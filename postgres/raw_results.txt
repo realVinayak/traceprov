@@ -10,4 +10,4 @@ Total modified: 4866.401 + 0.332 =  4866.733
 %OVERHEAD:                          26%
 
 
-Query 2: 
+Query 2:

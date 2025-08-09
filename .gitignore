@@ -3,3 +3,5 @@ crimes.csv
 postgres/*.so
 postgres/*.o
 playground/
+postgres/*.ids
+postgres/*.injected.sql

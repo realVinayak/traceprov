@@ -1,13 +1,20 @@
 // This is CPP because it allows some things more easier
 
 #include <iostream>
-#include "postgres.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <sys/mman.h>
 #include <list>
 #include <chrono>
+
+#include <string>
+#include <fstream>
+#include <sstream>
+#include <streambuf>
+
+#include <string.h>
 
 #define PROV_FILE "/var/lib/postgresql/14/main/provfile.prov"
 #define SCRATCH_SPACE "/var/lib/postgresql/14/main/scratch.space"
@@ -18,6 +25,9 @@
 #define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)
 
 #define PRINT_DEBUG(x) std::cout << "[traceprov]: " << '(' << __FILE__ << ',' << __LINE__ << ")\t" << x << "\t" << "ERRNO: " << errno << std::endl
+
+typedef long int int64;
+typedef int int32;
 
 // TODO: Make this part of a header.
 struct scratch_space {
@@ -117,7 +127,7 @@ void print_later_row(struct mmap_later_row *later_row){
     std::cout << "}" << std::endl;
 }
 
-int main(){
+int main(int argc, char *argv[]){
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -165,11 +175,35 @@ int main(){
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
 
 
-    // std::cout << "(";
-    // for (int64 pk: *filtered_rows){
-    //     std::cout << pk << ",";
-    // }
-    // std::cout << ")";
+    // If there are more than 1 arguments, assume that the other is the output file for the IDs.
+
+    if (argc == 2){
+
+        std::cout << "Writing IDS to " << argv[1] << std::endl;
+
+        int fd = open(argv[1], O_CREAT | O_RDWR, 666);
+        if (fd < 0){
+            PRINT_DEBUG("Error opening the raw file!");
+            return 1;
+        }else{
+            close(fd);
+        }
+
+        std::ofstream output_ids;
+        output_ids.open(argv[1]);
+
+        if (output_ids.is_open()){
+            for (int64 pk: *filtered_rows){
+                output_ids << pk << ",";
+            }
+            output_ids << "NULL";
+            output_ids.close();
+        }else{
+            PRINT_DEBUG("Error opening the ids file!");
+        }
+
+    }
+
 
 
     return 0;
