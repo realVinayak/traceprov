@@ -1,13 +1,37 @@
 Query 1:
 
-Times Modified SQL: 4866.401, 4859.146, 4973.005 - 
+Times Modified SQL: 4866.401, 4859.146, 4973.005 
 Times Inferring: 0.331, 0.332. 0.342
 
-Orig: 3829.384, 3846.537, 3871.702
 
-Original:                           3846.537
+Orig (SEQ): 3829.384, 3846.537, 3871.702
+Orig (PAR): 2504.154, 2398.019, 2395.219
+
 Total modified: 4866.401 + 0.332 =  4866.733
-%OVERHEAD:                          26%
 
+Original (SEQ):                     3846.537
+Original (PAR):                     2398.019
+
+%OVERHEAD (SEQ):                    26%
+%OVERHEAD (PAR):                    102%
+
+==============================================================================
 
 Query 2:
+
+Times Modified SQL: 2979.733,   2843.744,   2868.279 
+Times Inferring:    0.252,      0.240,      0.274
+
+
+Orig (SEQ): 1603.662    1592.802    1607.770
+Orig (PAR): 476.644     498.885     469.161
+
+Total modified: 2868.279 + 0.252 =  2868.531
+
+
+Original (SEQ):                     1603.662
+Original (PAR):                     476.644
+
+
+%OVERHEAD (SEQ):                    78%
+%OVERHEAD (PAR):                    501%
