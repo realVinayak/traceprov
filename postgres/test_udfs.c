@@ -52,13 +52,13 @@ struct mmap_later_row {
     int64 in_result;
 };
 
-// struct context {
-//     struct mmap_init_row *last_fwd_ptr;
-//     struct mmap_later_row *last_ptr;
-//     int64 group_cnt;
-// };
+struct traceprov_agg_context {
+    int64 group_cnt;
+    int worker_id;
+};
 
 // These structs are local.
+// Each process has its copy of this.
 struct local_context {
     int worker_id;
     int64 group_count;
@@ -98,12 +98,12 @@ inline static void print_local_context(){
     );
 }
 
-int remove_if_exists(){
+int remove_if_exists(const char *file){
     int rc = 0;
-    int can_access = access(PROV_FILE, F_OK);
+    int can_access = access(file, F_OK);
     if (can_access != 0) return 0;
 
-    if ((rc = remove(PROV_FILE)) != 0){
+    if ((rc = remove(file)) != 0){
         PRINT_ON_DEBUG("Error removing file!\n");
         return rc;
     }else{
@@ -115,7 +115,7 @@ int remove_if_exists(){
 static int init_trace_file(void **trace_file_ptr){
     int rc;
 
-    if (rc = remove_if_exists()) return rc;
+    if (rc = remove_if_exists(PROV_FILE)) return rc;
 
     PRINT_ON_DEBUG("[traceprov]: ERR # BEFORE OPEN");
 
@@ -195,7 +195,8 @@ static int init_local_vars(){
         off_t moved = lseek(scratch_fd, 0, SEEK_SET);
         if (moved == -1){
             PRINT_ON_DEBUG("[traceprov]: Error lseeking on scratch file.");
-            return 1;
+            rc = 1;
+            goto exit_scratch_space;
         }
         
         char buff[SCRATCH_PAGE_SIZE];
@@ -348,6 +349,9 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     PRINT_ON_DEBUG("Reinit state.");
     print_local_context();
 
+    remove_if_exists(PROV_FILE);
+    remove_if_exists(SCRATCH_SPACE);
+
     PG_RETURN_INT64(0);
 }
 
@@ -358,6 +362,9 @@ PG_FUNCTION_INFO_V1(agg_map_finalfunc);
 
 
 Datum agg_map_sfunc(PG_FUNCTION_ARGS){
+
+    // PRINT_ON_DEBUG("Being called with arg: %ld", PG_GETARG_INT64(1));
+
     int rc = 0;
     if (rc = init_local_vars()){
         PRINT_ON_DEBUG("Error initializing args: %d", rc);
@@ -367,28 +374,37 @@ Datum agg_map_sfunc(PG_FUNCTION_ARGS){
         if (local_context_var.should_print){
             PRINT_ON_DEBUG("Initialized local args correctly!");
             print_local_context();
+            local_context_var.should_print = 0;
         }
-        local_context_var.should_print = 0;
     }
 
-    // struct context *agg_inner_context;
 
-    // if (PG_ARGISNULL(0)){
-    //     agg_inner_context = (struct context *)MemoryContextAlloc(aggcontext, sizeof(struct context));
-    //     if (counter == NULL)
-    //         counter = (struct mmap_init_row*)(mapped_file);
-    // }else{
-    //     agg_inner_context = (struct context *)PG_GETARG_POINTER(0);
-    // }
+    struct traceprov_agg_context *agg_inner_context;
+
+    if (PG_ARGISNULL(0)){
+        agg_inner_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        // Here, we are creating a brand new group.
+        agg_inner_context->group_cnt = (++local_context_var.group_count);
+        // PRINT_ON_DEBUG("Making a new context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
+    }else{
+        agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
+        // PRINT_ON_DEBUG("Using a previous context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
+    }
     
-    local_context_var.p_init_row->group_cnt = 0;
+    local_context_var.p_init_row->group_cnt = agg_inner_context->group_cnt;
     local_context_var.p_init_row->primary_key = PG_GETARG_INT64(1);
-    local_context_var.p_init_row++;
-    PG_RETURN_POINTER(local_context_var.p_init_row);
+    local_context_var.p_init_row = local_context_var.p_init_row + 1;
+    PG_RETURN_POINTER(agg_inner_context);
 }
 
 Datum agg_map_finalfunc(PG_FUNCTION_ARGS){
-    local_context_var.p_init_row->group_cnt++;
-    const struct mmap_later_row * final_value = ((struct mmap_later_row*)((char*)local_context_var.trace_file + GIGA_BYTE) - local_context_var.group_count);
+
+    struct traceprov_agg_context * agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
+
+    const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
+        (char*)local_context_var.trace_file + (local_context_var.worker_id+1)*GIGA_BYTE
+    )) - agg_inner_context->group_cnt
+    );
+
     PG_RETURN_INT64(final_value);
 }
