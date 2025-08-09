@@ -37,6 +37,7 @@ int get_error_no(){
 #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { elog(INFO, "[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); elog(INFO, __VA_ARGS__); elog(INFO, "Error no: %d", get_error_no()); } } while(0)
 
 // #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { printf("[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); printf(__VA_ARGS__); printf("Error no: %d", get_error_no()); } } while(0)
+
 #define SCRATCH_PAGE_SIZE 256
 
 const int32 scratch_page_magic = 0xBADB00DE;
@@ -77,10 +78,16 @@ static struct local_context local_context_var = {
     .should_print = 1
 };
 
+// Note: if more members are added, also adjust the SCRATCH_PAGE_SIZE
+// Better yet, make it a computation of sizeof(scratch_space)
 struct scratch_space {
     int32 magic_word;
     int worker_count;
     void *trace_file;
+    // The count of groups seen.
+    int64 group_count;
+    // The number of rows written.
+    int64 row_count;
 };
 
 inline static void print_local_context(){
@@ -88,7 +95,7 @@ inline static void print_local_context(){
         "CONTEXT->worker_count: %d,"\
         "CONTEXT->group_count: %ld,"\
         "CONTEXT->trace_file: %p," \
-        "CONTEXT->p_init_row: %p" \
+        "CONTEXT->p_init_row: %p," \
         "CONTEXT->should_print: %d",
         local_context_var.worker_id,
         local_context_var.group_count,
@@ -316,7 +323,6 @@ int map_trace_file(void *addr, void **trace_file_ptr){
 
 PG_FUNCTION_INFO_V1(map);
 
-
 Datum map(PG_FUNCTION_ARGS){
     PRINT_ON_DEBUG("Initial error no.");
     int rc = init_local_vars();
@@ -332,6 +338,18 @@ Datum map(PG_FUNCTION_ARGS){
     // counter = ptr + 1;
     PG_RETURN_INT64(0);
 }
+
+
+PG_FUNCTION_INFO_V1(mark_later);
+
+Datum mark_later(PG_FUNCTION_ARGS){
+
+    // We'll now simply set the value of this row to be 
+    struct mmap_later_row * row = (struct mmap_later_row*)(PG_GETARG_INT64(0));
+    row->in_result = 1;
+    PG_RETURN_INT64(1);
+}
+
 
 PG_FUNCTION_INFO_V1(reinit_state);
 
@@ -355,6 +373,43 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     PG_RETURN_INT64(0);
 }
 
+PG_FUNCTION_INFO_V1(dump_state);
+
+Datum dump_state(PG_FUNCTION_ARGS){
+    // This is done to dump the current state into the scratch file.
+    // The benefit is that this function can be called just once (rather than "dumping" state after each access)
+    int scratch_fd = open(SCRATCH_SPACE, O_RDWR, PERM);
+    int rc = 0;
+    if (scratch_fd < 0){
+        PRINT_ON_DEBUG("Error opening scratch file for dump. Error code: %d\n", scratch_fd);
+        return 1;
+    }
+
+    PRINT_ON_DEBUG("[traceprov]: Opened scratch file succesful for dump");
+
+    struct scratch_space *ptr = (struct scratch_space *)(mmap(
+        NULL,
+        SCRATCH_PAGE_SIZE,
+        PROT_WRITE,
+        MAP_SHARED,
+        scratch_fd,
+        0
+    ));
+
+    if (ptr == MAP_FAILED){
+        PRINT_ON_DEBUG("(traceprov dump) Error doing mmap for scratch space\n");
+        return 1;
+    }else{
+        PRINT_ON_DEBUG("(traceprov dump) mmap for scratch space successful.\n");
+    }
+
+    ptr->group_count = local_context_var.group_count;
+    // This is a bit complicated (since we usually use the pointers)
+    ptr->row_count = ((uint64)local_context_var.p_init_row - (uint64)local_context_var.trace_file) / sizeof(struct mmap_init_row);
+
+    close(scratch_fd);
+    PG_RETURN_INT64(0);
+}
 
 
 PG_FUNCTION_INFO_V1(agg_map_sfunc);
