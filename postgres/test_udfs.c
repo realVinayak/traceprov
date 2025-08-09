@@ -37,6 +37,9 @@ int get_error_no(){
 #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { elog(INFO, "[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); elog(INFO, __VA_ARGS__); elog(INFO, "Error no: %d", get_error_no()); } } while(0)
 
 // #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { printf("[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); printf(__VA_ARGS__); printf("Error no: %d", get_error_no()); } } while(0)
+#define SCRATCH_PAGE_SIZE 256
+
+const int32 scratch_page_magic = 0xBADB00DE;
 
 int map_trace_file(void *addr, void **trace_file_ptr);
 
@@ -60,9 +63,14 @@ struct scratch_space {
     void *trace_file;
 };
 
-#define SCRATCH_PAGE_SIZE 256
-
-const int32 scratch_page_magic = 0xBADB00DE;
+inline static void print_local_context(){
+    PRINT_ON_DEBUG(
+        "CONTEXT->worker_count: %d, CONTEXT->group_count: %ld, CONTEXT->trace_file: %p",
+        local_context_var.worker_id,
+        local_context_var.group_count,
+        local_context_var.trace_file    
+    );
+}
 
 int remove_if_exists(){
     int rc = 0;
@@ -211,7 +219,7 @@ static int init_local_vars(){
 
     // If we're here, everything went smoothly.
     // We have the lock too.
-    local_context_var.group_count = (ptr->worker_count++);
+    local_context_var.worker_id = (ptr->worker_count++);
 
 exit_scratch_space:
     // We always need to unlock the file
@@ -305,6 +313,7 @@ Datum map(PG_FUNCTION_ARGS){
         return -1;
     }
     PRINT_ON_DEBUG("Successfully initialized the local variables!");
+    print_local_context();
     // struct mmap_init_row *ptr = (struct mmap_init_row *)mapped_file;
     // ptr->primary_key = PG_GETARG_INT64(0);
     // ptr->group_cnt = 0;
