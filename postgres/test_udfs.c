@@ -98,6 +98,8 @@ struct local_context {
     // This is put here to encapsulate the state.
     struct mmap_init_row *p_init_row;
     int should_print;
+    struct partial_row *partial_row_ptr;
+    void *initial_partial_row;
 };
 
 
@@ -105,7 +107,6 @@ struct absolute_local_context {
     int my_worker_id;
     int scratch_fd;
     struct scratch_space *scratch_ptr;
-    struct partial_row *partial_row_ptr;
     int64 local_group_number;
 };
 
@@ -113,7 +114,6 @@ static struct absolute_local_context ablc = {
     .my_worker_id = -1,
     .scratch_fd = -1,
     .scratch_ptr = NULL,
-    .partial_row_ptr = NULL,
     .local_group_number = 0
 };
 
@@ -128,6 +128,7 @@ struct scratch_space {
     int procs[MAX_WORKERS];
     enum TPROV_SIGNALS signal;
     int expected_count;
+    int8 main_worker_id;
     struct local_context locals[MAX_WORKERS];
 };
 
@@ -152,7 +153,7 @@ inline static void print_local_context(){
             ablc.scratch_ptr->locals[ablc.my_worker_id].should_print,
             ablc.my_worker_id,
             IsBackgroundWorker,
-            ablc.partial_row_ptr
+            ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr
         );
 }
 
@@ -501,7 +502,6 @@ void reinit_state_local(){
     ablc.my_worker_id = -1;
     ablc.scratch_fd = -1;
     ablc.scratch_ptr = NULL;
-    ablc.partial_row_ptr = NULL;
     ablc.local_group_number = 0;
 
     PRINT_ON_DEBUG("Reinit state.");
@@ -685,15 +685,6 @@ Datum agg_map_parallel_finalfunc(PG_FUNCTION_ARGS){
     PG_RETURN_INT64(final_value);
 }
 
-void instrument_local_group(void *ptr){
-    struct traceprov_agg_context *context = (struct traceprov_agg_context *)ptr;
-    // In this case, it is already combined, so there is nothing to do.
-    if (context->is_combined) return;
-    // Need to "instrument" this.
-    struct partial_row *p_partial_row = ablc.partial_row_ptr;
-    
-}
-
 Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
     int rc;
 
@@ -713,13 +704,16 @@ Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
         }
     }
 
-    if (ablc.partial_row_ptr == NULL){
-        rc = init_trace_file((void**)&ablc.partial_row_ptr, PROV_PARALLEL_TRACE, GIGA_BYTE);
+    ablc.scratch_ptr->main_worker_id = ablc.my_worker_id;
+
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr == NULL){
+        rc = init_trace_file((void**)&ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr, PROV_PARALLEL_TRACE, GIGA_BYTE);
         if (rc){
             PRINT_ON_DEBUG("Error initializing parallel trace file.%d", rc);
             elog(ERROR, "Couldn't create the parallel trace file");
             assert(0);
         }
+        ablc.scratch_ptr->locals[ablc.my_worker_id].initial_partial_row = ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr;
     }
 
     struct traceprov_agg_context *reference_struct, *other;
@@ -747,38 +741,29 @@ Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
 
     int group_no = 0;
 
+    struct partial_row *p_p_row = ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr;
+
     if (reference_struct->is_combined){
         group_no = reference_struct->group_cnt;
     }else{
-        group_no = ++ablc.local_group_number;
-        ablc.partial_row_ptr->local_group_no = reference_struct->group_cnt;
-        ablc.partial_row_ptr->worker_id = reference_struct->worker_id;
-        ablc.partial_row_ptr->global_group_no = group_no;
-        ablc.partial_row_ptr++;
+        group_no = ++ablc.scratch_ptr->locals[ablc.my_worker_id].group_count;
+        p_p_row->local_group_no = reference_struct->group_cnt;
+        p_p_row->worker_id = reference_struct->worker_id;
+        p_p_row->global_group_no = group_no;
+        ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr = p_p_row + 1;
         reference_struct->is_combined = 1;
         reference_struct->group_cnt = group_no;
     }
 
+    // We need to refetch it.
+    p_p_row = ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr;
+
     if (other != NULL){
-        ablc.partial_row_ptr->local_group_no = other->group_cnt;
-        ablc.partial_row_ptr->worker_id = other->worker_id;
-        ablc.partial_row_ptr->global_group_no = group_no;
-        ablc.partial_row_ptr++;
+        p_p_row->local_group_no = other->group_cnt;
+        p_p_row->worker_id = other->worker_id;
+        p_p_row->global_group_no = group_no;
+        ablc.scratch_ptr->locals[ablc.my_worker_id].partial_row_ptr = p_p_row + 1;
     }
-
-    // if (PG_ARGISNULL(0)){
-    //     context_2 = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
-    //     if (context_2->is_combined) PG_RETURN_POINTER(PG_GETARG_POINTER(1));
-    //     ablc.partial_row_ptr->global_group_no = ++ablc.local_group_number;
-    //     ablc.partial_row_ptr->local_group_no = context_2->group_cnt;
-    //     ablc.partial_row_ptr->worker_id = context_2->worker_id;
-    // }
-    // if (PG_ARGISNULL(1)){
-    //     PG_RETURN_POINTER(PG_GETARG_POINTER(0));
-    // }
-
-    // context_1 = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
-    // context_2 = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
 
     PG_RETURN_POINTER(reference_struct);
 }
