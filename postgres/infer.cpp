@@ -7,7 +7,9 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <list>
+#include <vector>
 #include <chrono>
+#include <algorithm>
 
 #include <string>
 #include <fstream>
@@ -187,7 +189,7 @@ void print_later_row(struct mmap_later_row *later_row){
     std::cout << "}" << std::endl;
 }
 
-void print_per_worker_stats(std::list<int64> **group_number_per_worker){
+void print_per_worker_stats(std::vector<int64> **group_number_per_worker){
     for (int i = 0; i < MAX_WORKERS; i++){
         if (group_number_per_worker[i] == NULL) continue;
         std::cout << "WORKER: " << i << " COUNT: " << group_number_per_worker[i]->size() << std::endl;
@@ -198,10 +200,10 @@ int main(int argc, char *argv[]){
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    auto present_groups = new std::list<int64>;
-    auto filtered_rows = new std::list<int64>;
+    auto present_groups = new std::vector<int64>;
+    auto filtered_rows = new std::vector<int64>;
 
-    std::list<int64> *group_numbers_per_worker[MAX_WORKERS];
+    std::vector<int64> *group_numbers_per_worker[MAX_WORKERS];
 
     for (int i = 0; i < MAX_WORKERS; i++){
         group_numbers_per_worker[i] = NULL;
@@ -252,7 +254,7 @@ int main(int argc, char *argv[]){
         for (int group_count: *present_groups){
             if (par_row->global_group_no == group_count){
                 if (group_numbers_per_worker[par_row->worker_id] == NULL){
-                    group_numbers_per_worker[par_row->worker_id] = new std::list<int64>;
+                    group_numbers_per_worker[par_row->worker_id] = new std::vector<int64>;
                 }
                 group_numbers_per_worker[par_row->worker_id]->push_back(par_row->local_group_no);
                 break;
@@ -264,21 +266,29 @@ int main(int argc, char *argv[]){
     // std::cout << "Made iters: " << iters_made << std::endl;
     
     print_per_worker_stats(group_numbers_per_worker);
+
+
     for (int i = 0; i < MAX_WORKERS; i++){
-        std::list<int64> * local_group_nos = group_numbers_per_worker[i];
+        std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
         if (local_group_nos == NULL) continue;
         // No point if the size is 0.
         if (local_group_nos->size() == 0) continue;
+
+        std::sort(local_group_nos->begin(), local_group_nos->end());
         
         struct mmap_init_row *init_row_iter = (struct mmap_init_row*)((char*)trace_file + PARTITION_SIZE*i);
         while (init_row_iter < scratch_space_var.locals[i].p_init_row){
-            for (int group_no : *local_group_nos){
-                if (init_row_iter->group_cnt == group_no)
+            
+            if(std::binary_search(
+                    local_group_nos->begin(), 
+                    local_group_nos->end(), 
+                    init_row_iter->group_cnt
+                )){
                     filtered_rows->push_back(init_row_iter->primary_key);
-            }
+                }
             init_row_iter++;
         }
-    
+
     }
 
     auto end = std::chrono::high_resolution_clock::now();
