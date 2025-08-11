@@ -5,7 +5,7 @@ DROP FUNCTION if exists reinit_state(INTEGER);
 DROP FUNCTION if exists mark_later(bigint);
 DROP FUNCTION if exists dump_state(INTEGER);
 
-CREATE FUNCTION reinit_state(INTEGER) RETURNS INTEGER AS '$libdir/test_udfs_2_34', 'reinit_state' LANGUAGE C;
+CREATE FUNCTION reinit_state(INTEGER) RETURNS INTEGER AS '$libdir/test_udfs_par_1_4', 'reinit_state' LANGUAGE C;
 CREATE FUNCTION dump_state(INTEGER) RETURNS INTEGER AS '$libdir/test_udfs_2_34', 'dump_state' LANGUAGE C;
 
 CREATE FUNCTION mark_later(bigint) RETURNS INTEGER AS '$libdir/test_udfs_2_34', 'mark_later' LANGUAGE C;

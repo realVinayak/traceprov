@@ -1,14 +1,32 @@
+#define _LARGEFILE64_SOURCE
+#define __USE_LARGEFILE64
+#define _FILE_OFFSET_BITS 64
+#define __USE_FILE_OFFSET64
+#define __REDIRECT_NTH
+
 #include "postgres.h"
 #include "fmgr.h"
 #include "stdio.h"
+#include "lib/stringinfo.h"
+#include "miscadmin.h"
+#include "libpq/pqformat.h"
+#include "storage/procsignal.h"
 
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
+
 #include <sys/mman.h>
+
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/ipc.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <sys/shm.h>
+
 
 PG_MODULE_MAGIC;
 
@@ -18,13 +36,17 @@ PG_MODULE_MAGIC;
 
 #define PROV_FILE "/var/lib/postgresql/14/main/provfile.prov"
 #define SCRATCH_SPACE "/var/lib/postgresql/14/main/scratch.space"
+#define PROV_PARALLEL_TRACE "/var/lib/postgresql/14/main/provfile_partial.prov"
 
-#define DEBUG_MODE 1
+#define MAX_WORKERS 10
+
+#define DEBUG_MODE 0
 #define PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 // #define PROV_FILE "provmap.map"
 
 #define GIGA_BYTE 1024 * 1024 * 1024
 #define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)
+#define PARTITION_SIZE 128 * 1024 * 1024
 
 typedef long int int64;
 typedef int int32;
@@ -38,11 +60,17 @@ int get_error_no(){
 
 // #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { printf("[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); printf(__VA_ARGS__); printf("Error no: %d", get_error_no()); } } while(0)
 
-#define SCRATCH_PAGE_SIZE 256
+int setup_signal_handlers();
+void reinit_state_local();
+
+enum TPROV_SIGNALS {
+    REINIT  =   1,
+    DUMP    =   2
+};
 
 const int32 scratch_page_magic = 0xBADB00DE;
 
-int map_trace_file(void *addr, void **trace_file_ptr);
+int map_trace_file(void *addr);
 
 struct mmap_init_row {
     int64 primary_key;
@@ -53,14 +81,16 @@ struct mmap_later_row {
     int64 in_result;
 };
 
-struct traceprov_agg_context {
-    int64 group_cnt;
-    int worker_id;
-};
 
+struct partial_row {
+    int8 worker_id;
+    int64 local_group_no;
+    int64 global_group_no;
+};
 // These structs are local.
 // Each process has its copy of this.
 struct local_context {
+    int worker_pid;
     int worker_id;
     int64 group_count;
     // We need to this because we want to share this mapping across processes.
@@ -70,16 +100,23 @@ struct local_context {
     int should_print;
 };
 
-static struct local_context local_context_var = {
-    .worker_id = -1,
-    .group_count = 0,
-    .trace_file = NULL,
-    .p_init_row = NULL,
-    .should_print = 1
+
+struct absolute_local_context {
+    int my_worker_id;
+    int scratch_fd;
+    struct scratch_space *scratch_ptr;
+    struct partial_row *partial_row_ptr;
+    int64 local_group_number;
 };
 
-// Note: if more members are added, also adjust the SCRATCH_PAGE_SIZE
-// Better yet, make it a computation of sizeof(scratch_space)
+static struct absolute_local_context ablc = {
+    .my_worker_id = -1,
+    .scratch_fd = -1,
+    .scratch_ptr = NULL,
+    .partial_row_ptr = NULL,
+    .local_group_number = 0
+};
+
 struct scratch_space {
     int32 magic_word;
     int worker_count;
@@ -88,24 +125,38 @@ struct scratch_space {
     int64 group_count;
     // The number of rows written.
     int64 row_count;
+    int procs[MAX_WORKERS];
+    enum TPROV_SIGNALS signal;
+    int expected_count;
+    struct local_context locals[MAX_WORKERS];
 };
 
+int get_scratch_space(struct scratch_space **pptr, int *fd);
+
+#define SCRATCH_PAGE_SIZE sizeof(struct scratch_space)
+
 inline static void print_local_context(){
-    PRINT_ON_DEBUG(
-        "CONTEXT->worker_count: %d,"\
-        "CONTEXT->group_count: %ld,"\
-        "CONTEXT->trace_file: %p," \
-        "CONTEXT->p_init_row: %p," \
-        "CONTEXT->should_print: %d",
-        local_context_var.worker_id,
-        local_context_var.group_count,
-        local_context_var.trace_file,
-        local_context_var.p_init_row,  
-        local_context_var.should_print   
-    );
+
+    if (ablc.scratch_ptr) 
+        PRINT_ON_DEBUG(
+            "CONTEXT->worker_count: %d, "\
+            "CONTEXT->group_count: %ld, "\
+            "CONTEXT->p_init_row: %p, " \
+            "CONTEXT->should_print: %d, "\
+            "LOCAL WORKER ID: %d, " \
+            "IS BACKGROUND: %d, " \
+            "PARTIAL SPACE: %p",
+            ablc.scratch_ptr->locals[ablc.my_worker_id].worker_id,
+            ablc.scratch_ptr->locals[ablc.my_worker_id].group_count,
+            ablc.scratch_ptr->locals[ablc.my_worker_id].p_init_row,  
+            ablc.scratch_ptr->locals[ablc.my_worker_id].should_print,
+            ablc.my_worker_id,
+            IsBackgroundWorker,
+            ablc.partial_row_ptr
+        );
 }
 
-int remove_if_exists(const char *file){
+static int remove_if_exists(const char *file){
     int rc = 0;
     int can_access = access(file, F_OK);
     if (can_access != 0) return 0;
@@ -119,14 +170,14 @@ int remove_if_exists(const char *file){
     return 0;
 }
 
-static int init_trace_file(void **trace_file_ptr){
+static int init_trace_file(void **trace_file_ptr, const char *fileName, long int size){
     int rc;
 
-    if (rc = remove_if_exists(PROV_FILE)) return rc;
+    if (rc = remove_if_exists(fileName)) return rc;
 
     PRINT_ON_DEBUG("[traceprov]: ERR # BEFORE OPEN");
 
-    int trace_file_fd = open(PROV_FILE, O_CREAT | O_RDWR, PERM);
+    int trace_file_fd = open(fileName, O_CREAT | O_RDWR, PERM);
     
     if (trace_file_fd < 0){
         PRINT_ON_DEBUG("Error opening file. %d\n", trace_file_fd);
@@ -137,7 +188,7 @@ static int init_trace_file(void **trace_file_ptr){
 
     PRINT_ON_DEBUG("[traceprov]: Opened initial trace file sucessfully!\n");
 
-    off_t moved = lseek(trace_file_fd, PROV_FILE_SIZE - 1, SEEK_SET);
+    off_t moved = lseek(trace_file_fd, size - 1, SEEK_SET);
     if (moved == -1){
         PRINT_ON_DEBUG("[traceprov]: Error lseeking on trace file.");
         return 1;
@@ -146,9 +197,9 @@ static int init_trace_file(void **trace_file_ptr){
     char temp_var = 0;
     write(trace_file_fd, &temp_var, 1);
 
-    void *ptr = mmap(
+    void *ptr = mmap64(
         NULL,
-        PROV_FILE_SIZE,
+        size,
         PROT_WRITE,
         MAP_SHARED,
         trace_file_fd,
@@ -171,7 +222,7 @@ static int init_trace_file(void **trace_file_ptr){
 // Otherwise, we'd be using garbage values. Not sure what is the best way of achieving that.
 static int init_local_vars(){
 
-    if (local_context_var.worker_id != -1) return 0;
+    if (ablc.my_worker_id != -1) return 0;
 
     int scratch_fd = open(SCRATCH_SPACE, O_CREAT | O_RDWR, PERM);
     int locked = 0, rc = 0;
@@ -236,16 +287,15 @@ static int init_local_vars(){
     if (ptr->trace_file == NULL){
         PRINT_ON_DEBUG("Trying to create brand new trace mapping!\n");
         // Need to create the trace file.
-        if (rc = init_trace_file(&ptr->trace_file)){
+        if (rc = init_trace_file(&ptr->trace_file, PROV_FILE, PROV_FILE_SIZE)){
             PRINT_ON_DEBUG("Error trying to create the trace file. \n");
             goto exit_scratch_space;
         }
-        local_context_var.trace_file = ptr->trace_file;
     }else{
         PRINT_ON_DEBUG("Trying to use existing trace mapping!\n");
         // We'd now need to mmap the trace file
         // But, we'll be using the static address (from the trace file)
-        if (rc = map_trace_file(ptr->trace_file, &local_context_var.trace_file)){
+        if (rc = map_trace_file(ptr->trace_file)){
             PRINT_ON_DEBUG("Error trying to map the trace file. \n");
             goto exit_scratch_space;
         }
@@ -253,31 +303,122 @@ static int init_local_vars(){
 
     // If we're here, everything went smoothly.
     // We have the lock too.
-    local_context_var.worker_id = (ptr->worker_count++);
+    ablc.my_worker_id = (ptr->worker_count++);
+    if (ablc.my_worker_id >= MAX_WORKERS){
+        elog(ERROR, "Maximum worker count reached!");
+        rc = 1;
+        goto exit_scratch_space;
+    }
+    // This shouldn't happen, but whatever.
+    assert(MyProcPid != 0);
+    // Store the myprocs, used for later sending signals.
+    ptr->procs[ablc.my_worker_id] = MyProcPid;
+    ptr->locals[ablc.my_worker_id].should_print = 1;
+
     // This way, each worker will operate in its own "zone"
-    local_context_var.p_init_row = (struct mmap_init_row *)(((char*)local_context_var.trace_file) + (GIGA_BYTE * local_context_var.worker_id));
+    ptr->locals[ablc.my_worker_id].p_init_row = (struct mmap_init_row *)(
+        ((char*)ptr->trace_file) + (PARTITION_SIZE * ablc.my_worker_id)
+    );
+    // This is done for sanity reasons.
+    ptr->locals[ablc.my_worker_id].worker_pid =  MyProcPid;
+    ptr->locals[ablc.my_worker_id].worker_id =  ablc.my_worker_id;
+    
+    ablc.scratch_ptr = ptr;
+    ablc.scratch_fd = scratch_fd;
+    // ptr->locals[ablc.my_worker_id].p_init_row->group_cnt = 1;
+    // // Also add signal handler for resetting and dumping the local state.
+    // if(rc = setup_signal_handlers()){
+    //     PRINT_ON_DEBUG("Error setting up the signal handler");
+    //     goto exit_scratch_space;
+    // }else{
+    //     PRINT_ON_DEBUG("Successfully added the signal handler!");
+    // }
 
 exit_scratch_space:
     // We always need to unlock the file
+    int previous_error = rc;
     if (locked){
         if(rc = flock(scratch_fd, LOCK_UN)){
             PRINT_ON_DEBUG("Error unlocking!: %d\n", rc);
         }
     }
 
-    int previous_error = rc;
-    if (scratch_fd > 0){
-        // If there is an error, and the file is open, close the file.
-        if (rc = close(scratch_fd)){
-            PRINT_ON_DEBUG("Error closing!: %d\n", rc);
-            return rc;
-        }
-    }
+    // if (scratch_fd > 0){
+    //     // If there is an error, and the file is open, close the file.
+    //     if (rc = close(scratch_fd)){
+    //         PRINT_ON_DEBUG("Error closing!: %d\n", rc);
+    //         return rc;
+    //     }
+    // }
     return previous_error;
 
 }
 
-int map_trace_file(void *addr, void **trace_file_ptr){
+void hijacked_signal_handler(int signo){
+
+    int scratch_fd = -1;
+    struct scratch_space *ptr;
+
+    if (get_scratch_space(&ptr, &scratch_fd)){
+        PRINT_ON_DEBUG("Not handling signal. Calling default");
+        goto default_handler;
+    }
+
+    // There can be a race condition here, so that is why the lkc.
+    if ((flock(scratch_fd, LOCK_EX))){
+        PRINT_ON_DEBUG("Error locking the file");
+        goto default_handler;
+    }
+
+    ptr->expected_count--;
+
+    if(flock(scratch_fd, LOCK_UN)){
+        PRINT_ON_DEBUG("Error unlocking!");
+    }
+
+    if (ptr->signal == REINIT){
+        PRINT_ON_DEBUG("Triggered for reinit state!");
+        reinit_state_local();
+        goto setup_default;
+    }else if (ptr->signal == DUMP){
+        PRINT_ON_DEBUG("Triggered for dump state!");
+        goto setup_default;
+    }
+
+default_handler:
+    if (scratch_fd > 0) close(scratch_fd);
+    procsignal_sigusr1_handler(signo);
+    return;
+
+setup_default:
+    if (scratch_fd > 0) close(scratch_fd);
+    struct sigaction act;
+    act.sa_handler = procsignal_sigusr1_handler;
+    act.sa_flags = 0;
+
+    if (sigaction(SIGUSR1, &act, NULL)){
+        PRINT_ON_DEBUG("Error reinit the default");
+    }
+}
+
+// This sets up the signal handlers
+int setup_signal_handlers(){
+    struct sigaction act;
+    
+    act.sa_handler = hijacked_signal_handler;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+
+    if (sigaction(SIGUSR1, &act, NULL)){
+        PRINT_ON_DEBUG("Error getting the sighandler!");
+        return 1;
+    }
+
+    return 0;
+
+}
+
+int map_trace_file(void *addr){
     // we SHOULD NOT be creating the trace file here, again.
     int trace_file_fd = open(PROV_FILE, O_RDWR);
     if (trace_file_fd < 0){
@@ -287,7 +428,7 @@ int map_trace_file(void *addr, void **trace_file_ptr){
 
     PRINT_ON_DEBUG("[traceprov]: Opened trace file later sucessfully!\n");
 
-    void *ptr = mmap(
+    void *ptr = mmap64(
         addr,
         PROV_FILE_SIZE,
         PROT_WRITE,
@@ -299,7 +440,7 @@ int map_trace_file(void *addr, void **trace_file_ptr){
     if (ptr == MAP_FAILED){
         PRINT_ON_DEBUG("[traceprov]: Error mmaping the file\n");
 
-        ptr = mmap(
+        ptr = mmap64(
             NULL,
             PROV_FILE_SIZE,
             PROT_WRITE,
@@ -317,7 +458,6 @@ int map_trace_file(void *addr, void **trace_file_ptr){
     }
 
     PRINT_ON_DEBUG("memmapped tracefile using existing mapping successful!\n");
-    *trace_file_ptr = ptr;
     return 0;
 }
 
@@ -328,6 +468,7 @@ Datum map(PG_FUNCTION_ARGS){
     int rc = init_local_vars();
     if (rc != 0){
         PRINT_ON_DEBUG("Error initializing the local variables!");
+        assert(0);
         return -1;
     }
     PRINT_ON_DEBUG("Successfully initialized the local variables!");
@@ -346,44 +487,90 @@ Datum mark_later(PG_FUNCTION_ARGS){
 
     // We'll now simply set the value of this row to be 
     struct mmap_later_row * row = (struct mmap_later_row*)(PG_GETARG_INT64(0));
+    // if (row->in_result){
+    //     elog(ERROR, "Found marking an existing row!");
+    // }
     row->in_result = 1;
     PG_RETURN_INT64(1);
 }
 
+void reinit_state_local(){
+    PRINT_ON_DEBUG("Current state.");
+    print_local_context();
+
+    ablc.my_worker_id = -1;
+    ablc.scratch_fd = -1;
+    ablc.scratch_ptr = NULL;
+    ablc.partial_row_ptr = NULL;
+    ablc.local_group_number = 0;
+
+    PRINT_ON_DEBUG("Reinit state.");
+    print_local_context();
+
+}
 
 PG_FUNCTION_INFO_V1(reinit_state);
 
 Datum reinit_state(PG_FUNCTION_ARGS){
 
-    PRINT_ON_DEBUG("Current state.");
-    print_local_context();
+    int scratch_fd = -1;
+    struct scratch_space *ptr;
+    int rc = 0;
+    
 
-    local_context_var.group_count = 0;
-    local_context_var.worker_id = -1;
-    local_context_var.trace_file = NULL;
-    local_context_var.p_init_row = NULL;
-    local_context_var.should_print = 1;
+    if (rc = get_scratch_space(&ptr, &scratch_fd)){
+        PG_RETURN_INT64(rc);
+    }
 
-    PRINT_ON_DEBUG("Reinit state.");
-    print_local_context();
+    int expected_responses = 0;
+    for (int i_proc = 0; i_proc < MAX_WORKERS; i_proc++){
+        if (ptr->procs[i_proc] && ptr->procs[i_proc] != MyProcPid){
+            expected_responses++;
+        }
+    }
+
+    ptr->signal = REINIT;
+    ptr->expected_count = expected_responses;
+
+    int blocked = 0;
+
+    for (int i_proc = 0; i_proc < MAX_WORKERS; i_proc++){
+        if (ptr->procs[i_proc]  && ptr->procs[i_proc] != MyProcPid ){
+            if (kill(ptr->procs[i_proc], SIGUSR1)){
+                blocked++;
+                PRINT_ON_DEBUG("Error triggering on %d", ptr->procs[i_proc]);
+            }
+        }
+    }
+
+    while (ptr->expected_count > blocked);
+
+    assert(blocked == expected_responses);
+
+    // Now, doing the local reinit.
+    reinit_state_local();
 
     remove_if_exists(PROV_FILE);
     remove_if_exists(SCRATCH_SPACE);
+    remove_if_exists(PROV_PARALLEL_TRACE);
+    // This needs to reinit the state across all the workers.
+exit_reinit:
 
-    PG_RETURN_INT64(0);
+    if (scratch_fd > 0){
+        close(scratch_fd);
+    }
+    PG_RETURN_INT64(rc);
 }
 
-PG_FUNCTION_INFO_V1(dump_state);
-
-Datum dump_state(PG_FUNCTION_ARGS){
-    // This is done to dump the current state into the scratch file.
-    // The benefit is that this function can be called just once (rather than "dumping" state after each access)
+int get_scratch_space(struct scratch_space **pptr, int *fd){
     int scratch_fd = open(SCRATCH_SPACE, O_RDWR, PERM);
     int rc = 0;
     if (scratch_fd < 0){
         PRINT_ON_DEBUG("Error opening scratch file for dump. Error code: %d\n", scratch_fd);
         return 1;
     }
+
+    *fd = scratch_fd;
 
     PRINT_ON_DEBUG("[traceprov]: Opened scratch file succesful for dump");
 
@@ -398,19 +585,247 @@ Datum dump_state(PG_FUNCTION_ARGS){
 
     if (ptr == MAP_FAILED){
         PRINT_ON_DEBUG("(traceprov dump) Error doing mmap for scratch space\n");
+        close(scratch_fd);
         return 1;
     }else{
         PRINT_ON_DEBUG("(traceprov dump) mmap for scratch space successful.\n");
     }
 
-    ptr->group_count = local_context_var.group_count;
-    // This is a bit complicated (since we usually use the pointers)
-    ptr->row_count = ((uint64)local_context_var.p_init_row - (uint64)local_context_var.trace_file) / sizeof(struct mmap_init_row);
+    *pptr = ptr;
+    return 0;
+}
 
-    close(scratch_fd);
+PG_FUNCTION_INFO_V1(dump_state);
+
+Datum dump_state(PG_FUNCTION_ARGS){
+    // This is done to dump the current state into the scratch file.
+    // The benefit is that this function can be called just once (rather than "dumping" state after each access)
+
+    // int scratch_fd;
+    // struct scratch_space *ptr;
+    // int rc = 0;
+    
+    // if (rc = get_scratch_space(&ptr, &scratch_fd)){
+    //     PG_RETURN_INT64(rc);
+    // }
+
+    // ptr->group_count = local_context_var.group_count;
+    // // This is a bit complicated (since we usually use the pointers)
+    // ptr->row_count = ((uint64)local_context_var.p_init_row - (uint64)local_context_var.trace_file) / sizeof(struct mmap_init_row);
+
+    // close(scratch_fd);
     PG_RETURN_INT64(0);
 }
 
+struct traceprov_agg_context {
+    int8 is_combined;
+    int64 group_cnt;
+    int8 worker_id;
+};
+
+
+// Parallel functions
+
+PG_FUNCTION_INFO_V1(agg_map_parallel_sfunc);
+PG_FUNCTION_INFO_V1(agg_map_parallel_finalfunc);
+PG_FUNCTION_INFO_V1(agg_map_parallel_combine);
+PG_FUNCTION_INFO_V1(agg_map_parallel_serialize);
+PG_FUNCTION_INFO_V1(agg_map_parallel_deserialize);
+
+Datum agg_map_parallel_sfunc(PG_FUNCTION_ARGS){
+    int rc = 0;
+    struct traceprov_agg_context *agg_inner_context;
+
+    if (rc = init_local_vars()){
+        PRINT_ON_DEBUG("Error initializing args: %d", rc);
+        elog(ERROR, "Couldn't set up local variables");
+        assert(0);
+        return rc;
+    }else{
+        if (ablc.scratch_ptr->locals[ablc.my_worker_id].should_print){
+            PRINT_ON_DEBUG("Initialized local args correctly!");
+            print_local_context();
+            ablc.scratch_ptr->locals[ablc.my_worker_id].should_print = 0;
+        }   
+    }
+
+    // Currently, this will just try to count.
+    if (PG_ARGISNULL(0)){
+        agg_inner_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_inner_context->group_cnt = (++ablc.scratch_ptr->locals[ablc.my_worker_id].group_count);
+        agg_inner_context->worker_id = ablc.my_worker_id;
+        // This has not been combined.
+        agg_inner_context->is_combined = 0;
+
+    }else{
+        agg_inner_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    }
+
+    struct local_context *p_local_context = &ablc.scratch_ptr->locals[ablc.my_worker_id];
+    assert (p_local_context->p_init_row->group_cnt == 0);
+    p_local_context->p_init_row->group_cnt = agg_inner_context->group_cnt;
+    p_local_context->p_init_row->primary_key = PG_GETARG_INT64(1);
+    p_local_context->p_init_row = p_local_context->p_init_row + 1;
+
+    PG_RETURN_POINTER(agg_inner_context);
+}
+
+Datum agg_map_parallel_finalfunc(PG_FUNCTION_ARGS){
+
+    struct traceprov_agg_context *agg_inner_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    // if (!agg_inner_context->is_combined){
+    //     elog(ERROR, "Found handling an incombined state in parallel func!");
+    // }
+
+    const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
+        (char*)ablc.scratch_ptr->trace_file + ((long)2)*GIGA_BYTE
+    )) - agg_inner_context->group_cnt
+    );
+
+    PG_RETURN_INT64(final_value);
+}
+
+void instrument_local_group(void *ptr){
+    struct traceprov_agg_context *context = (struct traceprov_agg_context *)ptr;
+    // In this case, it is already combined, so there is nothing to do.
+    if (context->is_combined) return;
+    // Need to "instrument" this.
+    struct partial_row *p_partial_row = ablc.partial_row_ptr;
+    
+}
+
+Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
+    int rc;
+
+    // It is possible that the main process has never seen initialized the context.
+    assert(!IsBackgroundWorker);
+    
+    if(rc = init_local_vars()){
+        PRINT_ON_DEBUG("Error initializing args: %d", rc);
+        elog(ERROR, "Couldn't set up the local variables on the main process!");
+        assert(0);
+        return rc;
+    }else{
+        if (ablc.scratch_ptr->locals[ablc.my_worker_id].should_print){
+            PRINT_ON_DEBUG("Initialized the local args on main process correctly!");
+            print_local_context();
+            ablc.scratch_ptr->locals[ablc.my_worker_id].should_print = 0;
+        }
+    }
+
+    if (ablc.partial_row_ptr == NULL){
+        rc = init_trace_file((void**)&ablc.partial_row_ptr, PROV_PARALLEL_TRACE, GIGA_BYTE);
+        if (rc){
+            PRINT_ON_DEBUG("Error initializing parallel trace file.%d", rc);
+            elog(ERROR, "Couldn't create the parallel trace file");
+            assert(0);
+        }
+    }
+
+    struct traceprov_agg_context *reference_struct, *other;
+
+    if (PG_ARGISNULL(0)){
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        other = NULL;
+    }else if (PG_ARGISNULL(1)){
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        other = NULL;
+    } else{
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        other = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        struct traceprov_agg_context *tmp;
+        // If ther other happened to be 
+        if (other->is_combined){
+            assert(!reference_struct->is_combined);
+            tmp = other;
+            other = reference_struct;
+            reference_struct = tmp;
+        }
+    }
+
+    assert(reference_struct != NULL);
+
+    int group_no = 0;
+
+    if (reference_struct->is_combined){
+        group_no = reference_struct->group_cnt;
+    }else{
+        group_no = ++ablc.local_group_number;
+        ablc.partial_row_ptr->local_group_no = reference_struct->group_cnt;
+        ablc.partial_row_ptr->worker_id = reference_struct->worker_id;
+        ablc.partial_row_ptr->global_group_no = group_no;
+        ablc.partial_row_ptr++;
+        reference_struct->is_combined = 1;
+        reference_struct->group_cnt = group_no;
+    }
+
+    if (other != NULL){
+        ablc.partial_row_ptr->local_group_no = other->group_cnt;
+        ablc.partial_row_ptr->worker_id = other->worker_id;
+        ablc.partial_row_ptr->global_group_no = group_no;
+        ablc.partial_row_ptr++;
+    }
+
+    // if (PG_ARGISNULL(0)){
+    //     context_2 = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+    //     if (context_2->is_combined) PG_RETURN_POINTER(PG_GETARG_POINTER(1));
+    //     ablc.partial_row_ptr->global_group_no = ++ablc.local_group_number;
+    //     ablc.partial_row_ptr->local_group_no = context_2->group_cnt;
+    //     ablc.partial_row_ptr->worker_id = context_2->worker_id;
+    // }
+    // if (PG_ARGISNULL(1)){
+    //     PG_RETURN_POINTER(PG_GETARG_POINTER(0));
+    // }
+
+    // context_1 = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    // context_2 = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+
+    PG_RETURN_POINTER(reference_struct);
+}
+
+
+Datum agg_map_parallel_serialize(PG_FUNCTION_ARGS){
+    struct traceprov_agg_context *context;
+    StringInfoData buf;
+
+    if (PG_ARGISNULL(0))
+        PG_RETURN_BYTEA_P(NULL);
+
+    context = (struct traceprov_agg_context *) PG_GETARG_POINTER(0);
+
+    pq_begintypsend(&buf);
+    // I mean, this should always be 0?
+    pq_sendint8(&buf, context->is_combined);
+    pq_sendint64(&buf, context->group_cnt);
+    pq_sendint8(&buf, context->worker_id);
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf)); 
+}
+
+Datum agg_map_parallel_deserialize(PG_FUNCTION_ARGS){
+
+    struct traceprov_agg_context *context;
+    StringInfoData buf;
+
+    if (PG_ARGISNULL(0))
+        PG_RETURN_POINTER(NULL);
+
+    bytea *s = PG_GETARG_BYTEA_P(0);
+    initStringInfo(&buf);
+
+    buf.data = VARDATA(s);
+    buf.len = VARSIZE(s) - VARHDRSZ;
+    buf.cursor = 0;
+
+    context = malloc(sizeof(struct traceprov_agg_context));
+    context->is_combined = pq_getmsgbyte(&buf);
+    context->group_cnt = pq_getmsgint64(&buf);
+    context->worker_id = pq_getmsgbyte(&buf);
+
+    PG_RETURN_POINTER(context);
+}
+
+
+// These are sequeuntial functions.
 
 PG_FUNCTION_INFO_V1(agg_map_sfunc);
 PG_FUNCTION_INFO_V1(agg_map_finalfunc);
@@ -424,12 +839,13 @@ Datum agg_map_sfunc(PG_FUNCTION_ARGS){
     if (rc = init_local_vars()){
         PRINT_ON_DEBUG("Error initializing args: %d", rc);
         elog(ERROR, "Couldn't set up local variables!");
+        assert(0);
         return rc;
     }else{
-        if (local_context_var.should_print){
+        if (ablc.scratch_ptr->locals[ablc.my_worker_id].should_print){
             PRINT_ON_DEBUG("Initialized local args correctly!");
             print_local_context();
-            local_context_var.should_print = 0;
+            ablc.scratch_ptr->locals[ablc.my_worker_id].should_print = 0;
         }
     }
 
@@ -439,16 +855,17 @@ Datum agg_map_sfunc(PG_FUNCTION_ARGS){
     if (PG_ARGISNULL(0)){
         agg_inner_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
         // Here, we are creating a brand new group.
-        agg_inner_context->group_cnt = (++local_context_var.group_count);
+        agg_inner_context->group_cnt = (++ablc.scratch_ptr->locals[ablc.my_worker_id].group_count);
         // PRINT_ON_DEBUG("Making a new context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
     }else{
         agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
         // PRINT_ON_DEBUG("Using a previous context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
     }
     
-    local_context_var.p_init_row->group_cnt = agg_inner_context->group_cnt;
-    local_context_var.p_init_row->primary_key = PG_GETARG_INT64(1);
-    local_context_var.p_init_row = local_context_var.p_init_row + 1;
+    struct local_context *p_local_context = &ablc.scratch_ptr->locals[ablc.my_worker_id];
+    p_local_context->p_init_row->group_cnt = agg_inner_context->group_cnt;
+    p_local_context->p_init_row->primary_key = PG_GETARG_INT64(1);
+    p_local_context->p_init_row = p_local_context->p_init_row + 1;
     PG_RETURN_POINTER(agg_inner_context);
 }
 
@@ -457,9 +874,9 @@ Datum agg_map_finalfunc(PG_FUNCTION_ARGS){
     struct traceprov_agg_context * agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
 
     const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
-        (char*)local_context_var.trace_file + (local_context_var.worker_id+1)*GIGA_BYTE
+        (char*)ablc.scratch_ptr->trace_file + (ablc.my_worker_id+1)*GIGA_BYTE
     )) - agg_inner_context->group_cnt
     );
 
-    PG_RETURN_INT64(final_value);
+    PG_RETURN_INT64(0);
 }
