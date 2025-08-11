@@ -8,10 +8,8 @@ def main():
     with open(sys.argv[2]) as id_file:
         ids = id_file.read()
 
-    raw_sql_split = raw_sql.split("%s")
-    assert len(raw_sql_split) == 2, "Couldn't split correctly!"
 
-    new_sql = [raw_sql_split[0], ids, raw_sql_split[1]]
+    new_sql = raw_sql.replace("%s", ids)
 
     with open(sys.argv[3], 'w') as injected_sql_f:
         injected_sql_f.write(''.join(new_sql))
