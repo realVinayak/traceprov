@@ -663,6 +663,13 @@ Datum agg_map_parallel_sfunc(PG_FUNCTION_ARGS){
 
     struct local_context *p_local_context = &ablc.scratch_ptr->locals[ablc.my_worker_id];
     assert (p_local_context->p_init_row->group_cnt == 0);
+    if (DEBUG_MODE){
+        if (p_local_context->p_init_row->group_cnt != 0){
+            PRINT_ON_DEBUG("Found updating a previous row.");
+            elog(ERROR, "Updating previous, invalid!");
+            assert(0);
+        }
+    }
     p_local_context->p_init_row->group_cnt = agg_inner_context->group_cnt;
     p_local_context->p_init_row->primary_key = PG_GETARG_INT64(1);
     p_local_context->p_init_row = p_local_context->p_init_row + 1;
@@ -674,7 +681,8 @@ Datum agg_map_parallel_finalfunc(PG_FUNCTION_ARGS){
 
     struct traceprov_agg_context *agg_inner_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
     // if (!agg_inner_context->is_combined){
-    //     elog(ERROR, "Found handling an incombined state in parallel func!");
+    //     // elog(ERROR, "Found handling an incombined state in parallel func!");
+    //     assert()
     // }
 
     const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
