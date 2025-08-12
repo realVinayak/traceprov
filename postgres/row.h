@@ -22,10 +22,15 @@ enum TPROV_SIGNALS {
 };
 
 struct mmap_init_row {
-    int64 primary_key;
+    // This is nice because, now, we can store multiple
+    // pks in just one row. That way, we can handle joins
+    // much more easily.
+    int32 num_records;
     int64 group_cnt;
+    // int64 *primary_keys;
 };
 
+#define MMAP_INIT_ROW_PK(PTR, PK_ID) ((int64*)(&(PTR->group_cnt) + sizeof(PTR->group_cnt)) + PK_ID)
 
 struct mmap_later_row {
     int64 in_result;
