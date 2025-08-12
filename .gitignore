@@ -5,3 +5,4 @@ postgres/*.o
 playground/
 postgres/*.ids
 postgres/*.injected.sql
+postgres/trials/

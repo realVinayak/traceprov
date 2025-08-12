@@ -12,6 +12,8 @@
 #include "libpq/pqformat.h"
 #include "storage/procsignal.h"
 
+#include "row.h"
+
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
@@ -34,22 +36,8 @@ PG_MODULE_MAGIC;
 // #define PROV_FILE "provfile.prov"
 // #define SCRATCH_SPACE "scratch.space"
 
-#define PROV_FILE "/var/lib/postgresql/14/main/provfile.prov"
-#define SCRATCH_SPACE "/var/lib/postgresql/14/main/scratch.space"
-#define PROV_PARALLEL_TRACE "/var/lib/postgresql/14/main/provfile_partial.prov"
-
-#define MAX_WORKERS 10
-
 #define DEBUG_MODE 0
-#define PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 // #define PROV_FILE "provmap.map"
-
-#define GIGA_BYTE 1024 * 1024 * 1024
-#define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)
-#define PARTITION_SIZE 128 * 1024 * 1024
-
-typedef long int int64;
-typedef int int32;
 
 int get_error_no(){
     int err_no = errno;
@@ -63,52 +51,10 @@ int get_error_no(){
 int setup_signal_handlers();
 void reinit_state_local();
 
-enum TPROV_SIGNALS {
-    REINIT  =   1,
-    DUMP    =   2
-};
 
 const int32 scratch_page_magic = 0xBADB00DE;
 
 int map_trace_file(void *addr);
-
-struct mmap_init_row {
-    int64 primary_key;
-    int64 group_cnt;
-};
-
-struct mmap_later_row {
-    int64 in_result;
-};
-
-
-struct partial_row {
-    int8 worker_id;
-    int64 local_group_no;
-    int64 global_group_no;
-};
-// These structs are local.
-// Each process has its copy of this.
-struct local_context {
-    int worker_pid;
-    int worker_id;
-    int64 group_count;
-    // We need to this because we want to share this mapping across processes.
-    void *trace_file;
-    // This is put here to encapsulate the state.
-    struct mmap_init_row *p_init_row;
-    int should_print;
-    struct partial_row *partial_row_ptr;
-    void *initial_partial_row;
-};
-
-
-struct absolute_local_context {
-    int my_worker_id;
-    int scratch_fd;
-    struct scratch_space *scratch_ptr;
-    int64 local_group_number;
-};
 
 static struct absolute_local_context ablc = {
     .my_worker_id = -1,
@@ -117,24 +63,7 @@ static struct absolute_local_context ablc = {
     .local_group_number = 0
 };
 
-struct scratch_space {
-    int32 magic_word;
-    int worker_count;
-    void *trace_file;
-    // The count of groups seen.
-    int64 group_count;
-    // The number of rows written.
-    int64 row_count;
-    int procs[MAX_WORKERS];
-    enum TPROV_SIGNALS signal;
-    int expected_count;
-    int8 main_worker_id;
-    struct local_context locals[MAX_WORKERS];
-};
-
 int get_scratch_space(struct scratch_space **pptr, int *fd);
-
-#define SCRATCH_PAGE_SIZE sizeof(struct scratch_space)
 
 inline static void print_local_context(){
 
