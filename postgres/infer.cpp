@@ -151,7 +151,7 @@ int map_trace_file(void **trace_file_ptr, const char *fileName, long int size, v
     return 0;
 }
 
-void print_local_context(struct local_context &ptr){
+void print_local_context(struct local_context &ptr, void *trace_file){
     std::cout << "LOCAL CONTEXT: {" << std::endl;
     std::cout << "\t" << "WORKER PID: " << ptr.worker_pid << std::endl;
     std::cout << "\t" << "WORKER ID: " << ptr.worker_id << std::endl;
@@ -161,6 +161,9 @@ void print_local_context(struct local_context &ptr){
     std::cout << "\t" << "SHOULD PRINT: " << ptr.should_print << std::endl;
     std::cout << "\t" << "PARTIAL ROW: " << ptr.partial_row_ptr << std::endl;
     std::cout << "\t" << "PARTIAL INIT ROW: " << ptr.initial_partial_row << std::endl;
+    std::cout << "\t" << "ROWS COUNT: " << (
+        (long int)ptr.p_init_row - (long int)((char *)trace_file + PARTITION_SIZE * ptr.worker_id) 
+    ) / sizeof(struct mmap_init_row) << std::endl;
     std::cout << "}" << std::endl;
 }
 
@@ -172,7 +175,7 @@ void print_scratch(struct scratch_space &ptr){
     std::cout << "MAIN WORKER ID: " << (int)ptr.main_worker_id << std::endl;
 
     for (int i  = 0; i < MAX_WORKERS; i++){
-        print_local_context(ptr.locals[i]);
+        print_local_context(ptr.locals[i], ptr.trace_file);
     }
 }
 
@@ -195,6 +198,7 @@ void print_per_worker_stats(std::vector<int64> **group_number_per_worker){
         std::cout << "WORKER: " << i << " COUNT: " << group_number_per_worker[i]->size() << std::endl;
     }
 }
+
 
 int main(int argc, char *argv[]){
 
@@ -231,103 +235,107 @@ int main(int argc, char *argv[]){
     );
 
 
-    struct mmap_later_row *init_later_row_iter = ((struct mmap_later_row*)(
-        (char*)trace_file + ((long) 2)*GIGA_BYTE
-    ));
-
-    int64 max_group_count = scratch_space_var.locals[scratch_space_var.main_worker_id].group_count;
-
-    for (int back_iter = max_group_count; back_iter > 0; back_iter--){
-        struct mmap_later_row *later_row = init_later_row_iter - back_iter;
-        if (later_row->in_result)
-            present_groups->push_back(back_iter);
-    }
-
-    struct local_context main_local_context = scratch_space_var.locals[scratch_space_var.main_worker_id];
-
-    // Now, we need to consult the partial file.
-    int iters_made = 0;
-    while (
-        par_row < main_local_context.partial_row_ptr
-    ){  
-        iters_made++;
-        for (int group_count: *present_groups){
-            if (par_row->global_group_no == group_count){
-                if (group_numbers_per_worker[par_row->worker_id] == NULL){
-                    group_numbers_per_worker[par_row->worker_id] = new std::vector<int64>;
-                }
-                group_numbers_per_worker[par_row->worker_id]->push_back(par_row->local_group_no);
-                break;
-            }
-        }
-        par_row++;
-    }
-
-    // std::cout << "Made iters: " << iters_made << std::endl;
-    
-    print_per_worker_stats(group_numbers_per_worker);
-
-
-    for (int i = 0; i < MAX_WORKERS; i++){
-        std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
-        if (local_group_nos == NULL) continue;
-        // No point if the size is 0.
-        if (local_group_nos->size() == 0) continue;
-
-        std::sort(local_group_nos->begin(), local_group_nos->end());
-        
-        struct mmap_init_row *init_row_iter = (struct mmap_init_row*)((char*)trace_file + PARTITION_SIZE*i);
-        while (init_row_iter < scratch_space_var.locals[i].p_init_row){
-            
-            if(std::binary_search(
-                    local_group_nos->begin(), 
-                    local_group_nos->end(), 
-                    init_row_iter->group_cnt
-                )){
-                    filtered_rows->push_back(init_row_iter->primary_key);
-                }
-            init_row_iter++;
-        }
-
-    }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-    std::cout << "NUM FILTERED: " << filtered_rows->size() << std::endl;
-    std::cout << "Took: " << duration.count() << " ms" << std::endl;
-
-
-    // If there are more than 1 arguments, assume that the other is the output file for the IDs.
-
-    if (argc == 2){
-
-        std::cout << "Writing IDS to " << argv[1] << std::endl;
-
-        int fd = open(argv[1], O_CREAT | O_RDWR, 666);
-        if (fd < 0){
-            PRINT_DEBUG("Error opening the raw file!");
-            return 1;
-        }else{
-            close(fd);
-        }
-
-        std::ofstream output_ids;
-        output_ids.open(argv[1]);
-
-        if (output_ids.is_open()){
-            for (int64 pk: *filtered_rows){
-                output_ids << pk << ",";
-            }
-            output_ids << "NULL";
-            output_ids.close();
-        }else{
-            PRINT_DEBUG("Error opening the ids file!");
-        }
-
-    }
-
-
-
     return 0;
 }
+
+
+    // struct mmap_later_row *init_later_row_iter = ((struct mmap_later_row*)(
+    //     (char*)trace_file + ((long) 2)*GIGA_BYTE
+    // ));
+
+    // int64 max_group_count = scratch_space_var.locals[scratch_space_var.main_worker_id].group_count;
+
+    // for (int back_iter = max_group_count; back_iter > 0; back_iter--){
+    //     struct mmap_later_row *later_row = init_later_row_iter - back_iter;
+    //     if (later_row->in_result)
+    //         present_groups->push_back(back_iter);
+    // }
+
+    // struct local_context main_local_context = scratch_space_var.locals[scratch_space_var.main_worker_id];
+
+    // // Now, we need to consult the partial file.
+    // int iters_made = 0;
+    // while (
+    //     par_row < main_local_context.partial_row_ptr
+    // ){  
+    //     iters_made++;
+    //     for (int group_count: *present_groups){
+    //         if (par_row->global_group_no == group_count){
+    //             if (group_numbers_per_worker[par_row->worker_id] == NULL){
+    //                 group_numbers_per_worker[par_row->worker_id] = new std::vector<int64>;
+    //             }
+    //             group_numbers_per_worker[par_row->worker_id]->push_back(par_row->local_group_no);
+    //             break;
+    //         }
+    //     }
+    //     par_row++;
+    // }
+
+    // // std::cout << "Made iters: " << iters_made << std::endl;
+    
+    // print_per_worker_stats(group_numbers_per_worker);
+
+
+    // for (int i = 0; i < MAX_WORKERS; i++){
+    //     std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
+    //     if (local_group_nos == NULL) continue;
+    //     // No point if the size is 0.
+    //     if (local_group_nos->size() == 0) continue;
+
+    //     std::sort(local_group_nos->begin(), local_group_nos->end());
+        
+    //     struct mmap_init_row *init_row_iter = (struct mmap_init_row*)((char*)trace_file + PARTITION_SIZE*i);
+    //     while (init_row_iter < scratch_space_var.locals[i].p_init_row){
+            
+    //         if(std::binary_search(
+    //                 local_group_nos->begin(), 
+    //                 local_group_nos->end(), 
+    //                 init_row_iter->group_cnt
+    //             )){
+    //                 filtered_rows->push_back(init_row_iter->primary_key);
+    //             }
+    //         init_row_iter++;
+    //     }
+
+    // }
+
+    // auto end = std::chrono::high_resolution_clock::now();
+    // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    // std::cout << "NUM FILTERED: " << filtered_rows->size() << std::endl;
+    // std::cout << "Took: " << duration.count() << " ms" << std::endl;
+
+
+    // // If there are more than 1 arguments, assume that the other is the output file for the IDs.
+
+    // if (argc == 2){
+
+    //     std::cout << "Writing IDS to " << argv[1] << std::endl;
+
+    //     int fd = open(argv[1], O_CREAT | O_RDWR, 666);
+    //     if (fd < 0){
+    //         PRINT_DEBUG("Error opening the raw file!");
+    //         return 1;
+    //     }else{
+    //         close(fd);
+    //     }
+
+    //     std::ofstream output_ids;
+    //     output_ids.open(argv[1]);
+
+    //     if (output_ids.is_open()){
+    //         for (int64 pk: *filtered_rows){
+    //             output_ids << pk << ",";
+    //         }
+    //         output_ids << "NULL";
+    //         output_ids.close();
+    //     }else{
+    //         PRINT_DEBUG("Error opening the ids file!");
+    //     }
+
+    // }
+
+
+
+//     return 0;
+// }
