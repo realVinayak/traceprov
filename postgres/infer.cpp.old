@@ -166,7 +166,7 @@ int main(int argc, char *argv[]){
     print_scratch(scratch_space_var);
 
     void *trace_file;
-    struct partial_row * par_row = NULL;
+    struct partial_row * par_row;
 
     // Mapping the address directly is pretty sweet, because then we don't need to do much arithmetic.
     map_trace_file(&trace_file, PROV_FILE, PROV_FILE_SIZE, scratch_space_var.trace_file);
@@ -216,10 +216,9 @@ int main(int argc, char *argv[]){
 
     for (int i = 0; i < MAX_WORKERS; i++){
         std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
-        if (local_group_nos == NULL && par_row != NULL ) continue;
+        if (local_group_nos == NULL) continue;
         // No point if the size is 0.
-	if (par_row == NULL) local_group_nos = present_groups;
-        if ((local_group_nos->size() == 0)) continue;
+        if (local_group_nos->size() == 0) continue;
 
         std::sort(local_group_nos->begin(), local_group_nos->end());
 
@@ -239,8 +238,6 @@ int main(int argc, char *argv[]){
                 }
             init_row_iter = (struct mmap_init_row*) MMAP_INIT_ROW_PK(init_row_iter, init_row_iter->num_records);
         }
-
-	if (par_row == NULL) break;
 
     }
 
