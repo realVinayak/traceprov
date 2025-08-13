@@ -5,5 +5,7 @@ postgres/*.o
 playground/
 postgres/*.ids
 postgres/*.injected.sql
-postgres/trials/
 postgres/*.auto.sql
+postgres/trials/*/*.injected.sql
+postgres/trials/*/*.ids
+postgres/trials/*/*.fidelity.sql

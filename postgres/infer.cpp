@@ -22,8 +22,12 @@
 
 #define MAX_WORKERS 10
 
+#define LENGTH 15
 
 #define PRINT_DEBUG(x) std::cout << "[traceprov]: " << '(' << __FILE__ << ',' << __LINE__ << ")\t" << x << "\t" << "ERRNO: " << errno << std::endl
+
+void print_ids_simple(std::vector<int64> *v);
+void print_ids_simple(std::vector<int64> *v1, std::vector<int64> *v2);
 
 int map_scratch_space(struct scratch_space *ptr){
     int scratch_fd = open(SCRATCH_SPACE, O_RDWR);
@@ -137,6 +141,13 @@ int main(int argc, char *argv[]){
     auto start = std::chrono::high_resolution_clock::now();
 
     auto present_groups = new std::vector<int64>;
+
+    std::vector<int64> *filtered_rows_all[LENGTH];
+
+    for (int i = 0; i < LENGTH; i++){
+        filtered_rows_all[i] = new std::vector<int64>;
+    }
+
     auto filtered_rows = new std::vector<int64>;
 
     std::vector<int64> *group_numbers_per_worker[MAX_WORKERS];
@@ -203,7 +214,6 @@ int main(int argc, char *argv[]){
     
     print_per_worker_stats(group_numbers_per_worker);
 
-
     for (int i = 0; i < MAX_WORKERS; i++){
         std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
         if (local_group_nos == NULL) continue;
@@ -213,6 +223,7 @@ int main(int argc, char *argv[]){
         std::sort(local_group_nos->begin(), local_group_nos->end());
         
         struct mmap_init_row *init_row_iter = (struct mmap_init_row*)((char*)trace_file + PARTITION_SIZE*i);
+
         while (init_row_iter < scratch_space_var.locals[i].p_init_row){
             
             if(std::binary_search(
@@ -221,7 +232,8 @@ int main(int argc, char *argv[]){
                     init_row_iter->group_cnt
                 )){
                     for (int pk_id = 0; pk_id < init_row_iter->num_records; pk_id++){
-                        filtered_rows->push_back(*MMAP_INIT_ROW_PK(init_row_iter, pk_id));
+                        int64 val = *MMAP_INIT_ROW_PK(init_row_iter, pk_id);
+                        filtered_rows_all[pk_id]->push_back(val);
                     }
                 }
             init_row_iter = (struct mmap_init_row*) MMAP_INIT_ROW_PK(init_row_iter, init_row_iter->num_records);
@@ -234,6 +246,12 @@ int main(int argc, char *argv[]){
 
     std::cout << "NUM FILTERED: " << filtered_rows->size() << std::endl;
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
+
+    // int idx = 0;
+
+    // for (idx = 0; idx < filtered_rows_all[0]->size(); idx++){
+    //     std::cout << "(" << filtered_rows_all[0]->at(idx) << "," << filtered_rows_all[1]->at(idx) << ")" << ",";
+    // }
 
 
     // If there are more than 1 arguments, assume that the other is the output file for the IDs.
@@ -265,7 +283,39 @@ int main(int argc, char *argv[]){
 
     }
 
+    for (int i = 0; i < LENGTH; i++){
+        std::cout << i << " " << filtered_rows_all[i]->size() << std::endl;
+    }
 
+    print_ids_simple(filtered_rows_all[4]);
 
     return 0;
+}
+
+void print_ids_simple(std::vector<int64> *v){
+
+    std::vector<int64> new_v;
+
+    for (int i = 0; i < v->size(); i++){
+        int found = 0;
+        for (int val = 0; val < new_v.size(); val++){
+            if (new_v[val] == v->at(i)){
+                found = 1;
+                break;
+            }
+        }
+        if (!found) new_v.push_back(v->at(i));
+    }
+
+    for (int i = 0; i < new_v.size(); i++){
+        std::cout << new_v.at(i) << " ,";
+        if (i % 20 == 0) std::cout << std::endl;
+    }
+}
+
+void print_ids_simple(std::vector<int64> *v1, std::vector<int64> *v2){
+    for (int i = 0; i < v1->size(); i++){
+        std::cout << "(" << v1->at(i) << ", " << v2->at(i) << ")" << ",";
+        if (i % 20 == 0) std::cout << std::endl;
+    }
 }

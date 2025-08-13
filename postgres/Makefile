@@ -22,3 +22,7 @@ infer:
 
 infer_dbg:
 	g++ -g -O0 -I/usr/include/postgresql/14/server/ infer.cpp -o infer.o
+
+sql:
+	sed 's/__FILE__/$(file)/g' parallel_drop_and_create.sql > $(name).auto.sql
+	sudo cp $(name).auto.sql /home/postgres/
