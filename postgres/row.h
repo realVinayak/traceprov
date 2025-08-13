@@ -3,9 +3,9 @@
 #define __TRACEPROV_ROW__
 #include "c.h"
 
-#define PROV_FILE "/var/lib/postgresql/14/main/provfile.prov"
-#define SCRATCH_SPACE "/var/lib/postgresql/14/main/scratch.space"
-#define PROV_PARALLEL_TRACE "/var/lib/postgresql/14/main/provfile_partial.prov"
+#define PROV_FILE "/var/lib/postgresql/16/main/provfile.prov"
+#define SCRATCH_SPACE "/var/lib/postgresql/16/main/scratch.space"
+#define PROV_PARALLEL_TRACE "/var/lib/postgresql/16/main/provfile_partial.prov"
 
 #define GIGA_BYTE 1024 * 1024 * 1024
 #define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)

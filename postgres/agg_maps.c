@@ -11,6 +11,7 @@
 #include "miscadmin.h"
 #include "libpq/pqformat.h"
 #include "storage/procsignal.h"
+#include "varatt.h"
 
 #include "row.h"
 
@@ -631,7 +632,7 @@ Datum agg_map_parallel_finalfunc(PG_FUNCTION_ARGS){
     )) - agg_inner_context->group_cnt
     );
 
-    PG_RETURN_INT64(final_value);
+    PG_RETURN_INT64((long int)final_value);
 }
 
 Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
