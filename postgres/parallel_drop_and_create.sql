@@ -3,6 +3,11 @@ DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT);
 DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT);
 DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT);
 DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE  IF EXISTS agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 
 
 DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT);
@@ -10,6 +15,11 @@ DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 
 DROP FUNCTION   IF EXISTS agg_map_parallel_finalfunc(internal);
 DROP FUNCTION   IF EXISTS agg_map_parallel_combine(internal, internal);
@@ -30,7 +40,11 @@ CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT) RETURNS interna
 CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
 CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
 CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
-
+CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
+CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
+CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
+CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
+CREATE FUNCTION agg_map_parallel_sfunc(internal, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'agg_map_parallel_sfunc' LANGUAGE C;
 
 
 CREATE FUNCTION agg_map_parallel_finalfunc(internal) RETURNS BIGINT AS '$libdir/__FILE__', 'agg_map_parallel_finalfunc' LANGUAGE C;
@@ -92,6 +106,61 @@ CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT) (
 );
 
 CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = agg_map_parallel_sfunc,
+    STYPE = internal,
+    SSPACE = 32,
+    FINALFUNC = agg_map_parallel_finalfunc,
+    COMBINEFUNC = agg_map_parallel_combine,
+    SERIALFUNC = agg_map_parallel_serialize,
+    DESERIALFUNC = agg_map_parallel_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = agg_map_parallel_sfunc,
+    STYPE = internal,
+    SSPACE = 32,
+    FINALFUNC = agg_map_parallel_finalfunc,
+    COMBINEFUNC = agg_map_parallel_combine,
+    SERIALFUNC = agg_map_parallel_serialize,
+    DESERIALFUNC = agg_map_parallel_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = agg_map_parallel_sfunc,
+    STYPE = internal,
+    SSPACE = 32,
+    FINALFUNC = agg_map_parallel_finalfunc,
+    COMBINEFUNC = agg_map_parallel_combine,
+    SERIALFUNC = agg_map_parallel_serialize,
+    DESERIALFUNC = agg_map_parallel_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = agg_map_parallel_sfunc,
+    STYPE = internal,
+    SSPACE = 32,
+    FINALFUNC = agg_map_parallel_finalfunc,
+    COMBINEFUNC = agg_map_parallel_combine,
+    SERIALFUNC = agg_map_parallel_serialize,
+    DESERIALFUNC = agg_map_parallel_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = agg_map_parallel_sfunc,
+    STYPE = internal,
+    SSPACE = 32,
+    FINALFUNC = agg_map_parallel_finalfunc,
+    COMBINEFUNC = agg_map_parallel_combine,
+    SERIALFUNC = agg_map_parallel_serialize,
+    DESERIALFUNC = agg_map_parallel_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE agg_map_parallel(BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
     SFUNC = agg_map_parallel_sfunc,
     STYPE = internal,
     SSPACE = 32,
