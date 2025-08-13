@@ -244,7 +244,10 @@ int main(int argc, char *argv[]){
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-    std::cout << "NUM FILTERED: " << filtered_rows->size() << std::endl;
+    for (int pk_id = 0; pk_id < LENGTH; pk_id++){
+        std::cout << "FILTERED: " << filtered_rows_all[pk_id]->size() << std::endl;
+    }
+
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
 
     // int idx = 0;
@@ -256,38 +259,38 @@ int main(int argc, char *argv[]){
 
     // If there are more than 1 arguments, assume that the other is the output file for the IDs.
 
-    if (argc == 2){
+    // if (argc == 2){
 
-        std::cout << "Writing IDS to " << argv[1] << std::endl;
+    //     std::cout << "Writing IDS to " << argv[1] << std::endl;
 
-        int fd = open(argv[1], O_CREAT | O_RDWR, 666);
-        if (fd < 0){
-            PRINT_DEBUG("Error opening the raw file!");
-            return 1;
-        }else{
-            close(fd);
-        }
+    //     int fd = open(argv[1], O_CREAT | O_RDWR, 666);
+    //     if (fd < 0){
+    //         PRINT_DEBUG("Error opening the raw file!");
+    //         return 1;
+    //     }else{
+    //         close(fd);
+    //     }
 
-        std::ofstream output_ids;
-        output_ids.open(argv[1]);
+    //     std::ofstream output_ids;
+    //     output_ids.open(argv[1]);
 
-        if (output_ids.is_open()){
-            for (int64 pk: *filtered_rows){
-                output_ids << pk << ",";
-            }
-            output_ids << "NULL";
-            output_ids.close();
-        }else{
-            PRINT_DEBUG("Error opening the ids file!");
-        }
+    //     if (output_ids.is_open()){
+    //         for (int64 pk: *filtered_rows){
+    //             output_ids << pk << ",";
+    //         }
+    //         output_ids << "NULL";
+    //         output_ids.close();
+    //     }else{
+    //         PRINT_DEBUG("Error opening the ids file!");
+    //     }
 
-    }
+    // }
 
-    for (int i = 0; i < LENGTH; i++){
-        std::cout << i << " " << filtered_rows_all[i]->size() << std::endl;
-    }
+    // for (int i = 0; i < LENGTH; i++){
+    //     std::cout << i << " " << filtered_rows_all[i]->size() << std::endl;
+    // }
 
-    print_ids_simple(filtered_rows_all[4]);
+    // print_ids_simple(filtered_rows_all[4]);
 
     return 0;
 }
