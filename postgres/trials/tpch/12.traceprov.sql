@@ -1,4 +1,4 @@
-EXPLAIN SELECT *, mark_later(mapped_agg) FROM ( SELECT l_shipmode, sum( CASE
+SELECT *, mark_later(mapped_agg) FROM ( SELECT l_shipmode, sum( CASE
 WHEN o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH' THEN 1 ELSE 0
 END) AS high_line_count, sum( CASE WHEN o_orderpriority <> '1-URGENT' AND
 o_orderpriority <> '2-HIGH' THEN 1 ELSE 0 END) AS low_line_count,
