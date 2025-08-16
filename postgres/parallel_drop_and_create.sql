@@ -27,6 +27,10 @@ DROP FUNCTION   IF EXISTS agg_map_parallel_serialize(internal);
 DROP FUNCTION   IF EXISTS agg_map_parallel_deserialize(bytea, internal);
 DROP FUNCTION   IF EXISTS reinit_state(INTEGER);
 
+DROP FUNCTION   IF EXISTS log_subquery_pk(BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS log_subquery_pk(BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS log_subquery_pk(BIGINT, BIGINT, BIGINT, BIGINT);
+
 
 DROP AGGREGATE  IF EXISTS agg_map(BIGINT);
 DROP FUNCTION   IF EXISTS agg_map_sfunc(state internal, bigint);
@@ -60,6 +64,11 @@ CREATE FUNCTION agg_map_finalfunc(state internal) RETURNS bigint AS '$libdir/__F
 
 
 CREATE FUNCTION reinit_state(INTEGER) RETURNS INTEGER AS '$libdir/__FILE__', 'reinit_state' LANGUAGE C;
+
+CREATE FUNCTION log_subquery_pk(BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION log_subquery_pk(BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION log_subquery_pk(BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+
 
 CREATE AGGREGATE agg_map_parallel(BIGINT) (
     SFUNC = agg_map_parallel_sfunc,

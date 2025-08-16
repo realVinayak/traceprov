@@ -11,11 +11,12 @@ series:
 	sudo systemctl restart postgresql.service
 
 module:
-	gcc -fPIC -c -I/usr/include/postgresql/14/server/ $(src).c -o $(src)_$(suff).o
-	gcc -shared $(src)_$(suff).o -o $(src)_$(suff).so
+	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/14/server/ $(src).c -o $(src)_$(suff).o
+	gcc -g -Wall -shared $(src)_$(suff).o -o $(src)_$(suff).so
 	sudo cp $(src)_$(suff).so /usr/lib/postgresql/14/lib
 	rm *.auto.sql
 	sed 's/__FILE__/$(src)_$(suff)/g' parallel_drop_and_create.sql > parallel_drop_and_create_$(src)_$(suff).auto.sql
+	sudo cp parallel_drop_and_create_$(src)_$(suff).auto.sql /home/postgres/
 
 infer:
 	g++ -O3 -I/usr/include/postgresql/14/server/ infer.cpp -o infer.o
