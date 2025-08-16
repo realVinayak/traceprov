@@ -1,6 +1,8 @@
 clean:
-	rm *.so
-	rm *.o
+	rm -f *.so
+	rm -f *.o
+	rm -f *.auto.sql
+	rm -f *.ids
 
 parallel:
 	sudo cp /etc/postgresql/14/main/postgresql.conf.parallel /etc/postgresql/14/main/postgresql.conf

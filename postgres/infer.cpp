@@ -166,7 +166,7 @@ int main(int argc, char *argv[]){
     print_scratch(scratch_space_var);
 
     void *trace_file;
-    struct partial_row * par_row;
+    struct partial_row * par_row = NULL;
 
     // Mapping the address directly is pretty sweet, because then we don't need to do much arithmetic.
     map_trace_file(&trace_file, PROV_FILE, PROV_FILE_SIZE, scratch_space_var.trace_file);
@@ -214,6 +214,11 @@ int main(int argc, char *argv[]){
     
     print_per_worker_stats(group_numbers_per_worker);
 
+    if (par_row == NULL){
+        // There is no provenance file here.
+        group_numbers_per_worker[0] = present_groups;
+    }
+
     for (int i = 0; i < MAX_WORKERS; i++){
         std::vector<int64> * local_group_nos = group_numbers_per_worker[i];
         if (local_group_nos == NULL) continue;
@@ -259,32 +264,38 @@ int main(int argc, char *argv[]){
 
     // If there are more than 1 arguments, assume that the other is the output file for the IDs.
 
-    // if (argc == 2){
+    if (argc == 2){
 
-    //     std::cout << "Writing IDS to " << argv[1] << std::endl;
+        std::cout << "Writing IDS to " << argv[1] << std::endl;
 
-    //     int fd = open(argv[1], O_CREAT | O_RDWR, 666);
-    //     if (fd < 0){
-    //         PRINT_DEBUG("Error opening the raw file!");
-    //         return 1;
-    //     }else{
-    //         close(fd);
-    //     }
+        int fd = open(argv[1], O_CREAT | O_RDWR, 666);
+        if (fd < 0){
+            PRINT_DEBUG("Error opening the raw file!");
+            return 1;
+        }else{
+            close(fd);
+        }
 
-    //     std::ofstream output_ids;
-    //     output_ids.open(argv[1]);
+        std::ofstream output_ids;
+        output_ids.open(argv[1]);
 
-    //     if (output_ids.is_open()){
-    //         for (int64 pk: *filtered_rows){
-    //             output_ids << pk << ",";
-    //         }
-    //         output_ids << "NULL";
-    //         output_ids.close();
-    //     }else{
-    //         PRINT_DEBUG("Error opening the ids file!");
-    //     }
+        if (output_ids.is_open()){
 
-    // }
+            for (int idx = 0; idx < filtered_rows_all[2]->size(); idx++){
+                output_ids << "(" << filtered_rows_all[2]->at(idx) << "," << filtered_rows_all[3]->at(idx) << ")" << ",";
+                // output_ids << filtered_rows_all[2]->at(idx) << ",";
+            }
+            // for (int64 pk: *filtered_rows_all){
+            //     output_ids << pk << ",";
+            // }
+            output_ids << "(NULL, NULL)";
+            // output_ids << "NULL";
+            output_ids.close();
+        }else{
+            PRINT_DEBUG("Error opening the ids file!");
+        }
+
+    }
 
     // for (int i = 0; i < LENGTH; i++){
     //     std::cout << i << " " << filtered_rows_all[i]->size() << std::endl;

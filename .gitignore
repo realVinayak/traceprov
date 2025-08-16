@@ -9,3 +9,4 @@ postgres/*.auto.sql
 postgres/trials/*/*.injected.sql
 postgres/trials/*/*.ids
 postgres/trials/*/*.fidelity.sql
+postgres/benchmark/tpch/scale_1_base_check/check_answers/*.log

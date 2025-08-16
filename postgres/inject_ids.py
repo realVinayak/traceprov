@@ -9,7 +9,7 @@ def main():
         ids = id_file.read()
 
 
-    new_sql = raw_sql.replace("%s", ids)
+    new_sql = raw_sql.replace("%s", ids, 1)
 
     with open(sys.argv[3], 'w') as injected_sql_f:
         injected_sql_f.write(''.join(new_sql))
