@@ -1,0 +1,29 @@
+{
+    "pk_order": [
+        "c_custkey",
+        "o_orderkey",
+        "l_orderkey",
+        "l_linenumber"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "c_custkey"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "o_orderkey"
+            ]
+        },
+        {
+            "ref": "C",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        }
+    ]
+}
