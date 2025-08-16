@@ -48,9 +48,24 @@ int get_error_no(){
 
 // #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { printf("[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); printf(__VA_ARGS__); printf("Error no: %d", get_error_no()); } } while(0)
 
+PG_FUNCTION_INFO_V1(mark_later);
+PG_FUNCTION_INFO_V1(reinit_state);
+PG_FUNCTION_INFO_V1(dump_state);
+
+// Parallel functions
+
+PG_FUNCTION_INFO_V1(agg_map_parallel_sfunc);
+PG_FUNCTION_INFO_V1(agg_map_parallel_finalfunc);
+PG_FUNCTION_INFO_V1(agg_map_parallel_combine);
+PG_FUNCTION_INFO_V1(agg_map_parallel_serialize);
+PG_FUNCTION_INFO_V1(agg_map_parallel_deserialize);
+
+PG_FUNCTION_INFO_V1(log_subquery_pk);
+
+
 int setup_signal_handlers();
 void reinit_state_local();
-
+int init_local_vars();
 
 const int32 scratch_page_magic = 0xBADB00DE;
 
@@ -103,9 +118,9 @@ static int remove_if_exists(const char *file){
 static int init_trace_file(void **trace_file_ptr, const char *fileName, long int size){
     int rc;
 
-    if (rc = remove_if_exists(fileName)) return rc;
+    if ((rc = remove_if_exists(fileName))) return rc;
 
-    PRINT_ON_DEBUG("[traceprov]: ERR # BEFORE OPEN");
+    PRINT_ON_DEBUG("[traceprov - %s]: ERR # BEFORE OPEN", fileName);
 
     int trace_file_fd = open(fileName, O_CREAT | O_RDWR, PERM);
     
@@ -114,13 +129,13 @@ static int init_trace_file(void **trace_file_ptr, const char *fileName, long int
         return 1;
     }
 
-    PRINT_ON_DEBUG("[traceprov]: ERR # AFTER OPEN");
+    PRINT_ON_DEBUG("[traceprov - %s]: ERR # AFTER OPEN", fileName);
 
-    PRINT_ON_DEBUG("[traceprov]: Opened initial trace file sucessfully!\n");
+    PRINT_ON_DEBUG("[traceprov - %s]: Opened initial file sucessfully!\n", fileName);
 
     off_t moved = lseek(trace_file_fd, size - 1, SEEK_SET);
     if (moved == -1){
-        PRINT_ON_DEBUG("[traceprov]: Error lseeking on trace file.");
+        PRINT_ON_DEBUG("[traceprov - %s]: Error lseeking on trace file.", fileName);
         return 1;
     }
 
@@ -137,22 +152,87 @@ static int init_trace_file(void **trace_file_ptr, const char *fileName, long int
     );
 
     if (ptr == MAP_FAILED){
-        PRINT_ON_DEBUG("[traceprov]: Error mmaping the file.\n");
+        PRINT_ON_DEBUG("[traceprov - %s]: Error mmaping the file.\n", fileName);
         close(trace_file_fd);
         return 1;
     }
 
-    PRINT_ON_DEBUG("[traceprov]: memmapped tracefile initially correctly");
+    PRINT_ON_DEBUG("[traceprov - %s]: memmapped initially correctly", fileName);
     *trace_file_ptr = ptr;
     return 0;
 }
 
-// TODO:
-// 1. There needs to be some mechanism for removing the scratch space. 
-// Otherwise, we'd be using garbage values. Not sure what is the best way of achieving that.
-static int init_local_vars(){
+
+int attach_trace_file(){
+
+    assert(ablc.scratch_ptr != NULL);
+    assert(ablc.my_worker_id != -1);
+
+    // This is the proper way (checking if the p_init_row is not null)
+    // Otherwise, there can be race conditons (say, checking if based on ptr's tracefile)
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].p_init_row != NULL) return 0;
+    
+    int rc  = 0;
+    int locked = 0;
+    if ((rc = flock(ablc.scratch_fd, LOCK_EX))){
+        PRINT_ON_DEBUG("Error locking the scratch file.");
+        goto attach_trace_file_exit;
+    }
+
+    locked = 1;
+
+    struct scratch_space *ptr = ablc.scratch_ptr;
+    if (ptr->trace_file == NULL){
+        PRINT_ON_DEBUG("Trying to create brand new trace mapping!\n");
+        // Need to create the trace file.
+        if ((rc = init_trace_file(&ptr->trace_file, PROV_FILE, PROV_FILE_SIZE))){
+            PRINT_ON_DEBUG("Error trying to create the trace file. \n");
+            goto attach_trace_file_exit;
+        }
+    }else{
+        PRINT_ON_DEBUG("Trying to use existing trace mapping!\n");
+        // We'd now need to mmap the trace file
+        // But, we'll be using the static address (from the trace file)
+        if ((rc = map_trace_file(ptr->trace_file))){
+            PRINT_ON_DEBUG("Error trying to map the trace file. \n");
+            goto attach_trace_file_exit;
+        }  
+    }
+
+    // This way, each worker will operate in its own "zone"
+    ptr->locals[ablc.my_worker_id].p_init_row = (struct mmap_init_row *)(
+        ((char*)ptr->trace_file) + (PARTITION_SIZE * ablc.my_worker_id)
+    );
+
+attach_trace_file_exit:
+
+    if (locked){
+        if ((rc = flock(ablc.scratch_fd, LOCK_UN))){
+            elog(ERROR, "Error unlocking: %d", rc);
+            assert(0);
+        }
+    }
+
+    return 0;
+
+}
+
+
+int init_local_vars_and_trace(){
+    int rc = 0;
+
+    if ((rc = init_local_vars())) return rc;
+
+    if ((rc = attach_trace_file())) return rc;
+
+    return 0;
+}
+
+
+int init_local_vars(){
 
     if (ablc.my_worker_id != -1) return 0;
+
 
     int scratch_fd = open(SCRATCH_SPACE, O_CREAT | O_RDWR, PERM);
     int locked = 0, rc = 0;
@@ -213,24 +293,6 @@ static int init_local_vars(){
         PRINT_ON_DEBUG("mmap for scratch space successful.\n");
     }
 
-    // Check if we need to create the main trace file.
-    if (ptr->trace_file == NULL){
-        PRINT_ON_DEBUG("Trying to create brand new trace mapping!\n");
-        // Need to create the trace file.
-        if (rc = init_trace_file(&ptr->trace_file, PROV_FILE, PROV_FILE_SIZE)){
-            PRINT_ON_DEBUG("Error trying to create the trace file. \n");
-            goto exit_scratch_space;
-        }
-    }else{
-        PRINT_ON_DEBUG("Trying to use existing trace mapping!\n");
-        // We'd now need to mmap the trace file
-        // But, we'll be using the static address (from the trace file)
-        if (rc = map_trace_file(ptr->trace_file)){
-            PRINT_ON_DEBUG("Error trying to map the trace file. \n");
-            goto exit_scratch_space;
-        }
-    }
-
     // If we're here, everything went smoothly.
     // We have the lock too.
     ablc.my_worker_id = (ptr->worker_count++);
@@ -245,10 +307,6 @@ static int init_local_vars(){
     ptr->procs[ablc.my_worker_id] = MyProcPid;
     ptr->locals[ablc.my_worker_id].should_print = 1;
 
-    // This way, each worker will operate in its own "zone"
-    ptr->locals[ablc.my_worker_id].p_init_row = (struct mmap_init_row *)(
-        ((char*)ptr->trace_file) + (PARTITION_SIZE * ablc.my_worker_id)
-    );
     // This is done for sanity reasons.
     ptr->locals[ablc.my_worker_id].worker_pid =  MyProcPid;
     ptr->locals[ablc.my_worker_id].worker_id =  ablc.my_worker_id;
@@ -268,7 +326,7 @@ exit_scratch_space:
     // We always need to unlock the file
     int previous_error = rc;
     if (locked){
-        if(rc = flock(scratch_fd, LOCK_UN)){
+        if((rc = flock(scratch_fd, LOCK_UN))){
             PRINT_ON_DEBUG("Error unlocking!: %d\n", rc);
         }
     }
@@ -391,28 +449,6 @@ int map_trace_file(void *addr){
     return 0;
 }
 
-PG_FUNCTION_INFO_V1(map);
-
-Datum map(PG_FUNCTION_ARGS){
-    PRINT_ON_DEBUG("Initial error no.");
-    int rc = init_local_vars();
-    if (rc != 0){
-        PRINT_ON_DEBUG("Error initializing the local variables!");
-        assert(0);
-        return -1;
-    }
-    PRINT_ON_DEBUG("Successfully initialized the local variables!");
-    print_local_context();
-    // struct mmap_init_row *ptr = (struct mmap_init_row *)mapped_file;
-    // ptr->primary_key = PG_GETARG_INT64(0);
-    // ptr->group_cnt = 0;
-    // counter = ptr + 1;
-    PG_RETURN_INT64(0);
-}
-
-
-PG_FUNCTION_INFO_V1(mark_later);
-
 Datum mark_later(PG_FUNCTION_ARGS){
 
     // We'll now simply set the value of this row to be 
@@ -421,6 +457,8 @@ Datum mark_later(PG_FUNCTION_ARGS){
     //     elog(ERROR, "Found marking an existing row!");
     // }
     row->in_result = 1;
+    // PRINT_ON_DEBUG("sleeping.");
+    // sleep(60*10);
     PG_RETURN_INT64(1);
 }
 
@@ -438,8 +476,6 @@ void reinit_state_local(){
 
 }
 
-PG_FUNCTION_INFO_V1(reinit_state);
-
 Datum reinit_state(PG_FUNCTION_ARGS){
 
     int scratch_fd = -1;
@@ -447,7 +483,7 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     int rc = 0;
     
 
-    if (rc = get_scratch_space(&ptr, &scratch_fd)){
+    if ((rc = get_scratch_space(&ptr, &scratch_fd))){
         PG_RETURN_INT64(rc);
     }
 
@@ -482,8 +518,15 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     remove_if_exists(PROV_FILE);
     remove_if_exists(SCRATCH_SPACE);
     remove_if_exists(PROV_PARALLEL_TRACE);
+
+    for (int i = 0; i < MAX_WORKERS; i++){
+        char subq_file_name[sizeof(PROV_SUBQ_TRACE) + 4];
+        memset(subq_file_name, 0, sizeof(subq_file_name));
+        sprintf(subq_file_name, PROV_SUBQ_TRACE, i);
+        remove_if_exists(subq_file_name);
+    }
+
     // This needs to reinit the state across all the workers.
-exit_reinit:
 
     if (scratch_fd > 0){
         close(scratch_fd);
@@ -493,7 +536,7 @@ exit_reinit:
 
 int get_scratch_space(struct scratch_space **pptr, int *fd){
     int scratch_fd = open(SCRATCH_SPACE, O_RDWR, PERM);
-    int rc = 0;
+
     if (scratch_fd < 0){
         PRINT_ON_DEBUG("Error opening scratch file for dump. Error code: %d\n", scratch_fd);
         return 1;
@@ -524,8 +567,6 @@ int get_scratch_space(struct scratch_space **pptr, int *fd){
     return 0;
 }
 
-PG_FUNCTION_INFO_V1(dump_state);
-
 Datum dump_state(PG_FUNCTION_ARGS){
     // This is done to dump the current state into the scratch file.
     // The benefit is that this function can be called just once (rather than "dumping" state after each access)
@@ -553,24 +594,17 @@ struct traceprov_agg_context {
 };
 
 
-// Parallel functions
-
-PG_FUNCTION_INFO_V1(agg_map_parallel_sfunc);
-PG_FUNCTION_INFO_V1(agg_map_parallel_finalfunc);
-PG_FUNCTION_INFO_V1(agg_map_parallel_combine);
-PG_FUNCTION_INFO_V1(agg_map_parallel_serialize);
-PG_FUNCTION_INFO_V1(agg_map_parallel_deserialize);
-
 Datum agg_map_parallel_sfunc(PG_FUNCTION_ARGS){
     int rc = 0;
     struct traceprov_agg_context *agg_inner_context;
 
-    if (rc = init_local_vars()){
+    if ((rc = init_local_vars_and_trace())){
         PRINT_ON_DEBUG("Error initializing args: %d", rc);
         elog(ERROR, "Couldn't set up local variables");
         assert(0);
         return rc;
     }else{
+
         if (ablc.scratch_ptr->locals[ablc.my_worker_id].should_print){
             PRINT_ON_DEBUG("Initialized local args correctly!");
             print_local_context();
@@ -640,7 +674,7 @@ Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
     // It is possible that the main process has never seen initialized the context.
     assert(!IsBackgroundWorker);
     
-    if(rc = init_local_vars()){
+    if((rc = init_local_vars_and_trace())){
         PRINT_ON_DEBUG("Error initializing args: %d", rc);
         elog(ERROR, "Couldn't set up the local variables on the main process!");
         assert(0);
@@ -814,3 +848,33 @@ Datum agg_map_parallel_deserialize(PG_FUNCTION_ARGS){
 
 //     PG_RETURN_INT64(0);
 // }
+
+Datum log_subquery_pk(PG_FUNCTION_ARGS){
+    int rc = 0;
+
+    if ((rc = init_local_vars())){
+        elog(ERROR, "Error initializing local vars for subquery");
+    }
+
+    // Now, we create files for each worker.
+
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk == NULL){
+        // If this is null, then we need to create it.
+        char subq_file_name[sizeof(PROV_SUBQ_TRACE) + 4];
+        memset(subq_file_name, 0, sizeof(subq_file_name));
+        sprintf(subq_file_name, PROV_SUBQ_TRACE, ablc.my_worker_id);
+        rc = init_trace_file((void**)&ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk, subq_file_name, GIGA_BYTE);
+        if (rc) {
+            elog(ERROR, "Error creating prov-subq file");
+            assert(0);
+        }
+        ablc.scratch_ptr->locals[ablc.my_worker_id].initial_subq_pk = ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk;
+    }
+
+
+    for (int pk_id = 0; pk_id < PG_NARGS(); pk_id++, ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk++){
+        *ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk = PG_GETARG_INT64(pk_id);
+    }
+
+    PG_RETURN_BOOL(1);
+}
