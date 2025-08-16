@@ -281,14 +281,23 @@ int main(int argc, char *argv[]){
 
         if (output_ids.is_open()){
 
-            for (int idx = 0; idx < filtered_rows_all[2]->size(); idx++){
-                output_ids << "(" << filtered_rows_all[2]->at(idx) << "," << filtered_rows_all[3]->at(idx) << ")" << ",";
-                // output_ids << filtered_rows_all[2]->at(idx) << ",";
+
+            for (int idx = 0; idx < filtered_rows_all[0]->size(); idx++){
+
+                int add_separator = 0;
+
+                for (int pk_idx = 0; pk_idx < LENGTH; pk_idx++){
+                    if (filtered_rows_all[pk_idx]->size()){
+                        if (add_separator) output_ids << ",";
+
+                        output_ids << filtered_rows_all[pk_idx]->at(idx);
+                        add_separator = 1;
+                    }
+                }
+
+                output_ids << std::endl;
             }
-            // for (int64 pk: *filtered_rows_all){
-            //     output_ids << pk << ",";
-            // }
-            output_ids << "(NULL, NULL)";
+
             // output_ids << "NULL";
             output_ids.close();
         }else{
@@ -297,11 +306,6 @@ int main(int argc, char *argv[]){
 
     }
 
-    // for (int i = 0; i < LENGTH; i++){
-    //     std::cout << i << " " << filtered_rows_all[i]->size() << std::endl;
-    // }
-
-    // print_ids_simple(filtered_rows_all[4]);
 
     return 0;
 }
