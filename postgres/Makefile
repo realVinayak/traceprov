@@ -29,3 +29,6 @@ infer_dbg:
 sql:
 	sed 's/__FILE__/$(file)/g' parallel_drop_and_create.sql > $(name).auto.sql
 	sudo cp $(name).auto.sql /home/postgres/
+
+validate:
+	sudo python3 benchmark/tpch/traceprov/validate/capture.py q$(num).ids benchmark/tpch/traceprov/validate/$(num).config.json benchmark/tpch/traceprov/validate/$(num).validate.sql $(db) benchmark/tpch/raw_queries/$(num).sql

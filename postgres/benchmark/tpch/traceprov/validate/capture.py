@@ -79,7 +79,7 @@ def capture():
     print(injected_run_cmd)
     assert(os.system(injected_run_cmd) == 0)
 
-    raw_run_cmd = get_run_cmd('/tmp/injected.sql', '/tmp/raw.out')
+    raw_run_cmd = get_run_cmd(raw_sql_file, '/tmp/raw.out')
     print(raw_run_cmd)
     assert(os.system(raw_run_cmd) == 0)
 

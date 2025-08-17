@@ -1,0 +1,13 @@
+{
+    "pk_order": [
+        "o_orderkey"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "o_orderkey"
+            ]
+        }
+    ]
+}

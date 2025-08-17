@@ -11,14 +11,17 @@
 #include <chrono>
 #include <algorithm>
 
+
+#include "row.h"
+
+#undef sprintf
+
+#include <string.h>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <streambuf>
 
-#include <string.h>
-
-#include "row.h"
 
 #define MAX_WORKERS 10
 
@@ -253,13 +256,47 @@ int main(int argc, char *argv[]){
         std::cout << "FILTERED: " << filtered_rows_all[pk_id]->size() << std::endl;
     }
 
+    std::vector<std::pair<int64, int64>> sub_q_ids;
+
+    int did_sort = 0;
+
+    for (int worker_id = 0; worker_id < MAX_WORKERS; worker_id++){
+
+        int64 *initial_subq_ptr = scratch_space_var.locals[worker_id].initial_subq_pk;
+
+        if (!initial_subq_ptr) continue;
+
+        if (!did_sort) std::sort(filtered_rows_all[0]->begin(), filtered_rows_all[0]->end());
+        did_sort = 1;
+
+        int64 *subq_pks;
+
+        char subq_file_name[sizeof(PROV_SUBQ_TRACE) + 4];
+        memset(subq_file_name, 0, sizeof(subq_file_name));
+        sprintf(subq_file_name, PROV_SUBQ_TRACE, worker_id);
+
+
+        map_trace_file((void **)&subq_pks, subq_file_name, GIGA_BYTE, NULL);
+
+        while (initial_subq_ptr < scratch_space_var.locals[worker_id].subq_pk){
+            
+            if (std::binary_search(
+                filtered_rows_all[0]->begin(),
+                filtered_rows_all[0]->end(),
+                subq_pks[2]
+            )){
+                sub_q_ids.push_back(std::pair<int64, int64>(subq_pks[0], subq_pks[1]));
+            }
+
+            subq_pks += 3;
+            initial_subq_ptr += 3;
+        }
+
+    }
+
+    std::cout << "SUBQ IDS SIZE: " << sub_q_ids.size() << std::endl;
+
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
-
-    // int idx = 0;
-
-    // for (idx = 0; idx < filtered_rows_all[0]->size(); idx++){
-    //     std::cout << "(" << filtered_rows_all[0]->at(idx) << "," << filtered_rows_all[1]->at(idx) << ")" << ",";
-    // }
 
 
     // If there are more than 1 arguments, assume that the other is the output file for the IDs.
