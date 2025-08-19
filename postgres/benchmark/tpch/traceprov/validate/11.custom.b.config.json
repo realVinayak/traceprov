@@ -1,0 +1,32 @@
+{
+    "id_table_name": "group_inner",
+    "id_file": "11.custom.inner.ids",
+    "group_number": 0,
+    "pk_order": [
+        "ps_suppkey",
+        "ps_partkey",
+        "s_suppkey",
+        "n_nationkey"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "ps_suppkey",
+                "ps_partkey"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "s_suppkey"
+            ]
+        },
+        {
+            "ref": "C",
+            "keys": [
+                "n_nationkey"
+            ]
+        }
+    ]
+}

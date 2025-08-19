@@ -4,6 +4,8 @@
 #define __USE_FILE_OFFSET64
 #define __REDIRECT_NTH
 
+#define _GNU_SOURCE
+
 #include "postgres.h"
 #include "fmgr.h"
 #include "stdio.h"
@@ -36,7 +38,7 @@ PG_MODULE_MAGIC;
 // #define PROV_FILE "provfile.prov"
 // #define SCRATCH_SPACE "scratch.space"
 
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 // #define PROV_FILE "provmap.map"
 
 int get_error_no(){
@@ -60,7 +62,22 @@ PG_FUNCTION_INFO_V1(agg_map_parallel_combine);
 PG_FUNCTION_INFO_V1(agg_map_parallel_serialize);
 PG_FUNCTION_INFO_V1(agg_map_parallel_deserialize);
 
+// This also tags with the worker id
+PG_FUNCTION_INFO_V1(agg_map_parallel_finalfunc_tag);
+
+// Stores info for the second aggregate.
+PG_FUNCTION_INFO_V1(agg_map_parallel_sfunc_second);
+
 PG_FUNCTION_INFO_V1(log_subquery_pk);
+PG_FUNCTION_INFO_V1(log_subquery_pk_neg);
+
+PG_FUNCTION_INFO_V1(agg_from_ptr_sfunc);
+PG_FUNCTION_INFO_V1(agg_from_ptr_sfunc_tag);
+PG_FUNCTION_INFO_V1(agg_from_ptr_combine);
+PG_FUNCTION_INFO_V1(agg_from_ptr_serialize);
+PG_FUNCTION_INFO_V1(agg_from_ptr_deserialize);
+PG_FUNCTION_INFO_V1(agg_from_ptr_finalfunc);
+
 
 
 int setup_signal_handlers();
@@ -75,7 +92,8 @@ static struct absolute_local_context ablc = {
     .my_worker_id = -1,
     .scratch_fd = -1,
     .scratch_ptr = NULL,
-    .local_group_number = 0
+    .local_group_number = 0,
+    .background_ptrs = NULL
 };
 
 int get_scratch_space(struct scratch_space **pptr, int *fd);
@@ -155,7 +173,12 @@ static int init_trace_file(void **trace_file_ptr, const char *fileName, long int
         PRINT_ON_DEBUG("[traceprov - %s]: Error mmaping the file.\n", fileName);
         close(trace_file_fd);
         return 1;
+    }else{
+        PRINT_ON_DEBUG("Initial mmap successfully,sleeping");
+        // sleep(3*60);
     }
+
+    PRINT_ON_DEBUG("PTR IS: %p", ptr);
 
     PRINT_ON_DEBUG("[traceprov - %s]: memmapped initially correctly", fileName);
     *trace_file_ptr = ptr;
@@ -201,7 +224,7 @@ int attach_trace_file(){
 
     // This way, each worker will operate in its own "zone"
     ptr->locals[ablc.my_worker_id].p_init_row = (struct mmap_init_row *)(
-        ((char*)ptr->trace_file) + (PARTITION_SIZE * ablc.my_worker_id)
+        ((char*)ptr->trace_file)
     );
 
 attach_trace_file_exit:
@@ -218,12 +241,41 @@ attach_trace_file_exit:
 }
 
 
+int attach_local_trace_file(){
+
+    int rc = 0;
+
+    assert(ablc.my_worker_id != -1);
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].local_trace_file != NULL) return 0;
+    char local_trace_filename[sizeof(PROV_SUB_FILE) + 4];
+    memset(local_trace_filename, 0, sizeof(local_trace_filename));
+    sprintf(local_trace_filename, PROV_SUB_FILE, ablc.my_worker_id);
+
+    rc = init_trace_file(&ablc.scratch_ptr->locals[ablc.my_worker_id].local_trace_file, local_trace_filename, SUB_PROV_FILE_SIZE);
+
+    if (rc){
+        elog(ERROR, "Error creating local trace file: %s", local_trace_filename);
+        assert(0);
+    }else{
+        PRINT_ON_DEBUG("Created local trace file: %s", local_trace_filename);
+    }
+    ablc.scratch_ptr->locals[ablc.my_worker_id].p_init_row = ablc.scratch_ptr->locals[ablc.my_worker_id].local_trace_file;
+
+    return rc;
+
+}
+
+
 int init_local_vars_and_trace(){
     int rc = 0;
 
     if ((rc = init_local_vars())) return rc;
 
-    if ((rc = attach_trace_file())) return rc;
+    if (IsBackgroundWorker){
+        if ((rc = attach_local_trace_file())) return rc;
+    }else{
+        if ((rc = attach_trace_file())) return rc;
+    }
 
     return 0;
 }
@@ -416,17 +468,22 @@ int map_trace_file(void *addr){
 
     PRINT_ON_DEBUG("[traceprov]: Opened trace file later sucessfully!\n");
 
+    PRINT_ON_DEBUG("Requested addr is: %p", addr);
+
     void *ptr = mmap64(
         addr,
         PROV_FILE_SIZE,
         PROT_WRITE,
-        MAP_SHARED | MAP_FIXED,
+        MAP_SHARED | MAP_FIXED_NOREPLACE,
         trace_file_fd,
         0
     );
 
     if (ptr == MAP_FAILED){
+
         PRINT_ON_DEBUG("[traceprov]: Error mmaping the file\n");
+
+        // sleep(60*5);
 
         ptr = mmap64(
             NULL,
@@ -470,6 +527,10 @@ void reinit_state_local(){
     ablc.scratch_fd = -1;
     ablc.scratch_ptr = NULL;
     ablc.local_group_number = 0;
+
+    if (ablc.background_ptrs) free(ablc.background_ptrs);
+
+    ablc.background_ptrs = NULL; 
 
     PRINT_ON_DEBUG("Reinit state.");
     print_local_context();
@@ -524,6 +585,11 @@ Datum reinit_state(PG_FUNCTION_ARGS){
         memset(subq_file_name, 0, sizeof(subq_file_name));
         sprintf(subq_file_name, PROV_SUBQ_TRACE, i);
         remove_if_exists(subq_file_name);
+
+        char local_trace_filename[sizeof(PROV_SUB_FILE) + 4];
+        memset(local_trace_filename, 0, sizeof(local_trace_filename));
+        sprintf(local_trace_filename, PROV_SUB_FILE, i);
+        remove_if_exists(local_trace_filename);
     }
 
     // This needs to reinit the state across all the workers.
@@ -643,29 +709,69 @@ Datum agg_map_parallel_sfunc(PG_FUNCTION_ARGS){
 
     int64 *pk_space = (int64*)(&p_local_context->p_init_row->group_cnt + sizeof(p_local_context->p_init_row->group_cnt));
 
+    // if ((uint64_t)pk_space > ((uint64_t)p_local_context->local_trace_file + SUB_PROV_FILE_SIZE)){
+    //     elog(ERROR, "Overflow for local context: %p", pk_space);
+    // }
     for (int pk_id = 1; pk_id < PG_NARGS(); pk_id++, pk_space++){
         *pk_space = PG_GETARG_INT64(pk_id);
     }
     
     p_local_context->p_init_row = (struct mmap_init_row*)pk_space;
 
+    // if ((u_int64_t)p_local_context->p_init_row > ((u_int64_t)((char *)ablc.scratch_ptr->trace_file + PARTITION_SIZE*(ablc.my_worker_id + 1)))){
+    //     elog(ERROR, "Found address break!");
+    // }
+
     PG_RETURN_POINTER(agg_inner_context);
+}
+
+Datum agg_map_parallel_sfunc_second(PG_FUNCTION_ARGS){
+
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].layer_mark == NULL){
+        ablc.scratch_ptr->locals[ablc.my_worker_id].layer_mark = (void*)-1;
+        ablc.scratch_ptr->locals[ablc.my_worker_id].second_group_count = ablc.scratch_ptr->locals[ablc.my_worker_id].group_count;
+    }
+    
+    return agg_map_parallel_sfunc(fcinfo);
 }
 
 Datum agg_map_parallel_finalfunc(PG_FUNCTION_ARGS){
 
+    if (PG_ARGISNULL(0)){
+        PG_RETURN_NULL();
+    }
     struct traceprov_agg_context *agg_inner_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
     // if (!agg_inner_context->is_combined){
     //     // elog(ERROR, "Found handling an incombined state in parallel func!");
     //     assert()
     // }
 
-    const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
+    struct mmap_later_row * final_value;
+
+    if (IsBackgroundWorker){
+        final_value = (((struct mmap_later_row*)(
+        (char*)ablc.scratch_ptr->locals[ablc.my_worker_id].local_trace_file + SUB_PROV_FILE_SIZE
+        )) - agg_inner_context->group_cnt);
+    }else{
+        final_value = (((struct mmap_later_row*)(
         (char*)ablc.scratch_ptr->trace_file + ((long)2)*GIGA_BYTE
-    )) - agg_inner_context->group_cnt
-    );
+        )) - agg_inner_context->group_cnt);
+    }
 
     PG_RETURN_INT64(final_value);
+}
+
+Datum agg_map_parallel_finalfunc_tag(FunctionCallInfo fcinfo){
+
+    int64 naive = agg_map_parallel_finalfunc(fcinfo);
+    
+    // Tag the naive 64-bit response with worker id.
+
+    int8 worker_id = ablc.my_worker_id;
+    int64 mask = (int64)worker_id << 48;
+
+    PG_RETURN_INT64(mask | naive);
+
 }
 
 Datum agg_map_parallel_combine(PG_FUNCTION_ARGS){
@@ -877,4 +983,148 @@ Datum log_subquery_pk(PG_FUNCTION_ARGS){
     }
 
     PG_RETURN_BOOL(1);
+}
+
+Datum log_subquery_pk_neg(PG_FUNCTION_ARGS){
+    int rc = 0;
+
+    if ((rc = init_local_vars())){
+        elog(ERROR, "Error initializing local vars for subquery");
+    }
+
+    // Now, we create files for each worker.
+
+    if (ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk == NULL){
+        // If this is null, then we need to create it.
+        char subq_file_name[sizeof(PROV_SUBQ_TRACE) + 4];
+        memset(subq_file_name, 0, sizeof(subq_file_name));
+        sprintf(subq_file_name, PROV_SUBQ_TRACE, ablc.my_worker_id);
+        rc = init_trace_file((void**)&ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk, subq_file_name, GIGA_BYTE);
+        if (rc) {
+            elog(ERROR, "Error creating prov-subq file");
+            assert(0);
+        }
+        ablc.scratch_ptr->locals[ablc.my_worker_id].initial_subq_pk = ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk;
+    }
+
+
+    for (int pk_id = 0; pk_id < PG_NARGS(); pk_id++, ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk++){
+        *ablc.scratch_ptr->locals[ablc.my_worker_id].subq_pk = PG_GETARG_INT64(pk_id);
+    }
+
+    PG_RETURN_BOOL(0);
+}
+
+Datum agg_from_ptr_sfunc(PG_FUNCTION_ARGS){
+    int64 group_no;
+    if (PG_ARGISNULL(0)){
+        group_no = ++ablc.scratch_ptr->locals[ablc.my_worker_id].second_group_count;
+    }else{
+        group_no = (int64)PG_GETARG_POINTER(0);
+    }
+    struct mmap_later_row *row =  (struct mmap_later_row *)PG_GETARG_INT64(1);
+    row->in_result = group_no;
+    PG_RETURN_POINTER(group_no);
+}
+
+int should_print = 1;
+Datum agg_from_ptr_sfunc_tag(PG_FUNCTION_ARGS){
+
+    if (ablc.background_ptrs == NULL) {
+        ablc.background_ptrs = malloc(sizeof(void*)*MAX_WORKERS);
+        memset(ablc.background_ptrs, 0, sizeof(void*)*MAX_WORKERS);
+    }
+
+    int64 group_no;
+    if (PG_ARGISNULL(0)){
+        group_no = ++ablc.scratch_ptr->locals[ablc.my_worker_id].second_group_count;
+    }else{
+        group_no = (int64)PG_GETARG_POINTER(0);
+    }
+
+    u_int64_t naive_row  = PG_GETARG_INT64(1);
+    int incoming_worker_id = naive_row >> 48;
+
+    u_int64_t reverse_mask = 0x0000FFFFFFFFFFFF;
+
+    struct mmap_later_row *row;
+
+    if (incoming_worker_id == ablc.my_worker_id){
+        row = (struct mmap_later_row*)(naive_row & reverse_mask);
+    }else {
+        if (ablc.background_ptrs[incoming_worker_id] == NULL){
+            PRINT_ON_DEBUG("Mmaping background ptr: %d", incoming_worker_id);
+            char local_trace_filename[sizeof(PROV_SUB_FILE) + 4];
+            memset(local_trace_filename, 0, sizeof(local_trace_filename));
+            sprintf(local_trace_filename, PROV_SUB_FILE, incoming_worker_id);
+            int bg_trace_fd;
+
+            TEMP_FAILURE_RETRY  (bg_trace_fd = open(local_trace_filename, O_RDWR));
+
+
+            if (bg_trace_fd < 0) elog(ERROR, "Error opening bg trace file: %s", local_trace_filename);
+
+            void *ptr = mmap64(
+                NULL,
+                SUB_PROV_FILE_SIZE,
+                PROT_WRITE,
+                MAP_SHARED,
+                bg_trace_fd,
+                0
+            );
+
+            if (ptr == MAP_FAILED){
+                elog(ERROR, "Error mmaping trace file");
+            }
+
+            ablc.background_ptrs[incoming_worker_id] = ptr;
+
+        }
+
+        row = (struct mmap_later_row *)(
+            ablc.background_ptrs[incoming_worker_id] 
+            + (
+                (reverse_mask & naive_row) 
+                - (u_int64_t)ablc.scratch_ptr->locals[incoming_worker_id].local_trace_file
+            )
+        );
+
+        // if (should_print){
+        //     PRINT_ON_DEBUG("ROW: %p, BASE: %p, ORIG: %ld", row, ablc.background_ptrs[incoming_worker_id], naive_row);
+        // }
+    }
+
+    // PRINT_ON_DEBUG("ROW: %p", row);
+
+    row->in_result = group_no;
+    PG_RETURN_POINTER(group_no);
+}
+
+Datum agg_from_ptr_combine(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect combine to be called.");
+    PG_RETURN_POINTER(1);
+}
+
+Datum agg_from_ptr_serialize(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect serialize to be called.");
+    PG_RETURN_POINTER(1);
+}
+
+Datum agg_from_ptr_deserialize(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect deserialize to be called.");
+    PG_RETURN_POINTER(1);
+}
+
+Datum agg_from_ptr_finalfunc(PG_FUNCTION_ARGS){
+    // assert(!IsBackgroundWorker);
+    struct local_context *current_context = &ablc.scratch_ptr->locals[ablc.my_worker_id];
+    if (current_context->layer_mark == NULL){
+        // Cache the layer mark (we will change this going forward)
+        current_context->layer_mark = (void*)current_context->p_init_row;
+        PRINT_ON_DEBUG("Using layer mark: %p", current_context->layer_mark);
+    }
+
+    int64 return_value = (int64)(((struct mmap_later_row*)current_context->layer_mark) + (int64)PG_GETARG_POINTER(0));
+
+    PG_RETURN_INT64(return_value);
 }

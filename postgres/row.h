@@ -7,12 +7,14 @@
 #define SCRATCH_SPACE "/var/lib/postgresql/14/main/scratch.space"
 #define PROV_PARALLEL_TRACE "/var/lib/postgresql/14/main/provfile_partial.prov"
 #define PROV_SUBQ_TRACE "/var/lib/postgresql/14/main/prov_subq_trace_%d.prov"
+#define PROV_SUB_FILE "/var/lib/postgresql/14/main/provfile_%d.prov"
 
 
 #define GIGA_BYTE 1024 * 1024 * 1024
 #define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)
 #define PARTITION_SIZE 128 * 1024 * 1024
 #define PERM (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+#define SUB_PROV_FILE_SIZE (long)2*GIGA_BYTE
 
 #define MAX_WORKERS 10
 
@@ -51,8 +53,6 @@ struct local_context {
     int worker_pid;
     int worker_id;
     int64 group_count;
-    // We need to this because we want to share this mapping across processes.
-    void *trace_file;
     // This is put here to encapsulate the state.
     struct mmap_init_row *p_init_row;
     int should_print;
@@ -60,6 +60,9 @@ struct local_context {
     void *initial_partial_row;
     int64 *subq_pk;
     int64 *initial_subq_pk;
+    void *layer_mark;
+    int64 second_group_count;
+    void *local_trace_file;
 };
 
 struct absolute_local_context {
@@ -67,6 +70,7 @@ struct absolute_local_context {
     int scratch_fd;
     struct scratch_space *scratch_ptr;
     int64 local_group_number;
+    void **background_ptrs;
 };
 
 struct scratch_space {
