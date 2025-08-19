@@ -2,26 +2,54 @@ import json
 import sys
 import os
 
-ID_TABLE_NAME = "captured_id"
+DEFAULT_ID_TABLE_NAME = "captured_id"
 
 def make_select(table, keys):
     return ','.join([f"{table}.{key}" for key in keys])
 
+def make_table(table, keys):
+    columns = ',\n'.join([f"{pk_name} INTEGER" for pk_name in keys])
+    create_table_sql = '\n'.join([
+        f'CREATE TABLE {table} (',
+        columns,
+        f");"
+    ])
+    return create_table_sql
+
 def capture():
 
-    id_file_name = sys.argv[1]
+    config_file_name = sys.argv[1]
+    validate_sql_file = sys.argv[2]
+    db_name = sys.argv[3]
 
-    assert(os.system(f'./infer.o {id_file_name}') == 0)
-
-
-    config_file_name = sys.argv[2]
-    validate_sql_file = sys.argv[3]
-    db_name = sys.argv[4]
-
-    if len(sys.argv) == 6:
-        raw_sql_file = sys.argv[5]
+    if len(sys.argv) == 5:
+        raw_sql_file = sys.argv[4]
     else:
         raw_sql_file = None
+
+    with open(config_file_name) as cf:
+        config = json.loads(cf.read())
+
+
+    id_file_name = config['id_file']
+    group_no = config.get('group_number', 1)
+    subq_table = config.get('subq_table_name')
+    ignore_group = config.get('ignore_gn')
+
+    extras = ""
+    if subq_table:
+        extras += f" -s.num {len(config.get('subq_pk_order'))}"
+        extras += f" -s.out {config.get('subq_id_file')}"
+
+    if ignore_group is not None:
+        extras += f" -ig {int(ignore_group)}"
+
+    infer_sh = f'./infer.o -f {id_file_name} -g {group_no}' + extras
+    print(infer_sh)
+    assert(os.system(infer_sh)== 0)
+
+    if subq_table:
+        assert(os.system(f"rm -f /home/postgres/{config.get('subq_id_file')}") == 0)
 
     assert(os.system(f'rm -f /home/postgres/{id_file_name}') == 0)
 
@@ -29,18 +57,20 @@ def capture():
         with open(id_file_name) as idf:
             f.write(idf.read())
 
+    if config.get('subq_id_file'):
+        with open(f"/home/postgres/{config.get('subq_id_file')}", 'w') as f:
+            with open(config.get('subq_id_file')) as idf:
+                f.write(idf.read())
+
+
     assert(os.system(f"chown -R postgres:postgres /home/postgres") == 0)
 
-    with open(config_file_name) as cf:
-        config = json.loads(cf.read())
+    ID_TABLE_NAME = config.get('id_table_name', DEFAULT_ID_TABLE_NAME)
 
-    columns = ',\n'.join([f"{pk_name} INTEGER" for pk_name in config['pk_order']])
-
-    create_table_sql = '\n'.join([
-        f'CREATE TABLE {ID_TABLE_NAME} (',
-        columns,
-        f");"
-    ])
+    create_table_sql = make_table(
+        ID_TABLE_NAME,
+        config['pk_order']
+    )
 
     copy_from_file_sql = f"COPY {ID_TABLE_NAME} FROM '/home/postgres/{id_file_name}' WITH (FORMAT csv, DELIMITER ',');"
 
@@ -50,8 +80,11 @@ def capture():
     for participating in config['inserts']:
         ref = participating['ref']
         keys = participating['keys']
+        is_subq = participating.get('is_sub', False)
 
-        key_select_sql = f"SELECT {make_select(ID_TABLE_NAME, keys)} FROM {ID_TABLE_NAME}"
+        inner_table = subq_table if is_subq else ID_TABLE_NAME
+
+        key_select_sql = f"SELECT {make_select(inner_table, keys)} FROM {inner_table}"
         sql_to_inject = sql_to_inject.replace(f"%{ref}%", key_select_sql)
     
     final_sql = [
@@ -60,6 +93,16 @@ def capture():
         copy_from_file_sql,
         '-- SQL --',
     ]
+
+    if subq_table:
+        final_sql.append(f"DROP TABLE IF EXISTS {subq_table};")
+        subq_id_file = config['subq_id_file']
+        subq_create_table = make_table(
+            subq_table,
+            config['subq_pk_order']
+        )
+        final_sql.append(subq_create_table)
+        final_sql.append(f"COPY {subq_table} FROM '/home/postgres/{subq_id_file}' WITH (FORMAT csv, DELIMITER ',');")
 
     with open("/tmp/create_id_table.sql", 'w') as f:
         f.write('\n'.join(final_sql))
@@ -83,7 +126,7 @@ def capture():
     print(raw_run_cmd)
     assert(os.system(raw_run_cmd) == 0)
 
-    os.system('diff /tmp/injected.out /tmp/raw.out')
+    os.system('diff -u /tmp/injected.out /tmp/raw.out')
 
 if __name__ == '__main__':
     capture()

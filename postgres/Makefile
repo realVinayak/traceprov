@@ -1,3 +1,7 @@
+
+word-dot = $(word $2,$(subst ., ,$1))
+word-dot-rest = $(word $2,$(subst ., ,$2))
+
 clean:
 	rm -f *.so
 	rm -f *.o
@@ -32,3 +36,6 @@ sql:
 
 validate:
 	sudo python3 benchmark/tpch/traceprov/validate/capture.py q$(num).ids benchmark/tpch/traceprov/validate/$(num).config.json benchmark/tpch/traceprov/validate/$(num).validate.sql $(db) benchmark/tpch/raw_queries/$(num).sql
+
+validate_mod:
+	sudo python3 benchmark/tpch/traceprov/validate/capture.py benchmark/tpch/traceprov/validate/$(num).config.json benchmark/tpch/traceprov/validate/$(num).validate.sql $(db) benchmark/tpch/raw_queries/$(check).sql

@@ -1,0 +1,22 @@
+{
+    "pk_order": [
+        "ps_partkey",
+        "ps_suppkey",
+        "p_partkey"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "ps_partkey",
+                "ps_suppkey"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "p_partkey"
+            ]
+        }
+    ]
+}
