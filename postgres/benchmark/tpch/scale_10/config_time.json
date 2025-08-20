@@ -20,7 +20,7 @@
     "validate": false,
     "repeat": 10,
     "subdirs": [
-        "params_default"
+        "params_1"
     ],
     "validate_steps": {
         "11": [
