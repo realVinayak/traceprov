@@ -38,7 +38,7 @@ PG_MODULE_MAGIC;
 // #define PROV_FILE "provfile.prov"
 // #define SCRATCH_SPACE "scratch.space"
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 // #define PROV_FILE "provmap.map"
 
 int get_error_no(){
