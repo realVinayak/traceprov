@@ -1,0 +1,16 @@
+{
+    "id_file": "6.ids",
+    "pk_order": [
+        "l_orderkey",
+        "l_linenumber"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        }
+    ]
+}
