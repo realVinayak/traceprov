@@ -5,3 +5,12 @@ postgres/*.o
 playground/
 postgres/*.ids
 postgres/*.injected.sql
+postgres/*.auto.sql
+postgres/trials/*/*.injected.sql
+postgres/trials/*/*.ids
+postgres/trials/*/*.fidelity.sql
+postgres/benchmark/tpch/scale_1_base_check/check_answers/*.log
+postgres/benchmark/tpch/__pycache__/
+postgres/benchmark/tpch/temp.out
+postgres/benchmark/tpch/baseline_result_store.json
+postgres/benchmark/tpch/traceprov_result_store.json

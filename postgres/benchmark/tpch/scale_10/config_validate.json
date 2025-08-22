@@ -1,0 +1,35 @@
+{
+    "db_name": "tpch_10_v02",
+    "queries": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        10,
+        11,
+        12,
+        14,
+        17,
+        19
+    ],
+    "id_only": [
+        9
+    ],
+    "validate": true,
+    "repeat": 1,
+    "subdirs": [
+        "params_1"
+    ],
+    "validate_steps": {
+        "11": [
+            "a",
+            "b"
+        ]
+    },
+    "expected_diff_failures": [
+        "11"
+    ]
+}

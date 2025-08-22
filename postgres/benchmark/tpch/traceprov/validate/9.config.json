@@ -1,0 +1,53 @@
+{
+    "id_file": "9.ids",
+    "pk_order": [
+        "p_partkey",
+        "s_suppkey",
+        "l_orderkey",
+        "l_linenumber",
+        "ps_partkey",
+        "ps_suppkey",
+        "o_orderkey",
+        "n_nationkey"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "p_partkey"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "s_suppkey"
+            ]
+        },
+        {
+            "ref": "C",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        },
+        {
+            "ref": "D",
+            "keys": [
+                "ps_partkey",
+                "ps_suppkey"
+            ]
+        },
+        {
+            "ref": "E",
+            "keys": [
+                "o_orderkey"
+            ]
+        },
+        {
+            "ref": "F",
+            "keys": [
+                "n_nationkey"
+            ]
+        }
+    ]
+}
