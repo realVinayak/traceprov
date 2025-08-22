@@ -53,6 +53,8 @@ Below is the list of user-defined functions used in the forward tracing. The agg
 
 # Building the UDFs
 
+The UDFs (and aggregates) are coded in [postgres/agg_maps.c](https://github.com/realVinayak/traceprov/blob/main/postgres/agg_maps.c).
+
 To build the UDFs, do the following (with a suffix chosen for `SOME_SUFFIX`).
 
 ```
@@ -74,6 +76,8 @@ Thus, to load the functions (and aggregates), in Postgres simply do the followin
 ```
 
 # Performing inference
+
+The code for inference is in [postgres/infer.cpp](https://github.com/realVinayak/traceprov/blob/main/postgres/infer.cpp).
 
 To perform inference, after forward tracing, first build the infer executable.
 
