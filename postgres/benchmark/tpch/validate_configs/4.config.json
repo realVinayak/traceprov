@@ -1,0 +1,29 @@
+{
+    "pk_order": [
+        "o_orderkey"
+    ],
+    "subq_table_name": "subquery_4_captured_id",
+    "subq_pk_order": [
+        "l_orderkey",
+        "l_linenumber",
+        "o_orderkey"
+    ],
+    "subq_id_file": "4.subq.ids",
+    "id_file": "4.ids",
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "o_orderkey"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ],
+            "is_sub": true
+        }
+    ]
+}

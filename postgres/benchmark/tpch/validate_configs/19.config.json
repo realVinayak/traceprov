@@ -1,0 +1,23 @@
+{
+    "id_file": "19.ids",
+    "pk_order": [
+        "l_orderkey",
+        "l_linenumber",
+        "p_partkey"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "p_partkey"
+            ]
+        }
+    ]
+}
