@@ -1,0 +1,8 @@
+{
+    "pk_order": [
+        "community_area",
+        "ward",
+        "district",
+        "beat"
+    ]
+}

@@ -1,0 +1,6 @@
+{
+    "pk_order": [
+        "l_orderkey",
+        "p_partkey"
+    ]
+}

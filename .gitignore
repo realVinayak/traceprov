@@ -14,3 +14,4 @@ postgres/benchmark/tpch/__pycache__/
 postgres/benchmark/tpch/temp.out
 postgres/benchmark/tpch/baseline_result_store.json
 postgres/benchmark/tpch/traceprov_result_store.json
+ benchmark/tpch/ranges/__pycache__/

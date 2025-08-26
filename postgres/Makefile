@@ -21,8 +21,8 @@ module:
 	gcc -g -Wall -shared $(src)_$(suff).o -o $(src)_$(suff).so
 	sudo cp $(src)_$(suff).so /usr/lib/postgresql/14/lib
 	rm -f *.auto.sql
-	sed 's/__FILE__/$(src)_$(suff)/g' parallel_drop_and_create.sql > parallel_drop_and_create_$(src)_$(suff).auto.sql
-	sudo cp parallel_drop_and_create_$(src)_$(suff).auto.sql /home/postgres/
+	sed 's/__FILE__/$(src)_$(suff)/g' $(sql).sql > $(sql)_$(src)_$(suff).auto.sql
+	sudo cp $(sql)_$(src)_$(suff).auto.sql /home/postgres/
 
 infer:
 	g++ -O3 -I/usr/include/postgresql/14/server/ infer.cpp -o infer.o
@@ -39,3 +39,9 @@ validate:
 
 validate_mod:
 	sudo python3 benchmark/tpch/traceprov/validate/capture.py benchmark/tpch/traceprov/validate/$(num).config.json benchmark/tpch/traceprov/validate/$(num).validate.sql $(db) benchmark/tpch/raw_queries/$(check).sql
+
+agg_udfs:
+	sudo make module src=agg_maps suff=$(suff) sql=parallel_drop_and_create
+
+binary_search:
+	sudo make module src=binary_search suff=$(suff) sql=create_b_search
