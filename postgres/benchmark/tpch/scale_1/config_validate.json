@@ -1,6 +1,9 @@
 {
     "db_name": "tpch_01_v01",
     "queries": [
+        17
+    ],
+    "_queries": [
         1,
         2,
         3,
@@ -21,6 +24,14 @@
     "validate": true,
     "repeat": 1,
     "subdirs": [
+        "params_1",
+        "params_2",
+        "params_3",
+        "params_4",
+        "params_5",
+        "params_default"
+    ],
+    "_subdirs": [
         "params_default",
         "params_1",
         "params_2",

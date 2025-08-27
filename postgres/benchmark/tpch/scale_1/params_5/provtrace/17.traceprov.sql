@@ -4,13 +4,9 @@
 SELECT *, mark_later(mapped_agg_second) FROM (
     select
         sum(l_extendedprice) / 7.0 as avg_yearly,
-        agg_map_parallel_second(p_partkey, l_orderkey, l_linenumber, 0) as mapped_agg_second,
-        SUM(later)
+        agg_map_parallel_second(p_partkey, l_orderkey, l_linenumber, mark_later(mapped_agg)) as mapped_agg_second
     from
-        (
-            SELECT 
-                *, mark_later(mapped_agg) as later
-            FROM part, lineitem JOIN LATERAL (
+        part, lineitem JOIN LATERAL (
                 SELECT 
                     0.2 * avg(l_quantity) as avg,
                     agg_map_parallel(l_orderkey, l_linenumber, 0, 0) as mapped_agg
@@ -21,6 +17,5 @@ SELECT *, mark_later(mapped_agg_second) FROM (
             WHERE p_partkey = l_partkey
             and p_brand = 'Brand#12'
             and p_container = 'SM BAG'
-        ) h
 ) g;
 
