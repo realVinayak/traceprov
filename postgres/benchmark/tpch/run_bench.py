@@ -54,7 +54,7 @@ def run():
         for query in test_queries:
 
             for repetition in range(repeat):
-                print("[baseline] Running query:\t", query, 'num', repetition)
+                print("[baseline] Running query:\t", query, 'num', repetition, 'dir:\t', test_dir)
                 start = time.perf_counter()
                 safe_run(f"PGPASSWORD=postgres psql -U postgres {db_name} -f {path}base/{query}.sql > /dev/null")
                 end = time.perf_counter()
@@ -64,7 +64,7 @@ def run():
                 baseline_result_store = _add_duration(test_dir, query, duration, baseline_result_store)
 
             for repetition in range(repeat):
-                print('[traceprov] Running query:\t', query, 'num', repetition)
+                print('[traceprov] Running query:\t', query, 'num', repetition, 'dir:\t', test_dir)
                 safe_run(f'echo "select reinit_state(0);" | PGPASSWORD=postgres psql -U postgres {db_name}')
                 start = time.perf_counter()
                 safe_run(f"PGPASSWORD=postgres psql -U postgres {db_name} -f {path}provtrace/{query}.traceprov.sql > /dev/null")
