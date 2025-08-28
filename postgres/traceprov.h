@@ -4,6 +4,8 @@
 
 
 #include "c.h"
+#include "errno.h"
+#include "utils/elog.h"
 
 #define TRACE_PROV_DIR "/var/lib/postgresql/14/main/traceprov"
 
@@ -18,6 +20,26 @@
 #define TRACEPROV_BLOCK_SIZE 1L << 15
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+
+#define DEBUG_MODE 0
+
+const int32 traceprov_shared_context_magic = 0xBADB00DE;
+
+int get_error_no(){
+    int err_no = errno;
+    return err_no;
+}
+
+#define PRINT_ON_DEBUG(...) do { \
+    if (DEBUG_MODE) { \
+        elog(INFO, \
+            "[traceprov]: %s, %d. PID: %d\t", \
+             __FILE__, __LINE__, \
+             getpid()); \ 
+        elog(INFO, __VA_ARGS__); \ 
+        elog(INFO, "Error no: %d", get_error_no()); \
+    } } while(0) \
+
 
 struct trace_file_forward_row {
     int64   group_count;
@@ -69,3 +91,5 @@ struct current_context {
     // This is done to avoid doing the stupid array indexing on every access.
     struct local_context *local_context;
 };
+
+#define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)

@@ -36,10 +36,7 @@ PG_MODULE_MAGIC;
 
 #define DEBUG_MODE 0
 
-int get_error_no(){
-    int err_no = errno;
-    return err_no;
-}
+
 
 #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { elog(INFO, "[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); elog(INFO, __VA_ARGS__); elog(INFO, "Error no: %d", get_error_no()); } } while(0)
 
