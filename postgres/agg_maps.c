@@ -34,12 +34,7 @@
 
 PG_MODULE_MAGIC;
 
-
-// #define PROV_FILE "provfile.prov"
-// #define SCRATCH_SPACE "scratch.space"
-
 #define DEBUG_MODE 0
-// #define PROV_FILE "provmap.map"
 
 int get_error_no(){
     int err_no = errno;
@@ -47,8 +42,6 @@ int get_error_no(){
 }
 
 #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { elog(INFO, "[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); elog(INFO, __VA_ARGS__); elog(INFO, "Error no: %d", get_error_no()); } } while(0)
-
-// #define PRINT_ON_DEBUG(...) do {if (DEBUG_MODE) { printf("[traceprov]: %s, %d. PID: %d\t", __FILE__, __LINE__, getpid()); printf(__VA_ARGS__); printf("Error no: %d", get_error_no()); } } while(0)
 
 PG_FUNCTION_INFO_V1(mark_later);
 PG_FUNCTION_INFO_V1(reinit_state);
@@ -365,6 +358,9 @@ int init_local_vars(){
     
     ablc.scratch_ptr = ptr;
     ablc.scratch_fd = scratch_fd;
+
+    // Apparently, postgres kills the background processes if spawning for partial aggregates.
+    // Thus, below code is not needed.
     // ptr->locals[ablc.my_worker_id].p_init_row->group_cnt = 1;
     // // Also add signal handler for resetting and dumping the local state.
     // if(rc = setup_signal_handlers()){
@@ -704,6 +700,11 @@ Datum agg_map_parallel_sfunc(PG_FUNCTION_ARGS){
             assert(0);
         }
     }
+
+    size_t size_pack = sizeof(p_local_context->p_init_row) + sizeof((PG_NARGS() - 1)*sizeof(int64));
+    // Check if the size will overflow the current page.
+    // If it'll, then we'd allocate a brand new page.
+
     p_local_context->p_init_row->num_records = PG_NARGS() - 1;
     p_local_context->p_init_row->group_cnt = agg_inner_context->group_cnt;
 
@@ -897,63 +898,6 @@ Datum agg_map_parallel_deserialize(PG_FUNCTION_ARGS){
 
     PG_RETURN_POINTER(context);
 }
-
-
-// // These are sequeuntial functions.
-
-// PG_FUNCTION_INFO_V1(agg_map_sfunc);
-// PG_FUNCTION_INFO_V1(agg_map_finalfunc);
-
-
-// Datum agg_map_sfunc(PG_FUNCTION_ARGS){
-
-//     // PRINT_ON_DEBUG("Being called with arg: %ld", PG_GETARG_INT64(1));
-
-//     int rc = 0;
-//     if (rc = init_local_vars()){
-//         PRINT_ON_DEBUG("Error initializing args: %d", rc);
-//         elog(ERROR, "Couldn't set up local variables!");
-//         assert(0);
-//         return rc;
-//     }else{
-//         if (ablc.scratch_ptr->locals[ablc.my_worker_id].should_print){
-//             PRINT_ON_DEBUG("Initialized local args correctly!");
-//             print_local_context();
-//             ablc.scratch_ptr->locals[ablc.my_worker_id].should_print = 0;
-//         }
-//     }
-
-
-//     struct traceprov_agg_context *agg_inner_context;
-
-//     if (PG_ARGISNULL(0)){
-//         agg_inner_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
-//         // Here, we are creating a brand new group.
-//         agg_inner_context->group_cnt = (++ablc.scratch_ptr->locals[ablc.my_worker_id].group_count);
-//         // PRINT_ON_DEBUG("Making a new context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
-//     }else{
-//         agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
-//         // PRINT_ON_DEBUG("Using a previous context: %ld. Group count is: %ld", PG_GETARG_INT64(1), agg_inner_context->group_cnt);
-//     }
-    
-//     struct local_context *p_local_context = &ablc.scratch_ptr->locals[ablc.my_worker_id];
-//     p_local_context->p_init_row->group_cnt = agg_inner_context->group_cnt;
-//     p_local_context->p_init_row->primary_key = PG_GETARG_INT64(1);
-//     p_local_context->p_init_row = p_local_context->p_init_row + 1;
-//     PG_RETURN_POINTER(agg_inner_context);
-// }
-
-// Datum agg_map_finalfunc(PG_FUNCTION_ARGS){
-
-//     struct traceprov_agg_context * agg_inner_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
-
-//     const struct mmap_later_row * final_value = (((struct mmap_later_row*)(
-//         (char*)ablc.scratch_ptr->trace_file + (ablc.my_worker_id+1)*GIGA_BYTE
-//     )) - agg_inner_context->group_cnt
-//     );
-
-//     PG_RETURN_INT64(0);
-// }
 
 Datum log_subquery_pk(PG_FUNCTION_ARGS){
     int rc = 0;

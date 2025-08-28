@@ -9,6 +9,8 @@
 #define PROV_SUBQ_TRACE "/var/lib/postgresql/14/main/prov_subq_trace_%d.prov"
 #define PROV_SUB_FILE "/var/lib/postgresql/14/main/provfile_%d.prov"
 
+// 32kB is the page size.
+#define PROV_PAGE_SIZE 1L << 15
 
 #define GIGA_BYTE 1024 * 1024 * 1024
 #define PROV_FILE_SIZE ((long)10 * GIGA_BYTE)
