@@ -7,18 +7,31 @@
 #include "errno.h"
 #include "utils/elog.h"
 
+#include <assert.h>
+
+// TODO: Make this per-process to enable concurrent traceprovs.
 #define TRACE_PROV_DIR "/var/lib/postgresql/14/main/traceprov"
 
-#define DEFINE_TRACE_PROV_FILE(filename) TRACE_PROV_DIR ## filename
+#define DEFINE_TRACE_PROV_FILE(filename) TRACE_PROV_DIR filename
 
-#define MAIN_TRACE_FILE             DEFINE_TRACE_PROV_FILE("/trace_file_%d.tp")
-#define PARTIAL_GROUP_BY_FILE       DEFINE_TRACE_PROV_FILE("/partial_group_by_trace.tp")
-#define TRACEPROV_SHARED_CONTEXT    DEFINE_TRACE_PROV_FILE("/shared_context.shm")
-#define SUBQUERY_TRACE              DEFINE_TRACE_PROV_FILE("/subq_trace_%d.tp")
+#define TRACEPROV_MAIN_TRACE_FILE       DEFINE_TRACE_PROV_FILE("/trace_file_%d.tp")
+#define TRACEPROV_PARTIAL_GROUP_BY_FILE DEFINE_TRACE_PROV_FILE("/partial_group_by_trace.tp")
+#define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
+#define TRACEPROV_SUBQUERY_TRACE        DEFINE_TRACE_PROV_FILE("/subq_trace_%d.tp")
+#define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
 
-// 32kB is page size
-#define TRACEPROV_BLOCK_SIZE    1L << 15
-#define TRACEPROV_MAX_WORKERS   256
+// The intention here is to align with the OS' page size.
+// If the OS page size is different (huge pages, or some other page size)
+// The below should also be changed.
+#define TRACEPROV_PAGE_SIZE             (1L << 12)
+// Defines the maximum number of workers currently supported.
+#define TRACEPROV_MAX_WORKERS           256
+// Defines the maximum number of layers per worker, before it begins
+// doing dynamic memory allocation.
+// Essentially, if the number of layer increases more than this, it then spills
+// the extra layers to a new file (instead of storing it all part of the shared context)
+// This approach makes it fast for the common case where there are couple of layers
+#define TRACEPROV_MAX_LAYER_PER_WORKER  0
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -42,11 +55,11 @@ int get_error_no(){
 
 #define PRINT_ON_DEBUG(...) do { \
     if (DEBUG_MODE) { \
-        elog(INFO, \
+        elog(INFO,\
             "[traceprov]: %s, %d. PID: %d\t", \
-             __FILE__, __LINE__, \
-             getpid()); \ 
-        elog(INFO, __VA_ARGS__); \ 
+             __FILE__, __LINE__,\
+             getpid());\
+        elog(INFO, __VA_ARGS__);\
         elog(INFO, "Error no: %d", get_error_no()); \
     } } while(0) \
 
@@ -66,6 +79,38 @@ struct trace_file_partial_row {
 };
 
 
+// Each layer is backed by a single file.
+// However, that file is grown incrementally.
+// Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
+// Each mapping is of 32kB (or TRACEPROV_BLOCK_SIZE).
+struct traceprov_aggregate_layer {
+    // Defines number of PKs being logged.
+    // This is NOT number of records
+    int32 num_pk_records;
+    // We only store the last mapping that it uses.
+    void *last_mapping;
+    // Stores the number of times the file has been grown.
+    int32 mapping_count;
+    // This points to the current_row. 
+    // This, will effectively lie in [last_mapping, last_mapping + TRACEPROV_BLOCK_SIZE)
+    void *current_row;
+    // This stores the number of groups that this layer has seen.
+    // Since this can exist in a background worker, this is always the LOCAL count of groups (and not global)
+    uint32 num_groups;
+    uint32 layer_number;
+    // Each record gets this much padding.
+    uint32 record_padding;
+    // Padding for this struct.
+    uint32 _padding[5];
+};
+
+static_assert(sizeof(struct traceprov_aggregate_layer) == 64, "Size mismatch.");
+
+#define TRACRPROV_NUM_LAYER_PER_PAGE (TRACEPROV_PAGE_SIZE / sizeof(struct traceprov_aggregate_layer))
+
+static_assert(((TRACEPROV_PAGE_SIZE) % sizeof(struct traceprov_aggregate_layer)) == 0, "Expected complete layers per page");
+
+
 struct local_context {
     int32   worker_pid;
     uint8   worker_id;
@@ -79,32 +124,13 @@ struct local_context {
 
     // This stores the aggregate layers.
     // Each aggregate consists of multiple mappings (see struct traceprov_aggregate_layer)
-    struct  traceprov_aggregate_layer **layers;
+    struct  traceprov_aggregate_layer cached_layers[TRACEPROV_MAX_LAYER_PER_WORKER];
+    struct  traceprov_aggregate_layer *layers;
     // The layers is resized double each time.
-    uint32  layer_count;
-};
-
-// Each layer is backed by a single file.
-// However, that file is grown incrementally.
-// Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
-// Each mapping is of 32kB (or TRACEPROV_BLOCK_SIZE).
-struct traceprov_aggregate_layer {
-    // Defines number of PKs being logged.
-    // This is NOT number of records
-    int32 num_pk_records;
-    // Stores the beginning of all the mappings.
-    void **mapping_starts;
-    // The number of mappings.
-    // This, actually, gets grown via powers of two.
-    // So, the mapping_starts gets resized double each time.
-    // This is done to avoid resizing all the damn time
-    int32 mapping_count;
-    // This points to the current_row. 
-    // This, will effectively lie in [mapping_starts[-1], mapping_starts[-1] + TRACEPROV_BLOCK_SIZE)
-    void *current_row;
-    // This stores the number of groups that this layer has seen.
-    // Since this can exist in a background worker, this is always the LOCAL count of groups (and not global)
-    uint32 num_groups;
+    // We don't bother looking at this if we fit in cached layers,
+    // So that is why this is "dynamic".
+    uint32  dynamic_layer_count;
+    int32   layer_fd;
 };
 
 struct traceprov_shared_context {

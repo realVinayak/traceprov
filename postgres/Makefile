@@ -45,3 +45,7 @@ agg_udfs:
 
 binary_search:
 	sudo make module src=binary_search suff=$(suff) sql=create_b_search
+
+traceprov:
+	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/14/server/ traceprov.c -o traceprov.o
+	gcc -g -Wall -shared traceprov.o -o traceprov.so
