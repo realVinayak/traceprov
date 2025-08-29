@@ -1,5 +1,11 @@
 #include "traceprov_utils.h"
 
+int get_error_no(){
+    int err_no = errno;
+    return err_no;
+}
+
+
 void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "traceprov_aggregate_layer {");
     elog(INFO, "\t->num_pk_records: %d", layer->num_pk_records);

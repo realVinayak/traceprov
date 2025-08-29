@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <unistd.h>
+#include <dirent.h>
 
 
 int remove_if_exists(const char *file){
@@ -42,7 +43,7 @@ char *get_injected_str(const char *file_template_name, int number, void *buffer)
     }
 
 
-    memset(file_name, file_name_size, 0);
+    memset(file_name, 0, file_name_size);
     sprintf(file_name, file_template_name, number);
 
     return file_name;
@@ -65,4 +66,29 @@ int remove_and_create(const char *file_name, int size){
     }
 
     return fd;
+}
+
+// Taken from https://stackoverflow.com/questions/11007494/how-to-delete-all-files-in-a-folder-but-not-delete-the-folder-using-nix-standar
+int remove_files_from_dir(const char *dir){
+    // These are data types defined in the "dirent" header
+    DIR *folder = opendir(dir);
+    struct dirent *next_file;
+    char filepath[256];
+
+    while ( (next_file = readdir(folder)) != NULL )
+    {
+        // skip "." and ".." entries
+        if (strcmp(next_file->d_name, ".")==0 || strcmp(next_file->d_name, "..")==0)
+            continue;
+
+        // build the path for each file in the folder
+        sprintf(filepath, "%s/%s", dir, next_file->d_name);
+        PRINT_ON_DEBUG("Removing file: %s", filepath);
+        if (remove(filepath)){
+            elog(ERROR, "Error removing file: %s", filepath);
+            return 1;
+        }
+    }
+    closedir(folder);
+    return 0;
 }
