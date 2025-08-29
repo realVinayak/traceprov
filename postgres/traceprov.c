@@ -7,6 +7,7 @@
 #include "fmgr.h"
 #include "miscadmin.h"
 #include "file_utils.h"
+#include "traceprov_utils.h"
 
 
 PG_MODULE_MAGIC;
