@@ -12,8 +12,10 @@
 
 PG_MODULE_MAGIC;
 
+static const int32 traceprov_shared_context_magic = 0xBADB00DE;
+
 static struct current_context traceprov_current = {
-    .my_worker_id =                 -1,
+    .my_worker_id =                 255,
     .traceprov_shared_context_fd =  -1,
     .shared_context =               NULL,
     .local_context =                NULL
@@ -47,7 +49,7 @@ static int initialize_shared_context(int shared_context_fd){
 
 static int initialize_local_context(){
     
-    if (traceprov_current.my_worker_id != -1) return 0;
+    if (traceprov_current.my_worker_id != 255) return 0;
 
     int rc = 0, is_locked = 0;
 
@@ -292,4 +294,34 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
     }
 
     return 0;
+}
+
+// Assumes layer has already been created.
+struct traceprov_aggregate_layer *get_layer(const int layer_number){
+    if (layer_number < TRACEPROV_MAX_LAYER_PER_WORKER){
+        return &traceprov_current.local_context->cached_layers[layer_number - 1];
+    }
+    return &traceprov_current.local_context->layers[layer_number - TRACEPROV_MAX_LAYER_PER_WORKER];
+}
+
+PG_FUNCTION_INFO_V1(test_local_setup);
+
+Datum test_local_setup(PG_FUNCTION_ARGS){
+    int rc = initialize_local_context();
+    if (rc) PG_RETURN_INT32(rc);
+    rc = initialize_layer_file(PG_GETARG_INT32(0), PG_GETARG_INT32(1));
+    print_layer(get_layer(PG_GETARG_INT32(0)));
+    PG_RETURN_INT32(rc);
+}
+
+PG_FUNCTION_INFO_V1(reinit_state);
+
+Datum reinit_state(PG_FUNCTION_ARGS){
+    traceprov_current.my_worker_id = 255;
+    traceprov_current.traceprov_shared_context_fd  = -1;
+    traceprov_current.shared_context = NULL;
+    traceprov_current.local_context = NULL;
+
+    int rc = remove_files_from_dir(TRACE_PROV_DIR);
+    PG_RETURN_INT32(rc);
 }

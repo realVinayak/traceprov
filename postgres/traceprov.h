@@ -1,6 +1,5 @@
 #ifndef __TRACEPROV__
 #define __TRACEPROV__
-#endif
 
 
 #include "c.h"
@@ -46,12 +45,7 @@ struct traceprov_aggregate_layer;
 struct traceprov_shared_context;
 struct current_context;
 
-const int32 traceprov_shared_context_magic = 0xBADB00DE;
-
-int get_error_no(){
-    int err_no = errno;
-    return err_no;
-}
+int get_error_no();
 
 #define PRINT_ON_DEBUG(...) do { \
     if (DEBUG_MODE) { \
@@ -163,3 +157,4 @@ struct current_context {
 };
 
 #define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)
+#endif
