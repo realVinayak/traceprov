@@ -19,6 +19,8 @@
 #define TRACEPROV_SUBQUERY_TRACE        DEFINE_TRACE_PROV_FILE("/subq_trace_%d.tp")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
 
+#define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
+
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
 // The below should also be changed.
@@ -30,11 +32,15 @@
 // Essentially, if the number of layer increases more than this, it then spills
 // the extra layers to a new file (instead of storing it all part of the shared context)
 // This approach makes it fast for the common case where there are couple of layers
-#define TRACEPROV_MAX_LAYER_PER_WORKER  0
+#define TRACEPROV_MAX_LAYER_PER_WORKER  32
+// Increase the trace file by this many number of PAGES.
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 32
+// Increase the group-mapping by these many pages at once.
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 16
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
-#define DEBUG_MODE 0
+#define DEBUG_MODE 1
 
 // Forward definitions.
 struct trace_file_forward_row;
@@ -62,6 +68,8 @@ struct trace_file_forward_row {
     int64   group_count;
 };
 
+static_assert(sizeof(struct trace_file_forward_row) == 8, "Invalid size");
+
 struct trace_file_grouped_row {
     int64   in_result;
 };
@@ -83,8 +91,8 @@ struct traceprov_aggregate_layer {
     int32 num_pk_records;
     // We only store the last mapping that it uses.
     void *last_mapping;
-    // Stores the number of times the file has been grown.
-    int32 mapping_count;
+    // The size of the layer in pages.
+    int32 size;
     // This points to the current_row. 
     // This, will effectively lie in [last_mapping, last_mapping + TRACEPROV_BLOCK_SIZE)
     void *current_row;
@@ -94,8 +102,13 @@ struct traceprov_aggregate_layer {
     uint32 layer_number;
     // Each record gets this much padding.
     uint32 record_padding;
+    // This, simply, caches the end of the current zone.
+    // Otherwise, we'd waste our time computing it on every access.
+    void *end_of_memory_zone;
+    // Stores the fd that corresponds to this layer.
+    int32 layer_fd;
     // Padding for this struct.
-    uint32 _padding[5];
+    uint32 _padding[1];
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) == 64, "Size mismatch.");
@@ -154,6 +167,13 @@ struct current_context {
     // This value gets cached from shared_context.
     // This is done to avoid doing the stupid array indexing on every access.
     struct local_context *local_context;
+};
+
+struct traceprov_agg_context {
+    int8 is_combined;
+    int64 group_cnt;
+    int8 worker_id;
+    int32 layer_number;
 };
 
 #define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)

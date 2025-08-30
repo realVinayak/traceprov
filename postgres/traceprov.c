@@ -12,6 +12,8 @@
 
 PG_MODULE_MAGIC;
 
+int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
+
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
 
 static struct current_context traceprov_current = {
@@ -74,7 +76,7 @@ static int initialize_local_context(){
 
     int32 magic_word = 0;
 
-    read(traceprov_shared_context_magic, &magic_word, sizeof(int32));
+    read(shared_context_fd, &magic_word, sizeof(int32));
 
     if (magic_word != traceprov_shared_context_magic){
         // The magic word didn't match. Need to initialize the file.
@@ -141,7 +143,7 @@ exit_initialize_local_context:
     return rc;
 }
 
-static int initialize_layer_file(const int layer_number, const int num_pk_records){
+static int initialize_layer_file(const int layer_number, const int num_pk_records, const bool set_current_row){
 
     /**
      * Here are the sequence of operations this function needs to perform.
@@ -281,7 +283,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
     layer->last_mapping = trace_ptr;
     // This is skipped because it is redundantly 0, but adding it here for documentation.
     // layer->mapping_count = 0;
-    layer->current_row = trace_ptr;
+    if (set_current_row) layer->current_row = trace_ptr;
     // layer->num_groups = 0;
     layer->layer_number = layer_number;
     
@@ -292,12 +294,27 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
         elog(ERROR, "Found invalid padding");
         return 1;
     }
+    layer->end_of_memory_zone = TRACEPROV_PAGE_SIZE + trace_ptr;
+    layer->layer_fd = trace_file_fd;
+    layer->size = 1;
 
     return 0;
 }
 
+static int initialize_local_and_layer(const int layer_number, const int num_pk_records, const bool set_current_row){
+    int rc = 0;
+    if ((rc = initialize_local_context())){
+        PRINT_ON_DEBUG("Error initializing local context.");
+        return rc;
+    }
+    if ((rc = initialize_layer_file(layer_number, num_pk_records, set_current_row))){
+        PRINT_ON_DEBUG("Error initializing layer file");
+    }
+    return rc;
+}
+
 // Assumes layer has already been created.
-struct traceprov_aggregate_layer *get_layer(const int layer_number){
+static inline struct traceprov_aggregate_layer *get_layer(const int layer_number){
     if (layer_number < TRACEPROV_MAX_LAYER_PER_WORKER){
         return &traceprov_current.local_context->cached_layers[layer_number - 1];
     }
@@ -309,7 +326,7 @@ PG_FUNCTION_INFO_V1(test_local_setup);
 Datum test_local_setup(PG_FUNCTION_ARGS){
     int rc = initialize_local_context();
     if (rc) PG_RETURN_INT32(rc);
-    rc = initialize_layer_file(PG_GETARG_INT32(0), PG_GETARG_INT32(1));
+    rc = initialize_layer_file(PG_GETARG_INT32(0), PG_GETARG_INT32(1), true);
     print_layer(get_layer(PG_GETARG_INT32(0)));
     PG_RETURN_INT32(rc);
 }
@@ -324,4 +341,232 @@ Datum reinit_state(PG_FUNCTION_ARGS){
 
     int rc = remove_files_from_dir(TRACE_PROV_DIR);
     PG_RETURN_INT32(rc);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_key_sfunc);
+
+Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
+    int rc = 0;
+    // Argument 0 is the internal state.
+    const int layer_number = PG_GETARG_INT32(1);
+    const int num_pk = PG_NARGS() - 2; // 1 for layer number, 1 for internal state.
+
+    struct traceprov_agg_context *agg_context;
+
+    if ((rc = initialize_local_and_layer(layer_number, num_pk, true))){
+        PRINT_ON_DEBUG("Error setting up local or layer");
+        elog(ERROR, "Error setting up local or layer");
+        return 1;
+    }
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(layer_number);
+
+    if (PG_ARGISNULL(0)){
+        agg_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_context->group_cnt = ++current_layer->num_groups;
+        agg_context->worker_id = traceprov_current.my_worker_id;
+        agg_context->is_combined = 0;
+        agg_context->layer_number = layer_number;
+    }else{
+        agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    }
+
+    // This is where it gets _interesting_ (and complicated)
+    // Since the records are padded, we'll fit completely in the page.
+    // However, we may be reaching the end of the allocated region.
+    // This is why we look at "end of memory zone" in the layer.
+    // We could, totally, compute it here, but looking at cached makes things faster.
+    // However, since the records are padded, the current pointer will always be EQUAL
+    // to theend  pointer. That is, there can be a case where we'd have to check for greater or less.
+
+    if (unlikely(current_layer->current_row == current_layer->end_of_memory_zone)){
+        // In this case, we'd have to grow the file.
+        const int initial_size = current_layer->size;
+        current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
+        const int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
+        if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
+            PRINT_ON_DEBUG("Error increasing the page size layer");
+            return rc;
+        }
+        // Now, need to create the new mapping.
+        void *ptr = mmap(
+            NULL,
+            TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+            PROT_WRITE,
+            MAP_SHARED,
+            current_layer->layer_fd,
+            initial_size * TRACEPROV_PAGE_SIZE
+        );
+
+        if ((unlikely(ptr == MAP_FAILED))){
+            PRINT_ON_DEBUG(
+                "Error mmaping incremented trace file. %ld, %ld", 
+                TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+                initial_size * TRACEPROV_PAGE_SIZE
+            );
+            rc = 1;
+            elog(ERROR, "Error mmaping incremented trace file");
+            return rc;
+        }
+
+        // Now, need to some reinitialzation.
+        current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
+        current_layer->current_row = ptr;
+    }
+
+    // This, essentially, just adds the padding to the beginning.
+    // For optimization purposes, we don't actually write to this space (because it is empty)
+    current_layer->current_row += current_layer->record_padding;
+
+    ((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
+    
+    int64 *pk_space = (int64*)((void*)(
+        &(((struct trace_file_forward_row*)current_layer->current_row)->group_count)) 
+        + sizeof(struct trace_file_forward_row)
+    );
+
+    for (int pk_id = 2; pk_id < PG_NARGS(); pk_id++, pk_space++){
+        *pk_space = PG_GETARG_INT64(pk_id);
+    }
+
+    current_layer->current_row = (void *)pk_space;
+    
+    PG_RETURN_POINTER(agg_context);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_key_finalfunc);
+
+Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
+    
+    if (unlikely(PG_ARGISNULL(0))){
+        PG_RETURN_NULL();
+    }
+
+    struct traceprov_agg_context *agg_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
+    
+    // Here, to re-use the code for layer setup, the group is, simply, treated as just another layer.
+    // That way, we don't have recreate yet another infrastructure for groups.
+ 
+    const int32 group_layer_number = agg_context->layer_number + 1;
+    int rc = 0;
+
+    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 0, false))){
+        PRINT_ON_DEBUG("Error setting up local or layer for group.");
+        elog(ERROR, "Error setting up local or layer for group.");
+        return 1;
+    }
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_number);
+    // Here, it'll be aligned again.
+    if (unlikely(current_layer->record_padding != 0)){
+        elog(ERROR, "Expected padding of 0");
+        PG_RETURN_NULL();
+    }
+
+    // Here, this is slightly different than the sfunc's usage of layers.
+    // This is because the group number can be arbitrary (they don't need to be sequential)
+    // So, we need to, unfortunately, store all the memory mappings that are created sequentially.
+    // In the previous usage of layers, once we move past a page, we won't need it. Here, we can.
+    
+    // This is the page number that needs to be fetched (1-indexed.)
+    const int32 page_number = (((agg_context->group_cnt - 1) * sizeof(int64)) / TRACEPROV_PAGE_SIZE) + 1;
+
+
+    // Need to, first, setup the group-page mapping.
+    if (unlikely((rc = grow_group_page_mapping(page_number, current_layer)))){
+        elog(ERROR, "Error setting up space for group-page mapping");
+        return rc;
+    }
+
+    // By the time we're here, the file has already been grown to handle the group.
+    const int region = TRACEPROV_NUM_REGIONS_GROUP(page_number) - 1;
+    void ** ptr = (void**)current_layer->current_row;
+
+    if (region == 0){
+        PG_RETURN_POINTER(((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]);
+    }
+    
+    PG_RETURN_POINTER((((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
+    // PG_RETURN_POINTER(ptr[region]);
+}
+
+int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_layer *layer){
+
+    // Here, we can be a bit clever.
+    // Since the contents of the group are fine being private to a worker,
+    // we can simply malloc and remalloc them, rather than doing any trickery with files.
+    // This significantly simplifies this, already.
+    
+    // If the page to fetch is 1, it'd just be 1 page.
+    // For anything more than that, we'd need to see how many pages does a single increment cover.
+    // For example, if TRACEPROV_INCREMENT_GROUP_BY_PG == 3, and we have page to fetch == 7,
+    // the regions will be {[0, 1], [2, 5], [6, 9]}. So, the number of regions will be 3.
+    const int32 num_regions = TRACEPROV_NUM_REGIONS_GROUP(page_to_fetch);
+
+    if (layer->current_row == NULL){
+        layer->current_row = malloc(sizeof(void*)*num_regions);
+        memset(layer->current_row, 0, sizeof(void*)*num_regions);
+    }else if (page_to_fetch > layer->size){
+        layer->current_row = realloc(layer->current_row, sizeof(void*)*num_regions);
+        if (DEBUG_MODE) PRINT_ON_DEBUG("clearing out from regions: %d, for: %d", TRACEPROV_NUM_REGIONS_GROUP(layer->size), (num_regions - TRACEPROV_NUM_REGIONS_GROUP(layer->size)));
+        memset((void**)layer->current_row + (TRACEPROV_NUM_REGIONS_GROUP(layer->size)), 0, (num_regions - TRACEPROV_NUM_REGIONS_GROUP(layer->size)) * sizeof(void*));
+    }
+
+    if (layer->current_row == NULL){
+        return 1;
+    }
+
+    void **ptr = (void **)layer->current_row;
+
+    if (ptr[0] == NULL){
+        // Set the initial mapping
+        ptr[0] = layer->last_mapping;
+    }
+
+    if (page_to_fetch <= layer->size) return 0;
+
+    // Region is 1 indexed.
+    for (int region = 2; region < num_regions + 1; region++){
+        // For every new region, need to grow the file.
+        if (ptr[region - 1] != NULL) continue;
+        const int32 new_size = 1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG;
+        if (unlikely(ftruncate(layer->layer_fd, new_size * TRACEPROV_PAGE_SIZE))){
+            elog(ERROR, "Error growing the layer file later");
+        }
+        // Need to now actually map the new portion of the file.
+        void *mapped_ptr = mmap(
+            NULL,
+            TRACEPROV_INCREMENT_GROUP_BY_PG * TRACEPROV_PAGE_SIZE,
+            PROT_WRITE,
+            MAP_SHARED,
+            layer->layer_fd,
+            (1 + (region - 2)*TRACEPROV_INCREMENT_GROUP_BY_PG)*TRACEPROV_PAGE_SIZE
+        );
+
+        if (mapped_ptr == MAP_FAILED){
+            elog(ERROR, "Error mmaping the grown group-by file");
+        }
+        ptr[region - 1] = mapped_ptr; 
+    }
+    // Basically, 1 (for the first page) + TRACEPROV_INCREMENT_GROUP_BY_PG pages for every subsequent region.
+    layer->size = 1 + (num_regions - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG;
+
+    if (unlikely(layer->size < page_to_fetch)){
+        elog(ERROR, "Created wrong region sizes, didn't use hint correctly.");
+    }
+
+    return 0;
+}
+
+PG_FUNCTION_INFO_V1(mark_later);
+
+Datum mark_later(PG_FUNCTION_ARGS){
+
+    // We'll now simply set the value of this row to be 
+    struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
+    if (row->in_result){
+        elog(ERROR, "Found marking an existing row!");
+    }
+    row->in_result = 1;
+    PG_RETURN_INT64(1);
 }
