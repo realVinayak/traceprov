@@ -55,3 +55,6 @@ traceprov:
 	rm -f *.auto.sql
 	sed 's/__FILE__/traceprov_$(suff)/g' traceprov.sql > traceprov_$(suff).auto.sql
 	sudo cp traceprov_$(suff).auto.sql /home/postgres/
+
+traceprov_infer:
+	g++ -g -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
