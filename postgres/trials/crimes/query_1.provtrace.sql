@@ -13,7 +13,7 @@ select *, mark_later(mapped_agg) from (
         count(*) AS c, 
         district, ward, block, 
         community_area, beat, 
-        traceprov_agg_key(1, id) as mapped_agg 
+        traceprov_agg_key_parallel(1, id) as mapped_agg 
     from crimes
     group by district, ward, block, community_area, beat
     ) f order by c desc limit 5;

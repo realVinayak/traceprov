@@ -9,6 +9,7 @@
 #include <assert.h>
 
 // Force using C's sprintf, yukkky.
+// Otherwise, Postgres' sprintf will be taken.
 #undef sprintf
 
 // TODO: Make this per-process to enable concurrent traceprovs.
@@ -16,8 +17,10 @@
 
 #define DEFINE_TRACE_PROV_FILE(filename) TRACE_PROV_DIR filename
 
-#define TRACEPROV_MAIN_TRACE_FILE       DEFINE_TRACE_PROV_FILE("/trace_file_%d.tp")
-#define TRACEPROV_PARTIAL_GROUP_BY_FILE DEFINE_TRACE_PROV_FILE("/partial_group_by_trace.tp")
+// This will be formatted, both, the layer number and worker
+#define TRACEPROV_MAIN_TRACE_FILE       DEFINE_TRACE_PROV_FILE("/trace_file_%d_%d.tp")
+// This will be formatted with layer number
+#define TRACEPROV_PARTIAL_GROUP_BY_FILE DEFINE_TRACE_PROV_FILE("/partial_group_by_trace_%d.tp")
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
 #define TRACEPROV_SUBQUERY_TRACE        DEFINE_TRACE_PROV_FILE("/subq_trace_%d.tp")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
@@ -43,7 +46,7 @@
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 
 // Forward definitions.
 struct trace_file_forward_row;
@@ -78,10 +81,14 @@ struct trace_file_grouped_row {
 };
 
 struct trace_file_partial_row {
-    uint8   worker_id;
+    // Ugh, this is made 64 because, now, we're able to 
+    // use it in layer file.
+    int64   worker_id;
     int64   local_group_number;
     int64   global_group_number;
 };
+
+static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 
 
 // Each layer is backed by a single file.

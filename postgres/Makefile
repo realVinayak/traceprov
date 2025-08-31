@@ -9,11 +9,11 @@ clean:
 	rm -f *.ids
 
 parallel:
-	sudo cp /etc/postgresql/14/main/postgresql.conf.parallel /etc/postgresql/14/main/postgresql.conf
+	sudo cp postgresql.conf.parallel /etc/postgresql/14/main/postgresql.conf
 	sudo systemctl restart postgresql.service
 
 series:
-	sudo cp /etc/postgresql/14/main/postgresql.conf.sequential /etc/postgresql/14/main/postgresql.conf
+	sudo cp postgresql.conf.sequential /etc/postgresql/14/main/postgresql.conf
 	sudo systemctl restart postgresql.service
 
 module:
