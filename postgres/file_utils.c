@@ -45,6 +45,33 @@ char *get_injected_str(const char *file_template_name, int number, void *buffer)
     return file_name;
 }
 
+char *get_bi_injected_str(const char *file_template_name, int first, int second, void *buffer){
+    char *file_name = (char*)buffer;
+    
+    size_t file_name_size = (strlen(file_template_name)
+        // We can put in 32 chars at max.
+        + (32 * 8) 
+        + 4
+    );
+
+    if (file_name == NULL){
+
+        // In some cases, we can avoid the repeated memory allocation by using previously allocated
+        // buffer. The caller assumes all the responsiblity of making sure the buffer is correctly sized.
+
+        file_name = (char *)malloc(file_name_size);
+        if (file_name == NULL){
+            return NULL;
+        }
+    }
+
+
+    memset(file_name, 0, file_name_size);
+    sprintf(file_name, file_template_name, first, second);
+
+    return file_name;
+}
+
 int remove_and_create(const char *file_name, int size){
     
     if (remove_if_exists(file_name)) return -1;

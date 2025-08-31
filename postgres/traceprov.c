@@ -8,11 +8,14 @@
 #include "miscadmin.h"
 #include "file_utils.h"
 #include "traceprov_utils.h"
+#include <lib/stringinfo.h>
+#include "libpq/pqformat.h"
 
 
 PG_MODULE_MAGIC;
 
 int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
+int grow_layer_file(struct traceprov_aggregate_layer *);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
 
@@ -89,7 +92,7 @@ static int initialize_local_context(){
 
     struct traceprov_shared_context *shared_context = (struct traceprov_shared_context *) mmap(
         NULL,
-        TRACEPROV_PAGE_SIZE,
+        TRACEPROV_SHARED_CONTEXT_SIZE,
         PROT_WRITE,
         MAP_SHARED,
         shared_context_fd,
@@ -252,8 +255,8 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
     if (layer->layer_number != 0) return 0;
 
     // Map the actual trace file for this layer.
-
-    char *file_name = get_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, NULL);
+    // Each worker gets its own trace file.
+    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, traceprov_current.my_worker_id, NULL);
 
     if (file_name == NULL){
         return 1;
@@ -345,7 +348,16 @@ Datum reinit_state(PG_FUNCTION_ARGS){
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_sfunc);
 
+// int should_sleep = 1;
+
 Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
+    // if (should_sleep){
+    //     PRINT_ON_DEBUG("Sleeping for debug.");
+    //     sleep(60);
+    //     PRINT_ON_DEBUG("Woken up");
+    //     should_sleep = 0;
+    // }
+
     int rc = 0;
     // Argument 0 is the internal state.
     const int layer_number = PG_GETARG_INT32(1);
@@ -380,40 +392,9 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     // to theend  pointer. That is, there can be a case where we'd have to check for greater or less.
 
     if (unlikely(current_layer->current_row == current_layer->end_of_memory_zone)){
-        // In this case, we'd have to grow the file.
-        const int initial_size = current_layer->size;
-        current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
-        const int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
-        if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
-            PRINT_ON_DEBUG("Error increasing the page size layer");
-            return rc;
+        if (unlikely(rc = grow_layer_file(current_layer))){
+            elog(ERROR, "Received an error when growing trace file.");
         }
-        // Now, need to create the new mapping.
-        void *ptr = mmap(
-            NULL,
-            TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
-            PROT_WRITE,
-            MAP_SHARED,
-            current_layer->layer_fd,
-            initial_size * TRACEPROV_PAGE_SIZE
-        );
-
-        if ((unlikely(ptr == MAP_FAILED))){
-            PRINT_ON_DEBUG(
-                "Error mmaping incremented trace file. %ld, %ld", 
-                TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
-                initial_size * TRACEPROV_PAGE_SIZE
-            );
-            rc = 1;
-            elog(ERROR, "Error mmaping incremented trace file");
-            return rc;
-        }
-
-        // Now, need to some reinitialzation.
-        current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
-        current_layer->current_row = ptr;
-        // Also set the last mapping.
-        current_layer->last_mapping = ptr;
     }
 
     // This, essentially, just adds the padding to the beginning.
@@ -492,6 +473,139 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     // PG_RETURN_POINTER(ptr[region]);
 }
 
+PG_FUNCTION_INFO_V1(traceprov_agg_key_combine);
+
+Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
+    int rc = 0;
+
+    struct traceprov_agg_context *reference_struct, *other;
+
+    if (PG_ARGISNULL(0)){
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        other = NULL;
+    }else if (PG_ARGISNULL(1)){
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        other = NULL;
+    } else{
+        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        other = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        struct traceprov_agg_context *tmp;
+        // If ther other happened to be 
+        if (other->is_combined){
+            assert(!reference_struct->is_combined);
+            tmp = other;
+            other = reference_struct;
+            reference_struct = tmp;
+        }
+    }
+
+    assert(reference_struct != NULL);
+    const int layer_number = reference_struct->layer_number;
+
+    // Here, we don't care about any layer file (it is not this function's responsibility)
+    // So, we do the bare minimum, just setting up the local context (vars)
+    if ((rc = initialize_local_and_layer(layer_number + 2, 2, true))){
+        PRINT_ON_DEBUG("Error setting up local or layer for combine");
+        return rc;
+    }
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(layer_number + 2);
+    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+
+    /**
+     * This is slightly tricky. We need to grow in two cases
+     * 1. When current row is at the end of the memory
+     * 2. When current row is end of memory- 1 BUT we'd be logging two rows.
+     * We handle each of them directly here.
+     * Doing inference, we won't ve able to differentiate the last row. BUT, it'd always be "skipped"
+     * Because the group number will be seen as zero, and won't be matched to anything.
+     * We can, totally, handle this by checking it later. However, this way, we can combine 2 truncates into 1.
+     */
+
+    if (unlikely(
+        (current_layer->current_row == current_layer->end_of_memory_zone) 
+        || ((current_layer->current_row == current_layer->end_of_memory_zone - 1) 
+            && (!reference_struct->is_combined) // This means reference is not combined (so, we'll have to log it)
+            && other != NULL // Other is not null, so we'd have to log it too.
+        )
+        
+    )){
+        if (unlikely(rc = grow_layer_file(current_layer))){
+            elog(ERROR, "Received an error when growing trace file, in combine.");
+        }
+    }
+
+    int group_no = 0;
+    if (reference_struct->is_combined){
+        group_no = reference_struct->group_cnt;
+    }else{
+        current_layer->current_row += current_layer->record_padding;
+        group_no = ++main_layer->num_groups;
+        ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = reference_struct->group_cnt;
+        ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = reference_struct->worker_id;
+        ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
+        reference_struct->is_combined = 1;
+        reference_struct->group_cnt = group_no;
+        current_layer->current_row += sizeof(struct trace_file_partial_row);
+    }
+
+
+    if (other != NULL){
+       current_layer->current_row += current_layer->record_padding;
+       ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = other->group_cnt;
+       ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = other->worker_id;
+       ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
+       current_layer->current_row += sizeof(struct trace_file_partial_row);
+    }
+
+    PG_RETURN_POINTER(reference_struct);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_key_serialize);
+
+Datum traceprov_agg_key_serialize(PG_FUNCTION_ARGS){
+    struct traceprov_agg_context *context;
+    StringInfoData buf;
+
+    if (PG_ARGISNULL(0)) PG_RETURN_BYTEA_P(NULL);
+
+    context = (struct traceprov_agg_context*) PG_GETARG_POINTER(0);
+
+    pq_begintypsend(&buf);
+    pq_sendint8(&buf, context->is_combined);
+    pq_sendint64(&buf, context->group_cnt);
+    pq_sendint8(&buf, context->worker_id);
+    pq_sendint32(&buf, context->layer_number);
+
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_key_deserialize);
+
+Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
+
+    struct traceprov_agg_context *context;
+    StringInfoData buf;
+
+    if (PG_ARGISNULL(0)) PG_RETURN_POINTER(NULL);
+    
+    bytea *s = PG_GETARG_BYTEA_P(0);
+    initStringInfo(&buf);
+
+    buf.data = VARDATA(s);
+    buf.len = VARSIZE(s) - VARHDRSZ;
+    buf.cursor = 0;
+
+    context = malloc(sizeof(struct traceprov_agg_context));
+    context->is_combined = pq_getmsgbyte(&buf);
+    context->group_cnt = pq_getmsgint64(&buf);
+    context->worker_id = pq_getmsgbyte(&buf);
+    context->layer_number = pq_getmsgint(&buf, sizeof(int32));
+
+    PG_RETURN_POINTER(context);
+}
+
+
 int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_layer *layer){
 
     // Here, we can be a bit clever.
@@ -558,6 +672,45 @@ int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_
     }
 
     return 0;
+}
+
+int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
+    int rc = 0;
+    // In this case, we'd have to grow the file.
+    const int initial_size = current_layer->size;
+    current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
+    const int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
+    if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
+        PRINT_ON_DEBUG("Error increasing the page size layer");
+        return rc;
+    }
+    // Now, need to create the new mapping.
+    void *ptr = mmap(
+        NULL,
+        TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+        PROT_WRITE,
+        MAP_SHARED,
+        current_layer->layer_fd,
+        initial_size * TRACEPROV_PAGE_SIZE
+    );
+
+    if ((unlikely(ptr == MAP_FAILED))){
+        PRINT_ON_DEBUG(
+            "Error mmaping incremented trace file. %ld, %ld", 
+            TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+            initial_size * TRACEPROV_PAGE_SIZE
+        );
+        rc = 1;
+        elog(ERROR, "Error mmaping incremented trace file");
+        return rc;
+    }
+
+    // Now, need to some reinitialzation.
+    current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
+    current_layer->current_row = ptr;
+    // Also set the last mapping.
+    current_layer->last_mapping = ptr;
+    return rc;
 }
 
 PG_FUNCTION_INFO_V1(mark_later);
