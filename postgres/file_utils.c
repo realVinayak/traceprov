@@ -12,10 +12,7 @@ int remove_if_exists(const char *file){
     if (can_access != 0) return 0;
 
     if ((rc = remove(file)) != 0){
-        PRINT_ON_DEBUG("Error removing file!\n");
         return rc;
-    }else{
-        PRINT_ON_DEBUG("Removed file successfully!\n");
     }
     return 0;
 }
@@ -37,7 +34,6 @@ char *get_injected_str(const char *file_template_name, int number, void *buffer)
 
         file_name = (char *)malloc(file_name_size);
         if (file_name == NULL){
-            PRINT_ON_DEBUG("Malloc of file name failed.");
             return NULL;
         }
     }
@@ -56,12 +52,10 @@ int remove_and_create(const char *file_name, int size){
     int fd = open(file_name, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
 
     if (fd < 0){
-        PRINT_ON_DEBUG("Error opening the file.");
         return -1;
     }
 
     if (ftruncate(fd, size)){
-        PRINT_ON_DEBUG("Error truncating file: %s", file_name);
         return -1;
     }
 
@@ -83,9 +77,7 @@ int remove_files_from_dir(const char *dir){
 
         // build the path for each file in the folder
         sprintf(filepath, "%s/%s", dir, next_file->d_name);
-        PRINT_ON_DEBUG("Removing file: %s", filepath);
         if (remove(filepath)){
-            elog(ERROR, "Error removing file: %s", filepath);
             return 1;
         }
     }

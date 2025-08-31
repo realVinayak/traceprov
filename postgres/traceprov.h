@@ -8,6 +8,9 @@
 
 #include <assert.h>
 
+// Force using C's sprintf, yukkky.
+#undef sprintf
+
 // TODO: Make this per-process to enable concurrent traceprovs.
 #define TRACE_PROV_DIR "/var/lib/postgresql/14/main/traceprov"
 
@@ -177,4 +180,8 @@ struct traceprov_agg_context {
 };
 
 #define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)
+
+#define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
+
+
 #endif
