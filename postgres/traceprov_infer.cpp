@@ -220,23 +220,6 @@ int main(int argc, char *argv[]){
         }
     }
 
-    // while (forward_row < final_row){
-    //     // Emulate the padding.
-    //     forward_row = (void*)((uint64)main_trace_layer->record_padding + (uint64)forward_row);
-    //     int64 mod_record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)forward_row), 0);
-    //     // if (mod_record_key == 1940144){
-    //     //     std::cout << "Considering previous.";
-    //     // }
-    //     if (std::binary_search(present_groups->begin(), present_groups->end(), ((struct trace_file_forward_row*)forward_row)->group_count)){
-    //         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++){
-    //             int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)forward_row), key_idx);
-
-    //             filtered_rows[key_idx]->push_back(record_key);
-    //         }
-    //     }
-    //     iters_made++;
-    //     forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)forward_row), main_trace_layer->num_pk_records);
-    // }
     for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
         std::cout << "FILTERED: " << filtered_rows[pk_id]->size() << std::endl;
     }
