@@ -1,12 +1,13 @@
 -- using default substitutions
+
 SELECT *, mark_later(mapped_agg_later) FROM (
     SELECT 
         c_count,
         Count(*) AS custdist,
-        agg_from_ptr(mapped_agg) as mapped_agg_later
+        traceprov_agg_from_ptr(1, 5, mapped_agg) as mapped_agg_later
     FROM   (SELECT c_custkey,
                 Count(o_orderkey),
-                agg_map_parallel(c_custkey, coalesce(o_orderkey, 0)) as mapped_agg
+                traceprov_agg_key_parallel(1, c_custkey, coalesce(o_orderkey, 0)) as mapped_agg
             FROM   customer
                 LEFT OUTER JOIN orders
                                 ON c_custkey = o_custkey

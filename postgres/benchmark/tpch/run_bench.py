@@ -98,7 +98,7 @@ def run():
                         raw_sql_file=f"{path}base/{query}.sql",
                         executable=executable,
                         out_file='./temp.out',
-                        print_stmts=False,
+                        print_stmts=True,
                         diff_out=False,
                         dry_run=(not validate) or (query in config.get('id_only', []))
                     )

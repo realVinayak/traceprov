@@ -12,7 +12,8 @@ FROM  (SELECT
   avg(l_extendedprice) AS avg_price,
   avg(l_discount) AS avg_disc,
   count(*) AS count_order,
-  agg_map_parallel(
+  traceprov_agg_key_parallel(
+    1,
     l_orderkey,
     l_linenumber
   ) as mapped_agg

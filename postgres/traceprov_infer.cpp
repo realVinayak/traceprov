@@ -89,6 +89,7 @@ int main(int argc, char *argv[]){
     char * output_id_file = NULL;
     char *subq_out_file = NULL;
     int subq_layer_number = 0;
+    int reference_layer = 0;
 
     int arg_index = 1;
 
@@ -105,6 +106,9 @@ int main(int argc, char *argv[]){
         }
         if (strcmp(argv[arg_index], "-s.layer_num") == 0){
             subq_layer_number = atoi(argv[arg_index + 1]);
+        }
+        if (strcmp(argv[arg_index], "-ref_layer") == 0){
+            reference_layer = atoi(argv[arg_index + 1]);
         }
         arg_index += 2;
     }
@@ -141,9 +145,34 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
+    std::vector<int64> * groups_to_filter = new std::vector<int64>;
+    
+    if (reference_layer){
+        const struct traceprov_aggregate_layer *group_reference_layer = &main_worker_context->cached_layers[reference_layer];
+        void *group_reference_ptr = NULL;
+        if (map_layer_file(reference_layer + 1, context.main_worker_id, &group_reference_ptr, group_reference_layer->size)){
+            PRINT_DEBUG("Error opening group reference layer");
+            return 1;
+        }
+        for (int64 reference_group_idx = 0; reference_group_idx < group_layer->num_groups; reference_group_idx++){
+            const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_reference_ptr)[reference_group_idx];
+            if (gr->in_result){
+                groups_to_filter->push_back(reference_group_idx + 1);
+            }
+        }
+
+        std::sort(groups_to_filter->begin(), groups_to_filter->end());
+    }
+
     for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
         const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
-        if (gr->in_result){
+        int should_add = false;
+        if (reference_layer){
+            should_add = std::binary_search(groups_to_filter->begin(), groups_to_filter->end(), gr->in_result);
+        }else{
+            should_add = gr->in_result;
+        }
+        if (should_add){
             present_groups->push_back(group_idx + 1);
         }
     }
