@@ -21,7 +21,7 @@ def run_validate(
         validate_sql_file, 
         db_name, 
         raw_sql_file=None, 
-        executable="./infer.o", 
+        executable="./traceprov_infer.o", 
         out_file=None, 
         print_stmts=True,
         dry_run=False,
@@ -32,7 +32,7 @@ def run_validate(
 
 
     id_file_name = config.get('id_file')
-    group_no = config.get('group_number', 1)
+    layer_number = config.get('layer_number', 1)
     subq_table = config.get('subq_table_name')
     ignore_group = config.get('ignore_gn')
 
@@ -47,7 +47,7 @@ def run_validate(
     if id_file_name and not dry_run:
         extras += f" -f {id_file_name}"
 
-    infer_sh = f'{executable} -g {group_no}' + extras
+    infer_sh = f'{executable} -l {layer_number}' + extras
     if out_file:
         infer_sh += f" > {out_file}"
 

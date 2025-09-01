@@ -5,6 +5,11 @@
 #include <chrono>
 #include <algorithm>
 
+#include <fstream>
+#include <sstream>
+#include <streambuf>
+
+
 #include "traceprov.h"
 #include "file_utils.h"
 #include <unistd.h>
@@ -95,6 +100,8 @@ int main(int argc, char *argv[]){
     }
 
     std::cout << "Using layer: " << layer_number << std::endl;
+
+    auto start = std::chrono::high_resolution_clock::now();
 
     struct traceprov_shared_context context;
     if (map_traceprov_shared_context(&context)){
@@ -210,7 +217,7 @@ int main(int argc, char *argv[]){
 
             if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
                 for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
-                    int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)forward_row), key_idx);
+                    int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
 
                     filtered_rows[key_idx]->push_back(record_key);
                 }
@@ -224,5 +231,44 @@ int main(int argc, char *argv[]){
         std::cout << "FILTERED: " << filtered_rows[pk_id]->size() << std::endl;
     }
 
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "Took: " << duration.count() << " ms" << std::endl;
+
+    if (output_id_file){
+        
+        std::cout << "Writing IDS to " << output_id_file << std::endl;
+
+        int fd = open(output_id_file, O_CREAT | O_RDWR, 666);
+        if (fd < 0){
+            PRINT_DEBUG("Error opening the ID file");
+            return 1;
+        }else{
+            close(fd);
+        }
+
+        std::ofstream output_ids;
+        output_ids.open(output_id_file);
+
+        if (!output_ids.is_open()){
+            std::cout << "Error getting the ID file open later";
+            return 1;
+        }
+
+        for (int record_index = 0; record_index < filtered_rows[0]->size(); record_index++){
+            bool add_separator = false;
+
+            for (int key_index = 0; key_index < main_trace_layer->num_pk_records; key_index++){
+                if (filtered_rows[key_index]->size() == 0) continue;
+                if (add_separator) output_ids << ",";
+                output_ids << filtered_rows[key_index]->at(record_index);
+                add_separator = true;
+            }
+
+            output_ids << std::endl;
+        }
+        output_ids.close();
+    }
     return 0;
 }
