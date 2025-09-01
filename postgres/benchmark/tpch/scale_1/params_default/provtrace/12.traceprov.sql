@@ -11,7 +11,7 @@ SELECT *, mark_later(mapped_agg) FROM (
                     AND o_orderpriority <> '2-HIGH' THEN 1
                 ELSE 0
             END) AS low_line_count,
-        agg_map_parallel(o_orderkey, l_orderkey, l_linenumber) as mapped_agg
+        traceprov_agg_key_parallel(1, o_orderkey, l_orderkey, l_linenumber) as mapped_agg
     FROM   orders,
         lineitem
     WHERE  o_orderkey = l_orderkey

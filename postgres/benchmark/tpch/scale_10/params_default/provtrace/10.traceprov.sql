@@ -8,7 +8,8 @@ SELECT *, mark_later(mapped_agg) FROM (
             c_address,
             c_phone,
             c_comment,
-            agg_map_parallel(
+            traceprov_agg_key_parallel(
+                1,
                 c_custkey,
                 o_orderkey,
                 l_orderkey,
