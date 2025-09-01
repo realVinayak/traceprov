@@ -37,6 +37,14 @@ DROP FUNCTION   IF EXISTS traceprov_agg_key_deserialize(bytea, internal);
 -- combine
 DROP FUNCTION   IF EXISTS traceprov_agg_key_combine(internal, internal);
 
+-- log subqquery pk.
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
 CREATE FUNCTION reinit_state() RETURNS INTEGER AS '$libdir/__FILE__', 'reinit_state' LANGUAGE C;
 
 CREATE FUNCTION test_local_setup(INTEGER, INTEGER) RETURNS INTEGER AS '$libdir/__FILE__', 'test_local_setup' LANGUAGE C;
@@ -175,3 +183,10 @@ CREATE AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT,
     DESERIALFUNC = traceprov_agg_key_deserialize,
     PARALLEL = SAFE
 );
+
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;

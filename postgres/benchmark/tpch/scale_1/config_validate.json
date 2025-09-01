@@ -1,6 +1,10 @@
 {
     "db_name": "tpch_01_v01",
     "queries": [
+        4
+    ],
+    "__queries": [
+        2,
         3,
         5,
         6,

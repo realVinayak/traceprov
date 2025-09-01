@@ -1,7 +1,7 @@
 {
     "id_table_name": "captured_id",
     "subq_table_name": "subq_captured_id",
-    "group_number": -1,
+    "subq_layer": 4,
     "id_file": "2.ids",
     "subq_id_file": "2.subq.ids",
     "pk_order": [
