@@ -7,7 +7,7 @@ SELECT   s_acctbal,
          s_address,
          s_phone,
          s_comment,
-         log_subquery_pk(p_partkey, s_suppkey, n_nationkey, r_regionkey, ps_suppkey, ps_partkey),
+         traceprov_log_subquery_pk(4, p_partkey, s_suppkey, n_nationkey, r_regionkey, ps_suppkey, ps_partkey),
          mark_later(mapped_agg)
 FROM     part,
          supplier,
@@ -17,7 +17,7 @@ FROM     part,
          JOIN LATERAL  (
                 SELECT 
                     Min(ps_supplycost) as min_ps_sc,
-                    agg_map_parallel(ps_suppkey, ps_partkey, s_suppkey, n_nationkey, r_regionkey) as mapped_agg
+                    traceprov_agg_key_parallel(1, ps_suppkey, ps_partkey, s_suppkey, n_nationkey, r_regionkey) as mapped_agg
                 FROM   partsupp,
                        supplier,
                        nation,

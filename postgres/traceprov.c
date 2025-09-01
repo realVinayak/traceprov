@@ -605,6 +605,37 @@ Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
     PG_RETURN_POINTER(context);
 }
 
+PG_FUNCTION_INFO_V1(traceprov_log_subquery_pk);
+
+Datum traceprov_log_subquery_pk(PG_FUNCTION_ARGS){
+    int rc = 0;
+    
+    const int layer_number = PG_GETARG_INT32(0);
+    const int num_key_records = PG_NARGS() - 1; // -1 for the layer number
+    if ((rc = initialize_local_and_layer(layer_number, num_key_records - 1, true))){
+        PRINT_ON_DEBUG("Error setting up the local or layer for log-subquery");
+        return rc;
+    }
+
+    struct traceprov_aggregate_layer *subquery_layer = get_layer(layer_number);
+
+    if (unlikely(subquery_layer->current_row == subquery_layer->end_of_memory_zone)){
+        if (unlikely(rc = grow_layer_file(subquery_layer))){
+            elog(ERROR, "Received an error when growing subquery trace file");
+        }
+    }
+
+    subquery_layer->current_row += subquery_layer->record_padding;
+    // We'd start writing the PKs here.
+    int64 *pk_space = (int64 *)subquery_layer->current_row;
+
+    for (int pk_id = 1; pk_id < PG_NARGS(); pk_id++, pk_space++){
+        *pk_space = PG_GETARG_INT64(pk_id);
+    }
+
+    subquery_layer->current_row = (void *)pk_space;
+    PG_RETURN_BOOL(1);
+}
 
 int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_layer *layer){
 

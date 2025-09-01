@@ -16,6 +16,8 @@
 
 #define PRINT_DEBUG(x) std::cout << "[traceprov]: " << '(' << __FILE__ << ',' << __LINE__ << ")\t" << x << "\t" << "ERRNO: " << errno << std::endl
 
+int dump_pk_records(std::vector<int64> **, const char *, int);
+
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
     char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, worker_id, NULL);
     if (file_name == NULL) return 1;
@@ -85,6 +87,8 @@ int main(int argc, char *argv[]){
 
     int layer_number = 1;
     char * output_id_file = NULL;
+    char *subq_out_file = NULL;
+    int subq_layer_number = 0;
 
     int arg_index = 1;
 
@@ -95,6 +99,12 @@ int main(int argc, char *argv[]){
         }
         if (strcmp(argv[arg_index], "-f") == 0){
             output_id_file = argv[arg_index + 1];
+        }
+        if (strcmp(argv[arg_index], "-s.out") == 0){
+            subq_out_file = argv[arg_index + 1];
+        }
+        if (strcmp(argv[arg_index], "-s.layer_num") == 0){
+            subq_layer_number = atoi(argv[arg_index + 1]);
         }
         arg_index += 2;
     }
@@ -177,6 +187,9 @@ int main(int argc, char *argv[]){
         }
     }
 
+    if (partial_group_row == NULL)
+        groups_per_worker[context.main_worker_id] = present_groups;
+
     for (int worker_id = 0; worker_id < context.worker_count; worker_id++) std::cout << "WORKER: " << worker_id << " GROUPS: "  << groups_per_worker[worker_id]->size() << std::endl;
 
     std::vector<int64> ** filtered_rows = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(main_trace_layer->num_pk_records));
@@ -184,10 +197,6 @@ int main(int argc, char *argv[]){
     for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
 
     int iters_made = 0;
-
-    if (partial_group_row == NULL)
-        groups_per_worker[context.main_worker_id] = present_groups;
-
 
     for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
@@ -230,6 +239,47 @@ int main(int argc, char *argv[]){
     for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
         std::cout << "FILTERED: " << filtered_rows[pk_id]->size() << std::endl;
     }
+    
+    std::vector<int64> ** subq_records = NULL;
+    int subq_width = 0;
+    
+    if (subq_layer_number){
+        // Here, it is entirely possible that the subquery gets parallelized.
+        // So, we'd have to look at all the workers.
+        const int subq_index = subq_layer_number - 1;
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+
+            const struct local_context *bg_context = &context.local_contexts[worker_id];
+            const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[subq_index];
+
+            if (bg_trace_layer->layer_number != subq_layer_number) continue;
+            
+            subq_width = bg_trace_layer->num_pk_records + 1;
+            if (subq_records == NULL){
+                // Need to have +1 because of the adjusting that was done during tracing.
+                subq_records = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(bg_trace_layer->num_pk_records + 1));
+                for (int pk_id = 0; pk_id < bg_trace_layer->num_pk_records + 1; pk_id++)
+                    subq_records[pk_id] = new std::vector<int64>;
+            }
+
+            void *subq_forward_row = NULL;
+            if (map_layer_file(subq_layer_number, worker_id, &subq_forward_row, bg_trace_layer->size)){
+                PRINT_DEBUG("Error opening the subq trace file");
+                continue;
+            }
+
+            const void *subq_final_row = get_final_ptr(subq_forward_row, bg_trace_layer);
+
+            while (subq_forward_row < subq_final_row){
+                subq_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)subq_forward_row);
+                int64 *subq_forward_row_record = (int64*)subq_forward_row;
+                for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records + 1; key_idx++, subq_forward_row_record++){
+                    subq_records[key_idx]->push_back(*subq_forward_row_record);
+                }
+                subq_forward_row = (void*)subq_forward_row_record;
+            }
+        }
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -237,38 +287,48 @@ int main(int argc, char *argv[]){
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
 
     if (output_id_file){
-        
-        std::cout << "Writing IDS to " << output_id_file << std::endl;
-
-        int fd = open(output_id_file, O_CREAT | O_RDWR, 666);
-        if (fd < 0){
-            PRINT_DEBUG("Error opening the ID file");
-            return 1;
-        }else{
-            close(fd);
+        if ((dump_pk_records(filtered_rows, output_id_file, main_trace_layer->num_pk_records))){
+            std::cout << "Error writing records to " << output_id_file << std::endl;
         }
-
-        std::ofstream output_ids;
-        output_ids.open(output_id_file);
-
-        if (!output_ids.is_open()){
-            std::cout << "Error getting the ID file open later";
-            return 1;
-        }
-
-        for (int record_index = 0; record_index < filtered_rows[0]->size(); record_index++){
-            bool add_separator = false;
-
-            for (int key_index = 0; key_index < main_trace_layer->num_pk_records; key_index++){
-                if (filtered_rows[key_index]->size() == 0) continue;
-                if (add_separator) output_ids << ",";
-                output_ids << filtered_rows[key_index]->at(record_index);
-                add_separator = true;
-            }
-
-            output_ids << std::endl;
-        }
-        output_ids.close();
     }
+
+    if (subq_out_file){
+        if ((dump_pk_records(subq_records, subq_out_file, subq_width))){
+            std::cout << "Error writing records to " << output_id_file << std::endl;
+        }
+    }
+    return 0;
+}
+
+// TODO: For the subquery, the width will be 1 + whatever from the layer.
+int dump_pk_records(std::vector<int64> **pk_records, const char *out_file, int width){
+    std::cout << "Writing IDs to " << out_file << std::endl;
+    int fd = open(out_file, O_CREAT | O_RDWR, 666);
+    if (fd < 0){
+        PRINT_DEBUG("Error opening the ID file");
+        return 1;
+    }else{
+        close(fd);
+    }
+
+    std::ofstream output_ids;
+    output_ids.open(out_file);
+
+    if (!output_ids.is_open()){
+        std::cout << "Error getting the ID file open later" << std::endl;
+        return 1;
+    }
+
+    for (int record_index = 0; record_index < pk_records[0]->size(); record_index++){
+        bool add_separator = false;
+        for (int key_index = 0; key_index < width; key_index++){
+            if (add_separator) output_ids << ",";
+            output_ids << pk_records[key_index]->at(record_index);
+            add_separator = true;
+        }
+
+        output_ids << std::endl;
+    }
+    output_ids.close();
     return 0;
 }

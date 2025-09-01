@@ -38,7 +38,7 @@ def run_validate(
 
     extras = ""
     if subq_table:
-        extras += f" -s.num {len(config.get('subq_pk_order'))}"
+        extras += f" -s.layer_num {config.get('subq_layer')}"
         extras += f" -s.out {config.get('subq_id_file')}"
 
     if ignore_group is not None:
