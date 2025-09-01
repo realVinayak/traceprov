@@ -1,7 +1,7 @@
 {
     "id_table_name": "group_outer",
     "id_file": "11.outer.ids",
-    "group_number": 1,
+    "layer_number": 1,
     "pk_order": [
         "ps_suppkey",
         "ps_partkey",

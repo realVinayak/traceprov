@@ -750,9 +750,62 @@ Datum mark_later(PG_FUNCTION_ARGS){
 
     // We'll now simply set the value of this row to be 
     struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
-    if (row->in_result){
-        elog(ERROR, "Found marking an existing row!");
-    }
+    // if (row->in_result){
+    //     elog(ERROR, "Found marking an existing row!");
+    // }
     row->in_result = 1;
     PG_RETURN_INT64(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_sfunc);
+
+Datum traceprov_agg_from_ptr_sfunc(PG_FUNCTION_ARGS){
+
+    // IMPORTANT: this is the layer number of the LAST layer.
+    int32 layer_number = PG_GETARG_INT32(1);
+    int32 new_layer_number = PG_GETARG_INT32(2);
+    
+    const int32 group_layer_result = layer_number + 1;
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_result);
+    struct traceprov_agg_context *agg_context;
+    if (PG_ARGISNULL(0)){
+        agg_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_context->group_cnt = ++current_layer->num_groups;
+        agg_context->layer_number = new_layer_number;
+    }else{
+        agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    }
+
+    struct trace_file_grouped_row * row = (struct trace_file_grouped_row *)(PG_GETARG_INT64(3));
+    row->in_result = agg_context->group_cnt;
+    PG_RETURN_POINTER(agg_context);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_combine);
+
+Datum traceprov_agg_from_ptr_combine(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect combine to be called");
+    PG_RETURN_POINTER(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_serialize);
+
+Datum traceprov_agg_from_ptr_serialize(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect serialize to be called");
+    PG_RETURN_POINTER(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_deserialize);
+
+Datum traceprov_agg_from_ptr_deserialize(PG_FUNCTION_ARGS){
+    elog(ERROR, "Didn't expect deserialize to be called");
+    PG_RETURN_POINTER(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_finalfunc);
+
+Datum traceprov_agg_from_ptr_finalfunc(FunctionCallInfo fcinfo){
+    // This works, and is fine.
+    return traceprov_agg_key_finalfunc(fcinfo);
 }

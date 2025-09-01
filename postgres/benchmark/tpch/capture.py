@@ -27,14 +27,18 @@ def run_validate(
         dry_run=False,
         diff_out=True
     ):
+    print("PRINTING", print_stmts)
+    diff_out = True
+    print_stmts = True
     with open(config_file_name) as cf:
         config = json.loads(cf.read())
 
 
-    id_file_name = config.get('id_file')
+    id_file_name = config.get('id_file', "temp.ids")
     layer_number = config.get('layer_number', 1)
     subq_table = config.get('subq_table_name')
     ignore_group = config.get('ignore_gn')
+    reference = config.get('reference')
 
     extras = ""
     if subq_table:
@@ -46,6 +50,9 @@ def run_validate(
     
     if id_file_name and not dry_run:
         extras += f" -f {id_file_name}"
+    
+    if reference:
+        extras += f" -ref_layer {reference}"
 
     infer_sh = f'{executable} -l {layer_number}' + extras
     if out_file:

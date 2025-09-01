@@ -1,13 +1,10 @@
 {
     "id_table_name": "group_inner",
     "id_file": "17.inner.ids",
-    "group_number": 1,
-    "ignore_gn": 1,
+    "layer_number": 4,
     "pk_order": [
         "l_orderkey",
-        "l_linenumber",
-        "scratch_0",
-        "scratch_1"
+        "l_linenumber"
     ],
     "inserts": [
         {

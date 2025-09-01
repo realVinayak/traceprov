@@ -57,4 +57,7 @@ traceprov:
 	sudo cp traceprov_$(suff).auto.sql /home/postgres/
 
 traceprov_infer:
+	g++ -O3 -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
+
+traceprov_infer_dbg:
 	g++ -g -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o

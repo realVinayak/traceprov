@@ -2,7 +2,7 @@
 SELECT *, mark_later(mapped_agg_group_1), mark_later(mapped_agg_group_2) FROM (
     SELECT ps_partkey,
        SUM(ps_supplycost * ps_availqty) AS value,
-       agg_map_parallel_second(ps_suppkey, ps_partkey, s_suppkey, n_nationkey) as mapped_agg_group_1
+       traceprov_agg_key_parallel(1, ps_suppkey, ps_partkey, s_suppkey, n_nationkey) as mapped_agg_group_1
     FROM
         partsupp,
         supplier,
@@ -15,7 +15,7 @@ SELECT *, mark_later(mapped_agg_group_1), mark_later(mapped_agg_group_2) FROM (
 JOIN (
     SELECT
        SUM(ps_supplycost * ps_availqty) * 0.0000100000 as computed_value,
-       agg_map_parallel(ps_suppkey, ps_partkey, s_suppkey, n_nationkey) as mapped_agg_group_2
+       traceprov_agg_key_parallel(4, ps_suppkey, ps_partkey, s_suppkey, n_nationkey) as mapped_agg_group_2
     FROM 
         partsupp,
         supplier,

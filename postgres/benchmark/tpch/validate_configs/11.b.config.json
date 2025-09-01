@@ -1,7 +1,7 @@
 {
     "id_table_name": "group_inner",
     "id_file": "11.inner.ids",
-    "group_number": 0,
+    "layer_number": 4,
     "pk_order": [
         "ps_suppkey",
         "ps_partkey",
