@@ -65,7 +65,7 @@ def run():
 
             for repetition in range(repeat):
                 print('[traceprov] Running query:\t', query, 'num', repetition, 'dir:\t', test_dir)
-                safe_run(f'echo "select reinit_state(0);" | PGPASSWORD=postgres psql -U postgres {db_name}')
+                safe_run(f'echo "select reinit_state();" | PGPASSWORD=postgres psql -U postgres {db_name}')
                 start = time.perf_counter()
                 safe_run(f"PGPASSWORD=postgres psql -U postgres {db_name} -f {path}provtrace/{query}.traceprov.sql > /dev/null")
                 end = time.perf_counter()
