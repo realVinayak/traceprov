@@ -6,7 +6,7 @@ FROM (
                         ELSE 0
                         END) / SUM(l_extendedprice * ( 1 - l_discount )) AS
         promo_revenue,
-        agg_map_parallel(l_orderkey, l_linenumber, p_partkey) as mapped_agg
+        traceprov_agg_key_parallel(1, l_orderkey, l_linenumber, p_partkey) as mapped_agg
     FROM   lineitem,
         part
     WHERE  l_partkey = p_partkey

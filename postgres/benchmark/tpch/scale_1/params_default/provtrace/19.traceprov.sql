@@ -3,7 +3,7 @@
 SELECT *, mark_later(mapped_agg) FROM (
     SELECT 
         SUM(l_extendedprice * ( 1 - l_discount )) AS revenue,
-        agg_map_parallel(l_orderkey, l_linenumber, p_partkey) as mapped_agg
+        traceprov_agg_key_parallel(1, l_orderkey, l_linenumber, p_partkey) as mapped_agg
     FROM   lineitem,
         part
     WHERE  ( p_partkey = l_partkey
