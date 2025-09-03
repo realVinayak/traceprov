@@ -11,8 +11,8 @@ FROM
 WHERE  p_partkey = l_partkey
     AND p_brand = ':1'
     AND p_container = ':2'
-    AND p_partkey in (SELECT group_outer.p_partkey FROM group_outer)
-    AND (l_orderkey, l_linenumber) in (SELECT group_outer.l_orderkey,group_outer.l_linenumber FROM group_outer)
+    AND p_partkey in (%A%)
+    AND (l_orderkey, l_linenumber) in (%B%)
     AND l_quantity < (
         select
             0.2 * avg(l_quantity)
@@ -20,6 +20,5 @@ WHERE  p_partkey = l_partkey
             lineitem
         where
             l_partkey = p_partkey
-            AND (l_orderkey, l_linenumber) in (%A%)
     );
 
