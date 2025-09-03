@@ -8,7 +8,8 @@ SELECT *, mark_later(mapped_agg) FROM (
     select
         n_name,
         sum(l_extendedprice * (1 - l_discount)) as revenue,
-        agg_map_parallel(
+        traceprov_agg_key_parallel(
+            1,
             c_custkey,
             o_orderkey,
             l_orderkey,

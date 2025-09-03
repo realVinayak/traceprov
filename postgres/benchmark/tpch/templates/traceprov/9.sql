@@ -9,7 +9,8 @@ SELECT *, mark_later(mapped_agg) FROM (
         nation,
         o_year,
         sum(amount) as sum_profit,
-        agg_map_parallel(
+        traceprov_agg_key_parallel(
+                1,
                 p_partkey,
                 s_suppkey,
                 l_orderkey,

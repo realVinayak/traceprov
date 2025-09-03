@@ -10,7 +10,8 @@ SELECT *, mark_later(mapped_agg) FROM (
         cust_nation,
         l_year,
         sum(volume) as revenue,
-        agg_map_parallel(
+        traceprov_agg_key_parallel(
+            1,
             s_suppkey,
             l_linenumber,
             l_orderkey,

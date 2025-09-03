@@ -8,13 +8,13 @@ SELECT *, mark_later(mapped_agg_later) FROM (
     select
         c_count,
         count(*) as custdist,
-        agg_from_ptr(mapped_agg) as mapped_agg_later
+        traceprov_agg_from_ptr(1, 5, mapped_agg) as mapped_agg_later
     from
         (
             select
                 c_custkey,
                 count(o_orderkey),
-                agg_map_parallel(c_custkey, coalesce(o_orderkey, 0)) as mapped_agg
+                traceprov_agg_key_parallel(1, c_custkey, coalesce(o_orderkey, 0)) as mapped_agg
             from
                 customer left outer join orders on
                     c_custkey = o_custkey
