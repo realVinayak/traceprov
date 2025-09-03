@@ -52,3 +52,6 @@ queries:
 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.a > $(target_dir)/validate/17.a.validate.sql;
 	cd $(qgen_dir) && \
 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.b > $(target_dir)/validate/17.b.validate.sql;
+
+examples:
+	echo "make queries target_dir=~/projects/prov/postgres/benchmark/tpch/scale_1/params_5 scale=1 seed=1755708657"
