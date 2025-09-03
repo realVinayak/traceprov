@@ -9,7 +9,7 @@ FROM (
     select
         o_orderpriority,
         count(*) as order_count,
-        agg_map_parallel(o_orderkey) as mapped_agg
+        traceprov_agg_key_parallel(1, o_orderkey) as mapped_agg
     from
         orders
     where
@@ -23,7 +23,7 @@ FROM (
             where
                 l_orderkey = o_orderkey
                 and l_commitdate < l_receiptdate
-                AND log_subquery_pk(l_orderkey, l_linenumber, o_orderkey)
+                AND traceprov_log_subquery_pk(4, l_orderkey, l_linenumber, o_orderkey)
         )
     group by
         o_orderpriority

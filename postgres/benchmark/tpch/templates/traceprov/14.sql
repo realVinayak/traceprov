@@ -11,7 +11,7 @@ SELECT *, mark_later(mapped_agg) FROM (
                 then l_extendedprice * (1 - l_discount)
             else 0
         end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue,
-        agg_map_parallel(l_orderkey, l_linenumber, p_partkey) as mapped_agg
+        traceprov_agg_key_parallel(1, l_orderkey, l_linenumber, p_partkey) as mapped_agg
     from
         lineitem,
         part

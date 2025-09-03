@@ -19,7 +19,7 @@ SELECT *, mark_later(mapped_agg) FROM (
                 then 1
             else 0
         end) as low_line_count,
-        agg_map_parallel(o_orderkey, l_orderkey, l_linenumber) as mapped_agg
+        traceprov_agg_key_parallel(1, o_orderkey, l_orderkey, l_linenumber) as mapped_agg
     from
         orders,
         lineitem

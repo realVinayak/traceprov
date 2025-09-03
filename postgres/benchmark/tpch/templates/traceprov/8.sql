@@ -11,7 +11,8 @@ SELECT *, mark_later(mapped_agg) FROM (
             when nation = ':1' then volume
             else 0
         end) / sum(volume) as mkt_share,
-        agg_map_parallel(
+        traceprov_agg_key_parallel(
+            1,
             p_partkey,
             s_suppkey,
             l_orderkey,

@@ -11,7 +11,7 @@ SELECT *, mark_later(mapped_agg) FROM
         sum(l_extendedprice * (1 - l_discount)) as revenue,
         o_orderdate,
         o_shippriority,
-        agg_map_parallel(c_custkey, o_orderkey, l_orderkey, l_linenumber) as mapped_agg
+        traceprov_agg_key_parallel(1, c_custkey, o_orderkey, l_orderkey, l_linenumber) as mapped_agg
     from
         customer,
         orders,
