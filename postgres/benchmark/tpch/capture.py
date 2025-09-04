@@ -16,6 +16,15 @@ def make_table(table, keys):
     ])
     return create_table_sql
 
+def create_index_stmts(table, insert_config):
+    index_creation = [
+        f"CREATE INDEX IDX_{idx} ON {table} ({','.join(participating['keys'])});"
+        for idx, participating in enumerate(insert_config)
+    ]
+    return '\n'.join(index_creation)
+
+
+
 def run_validate(
         config_file_name, 
         validate_sql_file, 
@@ -103,10 +112,13 @@ def run_validate(
         key_select_sql = f"SELECT {make_select(inner_table, keys)} FROM {inner_table}"
         sql_to_inject = sql_to_inject.replace(f"%{ref}%", key_select_sql)
     
+    create_index_sql = create_index_stmts(ID_TABLE_NAME, config['inserts'])
+
     final_sql = [
         f"DROP TABLE IF EXISTS {ID_TABLE_NAME};",
         create_table_sql,
         copy_from_file_sql,
+        create_index_sql,
         '-- SQL --',
     ]
 
