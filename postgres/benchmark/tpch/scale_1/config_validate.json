@@ -47,14 +47,6 @@
         "params_5",
         "params_default"
     ],
-    "_subdirs": [
-        "params_default",
-        "params_1",
-        "params_2",
-        "params_3",
-        "params_4",
-        "params_5"
-    ],
     "validate_steps": {
         "11": [
             "a",

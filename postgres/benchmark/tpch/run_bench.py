@@ -11,7 +11,8 @@ from capture import run_validate
 
 def safe_run(cmd):
     assert(os.system(cmd) == 0)
-    
+
+THROWAWAY = 3
 
 def run():
 
@@ -29,7 +30,7 @@ def run():
         config = json.loads(cf.read())
 
     test_queries = config['queries']
-    repeat = config['repeat']
+    repeat = config['repeat'] + THROWAWAY
     test_dirs = config['subdirs']
     db_name = config['db_name']
     validate = config.get('validate', False)
@@ -61,6 +62,9 @@ def run():
 
                 duration = end - start
 
+                # if we're going to throwaway, don't bother storing it
+                if repetition < THROWAWAY: continue
+
                 baseline_result_store = _add_duration(test_dir, query, duration, baseline_result_store)
 
             for repetition in range(repeat):
@@ -72,6 +76,7 @@ def run():
 
                 duration = end - start
 
+                if repetition < THROWAWAY: continue
 
                 # Now, we'd validate it.
                 assert validate_config_dirs

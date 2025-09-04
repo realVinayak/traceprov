@@ -19,12 +19,21 @@
         19
     ],
     "validate": false,
-    "repeat": 10,
+    "repeat": 4,
     "subdirs": [
-        "params_2"
+        "params_1",
+        "params_2",
+        "params_3",
+        "params_4",
+        "params_5",
+        "params_default"
     ],
     "validate_steps": {
         "11": [
+            "a",
+            "b"
+        ],
+        "17": [
             "a",
             "b"
         ]
