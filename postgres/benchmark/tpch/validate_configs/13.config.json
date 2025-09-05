@@ -1,4 +1,6 @@
 {
+    "id_file": "13.ids",
+    "reference": 5,
     "pk_order": [
         "c_custkey",
         "o_orderkey"

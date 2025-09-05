@@ -1,19 +1,18 @@
--- using 1755693634 as a seed to the RNG
+-- using 1755693633 as a seed to the RNG
 
 
 select
-    100.00 * sum(case
-        when p_type like 'PROMO%'
-            then l_extendedprice * (1 - l_discount)
-        else 0
-    end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
+	100.00 * sum(case
+		when p_type like 'PROMO%'
+			then l_extendedprice * (1 - l_discount)
+		else 0
+	end) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue
 from
-    lineitem,
-    part
+	lineitem,
+	part
 where
-    l_partkey = p_partkey
-    and l_shipdate >= date '1994-07-01'
-    and l_shipdate < date '1994-07-01' + interval '1' month
+	l_partkey = p_partkey
+	and l_shipdate >= date '1994-04-01'
+	and l_shipdate < date '1994-04-01' + interval '1' month
     AND (l_orderkey, l_linenumber) in (%A%)
-    AND p_partkey in (%B%)
-    ;
+    AND p_partkey in (%B%);

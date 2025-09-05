@@ -1,40 +1,40 @@
--- using 1755693634 as a seed to the RNG
+-- using 1755693633 as a seed to the RNG
 
 
 select
-    cntrycode,
-    count(*) as numcust,
-    sum(c_acctbal) as totacctbal
+	cntrycode,
+	count(*) as numcust,
+	sum(c_acctbal) as totacctbal
 from
-    (
-        select
-            substring(c_phone from 1 for 2) as cntrycode,
-            c_acctbal
-        from
-            customer
-        where
-            substring(c_phone from 1 for 2) in
-                ('20', '26', '34', '21', '19', '10', '11')
-            and c_acctbal > (
-                select
-                    avg(c_acctbal)
-                from
-                    customer
-                where
-                    c_acctbal > 0.00
-                    and substring(c_phone from 1 for 2) in
-                        ('20', '26', '34', '21', '19', '10', '11')
-            )
-            and not exists (
-                select
-                    *
-                from
-                    orders
-                where
-                    o_custkey = c_custkey
-            )
-    ) as custsale
+	(
+		select
+			substring(c_phone from 1 for 2) as cntrycode,
+			c_acctbal
+		from
+			customer
+		where
+			substring(c_phone from 1 for 2) in
+				('31', '27', '14', '10', '17', '11', '18')
+			and c_acctbal > (
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substring(c_phone from 1 for 2) in
+						('31', '27', '14', '10', '17', '11', '18')
+			)
+			and not exists (
+				select
+					*
+				from
+					orders
+				where
+					o_custkey = c_custkey
+			)
+	) as custsale
 group by
-    cntrycode
+	cntrycode
 order by
-    cntrycode;
+	cntrycode;

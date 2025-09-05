@@ -10,6 +10,7 @@
     ],
     "subq_id_file": "4.subq.ids",
     "id_file": "4.ids",
+    "subq_layer": 4,
     "inserts": [
         {
             "ref": "A",

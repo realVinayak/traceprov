@@ -1,0 +1,18 @@
+{
+    "id_table_name": "group_inner",
+    "id_file": "17.inner.ids",
+    "layer_number": 4,
+    "pk_order": [
+        "l_orderkey",
+        "l_linenumber"
+    ],
+    "inserts": [
+        {
+            "ref": "A",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        }
+    ]
+}
