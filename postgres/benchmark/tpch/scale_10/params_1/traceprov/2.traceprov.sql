@@ -1,0 +1,51 @@
+-- using 1755709829 as a seed to the RNG
+
+
+select
+    s_acctbal,
+    s_name,
+    n_name,
+    p_partkey,
+    p_mfgr,
+    s_address,
+    s_phone,
+    s_comment,
+    traceprov_log_subquery_pk(4, p_partkey, s_suppkey, n_nationkey, r_regionkey, ps_suppkey, ps_partkey),
+    mark_later(mapped_agg)
+from
+    part,
+    supplier,
+    nation,
+    region,
+    partsupp
+    JOIN LATERAL (
+        select
+            min(ps_supplycost)  as min_ps_sc,
+            traceprov_agg_key_parallel(1, ps_suppkey, ps_partkey, s_suppkey, n_nationkey, r_regionkey) as mapped_agg
+        from
+            partsupp,
+            supplier,
+            nation,
+            region
+        where
+            p_partkey = ps_partkey
+            and s_suppkey = ps_suppkey
+            and s_nationkey = n_nationkey
+            and n_regionkey = r_regionkey
+            and r_name = 'AMERICA'
+    ) as f
+    ON f.min_ps_sc = ps_supplycost
+where
+    p_partkey = ps_partkey
+    and s_suppkey = ps_suppkey
+    and p_size = 2
+    and p_type like '%STEEL'
+    and s_nationkey = n_nationkey
+    and n_regionkey = r_regionkey
+    and r_name = 'AMERICA'
+order by
+    s_acctbal desc,
+    n_name,
+    s_name,
+    p_partkey
+LIMIT 100;

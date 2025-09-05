@@ -1,7 +1,23 @@
 {
     "db_name": "tpch_01_v01",
-    "queries": [
+    "__queries": [
         17
+    ],
+    "queries": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        14,
+        17,
+        19
     ],
     "_queries": [
         1,
@@ -31,16 +47,12 @@
         "params_5",
         "params_default"
     ],
-    "_subdirs": [
-        "params_default",
-        "params_1",
-        "params_2",
-        "params_3",
-        "params_4",
-        "params_5"
-    ],
     "validate_steps": {
         "11": [
+            "a",
+            "b"
+        ],
+        "17": [
             "a",
             "b"
         ]

@@ -16,29 +16,42 @@ def make_table(table, keys):
     ])
     return create_table_sql
 
+def create_index_stmts(table, insert_config):
+    index_creation = [
+        f"CREATE INDEX IDX_{idx} ON {table} ({','.join(participating['keys'])});"
+        for idx, participating in enumerate(insert_config)
+    ]
+    return '\n'.join(index_creation)
+
+
+
 def run_validate(
         config_file_name, 
         validate_sql_file, 
         db_name, 
         raw_sql_file=None, 
-        executable="./infer.o", 
+        executable="./traceprov_infer.o", 
         out_file=None, 
         print_stmts=True,
         dry_run=False,
         diff_out=True
     ):
+    print("PRINTING", print_stmts)
+    diff_out = True
+    print_stmts = True
     with open(config_file_name) as cf:
         config = json.loads(cf.read())
 
 
-    id_file_name = config.get('id_file')
-    group_no = config.get('group_number', 1)
+    id_file_name = config.get('id_file', "temp.ids")
+    layer_number = config.get('layer_number', 1)
     subq_table = config.get('subq_table_name')
     ignore_group = config.get('ignore_gn')
+    reference = config.get('reference')
 
     extras = ""
     if subq_table:
-        extras += f" -s.num {len(config.get('subq_pk_order'))}"
+        extras += f" -s.layer_num {config.get('subq_layer')}"
         extras += f" -s.out {config.get('subq_id_file')}"
 
     if ignore_group is not None:
@@ -46,8 +59,11 @@ def run_validate(
     
     if id_file_name and not dry_run:
         extras += f" -f {id_file_name}"
+    
+    if reference:
+        extras += f" -ref_layer {reference}"
 
-    infer_sh = f'{executable} -g {group_no}' + extras
+    infer_sh = f'{executable} -l {layer_number}' + extras
     if out_file:
         infer_sh += f" > {out_file}"
 
@@ -96,10 +112,13 @@ def run_validate(
         key_select_sql = f"SELECT {make_select(inner_table, keys)} FROM {inner_table}"
         sql_to_inject = sql_to_inject.replace(f"%{ref}%", key_select_sql)
     
+    create_index_sql = create_index_stmts(ID_TABLE_NAME, config['inserts'])
+
     final_sql = [
         f"DROP TABLE IF EXISTS {ID_TABLE_NAME};",
         create_table_sql,
         copy_from_file_sql,
+        create_index_sql,
         '-- SQL --',
     ]
 

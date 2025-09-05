@@ -9,11 +9,11 @@ clean:
 	rm -f *.ids
 
 parallel:
-	sudo cp /etc/postgresql/14/main/postgresql.conf.parallel /etc/postgresql/14/main/postgresql.conf
+	sudo cp postgresql.conf.parallel /etc/postgresql/14/main/postgresql.conf
 	sudo systemctl restart postgresql.service
 
 series:
-	sudo cp /etc/postgresql/14/main/postgresql.conf.sequential /etc/postgresql/14/main/postgresql.conf
+	sudo cp postgresql.conf.sequential /etc/postgresql/14/main/postgresql.conf
 	sudo systemctl restart postgresql.service
 
 module:
@@ -45,3 +45,19 @@ agg_udfs:
 
 binary_search:
 	sudo make module src=binary_search suff=$(suff) sql=create_b_search
+
+traceprov:
+	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/14/server/ traceprov.c -o traceprov_$(suff).o
+	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/14/server/ file_utils.c -o file_utils_$(suff).o
+	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/14/server/ utils.c -o utils_$(suff).o
+	gcc -g -Wall -shared traceprov_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_$(suff).so
+	sudo cp traceprov_$(suff).so /usr/lib/postgresql/14/lib
+	rm -f *.auto.sql
+	sed 's/__FILE__/traceprov_$(suff)/g' traceprov.sql > traceprov_$(suff).auto.sql
+	sudo cp traceprov_$(suff).auto.sql /home/postgres/
+
+traceprov_infer:
+	g++ -O3 -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
+
+traceprov_infer_dbg:
+	g++ -g -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o

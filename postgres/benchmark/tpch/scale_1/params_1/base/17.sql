@@ -1,20 +1,20 @@
--- using 1755693634 as a seed to the RNG
+-- using 1755693633 as a seed to the RNG
 
 
 select
-    sum(l_extendedprice) / 7.0 as avg_yearly
+	sum(l_extendedprice) / 7.0 as avg_yearly
 from
-    lineitem,
-    part
+	lineitem,
+	part
 where
-    p_partkey = l_partkey
-    and p_brand = 'Brand#32'
-    and p_container = 'WRAP JAR'
-    and l_quantity < (
-        select
-            0.2 * avg(l_quantity)
-        from
-            lineitem
-        where
-            l_partkey = p_partkey
-    );
+	p_partkey = l_partkey
+	and p_brand = 'Brand#35'
+	and p_container = 'WRAP BOX'
+	and l_quantity < (
+		select
+			0.2 * avg(l_quantity)
+		from
+			lineitem
+		where
+			l_partkey = p_partkey
+	);
