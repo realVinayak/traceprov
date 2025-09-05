@@ -15,6 +15,9 @@ DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, B
 -- traceprov_agg_from_ptr aggregate
 DROP AGGREGATE traceprov_agg_from_ptr(int, int, BIGINT);
 
+-- traceprov_agg_from_ptr_dup_aware
+DROP AGGREGATE traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
+
 -- Functions
 DROP FUNCTION   IF EXISTS reinit_state(INTEGER); -- This is here for historical reasons.
 DROP FUNCTION   IF EXISTS reinit_state();
@@ -34,6 +37,7 @@ DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, int, BIGINT, B
 DROP FUNCTION   IF EXISTS traceprov_agg_key_finalfunc(state internal);
 
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_sfunc(state internal, INT, INT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_dup_aware_sfunc(state internal, INT, INT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_combine(internal, internal);
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_serialize(internal);
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_deserialize(bytea, internal);
@@ -201,6 +205,7 @@ CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, B
 CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_agg_from_ptr_sfunc(state internal, int, int, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_sfunc' LANGUAGE C;
+CREATE FUNCTION traceprov_agg_from_ptr_dup_aware_sfunc(state internal, int, int, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_dup_aware_sfunc' LANGUAGE C;
 CREATE FUNCTION traceprov_agg_from_ptr_finalfunc(state internal) RETURNS bigint AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_finalfunc' LANGUAGE C;
 CREATE FUNCTION traceprov_agg_from_ptr_serialize(internal) RETURNS bytea AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_serialize' LANGUAGE C;
 CREATE FUNCTION traceprov_agg_from_ptr_deserialize(bytea, internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_deserialize' LANGUAGE C;
@@ -208,6 +213,17 @@ CREATE FUNCTION traceprov_agg_from_ptr_combine(internal, internal) RETURNS inter
 
 CREATE AGGREGATE traceprov_agg_from_ptr(int, int, BIGINT) (
     SFUNC = traceprov_agg_from_ptr_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_from_ptr_finalfunc, 
+    COMBINEFUNC = traceprov_agg_from_ptr_combine,
+    SERIALFUNC = traceprov_agg_from_ptr_serialize,
+    DESERIALFUNC = traceprov_agg_from_ptr_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_from_ptr_dup_aware(int, int, BIGINT) (
+    SFUNC = traceprov_agg_from_ptr_dup_aware_sfunc, 
     STYPE = internal, 
     SSPACE = 32,
     FINALFUNC = traceprov_agg_from_ptr_finalfunc, 

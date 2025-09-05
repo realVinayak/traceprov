@@ -614,6 +614,7 @@ Datum traceprov_log_subquery_pk(PG_FUNCTION_ARGS){
     const int num_key_records = PG_NARGS() - 1; // -1 for the layer number
     if ((rc = initialize_local_and_layer(layer_number, num_key_records - 1, true))){
         PRINT_ON_DEBUG("Error setting up the local or layer for log-subquery");
+        elog(ERROR, "Error setting up the local or layer for log-subquery");
         return rc;
     }
 
@@ -808,4 +809,58 @@ PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_finalfunc);
 Datum traceprov_agg_from_ptr_finalfunc(FunctionCallInfo fcinfo){
     // This works, and is fine.
     return traceprov_agg_key_finalfunc(fcinfo);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_dup_aware_sfunc);
+
+Datum traceprov_agg_from_ptr_dup_aware_sfunc(PG_FUNCTION_ARGS){
+
+    // This is mostly same as traceprov_agg_from_ptr_sfunc.
+    // However, this function also checks if the previous row has already been grouped.
+    // If it was, then log the pointer in a separate file.
+    int32 layer_number = PG_GETARG_INT32(1);
+    int32 new_layer_number = PG_GETARG_INT32(2);
+    
+    const int32 group_layer_result = layer_number + 1;
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_result);
+    struct traceprov_agg_context *agg_context;
+    if (PG_ARGISNULL(0)){
+        agg_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_context->group_cnt = ++current_layer->num_groups;
+        agg_context->layer_number = new_layer_number;
+    }else{
+        agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    }
+
+    struct trace_file_grouped_row * row = (struct trace_file_grouped_row *)(PG_GETARG_INT64(3));
+
+    const int32 dup_layer_number = new_layer_number + 2; // Need to do +2 because +1 will be used for the finalfunc layer.
+ 
+    if (row->in_result == 0){
+        row->in_result = agg_context->group_cnt;
+    }else if (row->in_result != agg_context->group_cnt){
+        // This means that the previously the pointer has been assigned a group.
+        // Now, we'd try mapping the new file.
+        // We do this here to be lazily allocate the space for the file.
+        if (unlikely(initialize_local_and_layer(dup_layer_number, 1, true))){
+            PRINT_ON_DEBUG("Error setting up local or layer for agg from ptr dup aware");
+            elog(ERROR, "Error setting up local or layer for agg from ptr dup aware");
+            return 1;
+        }
+
+        struct traceprov_aggregate_layer *dup_layer = get_layer(dup_layer_number);
+        
+        if (unlikely(dup_layer->current_row == dup_layer->end_of_memory_zone)){
+            if (unlikely(grow_layer_file(dup_layer))){
+                elog(ERROR, "Received an error when growing agg_from_ptr_dup_aware trace file");
+            }
+        }
+
+        dup_layer->current_row += dup_layer->record_padding;
+        *((int64*)(dup_layer->current_row)) = (int64)(row);
+
+        dup_layer->current_row = &(((int64*)dup_layer->current_row)[1]);
+    }
+    PG_RETURN_POINTER(agg_context);
 }
