@@ -14,6 +14,7 @@ DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, B
 
 -- traceprov_agg_from_ptr aggregate
 DROP AGGREGATE traceprov_agg_from_ptr(int, int, BIGINT);
+DROP AGGREGATE traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
 
 -- Functions
 DROP FUNCTION   IF EXISTS reinit_state(INTEGER); -- This is here for historical reasons.

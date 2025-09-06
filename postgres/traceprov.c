@@ -705,45 +705,6 @@ int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_
     return 0;
 }
 
-int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
-    int rc = 0;
-    // In this case, we'd have to grow the file.
-    const int initial_size = current_layer->size;
-    current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
-    const int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
-    if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
-        PRINT_ON_DEBUG("Error increasing the page size layer");
-        return rc;
-    }
-    // Now, need to create the new mapping.
-    void *ptr = mmap(
-        NULL,
-        TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
-        PROT_WRITE,
-        MAP_SHARED,
-        current_layer->layer_fd,
-        initial_size * TRACEPROV_PAGE_SIZE
-    );
-
-    if ((unlikely(ptr == MAP_FAILED))){
-        PRINT_ON_DEBUG(
-            "Error mmaping incremented trace file. %ld, %ld", 
-            TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
-            initial_size * TRACEPROV_PAGE_SIZE
-        );
-        rc = 1;
-        elog(ERROR, "Error mmaping incremented trace file");
-        return rc;
-    }
-
-    // Now, need to some reinitialzation.
-    current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
-    current_layer->current_row = ptr;
-    // Also set the last mapping.
-    current_layer->last_mapping = ptr;
-    return rc;
-}
-
 PG_FUNCTION_INFO_V1(mark_later);
 
 Datum mark_later(PG_FUNCTION_ARGS){

@@ -15,3 +15,7 @@ postgres/benchmark/tpch/temp.out
 postgres/benchmark/tpch/baseline_result_store.json
 postgres/benchmark/tpch/traceprov_result_store.json
 postgres/benchmark/tpch/*.ids
+postgres/benchmark/micro/*/__pycache__
+postgres/benchmark/micro/layer_grow/*.o
+postgres/benchmark/micro/layer_grow/*.tp
+postgres/benchmark/micro/layer_grow/*.out
