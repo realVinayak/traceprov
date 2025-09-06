@@ -48,6 +48,8 @@ def run():
                         }
                 }
 
+    safe_run(f'echo "select analyze;" | PGPASSWORD=postgres psql -U postgres {db_name}')
+
     for test_dir in test_dirs:
         path = '/'.join([*config_file.split('/')[:-1], test_dir, ''])
 
