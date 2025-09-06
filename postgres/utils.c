@@ -1,10 +1,19 @@
 #include "traceprov_utils.h"
+#include <sys/file.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 int get_error_no(){
     int err_no = errno;
     return err_no;
 }
 
+#ifdef TRACEPROV_STANDALONE
+#undef PRINT_ON_DEBUG
+#define PRINT_ON_DEBUG(...) 0
+#undef  elog
+#define elog(...) 0
+#endif
 
 void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "traceprov_aggregate_layer {");
@@ -18,4 +27,43 @@ void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "\t->end_of_memory_zone: %p", layer->end_of_memory_zone);
     elog(INFO, "\t->layer_fd: %d", layer->layer_fd);
     elog(INFO, "}");
+}
+
+int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
+    int rc = 0;
+    // In this case, we'd have to grow the file.
+    const long int initial_size = current_layer->size;
+    current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
+    const long int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
+    if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
+        PRINT_ON_DEBUG("Error increasing the page size layer");
+        return rc;
+    }
+    // Now, need to create the new mapping.
+    void *ptr = mmap(
+        NULL,
+        TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+        PROT_WRITE,
+        MAP_SHARED,
+        current_layer->layer_fd,
+        initial_size * TRACEPROV_PAGE_SIZE
+    );
+
+    if ((unlikely(ptr == MAP_FAILED))){
+        PRINT_ON_DEBUG(
+            "Error mmaping incremented trace file. %ld, %ld", 
+            TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
+            initial_size * TRACEPROV_PAGE_SIZE
+        );
+        rc = 1;
+        elog(ERROR, "Error mmaping incremented trace file");
+        return rc;
+    }
+
+    // Now, need to some reinitialzation.
+    current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
+    current_layer->current_row = ptr;
+    // Also set the last mapping.
+    current_layer->last_mapping = ptr;
+    return rc;
 }

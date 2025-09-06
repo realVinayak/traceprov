@@ -1,1 +1,1 @@
-sudo python3 run_bench.py scale_1/config_validate.json validate_configs/ ../../infer.o
+sudo python3 run_bench.py scale_1/config_validate.json validate_configs/ ../../traceprov_infer.o
