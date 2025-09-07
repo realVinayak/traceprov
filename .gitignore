@@ -19,3 +19,4 @@ postgres/benchmark/micro/*/__pycache__
 postgres/benchmark/micro/layer_grow/*.o
 postgres/benchmark/micro/layer_grow/*.tp
 postgres/benchmark/micro/layer_grow/*.out
+postgres/benchmark/micro/aggregate/.ipynb_checkpoints/*
