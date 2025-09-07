@@ -1,0 +1,438 @@
+import json
+from typing import Any, Dict
+import sys
+import numpy as np
+import matplotlib.pyplot as plt
+
+LOWER_BOUND = 25
+UPPER_BOUND = 75
+
+muller_data = """
+8.00	1
+1.50	2
+4.00	3
+8.00	4
+1.50	5
+6.00	6
+1.25	7
+3.00	8
+6.00	9
+6.00	10
+200.00	11
+3.00	12
+20.00	13
+6.00	14
+100.00	17
+1.00	19
+"""
+
+muller_results = {
+    int(q): float(slowdown)
+    for (slowdown, q) in [
+        tuple(row.split("\t")) for row in muller_data.split("\n") if len(row) > 1
+    ]
+}
+
+print(muller_results)
+
+
+def get_json_dump(files):
+    data = {}
+
+    for file in files:
+        with open(file) as f:
+            data = {**data, **json.loads(f.read())}
+
+    return data
+
+
+def aggregate_over_params(data: Dict[str, Dict[str, Any]]):
+    # Simply return the aggregate over the params
+    agg_data = {}
+    for _, per_dir in sorted(data.items(), key=lambda x: x[0]):
+        for query_key, cells in per_dir.items():
+            agg_data[query_key] = [*agg_data.get(query_key, []), *cells]
+
+    return agg_data
+
+
+def print_stats(name, data):
+    for query, timings in data.items():
+        print(name, query, len(timings))
+
+
+def assert_int_type(in_dict):
+    for key in in_dict:
+        assert isinstance(key, int)
+    return in_dict
+
+
+def generate_figures(
+    baseline_files,
+    traceprov_files,
+    traceprov_files_infer,
+    params=None,
+    label=None,
+    use_muller=False,
+    out_dir="./",
+):
+    plt.clf()
+
+    _baseline_data = get_json_dump(baseline_files)
+    _traceprov_data = get_json_dump(traceprov_files)
+    _traceprov_infer = get_json_dump(traceprov_files_infer)
+
+    if params is None:
+        baseline_data = aggregate_over_params(_baseline_data)
+        traceprov_data = aggregate_over_params(_traceprov_data)
+        traceprov_infer = aggregate_over_params(_traceprov_infer)
+    else:
+        baseline_data = _baseline_data[params]
+        traceprov_data = _traceprov_data[params]
+        traceprov_infer = _traceprov_infer[params]
+
+    # print_stats("baseline", baseline_data)
+    # print_stats("traceprov", traceprov_data)
+    # print_stats("traceprov_infer", traceprov_infer)
+
+    # For each param (or set of params), there are two graphs.
+
+    # First graph shows:
+    # 1. Baseline
+    # 2. Traceprov Forward
+    # 3. Traceprov Inference
+    # 4. Traceprov Forward + Traceprov Inference
+    # 5. Traceprov Forward + Traceprov Inference + Materialization
+    # NOTE: We also show the average number of records
+
+    # Second graph shows:
+    # 1. Slowdown using (Traceprov Forward + Traceprov Inference) / Baseline
+    # 2. Slowdown using (Traceprov Forward + Traceprov Inference + Materialization) / Baseline
+
+    get_tuple = lambda times: (
+        np.median(times),
+        np.percentile(times, LOWER_BOUND),
+        np.percentile(times, UPPER_BOUND),
+    )
+
+    raw_baseline_time = {int(query): times for (query, times) in baseline_data.items()}
+    baseline_time = {
+        int(query): get_tuple(times) for query, times in baseline_data.items()
+    }
+
+    forward_times = lambda input_tuples: [i[0] for i in input_tuples]
+    infer_times = lambda input_tuples: [i[1] / 1000 for i in input_tuples]
+    forward_and_inference = lambda forwards, infers: [
+        f + i for (f, i) in zip(forwards, infers)
+    ]
+    forward_and_inference_and_material = lambda input_tuples: [
+        i[0] + i[1] for i in input_tuples
+    ]
+    num_records = lambda input_tuples: [sum(i[2]) for i in input_tuples]
+
+    raw_traceprov_forward_times = {
+        int(query): forward_times(times) for query, times in traceprov_data.items()
+    }
+
+    traceprov_forward_time = {
+        query: get_tuple(times) for query, times in raw_traceprov_forward_times.items()
+    }
+
+    raw_traceprov_infer_time = {
+        int(query): infer_times(times) for query, times in traceprov_infer.items()
+    }
+
+    traceprov_infer_time = {
+        query: get_tuple(times) for (query, times) in raw_traceprov_infer_time.items()
+    }
+
+    assert len(raw_traceprov_forward_times) == len(raw_traceprov_infer_time)
+
+    raw_traceprov_forward_and_infer = {
+        query: forward_and_inference(
+            raw_traceprov_forward_times[query], raw_traceprov_infer_time[query]
+        )
+        for query in raw_traceprov_forward_times.keys()
+    }
+
+    traceprov_forward_and_infer = {
+        query: get_tuple(times)
+        for query, times in raw_traceprov_forward_and_infer.items()
+    }
+
+    raw_traceprov_forward_and_infer_and_material = {
+        int(query): forward_and_inference_and_material(tuples)
+        for query, tuples in traceprov_data.items()
+    }
+
+    traceprov_forward_and_infer_and_material = {
+        query: get_tuple(times)
+        for query, times in raw_traceprov_forward_and_infer_and_material.items()
+    }
+
+    traceprov_logged_records = {
+        int(query): get_tuple(num_records(tuples))
+        for (query, tuples) in traceprov_data.items()
+    }
+
+    # print(baseline_time)
+    # print("\n\n")
+    # print(traceprov_forward_time)
+    # print("\n\n")
+    # print(traceprov_infer_time)
+    # print("\n\n")
+    # print(traceprov_forward_and_infer)
+    # print("\n\n")
+    # print(traceprov_forward_and_infer_and_material)
+    # print("\n\n")
+    # print(traceprov_logged_records)
+
+    queries = sorted(list(baseline_time.keys()))
+
+    assert len(assert_int_type(baseline_time)) == len(traceprov_forward_time)
+    assert len(assert_int_type(traceprov_forward_time)) == len(traceprov_infer_time)
+    assert len(assert_int_type(traceprov_infer_time)) == len(
+        traceprov_forward_and_infer
+    )
+    assert len(assert_int_type(traceprov_forward_and_infer)) == len(
+        assert_int_type(traceprov_forward_and_infer_and_material)
+    )
+
+    group_width = 0.85
+    num_groups = 5
+    bar_width = group_width / num_groups
+    group_offsets = np.linspace(
+        -(num_groups - 1) / 2 * bar_width, (num_groups - 1) / 2 * bar_width, num_groups
+    )
+
+    fig, (ax, ax_table) = plt.subplots(1, 2, figsize=(15, 6))
+
+    ax.bar(
+        [query + group_offsets[0] for query in queries],
+        [baseline_time[query][0] for query in queries],
+        width=bar_width,
+        label="Baseline",
+    )
+
+    ax.bar(
+        [query + group_offsets[1] for query in queries],
+        [traceprov_forward_time[query][0] for query in queries],
+        width=bar_width,
+        label="Trace",
+    )
+    ax.bar(
+        [query + group_offsets[2] for query in queries],
+        [traceprov_infer_time[query][0] for query in queries],
+        width=bar_width,
+        label="Infer",
+    )
+    ax.bar(
+        [query + group_offsets[3] for query in queries],
+        [traceprov_forward_and_infer[query][0] for query in queries],
+        width=bar_width,
+        label="Trace + Infer",
+    )
+    ax.bar(
+        [query + group_offsets[4] for query in queries],
+        [traceprov_forward_and_infer_and_material[query][0] for query in queries],
+        width=bar_width,
+        label="Trace + Infer + Materialize",
+    )
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+    ax.set_xticks(queries)
+
+    ax.set_ylabel("Time (s)")
+    ax.set_title(f"Execution and Provenance Measurement time ({label})")
+    ax.set_xlabel("Query")
+    ax.legend(loc="upper right", ncols=2, prop=dict(size=8))
+
+    data = []
+    for query in queries:
+        record_tuple = traceprov_logged_records[query]
+        record = [
+            format(int(record_tuple[1]), ","),
+            format(int(record_tuple[0]), ","),
+            format(int(record_tuple[2]), ","),
+        ]
+        data.append(record)
+
+    table = ax_table.table(
+        cellText=np.asarray(data),
+        rowLabels=queries,
+        colLabels=[
+            "Q1 of #records",
+            "Q2 of #records",
+            "Q3 of #records",
+        ],
+        colWidths=[0.2, 0.2, 0.2],
+        cellLoc="center",
+        loc="center",
+    )
+    ax_table.set_title("Number of records")
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.5)
+    ax_table.axis("off")
+    ax_table.axis("tight")
+
+    plt.tight_layout()
+    plt.savefig(f"{out_dir}/execution_time_{label}.png")
+
+    plt.clf()
+
+    fig_2, ax_2 = plt.subplots()
+    plt.grid(axis="x", linestyle="--", alpha=0.7)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+    ax_2.set_xticks(queries)
+
+    ax_2.set_xlabel("Query")
+    ax_2.set_ylabel("Slowdown")
+
+    slowdown = lambda traces, bases: [
+        (trace / base) for (trace, base) in zip(traces, bases)
+    ]
+
+    traceprov_forward_and_infer_slowdown = [
+        (
+            query,
+            get_tuple(
+                slowdown(
+                    raw_traceprov_forward_and_infer[query], raw_baseline_time[query]
+                )
+            ),
+        )
+        for query in queries
+    ]
+
+    traceprov_forward_and_infer_and_mat_slowdown = [
+        (
+            query,
+            get_tuple(
+                slowdown(
+                    raw_traceprov_forward_and_infer_and_material[query],
+                    raw_baseline_time[query],
+                )
+            ),
+        )
+        for query in queries
+    ]
+
+    muller_slowdown = [(query, muller_results[query]) for query in queries]
+
+    # Now, we make the slowdown plot.
+    plt.scatter(
+        [query for (query, _) in traceprov_forward_and_infer_slowdown],
+        [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
+        label="Trace + Infer",
+    )
+
+    traceprov_forward_and_infer_err_high = [
+        sd[2] - sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown
+    ]
+
+    traceprov_forward_and_infer_err_low = [
+        sd[0] - sd[1] for (_, sd) in traceprov_forward_and_infer_slowdown
+    ]
+
+    plt.errorbar(
+        [query for (query, _) in traceprov_forward_and_infer_slowdown],
+        [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
+        yerr=np.vstack(
+            [traceprov_forward_and_infer_err_low, traceprov_forward_and_infer_err_high]
+        ),
+        fmt="o",
+    )
+    plt.scatter(
+        [query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
+        [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
+        label="Trace + Infer + Materialize",
+    )
+
+    traceprov_forward_and_infer_and_mat_err_high = [
+        sd[2] - sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown
+    ]
+
+    traceprov_forward_and_infer_and_mat_err_low = [
+        sd[0] - sd[1] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown
+    ]
+
+    plt.errorbar(
+        [query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
+        [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
+        yerr=np.vstack(
+            [
+                traceprov_forward_and_infer_and_mat_err_low,
+                traceprov_forward_and_infer_and_mat_err_high,
+            ]
+        ),
+        fmt="o",
+    )
+
+    if use_muller:
+        plt.scatter(
+            [query for (query, _) in muller_slowdown],
+            [sd for (_, sd) in muller_slowdown],
+            label="Muller",
+        )
+
+    if use_muller:
+        # Because muller's has a high slowdown
+        ax_2.set_yscale("log", base=10)
+
+    ax_2.legend(loc="lower center", prop=dict(size=8))
+    ax_2.set_title(f"Slowdown ({label})")
+
+    plt.savefig(f"{out_dir}/slowdown_{label}.png")
+
+
+if __name__ == "__main__":
+    baseline_files = []
+    traceprov_files = []
+    traceprov_files_infer = []
+    label_suff = None
+    use_muller = False
+    results_dir = "./"
+    for idx, i in enumerate(sys.argv[1:], start=1):
+        # if i == "-v":
+        #     variance = True
+        # if i == "-m":
+        #     mean = True
+        if i == "-base":
+            baseline_files.append(sys.argv[idx + 1])
+        if i == "-trace":
+            traceprov_files.append(sys.argv[idx + 1])
+        if i == "-trace_inf":
+            traceprov_files_infer.append(sys.argv[idx + 1])
+        if i == "-label":
+            label_suff = sys.argv[idx + 1]
+        if i == "-muller":
+            use_muller = True
+        if i == "-out":
+            results_dir = sys.argv[idx + 1]
+
+    import os
+
+    os.system(f"mkdir -p {results_dir}")
+
+    params = [
+        None,
+        "params_default",
+        "params_1",
+        "params_2",
+        "params_3",
+        "params_4",
+        "params_5",
+    ]
+
+    for param in params:
+        label = f"{label_suff}_{param or 'all'}"
+        generate_figures(
+            baseline_files,
+            traceprov_files,
+            traceprov_files_infer,
+            use_muller=use_muller,
+            params=param,
+            label=label,
+            out_dir=results_dir,
+        )
