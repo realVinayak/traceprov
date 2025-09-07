@@ -61,7 +61,7 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     }
 
     // Now, need to some reinitialzation.
-    current_layer->end_of_memory_zone = (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + ptr;
+    current_layer->end_of_memory_zone = (void*)((TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + (char*)ptr);
     current_layer->current_row = ptr;
     // Also set the last mapping.
     current_layer->last_mapping = ptr;
