@@ -1,4 +1,5 @@
 import json
+import statistics
 from typing import Any, Dict
 import sys
 import numpy as np
@@ -67,6 +68,17 @@ def assert_int_type(in_dict):
     return in_dict
 
 
+forward_times = lambda input_tuples: [i[0] for i in input_tuples]
+infer_times = lambda input_tuples: [i[1] / 1000 for i in input_tuples]
+forward_and_inference = lambda forwards, infers: [
+    f + i for (f, i) in zip(forwards, infers)
+]
+forward_and_inference_and_material = lambda input_tuples: [
+    i[0] + i[1] for i in input_tuples
+]
+num_records = lambda input_tuples: [sum(i[2]) for i in input_tuples]
+
+
 def generate_figures(
     baseline_files,
     traceprov_files,
@@ -115,21 +127,18 @@ def generate_figures(
         np.percentile(times, UPPER_BOUND),
     )
 
+    get_tuple_dump = lambda times: (
+        statistics.median(times),
+        statistics.variance(times),
+    )
     raw_baseline_time = {int(query): times for (query, times) in baseline_data.items()}
     baseline_time = {
         int(query): get_tuple(times) for query, times in baseline_data.items()
     }
 
-    forward_times = lambda input_tuples: [i[0] for i in input_tuples]
-    infer_times = lambda input_tuples: [i[1] / 1000 for i in input_tuples]
-    forward_and_inference = lambda forwards, infers: [
-        f + i for (f, i) in zip(forwards, infers)
-    ]
-    forward_and_inference_and_material = lambda input_tuples: [
-        i[0] + i[1] for i in input_tuples
-    ]
-    num_records = lambda input_tuples: [sum(i[2]) for i in input_tuples]
-
+    dump_baseline_time = {
+        int(query): get_tuple_dump(times) for query, times in baseline_data.items()
+    }
     raw_traceprov_forward_times = {
         int(query): forward_times(times) for query, times in traceprov_data.items()
     }
@@ -146,6 +155,16 @@ def generate_figures(
         query: get_tuple(times) for (query, times) in raw_traceprov_infer_time.items()
     }
 
+    dump_forward_times = {
+        query: get_tuple_dump(times)
+        for query, times in raw_traceprov_forward_times.items()
+    }
+
+    dump_infer_times = {
+        query: get_tuple_dump(times)
+        for (query, times) in raw_traceprov_infer_time.items()
+    }
+
     assert len(raw_traceprov_forward_times) == len(raw_traceprov_infer_time)
 
     raw_traceprov_forward_and_infer = {
@@ -160,9 +179,19 @@ def generate_figures(
         for query, times in raw_traceprov_forward_and_infer.items()
     }
 
+    dump_traceprov_forward_and_infer = {
+        query: get_tuple_dump(times)
+        for query, times in raw_traceprov_forward_and_infer.items()
+    }
+
     raw_traceprov_forward_and_infer_and_material = {
         int(query): forward_and_inference_and_material(tuples)
         for query, tuples in traceprov_data.items()
+    }
+
+    dump_traceprov_forward_and_infer_and_material = {
+        query: get_tuple_dump(times)
+        for query, times in raw_traceprov_forward_and_infer_and_material.items()
     }
 
     traceprov_forward_and_infer_and_material = {
@@ -172,6 +201,11 @@ def generate_figures(
 
     traceprov_logged_records = {
         int(query): get_tuple(num_records(tuples))
+        for (query, tuples) in traceprov_data.items()
+    }
+
+    dump_traceprov_logged_records = {
+        int(query): get_tuple_dump(num_records(tuples))
         for (query, tuples) in traceprov_data.items()
     }
 
@@ -305,6 +339,13 @@ def generate_figures(
         for query in queries
     ]
 
+    dump_traceprov_forward_and_infer_slowdown = {
+        query: get_tuple(
+            slowdown(raw_traceprov_forward_and_infer[query], raw_baseline_time[query])
+        )
+        for query in queries
+    }
+
     traceprov_forward_and_infer_and_mat_slowdown = [
         (
             query,
@@ -317,6 +358,16 @@ def generate_figures(
         )
         for query in queries
     ]
+
+    dump_traceprov_forward_and_infer_and_mat_slowdown = {
+        query: get_tuple(
+            slowdown(
+                raw_traceprov_forward_and_infer_and_material[query],
+                raw_baseline_time[query],
+            )
+        )
+        for query in queries
+    }
 
     muller_slowdown = [(query, muller_results[query]) for query in queries]
 
@@ -385,8 +436,96 @@ def generate_figures(
 
     plt.savefig(f"{out_dir}/slowdown_{label}.png")
 
+    assert_int_type(dump_baseline_time)
+    assert_int_type(dump_forward_times)
+    assert_int_type(dump_infer_times)
+    assert_int_type(dump_traceprov_forward_and_infer)
+    assert_int_type(dump_traceprov_forward_and_infer_and_material)
+    assert_int_type(dump_traceprov_logged_records)
+    assert_int_type(dump_traceprov_forward_and_infer_slowdown)
+    assert_int_type(dump_traceprov_forward_and_infer_and_mat_slowdown)
 
-if __name__ == "__main__":
+    return dict(
+        baseline=dump_baseline_time,
+        trace=dump_forward_times,
+        infer=dump_infer_times,
+        trace_and_infer=dump_traceprov_forward_and_infer,
+        trace_and_infer_and_material=dump_traceprov_forward_and_infer_and_material,
+        num_records=dump_traceprov_logged_records,
+        trace_and_infer_slowdown=dump_traceprov_forward_and_infer_slowdown,
+        trace_and_infer_and_materialize_slowdown=dump_traceprov_forward_and_infer_and_mat_slowdown,
+    )
+
+
+def reorganize(content: Dict[str, Dict[str, Any]]):
+    # current structure is {'header': {1: {}, 2: {}}}
+    # Need to reorganize it to {1: {'header: ''}...}
+    new_content = {}
+    for header in content:
+        queries_content = content[header]
+        new_content = {
+            **new_content,
+            **{
+                query: {**{header: query_content}, **new_content.get(query, {})}
+                for query, query_content in queries_content.items()
+            },
+        }
+
+    return new_content
+
+
+def augment_contents(query_contents):
+    median = {
+        f"{header}_median": content[0] for header, content in query_contents.items()
+    }
+    variance = {
+        f"{header}_variance": content[1] for header, content in query_contents.items()
+    }
+    return {**median, **variance}
+
+
+def parse_back(instr: str):
+    return instr.replace("_median", "").replace("_variance", "")
+
+
+def dump_csv(contents_with_labels, file_prefix):
+
+    dict_rows = [
+        {"param": param, "query": query, **augment_contents(query_contents)}
+        for param, param_contents in contents_with_labels.items()
+        for query, query_contents in param_contents.items()
+    ]
+
+    order_header = [
+        "param",
+        "query",
+        "baseline",
+        "trace",
+        "infer",
+        "trace_and_infer",
+        "trace_and_infer_and_material",
+        "num_records",
+        "trace_and_infer_slowdown",
+        "trace_and_infer_and_materialize_slowdown",
+    ]
+
+    augmanted_order = []
+    for header in order_header:
+        if header in ["param", "query"]:
+            augmanted_order.append(header)
+            continue
+        augmanted_order.append(f"{header}_median")
+        augmanted_order.append(f"{header}_variance")
+
+    rows = [[str(row[header]) for header in augmanted_order] for row in dict_rows]
+
+    rows = [augmanted_order, *rows]
+    with open(f"{file_prefix}.tsv", "w") as f:
+        tab_sep = ["\t".join(row) for row in rows]
+        f.write("\n".join(tab_sep))
+
+
+def main():
     baseline_files = []
     traceprov_files = []
     traceprov_files_infer = []
@@ -425,9 +564,10 @@ if __name__ == "__main__":
         "params_5",
     ]
 
+    all_contents = {}
     for param in params:
         label = f"{label_suff}_{param or 'all'}"
-        generate_figures(
+        contents = generate_figures(
             baseline_files,
             traceprov_files,
             traceprov_files_infer,
@@ -436,3 +576,11 @@ if __name__ == "__main__":
             label=label,
             out_dir=results_dir,
         )
+        new_param = param or "all"
+        all_contents[new_param] = reorganize(contents)
+
+    dump_csv(all_contents, f"{results_dir}/{label_suff}_dump")
+
+
+if __name__ == "__main__":
+    main()
