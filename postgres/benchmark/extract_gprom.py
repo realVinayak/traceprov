@@ -1,6 +1,7 @@
 import argparse
 import os
 import json
+import datetime
 
 
 def get_config(file):
@@ -70,7 +71,12 @@ def main():
 
     assert begin_index < end_index
 
-    sql_str = "--- SQL OUT --- \n" + gprm_out[begin_index : end_index + 1]
+    time = datetime.datetime.now()
+
+    sql_str = (
+        f"--- SQL OUT --- ON {time.replace(microsecond=0).isoformat()} \n"
+        + gprm_out[begin_index : end_index + 1]
+    )
 
     if parsed.verbose:
         print(sql_str)
