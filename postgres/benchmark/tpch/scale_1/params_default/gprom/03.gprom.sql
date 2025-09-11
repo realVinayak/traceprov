@@ -28,5 +28,4 @@ SELECT F0_0."AGG_GB_ARG1" AS "_P_SIDE_GROUP_0", F0_0."AGG_GB_ARG2" AS "_P_SIDE_G
 FROM (SELECT * FROM temp_view_1) F0_0) F1_0 ON (((F0_0."GROUP_2" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_2") AND ((F0_0."GROUP_1" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_1") AND (F0_0."GROUP_0" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_0"))))))
 SELECT F0_0."GROUP_0" AS "l_orderkey", F0_0."AGGR_0" AS "revenue", F0_0."GROUP_1" AS "o_orderdate", F0_0."GROUP_2" AS "o_shippriority", F0_0."prov_customer_c__custkey" AS "prov_customer_c__custkey", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber"
 FROM (SELECT * FROM temp_view_0) F0_0
-ORDER BY "revenue" DESC NULLS LAST, "o_orderdate" ASC NULLS LAST
-LIMIT 10;
+ORDER BY "revenue" DESC NULLS LAST, "o_orderdate" ASC NULLS LAST;
