@@ -1,4 +1,4 @@
---- SQL OUT --- ON 2025-09-10T14:11:35 
+--- SQL OUT --- ON 2025-09-12T14:47:55 
 
 -- [1m[37m[40mERROR [0m[31m(query_operator_model_checker.c:482) [0mAttribute <ps_partkey> appears more than once in
 
@@ -73,5 +73,4 @@ FROM ((SELECT * FROM temp_view_4) F0_0 JOIN (
 SELECT F0_0."AGGR_0" AS "min_ps_suppcost", F0_0."GROUP_0" AS "ps_partkey", F0_0."prov_partsupp_1_ps__partkey" AS "prov_partsupp_1_ps__partkey", F0_0."prov_partsupp_1_ps__suppkey" AS "prov_partsupp_1_ps__suppkey", F0_0."prov_supplier_1_s__suppkey" AS "prov_supplier_1_s__suppkey", F0_0."prov_nation_1_n__nationkey" AS "prov_nation_1_n__nationkey", F0_0."prov_region_1_r__regionkey" AS "prov_region_1_r__regionkey"
 FROM (SELECT * FROM temp_view_5) F0_0) F1_0 ON (((F0_0."ps_supplycost" = F1_0."min_ps_suppcost") AND (F1_0."ps_partkey" = F0_0."ps_partkey"))))) F1_0)) F0_0
 WHERE (((((((F0_0."p_partkey" = F0_0."ps_partkey") AND (F0_0."s_suppkey" = F0_0."ps_suppkey")) AND (F0_0."p_size" = 15)) AND (F0_0."p_type" LIKE '%BRASS')) AND (F0_0."s_nationkey" = F0_0."n_nationkey")) AND (F0_0."n_regionkey" = F0_0."r_regionkey")) AND (F0_0."r_name" = 'EUROPE'))
-ORDER BY "s_acctbal" DESC NULLS LAST, "n_name" ASC NULLS LAST, "s_name" ASC NULLS LAST, "p_partkey" ASC NULLS LAST
-LIMIT 100;
+ORDER BY "s_acctbal" DESC NULLS LAST, "n_name" ASC NULLS LAST, "s_name" ASC NULLS LAST, "p_partkey" ASC NULLS LAST;

@@ -28,6 +28,7 @@ def main():
     parser.add_argument(
         "-heu", "--heuristics", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument("-dir", "--out_dir", required=False)
 
     parsed = parser.parse_args()
 
@@ -91,13 +92,17 @@ def main():
 
     if parsed.output == "INF":
 
+        parse_in_cleaned = parsed.input.split("/")[-1]
+
         if not parsed.heuristics:
-            outfile = parsed.input
+            outfile = parse_in_cleaned
         else:
-            outfile = parsed.input.replace(".sql", ".heuristics.sql")
-        outfile = outfile.replace("/extract_gprom/", "/gprom/")
+            outfile = parse_in_cleaned.replace(".sql", ".heuristics.sql")
         outfile = outfile.replace(".extract.", ".extracted.")
         assert outfile != parsed.input
+
+        if parsed.out_dir:
+            outfile = f"{parsed.out_dir}/{outfile}"
     else:
         outfile = parsed.output
 
