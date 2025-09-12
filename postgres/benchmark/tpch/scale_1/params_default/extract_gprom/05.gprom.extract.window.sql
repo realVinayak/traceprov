@@ -3,12 +3,12 @@ PROVENANCE OF (
         n_name,
         sum(l_extendedprice * (1 - l_discount)) as revenue
     from
-        customer,
-        orders,
-        lineitem,
-        supplier,
-        nation,
-        region
+        customer USE PROVENANCE (c_custkey),
+        orders USE PROVENANCE (o_orderkey),
+        lineitem USE PROVENANCE (l_linenumber, l_orderkey),
+        supplier USE PROVENANCE (s_suppkey),
+        nation USE PROVENANCE (n_nationkey),
+        region USE PROVENANCE (r_regionkey)
     where
         c_custkey = o_custkey
         and l_orderkey = o_orderkey
@@ -21,4 +21,6 @@ PROVENANCE OF (
         and o_orderdate < '1995-01-01'
     group by
         n_name
+    order by
+        revenue desc
 );
