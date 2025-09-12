@@ -30,6 +30,5 @@ PROVENANCE OF (
         c_comment
     order by
         revenue desc
-    LIMIT 20
 );
 
