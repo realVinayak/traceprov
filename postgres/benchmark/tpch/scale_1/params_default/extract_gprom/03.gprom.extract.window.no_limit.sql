@@ -6,9 +6,9 @@ PROVENANCE OF (
         o_orderdate,
         o_shippriority
     from
-        customer,
-        orders,
-        lineitem
+        customer USE PROVENANCE (c_custkey),
+        orders USE PROVENANCE (o_orderkey),
+        lineitem USE PROVENANCE (l_orderkey, l_linenumber)
     where
         c_mktsegment = 'BUILDING'
         and c_custkey = o_custkey
@@ -22,5 +22,4 @@ PROVENANCE OF (
     order by
         revenue desc,
         o_orderdate
-    LIMIT 10
 );
