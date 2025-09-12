@@ -25,6 +25,9 @@ def main():
     )
     parser.add_argument("-db", "--database", required=True, type=str)
     parser.add_argument("-v", "--verbose", required=False, type=int)
+    parser.add_argument(
+        "-heu", "--heuristics", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parsed = parser.parse_args()
 
@@ -41,6 +44,11 @@ def main():
     if parsed.lateral_rew:
         cmd_options.extend(["-lateral_rewrite"])
 
+    if parsed.heuristics:
+        cmd_options.extend(["-heuristic_opt TRUE"])
+
+    if parsed.verbose:
+        cmd_options.append("-Loperator_verbose TRUE")
     gprom_options = " ".join([f"-{key} {value}" for key, value in config.items()])
     gprom_executable = f"gprom {gprom_options} {' '.join(cmd_options)}"
 
@@ -82,8 +90,13 @@ def main():
         print(sql_str)
 
     if parsed.output == "INF":
-        outfile = parsed.input.replace(".gprom.extract.sql", ".gprom.sql")
+
+        if not parsed.heuristics:
+            outfile = parsed.input
+        else:
+            outfile = parsed.input.replace(".sql", ".heuristics.sql")
         outfile = outfile.replace("/extract_gprom/", "/gprom/")
+        outfile = outfile.replace(".extract.", ".extracted.")
         assert outfile != parsed.input
     else:
         outfile = parsed.output
