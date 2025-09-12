@@ -11,10 +11,13 @@ PROVENANCE OF (
         avg(l_discount) as avg_disc,
         count(*) as count_order
     from
-        lineitem USE PROVENANCE (l_orderkey, l_linenumber)
+        lineitem
     where
         l_shipdate <= '1998-09-02'
     group by
+        l_returnflag,
+        l_linestatus
+    order by
         l_returnflag,
         l_linestatus
 );
