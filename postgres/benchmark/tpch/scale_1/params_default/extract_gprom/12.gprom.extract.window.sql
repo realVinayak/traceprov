@@ -14,8 +14,8 @@ PROVENANCE OF (
             else 0
         end) as low_line_count
     from
-        orders,
-        lineitem
+        orders USE PROVENANCE (o_orderkey),
+        lineitem USE PROVENANCE (l_orderkey, l_linenumber)
     where
         o_orderkey = l_orderkey
         and l_shipmode in ('MAIL', 'SHIP')
@@ -25,4 +25,6 @@ PROVENANCE OF (
         and l_receiptdate < '1995-01-01'
     group by
         l_shipmode
+    order by
+        l_shipmode;
 );
