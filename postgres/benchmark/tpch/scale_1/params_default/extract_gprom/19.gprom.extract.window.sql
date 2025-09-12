@@ -2,8 +2,8 @@ PROVENANCE OF (
     select
         sum(l_extendedprice* (1 - l_discount)) as revenue
     from
-        lineitem,
-        part
+        lineitem USE PROVENANCE (l_orderkey, l_linenumber),
+        part USE PROVENANCE (p_partkey)
     where
         (
             p_partkey = l_partkey
