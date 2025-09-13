@@ -55,3 +55,16 @@ queries:
 
 examples:
 	echo "make queries target_dir=~/projects/prov/postgres/benchmark/tpch/scale_1/params_5 scale=1 seed=1755708657"
+
+%.sql:
+# 	rm -rf $(target_dir)
+# 	mkdir -p $(target_dir)
+# 	mkdir -p $(target_dir)/base
+# 	mkdir -p $(target_dir)/validate
+# 	mkdir -p $(target_dir)/traceprov
+	cd $(qgen_dir) && \
+	DSS_QUERY=$(base_dir)base/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/base/$*.sql;
+	cd $(qgen_dir) && \
+	DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/traceprov/$*.traceprov.sql;
+	cd $(qgen_dir) && \
+	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/validate/$*.validate.sql;
