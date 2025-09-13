@@ -1,0 +1,85 @@
+{
+    "id_table_name": "captured_id",
+    "subq_table_name": "subq_captured_id",
+    "subq_layer": 4,
+    "id_file": "2.ids",
+    "subq_id_file": "2.subq.ids",
+    "pk_order": [
+        "ps_suppkey",
+        "ps_partkey",
+        "s_suppkey",
+        "n_nationkey",
+        "r_regionkey"
+    ],
+    "subq_pk_order": [
+        "p_partkey",
+        "s_suppkey",
+        "n_nationkey",
+        "r_regionkey",
+        "ps_suppkey",
+        "ps_partkey"
+    ],
+    "inserts": [
+        {
+            "ref": "F",
+            "keys": [
+                "ps_suppkey",
+                "ps_partkey"
+            ]
+        },
+        {
+            "ref": "G",
+            "keys": [
+                "s_suppkey"
+            ]
+        },
+        {
+            "ref": "H",
+            "keys": [
+                "n_nationkey"
+            ]
+        },
+        {
+            "ref": "I",
+            "keys": [
+                "r_regionkey"
+            ]
+        },
+        {
+            "ref": "A",
+            "keys": [
+                "p_partkey"
+            ],
+            "is_sub": true
+        },
+        {
+            "ref": "B",
+            "keys": [
+                "s_suppkey"
+            ],
+            "is_sub": true
+        },
+        {
+            "ref": "C",
+            "keys": [
+                "n_nationkey"
+            ],
+            "is_sub": true
+        },
+        {
+            "ref": "D",
+            "keys": [
+                "r_regionkey"
+            ],
+            "is_sub": true
+        },
+        {
+            "ref": "E",
+            "keys": [
+                "ps_partkey",
+                "ps_suppkey"
+            ],
+            "is_sub": true
+        }
+    ]
+}
