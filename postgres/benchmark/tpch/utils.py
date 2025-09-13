@@ -2,6 +2,7 @@ import os
 import re
 
 SELECT_RE = r"SELECT\s*(\d*)"
+THROWAWAY = 3
 
 
 def get_total_logged_records(file="/tmp/temp.out"):

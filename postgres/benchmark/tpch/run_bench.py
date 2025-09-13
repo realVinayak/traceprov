@@ -8,9 +8,7 @@ import re
 # from capture import run_validate
 from capture_inline import run_validate
 
-from utils import safe_run, get_total_logged_records
-
-THROWAWAY = 3
+from utils import safe_run, get_total_logged_records, THROWAWAY
 
 
 def run():
