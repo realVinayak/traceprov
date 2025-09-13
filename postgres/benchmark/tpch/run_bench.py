@@ -8,20 +8,7 @@ import re
 # from capture import run_validate
 from capture_inline import run_validate
 
-SELECT_RE = r"SELECT\s*(\d*)"
-
-
-def get_total_logged_records():
-    with open("/tmp/temp.out") as tp:
-        contents = tp.read()
-
-    total = (int(val) for val in re.findall(SELECT_RE, contents))
-    return list(total)
-
-
-def safe_run(cmd):
-    assert os.system(cmd) == 0
-
+from utils import safe_run, get_total_logged_records
 
 THROWAWAY = 3
 
