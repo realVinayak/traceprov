@@ -68,3 +68,5 @@ examples:
 	DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/traceprov/$*.traceprov.sql;
 	cd $(qgen_dir) && \
 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/validate/$*.validate.sql;
+
+no_limit: 2.no_limit.sql 3.no_limit.sql 10.no_limit.sql 18.no_limit.sql 21.no_limit.sql
