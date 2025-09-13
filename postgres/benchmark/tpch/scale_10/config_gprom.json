@@ -1,0 +1,36 @@
+{
+    "db_name": "tpch_10_v02",
+    "queries": [
+        "01.gprom.materialized.sql",
+        "03.gprom.materialized.sql",
+        "03.gprom.no_limit.materialized.sql",
+        "05.gprom.materialized.sql",
+        "06.gprom.materialized.sql",
+        "07.gprom.materialized.sql",
+        "08.gprom.materialized.sql",
+        "09.gprom.materialized.sql",
+        "10.gprom.materialized.sql",
+        "10.gprom.no_limit.materialized.sql",
+        "12.gprom.materialized.sql",
+        "14.gprom.materialized.sql",
+        "19.gprom.materialized.sql"
+    ],
+    "validate": false,
+    "repeat": 1,
+    "subdirs": [
+        "params_default"
+    ],
+    "validate_steps": {
+        "11": [
+            "a",
+            "b"
+        ],
+        "17": [
+            "a",
+            "b"
+        ]
+    },
+    "expected_diff_failures": [
+        "11"
+    ]
+}
