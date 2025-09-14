@@ -58,6 +58,14 @@ class HashQuery(NamedTuple):
         except ValueError:
             parsed_query = int(re.findall(REGEX, query_str)[0])
 
+        hash_q = HashQuery(query=parsed_query, query_raw=query_str)
+        labeled = hash_q.add_label().label
+        if "gprom" in hash_q.query_raw:
+            query_str = labeled
+            if query_str[0] == "0":
+                query_str = query_str[1:]
+        if ".no_limit" in query_str:
+            query_str = query_str.replace(".no_limit", "NL")
         return HashQuery(query=parsed_query, query_raw=query_str)
 
 
@@ -122,25 +130,35 @@ def generate_figures(
     baseline_files,
     traceprov_files,
     traceprov_files_infer,
+    gprom_files,
     params=None,
     label=None,
     use_muller=False,
     out_dir="./",
+    split_traceprov=False,
 ):
     plt.clf()
 
     _baseline_data = get_json_dump(baseline_files)
     _traceprov_data = get_json_dump(traceprov_files)
     _traceprov_infer = get_json_dump(traceprov_files_infer)
+    _gprom_data = get_json_dump(gprom_files)
 
     if params is None:
         baseline_data = aggregate_over_params(_baseline_data)
         traceprov_data = aggregate_over_params(_traceprov_data)
         traceprov_infer = aggregate_over_params(_traceprov_infer)
+        gprom_data = aggregate_over_params(_gprom_data)
     else:
         baseline_data = _baseline_data[params]
         traceprov_data = _traceprov_data[params]
         traceprov_infer = _traceprov_infer[params]
+        gprom_data = _gprom_data.get(params, {})
+
+    gprom_data = {
+        queries: [(value["duration"], value["num_records"]) for value in values]
+        for queries, values in gprom_data.items()
+    }
 
     # print_stats("baseline", baseline_data)
     # print_stats("traceprov", traceprov_data)
@@ -170,6 +188,11 @@ def generate_figures(
         statistics.median(times),
         statistics.variance(times),
     )
+
+    raw_gprom_time = {
+        HashQuery.make_from_query(query): times for (query, times) in gprom_data.items()
+    }
+
     raw_baseline_time = {
         HashQuery.make_from_query(query): times
         for (query, times) in baseline_data.items()
@@ -177,6 +200,16 @@ def generate_figures(
     baseline_time = {
         HashQuery.make_from_query(query): get_tuple(times)
         for query, times in baseline_data.items()
+    }
+
+    gprom_time = {
+        HashQuery.make_from_query(query): get_tuple(forward_times(times))
+        for query, times in gprom_data.items()
+    }
+
+    dump_gprom_time = {
+        HashQuery.make_from_query(query): get_tuple_dump(forward_times(times))
+        for query, times in gprom_data.items()
     }
 
     dump_baseline_time = {
@@ -300,47 +333,111 @@ def generate_figures(
     #     assert_correct_type(traceprov_forward_and_infer_and_material)
     # )
 
-    group_width = 0.85
-    num_groups = 5
-    bar_width = group_width / num_groups
-    group_offsets = np.linspace(
-        -(num_groups - 1) / 2 * bar_width, (num_groups - 1) / 2 * bar_width, num_groups
-    )
+    if split_traceprov:
 
-    fig, (ax, ax_table) = plt.subplots(1, 2, figsize=(15, 6))
+        group_width = 0.85
+        num_groups = 6
+        bar_width = group_width / num_groups
+        group_offsets = np.linspace(
+            -(num_groups - 1) / 2 * bar_width,
+            (num_groups - 1) / 2 * bar_width,
+            num_groups,
+        )
 
-    ax.bar(
-        [idx + group_offsets[0] for idx, _ in queries],
-        [baseline_time[query][0] for _, query in queries],
-        width=bar_width,
-        label="Baseline",
-    )
+        fig, (ax, ax_table) = plt.subplots(1, 2, figsize=(15, 6))
 
-    ax.bar(
-        [idx + group_offsets[1] for idx, _ in queries],
-        [traceprov_forward_time[query][0] for _, query in queries],
-        width=bar_width,
-        label="Trace",
-    )
-    ax.bar(
-        [idx + group_offsets[2] for idx, _ in queries],
-        [traceprov_infer_time.get(query, (0, 0, 0))[0] for _, query in queries],
-        width=bar_width,
-        label="Infer",
-    )
-    ax.bar(
-        [idx + group_offsets[3] for idx, _ in queries],
-        [traceprov_forward_and_infer[query][0] for _, query in queries],
-        width=bar_width,
-        label="Trace + Infer",
-    )
-    ax.bar(
-        [idx + group_offsets[4] for idx, _ in queries],
-        [traceprov_forward_and_infer_and_material[query][0] for _, query in queries],
-        width=bar_width,
-        label="Trace + Infer + Materialize",
-    )
-    plt.grid(axis="y", linestyle="--", alpha=0.7)
+        ax.bar(
+            [idx + group_offsets[0] for idx, _ in queries],
+            [baseline_time[query][0] for _, query in queries],
+            width=bar_width,
+            label="Baseline",
+        )
+
+        # print(gprom_time)
+        # for _, q in queries:
+        #     print(len(gprom_time))
+        #     print("searching for", q in gprom_time)
+
+        # gprom_graph_data = [gprom_time.get(query, (0, 0))[0] for _, query in queries]
+        # print(gprom_graph_data)
+        ax.bar(
+            [idx + group_offsets[1] for idx, _ in queries],
+            [gprom_time.get(query, (0, 0))[0] for _, query in queries],
+            width=bar_width,
+            label="GProM (Join)",
+        )
+
+        ax.bar(
+            [idx + group_offsets[2] for idx, _ in queries],
+            [traceprov_forward_time[query][0] for _, query in queries],
+            width=bar_width,
+            label="Trace",
+        )
+        ax.bar(
+            [idx + group_offsets[3] for idx, _ in queries],
+            [traceprov_infer_time.get(query, (0, 0, 0))[0] for _, query in queries],
+            width=bar_width,
+            label="Infer",
+        )
+        ax.bar(
+            [idx + group_offsets[4] for idx, _ in queries],
+            [traceprov_forward_and_infer[query][0] for _, query in queries],
+            width=bar_width,
+            label="Trace + Infer",
+        )
+        ax.bar(
+            [idx + group_offsets[5] for idx, _ in queries],
+            [
+                traceprov_forward_and_infer_and_material[query][0]
+                for _, query in queries
+            ],
+            width=bar_width,
+            label="Trace + Infer + Materialize",
+        )
+        plt.grid(axis="y", linestyle="--", alpha=0.7)
+    else:
+        group_width = 0.85
+        num_groups = 3
+        bar_width = group_width / num_groups
+        group_offsets = np.linspace(
+            -(num_groups - 1) / 2 * bar_width,
+            (num_groups - 1) / 2 * bar_width,
+            num_groups,
+        )
+
+        fig, (ax, ax_table) = plt.subplots(1, 2, figsize=(15, 6))
+
+        ax.bar(
+            [idx + group_offsets[0] for idx, _ in queries],
+            [baseline_time[query][0] for _, query in queries],
+            width=bar_width,
+            label="Baseline",
+        )
+
+        print(gprom_time)
+        for _, q in queries:
+            print(len(gprom_time))
+            print("searching for", q, q in gprom_time)
+
+        # gprom_graph_data = [gprom_time.get(query, (0, 0))[0] for _, query in queries]
+        # print(gprom_graph_data)
+        ax.bar(
+            [idx + group_offsets[1] for idx, _ in queries],
+            [gprom_time.get(query, (0, 0))[0] for _, query in queries],
+            width=bar_width,
+            label="GProM (Join)",
+        )
+
+        ax.bar(
+            [idx + group_offsets[2] for idx, _ in queries],
+            [
+                traceprov_forward_and_infer_and_material[query][0]
+                for _, query in queries
+            ],
+            width=bar_width,
+            label="Trace + Infer + Materialize",
+        )
+
     ax.set_xticks(
         [idx for idx, _ in queries], labels=add_labels([q for _, q in queries])
     )
@@ -349,6 +446,9 @@ def generate_figures(
     ax.set_title(f"Execution and Provenance Measurement time ({label})")
     ax.set_xlabel("Query")
     ax.legend(loc="upper right", ncols=2, prop=dict(size=8))
+
+    if len(gprom_time) > 0:
+        ax.set_yscale("log", base=10)
 
     data = []
     for _, query in queries:
@@ -607,6 +707,7 @@ def main():
     baseline_files = []
     traceprov_files = []
     traceprov_files_infer = []
+    gprom_files = []
     label_suff = None
     use_muller = False
     results_dir = "./"
@@ -627,6 +728,8 @@ def main():
             use_muller = True
         if i == "-out":
             results_dir = sys.argv[idx + 1]
+        if i == "-gprom":
+            gprom_files.append(sys.argv[idx + 1])
 
     import os
 
@@ -649,6 +752,7 @@ def main():
             baseline_files,
             traceprov_files,
             traceprov_files_infer,
+            gprom_files,
             use_muller=use_muller,
             params=param,
             label=label,
