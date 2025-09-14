@@ -332,7 +332,7 @@ int main(int argc, char *argv[]){
 // TODO: For the subquery, the width will be 1 + whatever from the layer.
 int dump_pk_records(std::vector<int64> **pk_records, const char *out_file, int width){
     std::cout << "Writing IDs to " << out_file << std::endl;
-    int fd = open(out_file, O_CREAT | O_RDWR, 666);
+    int fd = open(out_file, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
     if (fd < 0){
         PRINT_DEBUG("Error opening the ID file");
         return 1;
