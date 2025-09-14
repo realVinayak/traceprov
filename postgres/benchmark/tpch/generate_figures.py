@@ -406,7 +406,7 @@ def generate_figures(
         plt.grid(axis="y", linestyle="--", alpha=0.7)
     else:
         group_width = 0.85
-        num_groups = 3
+        num_groups = 4
         bar_width = group_width / num_groups
         group_offsets = np.linspace(
             -(num_groups - 1) / 2 * bar_width,
@@ -436,9 +436,14 @@ def generate_figures(
             width=bar_width,
             label="GProM (Join)",
         )
-
         ax.bar(
             [idx + group_offsets[2] for idx, _ in queries],
+            [traceprov_forward_and_infer[query][0] for _, query in queries],
+            width=bar_width,
+            label="Trace + Infer",
+        )
+        ax.bar(
+            [idx + group_offsets[3] for idx, _ in queries],
             [
                 traceprov_forward_and_infer_and_material[query][0]
                 for _, query in queries
@@ -448,13 +453,13 @@ def generate_figures(
         )
 
     ax.set_xticks(
-        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries])
+        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries]), size=8
     )
 
     ax.set_ylabel("Time (s)")
     ax.set_title(f"Execution and Provenance Measurement time ({label})")
     ax.set_xlabel("Query")
-    ax.legend(loc="upper right", ncols=2, prop=dict(size=8))
+    ax.legend(loc="upper left", ncols=2, prop=dict(size=8))
 
     if len(gprom_time) > 0:
         ax.set_yscale("log", base=10)
@@ -498,7 +503,7 @@ def generate_figures(
     plt.grid(axis="x", linestyle="--", alpha=0.7)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
     ax_2.set_xticks(
-        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries])
+        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries]), size=8
     )
 
     ax_2.set_xlabel("Query")
