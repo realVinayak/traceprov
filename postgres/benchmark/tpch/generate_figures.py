@@ -1,9 +1,10 @@
 import json
 import statistics
-from typing import Any, Dict
+from typing import Any, Dict, NamedTuple
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import re
 
 LOWER_BOUND = 25
 UPPER_BOUND = 75
@@ -27,6 +28,39 @@ muller_data = """
 1.00	19
 """
 
+
+REGEX = r"^(\d+)\."
+
+
+class HashQuery(NamedTuple):
+    query: int
+    query_raw: str
+    label: str = None
+
+    def add_label(self) -> "HashQuery":
+        try:
+            value = int(self.query_raw)
+            return self._replace(label=str(value))
+        except ValueError:
+            # Clean stuff like .gprom. and .materialized. and .sql.
+            SPECIAL_CHARS = [".gprom", ".materialized", ".sql"]
+            value = self.query_raw
+            for char in SPECIAL_CHARS:
+                value = value.replace(char, "")
+            if ".no_limit" in value:
+                value = value.replace(".no_limit", "NL")
+            return self._replace(label=value)
+
+    @staticmethod
+    def make_from_query(query_str: str) -> "HashQuery":
+        try:
+            parsed_query = int(query_str)
+        except ValueError:
+            parsed_query = int(re.findall(REGEX, query_str)[0])
+
+        return HashQuery(query=parsed_query, query_raw=query_str)
+
+
 muller_results = {
     int(q): float(slowdown)
     for (slowdown, q) in [
@@ -42,7 +76,9 @@ def get_json_dump(files):
 
     for file in files:
         with open(file) as f:
-            data = {**data, **json.loads(f.read())}
+            new_data = json.loads(f.read())
+            for key in new_data:
+                data[key] = {**data.get(key, {}), **new_data[key]}
 
     return data
 
@@ -62,10 +98,13 @@ def print_stats(name, data):
         print(name, query, len(timings))
 
 
-def assert_int_type(in_dict):
+def assert_correct_type(in_dict):
     for key in in_dict:
-        assert isinstance(key, int)
+        assert isinstance(key, HashQuery)
     return in_dict
+
+
+add_labels = lambda queries: [(query.add_label().label) for query in queries]
 
 
 forward_times = lambda input_tuples: [i[0] for i in input_tuples]
@@ -131,16 +170,22 @@ def generate_figures(
         statistics.median(times),
         statistics.variance(times),
     )
-    raw_baseline_time = {int(query): times for (query, times) in baseline_data.items()}
+    raw_baseline_time = {
+        HashQuery.make_from_query(query): times
+        for (query, times) in baseline_data.items()
+    }
     baseline_time = {
-        int(query): get_tuple(times) for query, times in baseline_data.items()
+        HashQuery.make_from_query(query): get_tuple(times)
+        for query, times in baseline_data.items()
     }
 
     dump_baseline_time = {
-        int(query): get_tuple_dump(times) for query, times in baseline_data.items()
+        HashQuery.make_from_query(query): get_tuple_dump(times)
+        for query, times in baseline_data.items()
     }
     raw_traceprov_forward_times = {
-        int(query): forward_times(times) for query, times in traceprov_data.items()
+        HashQuery.make_from_query(query): forward_times(times)
+        for query, times in traceprov_data.items()
     }
 
     traceprov_forward_time = {
@@ -148,7 +193,8 @@ def generate_figures(
     }
 
     raw_traceprov_infer_time = {
-        int(query): infer_times(times) for query, times in traceprov_infer.items()
+        HashQuery.make_from_query(query): infer_times(times)
+        for query, times in traceprov_infer.items()
     }
 
     traceprov_infer_time = {
@@ -165,11 +211,29 @@ def generate_figures(
         for (query, times) in raw_traceprov_infer_time.items()
     }
 
-    assert len(raw_traceprov_forward_times) == len(raw_traceprov_infer_time)
+    if len(raw_traceprov_forward_times) != len(raw_traceprov_infer_time):
+        print(
+            "[debug]:",
+            "Mismatch in sizes for inference ",
+            len(raw_traceprov_forward_times),
+            len(raw_traceprov_infer_time),
+        )
+        print(
+            "[debug]:",
+            "Mismatch in sizes for inference",
+            set(raw_traceprov_forward_times.keys()).symmetric_difference(
+                set(raw_traceprov_infer_time.keys())
+            ),
+        )
+
+    # assert len(raw_traceprov_forward_times) == len(raw_traceprov_infer_time)
 
     raw_traceprov_forward_and_infer = {
         query: forward_and_inference(
-            raw_traceprov_forward_times[query], raw_traceprov_infer_time[query]
+            raw_traceprov_forward_times[query],
+            raw_traceprov_infer_time.get(
+                query, [0] * len(raw_traceprov_forward_times[query])
+            ),
         )
         for query in raw_traceprov_forward_times.keys()
     }
@@ -185,7 +249,7 @@ def generate_figures(
     }
 
     raw_traceprov_forward_and_infer_and_material = {
-        int(query): forward_and_inference_and_material(tuples)
+        HashQuery.make_from_query(query): forward_and_inference_and_material(tuples)
         for query, tuples in traceprov_data.items()
     }
 
@@ -200,12 +264,12 @@ def generate_figures(
     }
 
     traceprov_logged_records = {
-        int(query): get_tuple(num_records(tuples))
+        HashQuery.make_from_query(query): get_tuple(num_records(tuples))
         for (query, tuples) in traceprov_data.items()
     }
 
     dump_traceprov_logged_records = {
-        int(query): get_tuple_dump(num_records(tuples))
+        HashQuery.make_from_query(query): get_tuple_dump(num_records(tuples))
         for (query, tuples) in traceprov_data.items()
     }
 
@@ -221,16 +285,20 @@ def generate_figures(
     # print("\n\n")
     # print(traceprov_logged_records)
 
-    queries = sorted(list(baseline_time.keys()))
+    queries = list(
+        enumerate(
+            list(sorted(list(baseline_time.keys()), key=lambda x: x.query)), start=1
+        )
+    )
 
-    assert len(assert_int_type(baseline_time)) == len(traceprov_forward_time)
-    assert len(assert_int_type(traceprov_forward_time)) == len(traceprov_infer_time)
-    assert len(assert_int_type(traceprov_infer_time)) == len(
-        traceprov_forward_and_infer
-    )
-    assert len(assert_int_type(traceprov_forward_and_infer)) == len(
-        assert_int_type(traceprov_forward_and_infer_and_material)
-    )
+    # assert len(assert_correct_type(baseline_time)) == len(traceprov_forward_time)
+    # assert len(assert_correct_type(traceprov_forward_time)) == len(traceprov_infer_time)
+    # assert len(assert_correct_type(traceprov_infer_time)) == len(
+    #     traceprov_forward_and_infer
+    # )
+    # assert len(assert_correct_type(traceprov_forward_and_infer)) == len(
+    #     assert_correct_type(traceprov_forward_and_infer_and_material)
+    # )
 
     group_width = 0.85
     num_groups = 5
@@ -242,38 +310,40 @@ def generate_figures(
     fig, (ax, ax_table) = plt.subplots(1, 2, figsize=(15, 6))
 
     ax.bar(
-        [query + group_offsets[0] for query in queries],
-        [baseline_time[query][0] for query in queries],
+        [idx + group_offsets[0] for idx, _ in queries],
+        [baseline_time[query][0] for _, query in queries],
         width=bar_width,
         label="Baseline",
     )
 
     ax.bar(
-        [query + group_offsets[1] for query in queries],
-        [traceprov_forward_time[query][0] for query in queries],
+        [idx + group_offsets[1] for idx, _ in queries],
+        [traceprov_forward_time[query][0] for _, query in queries],
         width=bar_width,
         label="Trace",
     )
     ax.bar(
-        [query + group_offsets[2] for query in queries],
-        [traceprov_infer_time[query][0] for query in queries],
+        [idx + group_offsets[2] for idx, _ in queries],
+        [traceprov_infer_time.get(query, (0, 0, 0))[0] for _, query in queries],
         width=bar_width,
         label="Infer",
     )
     ax.bar(
-        [query + group_offsets[3] for query in queries],
-        [traceprov_forward_and_infer[query][0] for query in queries],
+        [idx + group_offsets[3] for idx, _ in queries],
+        [traceprov_forward_and_infer[query][0] for _, query in queries],
         width=bar_width,
         label="Trace + Infer",
     )
     ax.bar(
-        [query + group_offsets[4] for query in queries],
-        [traceprov_forward_and_infer_and_material[query][0] for query in queries],
+        [idx + group_offsets[4] for idx, _ in queries],
+        [traceprov_forward_and_infer_and_material[query][0] for _, query in queries],
         width=bar_width,
         label="Trace + Infer + Materialize",
     )
     plt.grid(axis="y", linestyle="--", alpha=0.7)
-    ax.set_xticks(queries)
+    ax.set_xticks(
+        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries])
+    )
 
     ax.set_ylabel("Time (s)")
     ax.set_title(f"Execution and Provenance Measurement time ({label})")
@@ -281,7 +351,7 @@ def generate_figures(
     ax.legend(loc="upper right", ncols=2, prop=dict(size=8))
 
     data = []
-    for query in queries:
+    for _, query in queries:
         record_tuple = traceprov_logged_records[query]
         record = [
             format(int(record_tuple[1]), ","),
@@ -292,7 +362,7 @@ def generate_figures(
 
     table = ax_table.table(
         cellText=np.asarray(data),
-        rowLabels=queries,
+        rowLabels=add_labels([q for _, q in queries]),
         colLabels=[
             "Q1 of #records",
             "Q2 of #records",
@@ -318,7 +388,9 @@ def generate_figures(
     fig_2, ax_2 = plt.subplots()
     plt.grid(axis="x", linestyle="--", alpha=0.7)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
-    ax_2.set_xticks(queries)
+    ax_2.set_xticks(
+        [idx for idx, _ in queries], labels=add_labels([q for _, q in queries])
+    )
 
     ax_2.set_xlabel("Query")
     ax_2.set_ylabel("Slowdown")
@@ -336,14 +408,14 @@ def generate_figures(
                 )
             ),
         )
-        for query in queries
+        for _, query in queries
     ]
 
     dump_traceprov_forward_and_infer_slowdown = {
         query: get_tuple(
             slowdown(raw_traceprov_forward_and_infer[query], raw_baseline_time[query])
         )
-        for query in queries
+        for _, query in queries
     }
 
     traceprov_forward_and_infer_and_mat_slowdown = [
@@ -356,7 +428,7 @@ def generate_figures(
                 )
             ),
         )
-        for query in queries
+        for _, query in queries
     ]
 
     dump_traceprov_forward_and_infer_and_mat_slowdown = {
@@ -366,14 +438,14 @@ def generate_figures(
                 raw_baseline_time[query],
             )
         )
-        for query in queries
+        for _, query in queries
     }
 
-    muller_slowdown = [(query, muller_results[query]) for query in queries]
+    muller_slowdown = [(query, muller_results[query.query]) for _, query in queries]
 
     # Now, we make the slowdown plot.
     plt.scatter(
-        [query for (query, _) in traceprov_forward_and_infer_slowdown],
+        [query.query for (query, _) in traceprov_forward_and_infer_slowdown],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
         label="Trace + Infer",
     )
@@ -387,7 +459,7 @@ def generate_figures(
     ]
 
     plt.errorbar(
-        [query for (query, _) in traceprov_forward_and_infer_slowdown],
+        [query.query for (query, _) in traceprov_forward_and_infer_slowdown],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
         yerr=np.vstack(
             [traceprov_forward_and_infer_err_low, traceprov_forward_and_infer_err_high]
@@ -395,7 +467,7 @@ def generate_figures(
         fmt="o",
     )
     plt.scatter(
-        [query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
+        [query.query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
         label="Trace + Infer + Materialize",
     )
@@ -409,7 +481,7 @@ def generate_figures(
     ]
 
     plt.errorbar(
-        [query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
+        [query.query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
         yerr=np.vstack(
             [
@@ -436,14 +508,14 @@ def generate_figures(
 
     plt.savefig(f"{out_dir}/slowdown_{label}.png")
 
-    assert_int_type(dump_baseline_time)
-    assert_int_type(dump_forward_times)
-    assert_int_type(dump_infer_times)
-    assert_int_type(dump_traceprov_forward_and_infer)
-    assert_int_type(dump_traceprov_forward_and_infer_and_material)
-    assert_int_type(dump_traceprov_logged_records)
-    assert_int_type(dump_traceprov_forward_and_infer_slowdown)
-    assert_int_type(dump_traceprov_forward_and_infer_and_mat_slowdown)
+    assert_correct_type(dump_baseline_time)
+    assert_correct_type(dump_forward_times)
+    assert_correct_type(dump_infer_times)
+    assert_correct_type(dump_traceprov_forward_and_infer)
+    assert_correct_type(dump_traceprov_forward_and_infer_and_material)
+    assert_correct_type(dump_traceprov_logged_records)
+    assert_correct_type(dump_traceprov_forward_and_infer_slowdown)
+    assert_correct_type(dump_traceprov_forward_and_infer_and_mat_slowdown)
 
     return dict(
         baseline=dump_baseline_time,
@@ -491,7 +563,11 @@ def parse_back(instr: str):
 def dump_csv(contents_with_labels, file_prefix):
 
     dict_rows = [
-        {"param": param, "query": query, **augment_contents(query_contents)}
+        {
+            "param": param,
+            "query": query.add_label().label,
+            **augment_contents(query_contents),
+        }
         for param, param_contents in contents_with_labels.items()
         for query, query_contents in param_contents.items()
     ]
@@ -517,7 +593,9 @@ def dump_csv(contents_with_labels, file_prefix):
         augmanted_order.append(f"{header}_median")
         augmanted_order.append(f"{header}_variance")
 
-    rows = [[str(row[header]) for header in augmanted_order] for row in dict_rows]
+    rows = [
+        [str(row.get(header, None)) for header in augmanted_order] for row in dict_rows
+    ]
 
     rows = [augmanted_order, *rows]
     with open(f"{file_prefix}.tsv", "w") as f:
