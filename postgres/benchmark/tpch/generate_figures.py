@@ -70,7 +70,7 @@ class HashQuery(NamedTuple):
 
 
 muller_results = {
-    int(q): float(slowdown)
+    HashQuery.make_from_query(q): float(slowdown)
     for (slowdown, q) in [
         tuple(row.split("\t")) for row in muller_data.split("\n") if len(row) > 1
     ]
@@ -124,6 +124,7 @@ forward_and_inference_and_material = lambda input_tuples: [
     i[0] + i[1] for i in input_tuples
 ]
 num_records = lambda input_tuples: [sum(i[2]) for i in input_tuples]
+num_records_gprom = lambda input_tuples: [sum(i[1]) for i in input_tuples]
 
 
 def generate_figures(
@@ -306,6 +307,11 @@ def generate_figures(
         for (query, tuples) in traceprov_data.items()
     }
 
+    dump_gprom_logged_records = {
+        HashQuery.make_from_query(query): get_tuple_dump(num_records_gprom(tuples))
+        for (query, tuples) in gprom_data.items()
+    }
+
     # print(baseline_time)
     # print("\n\n")
     # print(traceprov_forward_time)
@@ -323,6 +329,9 @@ def generate_figures(
             list(sorted(list(baseline_time.keys()), key=lambda x: x.query)), start=1
         )
     )
+
+    reverse_query_mapping = {query: index for (index, query) in queries}
+    assert len(reverse_query_mapping) == len(queries)
 
     # assert len(assert_correct_type(baseline_time)) == len(traceprov_forward_time)
     # assert len(assert_correct_type(traceprov_forward_time)) == len(traceprov_infer_time)
@@ -414,10 +423,10 @@ def generate_figures(
             label="Baseline",
         )
 
-        print(gprom_time)
-        for _, q in queries:
-            print(len(gprom_time))
-            print("searching for", q, q in gprom_time)
+        # print(gprom_time)
+        # for _, q in queries:
+        #     print(len(gprom_time))
+        #     print("searching for", q, q in gprom_time)
 
         # gprom_graph_data = [gprom_time.get(query, (0, 0))[0] for _, query in queries]
         # print(gprom_graph_data)
@@ -495,8 +504,26 @@ def generate_figures(
     ax_2.set_xlabel("Query")
     ax_2.set_ylabel("Slowdown")
 
-    slowdown = lambda traces, bases: [
-        (trace / base) for (trace, base) in zip(traces, bases)
+    def slowdown(traces, bases):
+        if len(traces) != len(bases):
+            print(
+                "Got mismatching for slowdown: ",
+                len(traces),
+                len(bases),
+                ": for: ",
+                params,
+            )
+        return [(trace / base) for (trace, base) in zip(traces, bases)]
+
+    gprom_slowdown = [
+        (
+            query,
+            get_tuple(
+                slowdown(forward_times(raw_gprom_time[query]), raw_baseline_time[query])
+            ),
+        )
+        for _, query in queries
+        if query in raw_gprom_time
     ]
 
     traceprov_forward_and_infer_slowdown = [
@@ -541,11 +568,18 @@ def generate_figures(
         for _, query in queries
     }
 
-    muller_slowdown = [(query, muller_results[query.query]) for _, query in queries]
+    muller_slowdown = [
+        (query, muller_results[query])
+        for _, query in queries
+        if query in muller_results
+    ]
 
     # Now, we make the slowdown plot.
     plt.scatter(
-        [query.query for (query, _) in traceprov_forward_and_infer_slowdown],
+        [
+            reverse_query_mapping[query]
+            for (query, _) in traceprov_forward_and_infer_slowdown
+        ],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
         label="Trace + Infer",
     )
@@ -558,16 +592,19 @@ def generate_figures(
         sd[0] - sd[1] for (_, sd) in traceprov_forward_and_infer_slowdown
     ]
 
-    plt.errorbar(
-        [query.query for (query, _) in traceprov_forward_and_infer_slowdown],
-        [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
-        yerr=np.vstack(
-            [traceprov_forward_and_infer_err_low, traceprov_forward_and_infer_err_high]
-        ),
-        fmt="o",
-    )
+    # plt.errorbar(
+    #     [query.query for (query, _) in traceprov_forward_and_infer_slowdown],
+    #     [sd[0] for (_, sd) in traceprov_forward_and_infer_slowdown],
+    #     yerr=np.vstack(
+    #         [traceprov_forward_and_infer_err_low, traceprov_forward_and_infer_err_high]
+    #     ),
+    #     fmt="o",
+    # )
     plt.scatter(
-        [query.query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
+        [
+            reverse_query_mapping[query]
+            for (query, _) in traceprov_forward_and_infer_and_mat_slowdown
+        ],
         [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
         label="Trace + Infer + Materialize",
     )
@@ -580,21 +617,32 @@ def generate_figures(
         sd[0] - sd[1] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown
     ]
 
-    plt.errorbar(
-        [query.query for (query, _) in traceprov_forward_and_infer_and_mat_slowdown],
-        [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
-        yerr=np.vstack(
-            [
-                traceprov_forward_and_infer_and_mat_err_low,
-                traceprov_forward_and_infer_and_mat_err_high,
-            ]
-        ),
-        fmt="o",
-    )
+    # plt.errorbar(
+    #     [
+    #         reverse_query_mapping[query]
+    #         for (query, _) in traceprov_forward_and_infer_and_mat_slowdown
+    #     ],
+    #     [sd[0] for (_, sd) in traceprov_forward_and_infer_and_mat_slowdown],
+    #     yerr=np.vstack(
+    #         [
+    #             traceprov_forward_and_infer_and_mat_err_low,
+    #             traceprov_forward_and_infer_and_mat_err_high,
+    #         ]
+    #     ),
+    #     fmt="o",
+    # )
+
+    if len(gprom_slowdown):
+        plt.scatter(
+            [reverse_query_mapping[query] for (query, _) in gprom_slowdown],
+            [sd[0] for (_, sd) in gprom_slowdown],
+            label="GProM",
+        )
+        ax_2.set_yscale("log", base=10)
 
     if use_muller:
         plt.scatter(
-            [query for (query, _) in muller_slowdown],
+            [reverse_query_mapping[query] for (query, _) in muller_slowdown],
             [sd for (_, sd) in muller_slowdown],
             label="Muller",
         )
@@ -616,6 +664,8 @@ def generate_figures(
     assert_correct_type(dump_traceprov_logged_records)
     assert_correct_type(dump_traceprov_forward_and_infer_slowdown)
     assert_correct_type(dump_traceprov_forward_and_infer_and_mat_slowdown)
+    assert_correct_type(dump_gprom_time)
+    assert_correct_type(dump_gprom_logged_records)
 
     return dict(
         baseline=dump_baseline_time,
@@ -626,6 +676,14 @@ def generate_figures(
         num_records=dump_traceprov_logged_records,
         trace_and_infer_slowdown=dump_traceprov_forward_and_infer_slowdown,
         trace_and_infer_and_materialize_slowdown=dump_traceprov_forward_and_infer_and_mat_slowdown,
+        **(
+            {}
+            if not gprom_data
+            else dict(
+                gprom_join=dump_gprom_time,
+                gprom_num_records=dump_gprom_logged_records,
+            )
+        ),
     )
 
 
@@ -683,6 +741,8 @@ def dump_csv(contents_with_labels, file_prefix):
         "num_records",
         "trace_and_infer_slowdown",
         "trace_and_infer_and_materialize_slowdown",
+        "gprom_join",
+        "gprom_num_records",
     ]
 
     augmanted_order = []
