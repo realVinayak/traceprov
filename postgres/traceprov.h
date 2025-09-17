@@ -48,6 +48,8 @@
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
+#define TRACEPROV_MASK(value) (~((uint64)(value - 1)))
+
 #define DEBUG_MODE 0
 
 // Forward definitions.

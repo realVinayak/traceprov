@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <vector>
+#include <list>
 #include <chrono>
 #include <algorithm>
 #include <unistd.h>
@@ -19,11 +20,44 @@ extern "C" {
     #include "miscadmin.h"
     #include "traceprov.h"
     #include "file_utils.h"
+    #include "utils/builtins.h"
+
     PG_MODULE_MAGIC;
+
+    #define TRACEPROV_OTIMES    " ⊗ "
+    #define TRACEPROV_PLUS      " ⊕ "
+    #define TRACEPROV_SOMETHING "𝟙"
+    #define TRACEPROV_DELTA     "δ"
 }
 
+// TODO: Implement some kind of caching mechanism here (for storing mappings, like we do for main forward tracing)
 
 extern "C" {
+
+    #define CACHED_LAYERS 24
+
+    struct mmap_entry {
+        void *ptr;
+        size_t size;
+    };
+
+    std::list<struct mmap_entry> *mmap_entries = NULL;
+
+    static inline void initialize_mmap_entries(){
+        if (mmap_entries == NULL){
+            mmap_entries = new std::list<struct mmap_entry>;
+        }
+        if (mmap_entries == NULL){
+            elog(ERROR, "Error making the mmap entries");
+        }
+    }
+
+    static inline void cleanup_mmap(){
+        for (struct mmap_entry &entry: *mmap_entries){
+            munmap(entry.ptr, entry.size);
+        };
+        mmap_entries = NULL;
+    }
 
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, worker_id, NULL);
@@ -48,10 +82,24 @@ extern "C" {
         }
 
         *ptr = temp_ptr;
+        close(fd);
+
+        struct mmap_entry entry = {
+            .ptr = temp_ptr,
+            .size = file_size * TRACEPROV_PAGE_SIZE
+        };
+
+        mmap_entries->push_back(entry);
         return 0;
     }
 
-    int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
+    int map_traceprov_shared_context(struct traceprov_shared_context **ptr){
+
+        // if (shared_context_ptr){
+        //     *ptr = (struct traceprov_shared_context *) shared_context_ptr;
+        //     return 0;
+        // }
+
         int shared_context_fd = open(TRACEPROV_SHARED_CONTEXT, O_RDONLY);
         if (shared_context_fd < 0){
             PRINT_ON_DEBUG("Error opening the scratch file");
@@ -74,7 +122,16 @@ extern "C" {
 
         PRINT_ON_DEBUG("Map shared context succesful!");
 
-        memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
+        // memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
+
+        struct mmap_entry entry = {
+            .ptr = temp_ptr,
+            .size = TRACEPROV_SHARED_CONTEXT_SIZE
+        };
+
+        mmap_entries->push_back(entry);
+
+        *ptr = temp_ptr;
 
         close(shared_context_fd);
 
@@ -122,10 +179,14 @@ extern "C" {
     struct infer_result * perform_inference(
         const int layer_number,
         const int reference_layer, 
-        const int subq_layer_number
+        const int subq_layer_number,
+        // This is for generating polynomials.
+        // Basically, when this is done, it'll perform inference _just_ for this group.
+        // TODO: Handle nested groups for polynomial generation?
+        const uint64 final_group_pointer_ref
         ){
 
-        struct traceprov_shared_context context;
+        struct traceprov_shared_context *context;
         if (map_traceprov_shared_context(&context)){
             elog(ERROR, "Error mmaping shared context");
         }
@@ -134,7 +195,7 @@ extern "C" {
         const int group_layer_number = layer_number + 1;
         const int partial_group_ln = layer_number + 2;
 
-        const struct local_context *main_worker_context = &context.local_contexts[context.main_worker_id];
+        const struct local_context *main_worker_context = &context->local_contexts[context->main_worker_id];
         const struct traceprov_aggregate_layer *main_trace_layer = &main_worker_context->cached_layers[layer_number - 1];
         const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
         const struct traceprov_aggregate_layer *partial_group_layer = &main_worker_context->cached_layers[partial_group_ln - 1];
@@ -146,9 +207,9 @@ extern "C" {
             // Here, it is entirely possible that the subquery gets parallelized.
             // So, we'd have to look at all the workers.
             const int subq_index = subq_layer_number - 1;
-            for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+            for (int worker_id = 0; worker_id < context->worker_count; worker_id++){
 
-                const struct local_context *bg_context = &context.local_contexts[worker_id];
+                const struct local_context *bg_context = &context->local_contexts[worker_id];
                 const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[subq_index];
 
                 if (bg_trace_layer->layer_number != subq_layer_number) continue;
@@ -212,7 +273,7 @@ extern "C" {
         void *forward_row;
         void *partial_group_row = NULL;
 
-        if (map_layer_file(group_layer_number, context.main_worker_id, &group_layer_ptr, group_layer->size)){
+        if (map_layer_file(group_layer_number, context->main_worker_id, &group_layer_ptr, group_layer->size)){
             PRINT_ON_DEBUG("Error opening group layer file");
             elog(ERROR, "Error opening group layer file");
         }
@@ -222,7 +283,7 @@ extern "C" {
         if (reference_layer){
             const struct traceprov_aggregate_layer *group_reference_layer = &main_worker_context->cached_layers[reference_layer];
             void *group_reference_ptr = NULL;
-            if (map_layer_file(reference_layer + 1, context.main_worker_id, &group_reference_ptr, group_reference_layer->size)){
+            if (map_layer_file(reference_layer + 1, context->main_worker_id, &group_reference_ptr, group_reference_layer->size)){
                 PRINT_ON_DEBUG("Error opening group reference layer");
                 elog(ERROR, "Error opening group reference layer");
             }
@@ -236,20 +297,57 @@ extern "C" {
             std::sort(groups_to_filter->begin(), groups_to_filter->end());
         }
 
-        for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
-            const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
-            int should_add = false;
-            if (reference_layer){
-                should_add = std::binary_search(groups_to_filter->begin(), groups_to_filter->end(), gr->in_result);
-            }else{
-                should_add = gr->in_result;
+        if (final_group_pointer_ref == 0){
+            for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
+                const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
+                int should_add = false;
+                if (reference_layer){
+                    should_add = std::binary_search(groups_to_filter->begin(), groups_to_filter->end(), gr->in_result);
+                }else{
+                    should_add = gr->in_result;
+                }
+                if (should_add){
+                    present_groups->push_back(group_idx + 1);
+                }
             }
-            if (should_add){
-                present_groups->push_back(group_idx + 1);
+        }else{
+
+            const int final_region_number = TRACEPROV_NUM_REGIONS_GROUP(group_layer->size);
+            
+            // We need to be quick here (because this path will be taken for each of the group)
+            // To do so, we use a mask.
+            // Need to be careful here. The mask depends on which region we are checking.
+            int region_number = 0;
+            for (region_number = 0; region_number < final_region_number; region_number++){
+
+                const uint64 region_start = ((uint64*)group_layer->current_row)[region_number];
+                const uint64 region_end = region_number == 0 ? (uint64)((char*)(void*)region_start + TRACEPROV_PAGE_SIZE) : (uint64)((char*)(void*)region_start + (TRACEPROV_INCREMENT_GROUP_BY_PG*TRACEPROV_PAGE_SIZE));
+                
+                if (final_group_pointer_ref >= region_start && final_group_pointer_ref < region_end){
+                    // We've now found the region where the page belongs too.
+                    // From here, we can compute the group number.
+                    // First, need to compute how many groups were before us. This is done by computing the number of pages, and dividing it by single group size.
+                    // This is written like below to improve readibility.
+                    const uint64 pages_behind = (region_number == 0) ? 0 : ((region_number == 1 ? 1 : (1 + (region_number - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
+                    const uint64 group_size = ((group_layer->num_pk_records + 1)*sizeof(int64));
+                    const uint64 groups_behind = (pages_behind * TRACEPROV_PAGE_SIZE) / group_size;
+                    const uint64 group_index_within_range = (((uint64)final_group_pointer_ref - (uint64)((((void**)(group_layer->current_row))[region_number]))) / group_size) + 1;
+                    const uint64 final_group_number = group_index_within_range + groups_behind;
+
+                    present_groups->push_back(final_group_number);
+                    break;
+                }
+            }
+
+            if (present_groups->size() == 0){
+                assert(0);
+                elog(ERROR, "Didn't find the region!");
             }
         }
 
-        if (map_layer_file(layer_number, context.main_worker_id, &forward_row, main_trace_layer->size)){
+
+
+        if (map_layer_file(layer_number, context->main_worker_id, &forward_row, main_trace_layer->size)){
             PRINT_ON_DEBUG("Error opening main trace file");
             elog(ERROR, "Error opening main trace file");
         }
@@ -258,7 +356,7 @@ extern "C" {
             get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, partial_group_ln, main_worker_context->worker_id, NULL),
             F_OK
         )){
-            if (map_layer_file(partial_group_ln, context.main_worker_id, &partial_group_row, partial_group_layer->size)){
+            if (map_layer_file(partial_group_ln, context->main_worker_id, &partial_group_row, partial_group_layer->size)){
                 PRINT_ON_DEBUG("Error opening the partial trace file");
             }
         }
@@ -269,8 +367,8 @@ extern "C" {
 
         std::sort(present_groups->begin(), present_groups->end());
         
-        std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context.worker_count));
-        for (int worker_id = 0; worker_id < context.worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<int64>;
+        std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context->worker_count));
+        for (int worker_id = 0; worker_id < context->worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<int64>;
 
         if (partial_group_row != NULL){
             // Need to, now, find the rows in the partial file.
@@ -289,7 +387,7 @@ extern "C" {
         }
 
         if (partial_group_row == NULL)
-            groups_per_worker[context.main_worker_id] = present_groups;
+            groups_per_worker[context->main_worker_id] = present_groups;
 
         // for (int worker_id = 0; worker_id < context.worker_count; worker_id++) std::cout << "WORKER: " << worker_id << " GROUPS: "  << groups_per_worker[worker_id]->size() << std::endl;
 
@@ -299,19 +397,19 @@ extern "C" {
 
         int iters_made = 0;
 
-        for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+        for (int worker_id = 0; worker_id < context->worker_count; worker_id++){
 
             std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
             if (local_group_nos->size() == 0) continue;
 
             std::sort(local_group_nos->begin(), local_group_nos->end());
 
-            const struct local_context *bg_context = &context.local_contexts[worker_id];
+            const struct local_context *bg_context = &context->local_contexts[worker_id];
             const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[layer_number - 1];
 
             void *current_forward_row = NULL;
             void *last_forward_row = NULL;
-            if (worker_id == context.main_worker_id){
+            if (worker_id == context->main_worker_id){
                 current_forward_row = forward_row;
             }else{
                 void *local_fwd_row = NULL;
@@ -369,6 +467,7 @@ extern "C" {
 
     Datum traceprov_infer(FunctionCallInfo fcinfo){
 
+        initialize_mmap_entries();
 
         ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
         TupleDesc	tupdesc;
@@ -403,32 +502,99 @@ extern "C" {
 
         MemoryContextSwitchTo(oldcontext);
 
-        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
+        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number, 0);
         store_inference(tupstore, tupdesc, infer_result_computed);
-
-        // Datum * buff = NULL;
-
-        // bool *nulls = (bool *)malloc(sizeof(bool) * columns);
-
-        // memset(nulls, 0, sizeof(bool) * columns);
-
-        // for (int i = 0; i < rows; i++){
-        //     if (buff == NULL){
-        //         buff = malloc(sizeof(Datum) * (columns));
-        //     }
-        //     for (int column_id = 0; column_id < columns; column_id++){
-        //         int value = column_id + i;
-        //         buff[column_id] = Int64GetDatumFast(value);
-        //     }
-
-        //     if (i > 0) continue;
-
-        //     tuplestore_putvalues(tupstore, tupdesc, buff, nulls);
-        // }
-
-        // tuplestore_donestoring(tupstore);
+        cleanup_mmap();
         return (Datum) 0;
     }
 
+    PG_FUNCTION_INFO_V1(traceprov_infer_count);
+
+    Datum traceprov_infer_count(PG_FUNCTION_ARGS){
+        
+        initialize_mmap_entries();
+
+        const int32 layer_number = PG_GETARG_INT32(0);
+        const uint64 reference_ptr = (uint64)(PG_GETARG_INT64(1));
+
+        struct infer_result *infer_result_computed = perform_inference(
+            layer_number,
+            0,
+            0,
+            reference_ptr
+        );
+
+        cleanup_mmap();
+        PG_RETURN_INT64(infer_result_computed->ids[0]->size());
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_infer_poly);
+
+    Datum traceprov_infer_poly(PG_FUNCTION_ARGS){
+        StringInfoData buf;
+        initStringInfo(&buf);
+        
+        initialize_mmap_entries();
+
+        const int32 layer_number = PG_GETARG_INT32(0);
+        const uint64 reference_ptr = (uint64)(PG_GETARG_INT64(1));
+        const int32 width = (uint64)(PG_GETARG_INT32(2));
+
+        const int32 idx_present = (uint64)(PG_GETARG_INT32(3));
+        const int32 idx_in_poly = (uint64)(PG_GETARG_INT32(4));
+
+
+        struct infer_result *infer_result_computed = perform_inference(
+            layer_number,
+            0,
+            0,
+            reference_ptr
+        );
+
+        cleanup_mmap();
+        std::string tuple_repr = "";
+        bool needs_outer_sep = false;
+        for (int record_num = 0; record_num < infer_result_computed->ids[0]->size(); record_num++){
+            bool needs_sep = false;
+            std::string row_repr = "";
+            for (int key_id = 0; key_id < width; key_id++){
+                if (needs_sep){
+                    row_repr += TRACEPROV_OTIMES;
+                }
+                needs_sep = true;
+                std::string value = TRACEPROV_SOMETHING;
+                if (key_id == idx_in_poly){
+                    value = std::to_string(infer_result_computed->ids[idx_present]->at(record_num));
+                }
+                row_repr += value;
+            }
+            // for (int key_id = 0; key_id < infer_result_computed->width; key_id++){
+            //     if (needs_sep){
+            //         row_repr += TRACEPROV_OTIMES;
+            //     }
+            //     needs_sep = true;
+            //     const int mask = 1 << key_id;
+            //     if (record_mask & mask){
+            //         row_repr += std::to_string(infer_result_computed->ids[key_id]->at(record_num));
+            //     }else{
+            //         row_repr += TRACEPROV_SOMETHING;
+            //     }
+            // }
+            row_repr = "(" + row_repr + ")";
+            if (needs_outer_sep){
+                tuple_repr += TRACEPROV_PLUS;
+            }
+            needs_outer_sep = true;
+            tuple_repr += row_repr;
+        }
+
+        std::string final_repr ="";
+        final_repr.append(TRACEPROV_DELTA);
+        final_repr.append("((");
+        final_repr.append(tuple_repr);
+        final_repr.append("))");
+
+        PG_RETURN_TEXT_P(cstring_to_text(final_repr.c_str()));
+    }
 };
 
