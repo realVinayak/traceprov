@@ -369,5 +369,28 @@ extern "C" {
         return (Datum) 0;
     }
 
+    PG_FUNCTION_INFO_V1(traceprov_infer_time);
+
+    // Runs the inference, and returns just the time taken to complete the inference.
+    // Note that it is the time to just fill-up the buffer with primary keys.
+    // So, it is a good indicator of overhead of inference (rather than materialization)
+    Datum traceprov_infer_time(FunctionCallInfo fcinfo){
+        
+        const int32 layer_number = PG_GETARG_INT32(0);
+        const int32 reference_layer = PG_GETARG_INT32(1);
+        const int32 subq_layer_number = PG_GETARG_INT32(2);
+
+        auto start = std::chrono::high_resolution_clock::now();
+
+        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
+
+        auto end = std::chrono::high_resolution_clock::now();
+
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        uint64 duration_time = (uint64)duration.count();
+
+        PG_RETURN_INT64(duration_time);
+    }
+
 };
 
