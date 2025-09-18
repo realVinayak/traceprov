@@ -185,23 +185,6 @@ extern "C" {
             infer_result_computed->width = subq_width;
             return infer_result_computed;
 
-            // const int32 width = subq_width;
-            // bool * nulls = (bool *)malloc(sizeof(bool)*width);
-            // memset(nulls, 0, sizeof(bool)*width);
-
-            // Datum *records = (Datum*)malloc(sizeof(Datum)*width);
-
-
-            // for (int record_index = 0; record_index < subq_records[0]->size(); record_index++){
-
-            //     for (int key_index = 0; key_index < width; key_index++){
-            //         records[key_index] = Int64GetDatumFast(subq_records[key_index]->at(record_index));
-            //     }
-            //     tuplestore_putvalues(tupstore, tupdesc, records, nulls);
-            // }
-
-            // tuplestore_donestoring(tupstore);
-            // return;
         }
         
 
@@ -291,8 +274,6 @@ extern "C" {
         if (partial_group_row == NULL)
             groups_per_worker[context.main_worker_id] = present_groups;
 
-        // for (int worker_id = 0; worker_id < context.worker_count; worker_id++) std::cout << "WORKER: " << worker_id << " GROUPS: "  << groups_per_worker[worker_id]->size() << std::endl;
-
         std::vector<int64> ** filtered_rows = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(main_trace_layer->num_pk_records));
 
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
@@ -337,32 +318,11 @@ extern "C" {
             }
         }
 
-        // for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
-        //     std::cout << "FILTERED: " << filtered_rows[pk_id]->size() << std::endl;
-        // }
-        
-
         struct infer_result *infer_result_computed = (struct infer_result*)malloc(sizeof(struct infer_result));
         infer_result_computed->ids = filtered_rows;
         infer_result_computed->width = main_trace_layer->num_pk_records;
 
         return infer_result_computed;
-        // const int32 width = main_trace_layer->num_pk_records;
-        // bool * nulls = (bool *)malloc(sizeof(bool)*width);
-        // memset(nulls, 0, sizeof(bool)*width);
-
-        // Datum *records = (Datum*)malloc(sizeof(Datum)*width);
-
-
-        // for (int record_index = 0; record_index < filtered_rows[0]->size(); record_index++){
-
-        //     for (int key_index = 0; key_index < width; key_index++){
-        //         records[key_index] = Int64GetDatumFast(filtered_rows[key_index]->at(record_index));
-        //     }
-        //     tuplestore_putvalues(tupstore, tupdesc, records, nulls);
-        // }
-
-        // tuplestore_donestoring(tupstore);
     }
 
     PG_FUNCTION_INFO_V1(traceprov_infer);
@@ -406,27 +366,6 @@ extern "C" {
         struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
         store_inference(tupstore, tupdesc, infer_result_computed);
 
-        // Datum * buff = NULL;
-
-        // bool *nulls = (bool *)malloc(sizeof(bool) * columns);
-
-        // memset(nulls, 0, sizeof(bool) * columns);
-
-        // for (int i = 0; i < rows; i++){
-        //     if (buff == NULL){
-        //         buff = malloc(sizeof(Datum) * (columns));
-        //     }
-        //     for (int column_id = 0; column_id < columns; column_id++){
-        //         int value = column_id + i;
-        //         buff[column_id] = Int64GetDatumFast(value);
-        //     }
-
-        //     if (i > 0) continue;
-
-        //     tuplestore_putvalues(tupstore, tupdesc, buff, nulls);
-        // }
-
-        // tuplestore_donestoring(tupstore);
         return (Datum) 0;
     }
 
