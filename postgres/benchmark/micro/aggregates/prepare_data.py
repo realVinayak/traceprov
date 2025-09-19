@@ -1,8 +1,8 @@
 import argparse
 from typing import NamedTuple
-from numpy import random
+from numpy import random # pyright: ignore[reportMissingImports]
 import time
-import psycopg2
+import psycopg2 # pyright: ignore[reportMissingModuleSource]
 import os
 
 
