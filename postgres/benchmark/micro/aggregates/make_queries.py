@@ -4,10 +4,10 @@ import os
 
 
 class Options(NamedTuple):
-    db_name: str
+    table_name: str
     qnum: str
     gprom_dir: Optional[str]
-
+    db_name: str
 
 TABLE_TICKER = "%TABLE%"
 GUESSED_ID_TICKER = "%GUESSED_ID%"
@@ -30,15 +30,16 @@ def main():
     parser.add_argument("-db", "--db_name", required=True, type=str)
     parser.add_argument("-qnum", "--qnum", required=True, type=str)
     parser.add_argument("-gp_dir", "--gprom_dir", required=False, type=str)
+    parser.add_argument("-t", "--table_name", required=False, type=str)
 
     parsed: Options = parser.parse_args()
-    query_dir = f"queries_{parsed.db_name}/{parsed.qnum}/"
+    query_dir = f"queries_{parsed.table_name}/{parsed.qnum}/"
     os.system(f"rm -rf {query_dir}/")
 
-    os.system(f"mkdir {query_dir}")
+    assert 0 == os.system(f"mkdir -p {query_dir}")
 
-    guessed_id_column = parsed.db_name.replace("_", "__")
-    table_name = parsed.db_name
+    guessed_id_column = f'prov_{parsed.table_name.replace("_", "__")}_id'
+    table_name = parsed.table_name
 
     template_base = cleanup(
         open_template("base", parsed.qnum), guessed_id_column, table_name
@@ -50,13 +51,13 @@ def main():
         open_template("extract", parsed.qnum), guessed_id_column, table_name
     )
 
-    with open(f"{query_dir}/base.sql") as f:
+    with open(f"{query_dir}/base.sql", 'w') as f:
         f.write(template_base)
 
-    with open(f"{query_dir}/traceprov.sql") as f:
+    with open(f"{query_dir}/traceprov.sql", 'w') as f:
         f.write(template_traceprov)
 
-    with open(f"{query_dir}/template_extract_gprom.sql") as f:
+    with open(f"{query_dir}/template_extract_gprom.sql", 'w') as f:
         f.write(template_extract_gprom)
 
     if parsed.gprom_dir is None:
@@ -73,13 +74,18 @@ def main():
     out_paths = [("gprom_join", [""]), ("gprom_window", ["--window"])]
 
     gprom_commands = [
-        f"python3 extract_gprom.py -i {absolute_input_path} -o {absolute_dir}/{out_path}.sql {' '.join(out_options)}"
+        f"python3 extract_gprom.py -db {parsed.db_name} -i {absolute_input_path} -o {absolute_dir}/{out_path}.sql {' '.join(out_options)}"
         for (out_path, out_options) in out_paths
     ]
 
     gprom_mat_commands = [
-        f"python3 extract_gprom.py -i {absolute_input_path} -o {absolute_dir}/{out_path}.materialize.sql {' '.join(out_options)}"
+        f"python3 extract_gprom.py -db {parsed.db_name} -i {absolute_input_path} -o {absolute_dir}/{out_path}.materialize.sql {' '.join(out_options)}"
         for (out_path, out_options) in out_paths
     ]
     cmds = [f"cd {parsed.gprom_dir}", *gprom_commands, *gprom_mat_commands]
-    assert os.system(";".join(cmds)) == 0
+    all_cmds = ";".join(cmds)
+    print('gprom: ', all_cmds)
+    assert os.system(all_cmds) == 0
+
+if __name__ == '__main__':
+    main()
