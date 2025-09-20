@@ -1,0 +1,1 @@
+SELECT prov_skew__1__1__num__100000000_id FROM (PROVENANCE OF (select sum(val), z from skew_1_1_num_100000000 USE PROVENANCE (id) group by z)) F;
