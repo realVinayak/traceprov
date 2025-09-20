@@ -2,18 +2,22 @@
     "query_id": "01",
     "queries": [
         {
-        "base": "base.sql",
-        "materialize": null
+            "key": "base",
+            "base": "base.sql",
+            "materialize": null
         },
-        {
+        {   
+            "key": "gprom_join",
             "base": "gprom_join.sql",
             "materialize": "gprom_join.materialize.sql"
         },
-        {
+        {   
+            "key": "gprom_window",
             "base": "gprom_window.sql",
             "materialize": "gprom_window.materialize.sql"
         },
         {   
+            "key": "traceprov",
             "base": "traceprov.sql",
             "time": "AUTO_TRACEPROV_TIME",
             "materialize": "AUTO_TRACEPROV_MAT"
