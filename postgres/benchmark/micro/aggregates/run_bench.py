@@ -17,7 +17,6 @@ class Options(NamedTuple):
 def run_query(path, db, query, timeout):
     # run_bench_process.py -f AUTO_TRACEPROV_TIME -q 01 -o /tmp/rand.out -db microbench_agg_0
     file = f"/tmp/{uuid.uuid4()}.txt"
-
     args = [
         sys.executable,
         "run_bench_process.py",
@@ -30,6 +29,7 @@ def run_query(path, db, query, timeout):
         "-db",
         db,
     ]
+    print('running: ', args)
 
     try:
         subprocess.run(args, timeout=timeout)
@@ -45,7 +45,7 @@ def run_subdir(subdir: str, config, iters: int, db: str):
     subdir_result = {}
 
     query_num = config["query_id"]
-    make_path: lambda path: (
+    make_path = lambda path: (
         path if path in SPECIAL_FILES else f"{subdir}/{query_num}/{path}"
     )
 
@@ -59,8 +59,10 @@ def run_subdir(subdir: str, config, iters: int, db: str):
 
         for i in range(iters):
 
+            os.system(f'echo "select reinit_state();" | PGPASSWORD=postgres psql -U postgres {db}')
             result = run_query(path, db, query_num, config["timeout"])
-
+            
+            print('on index: ', i)
             if result is None:
                 break
 
@@ -82,7 +84,7 @@ def run_subdir(subdir: str, config, iters: int, db: str):
 
             query_type_results["materialize"].append(mat_result)
 
-            time_query = query_type.get("materialize")
+            time_query = query_type.get("time")
             if time_query is None:
                 continue
 
@@ -115,11 +117,10 @@ def main():
     results = {}
 
     for subdir in config["subdirs"]:
-        current_result = results[subdir]
         subdir_results = run_subdir(subdir, config, iters, parsed.database)
-        current_result[subdir] = subdir_results
+        results[subdir] = subdir_results
 
-    print(subdir_results)
+    print(results)
 
 
 if __name__ == "__main__":
