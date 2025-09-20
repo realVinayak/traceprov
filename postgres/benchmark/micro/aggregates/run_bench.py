@@ -5,6 +5,7 @@ import subprocess
 from typing import NamedTuple
 import sys
 import uuid
+from .run_with_timeout import run_with_timeout
 
 SPECIAL_FILES = ["AUTO_TRACEPROV_TIME", "AUTO_TRACEPROV_MAT"]
 
@@ -29,10 +30,10 @@ def run_query(path, db, query, timeout):
         "-db",
         db,
     ]
-    print('running: ', args)
+    print("running: ", args)
 
     try:
-        subprocess.run(args, timeout=timeout)
+        run_with_timeout(" ".join(args), timeout_sec=timeout)
         with open(file) as f:
             result = float(f.read())
     except subprocess.TimeoutExpired:
@@ -59,10 +60,12 @@ def run_subdir(subdir: str, config, iters: int, db: str):
 
         for i in range(iters):
 
-            os.system(f'echo "select reinit_state();" | PGPASSWORD=postgres psql -U postgres {db}')
+            os.system(
+                f'echo "select reinit_state();" | PGPASSWORD=postgres psql -U postgres {db}'
+            )
             result = run_query(path, db, query_num, config["timeout"])
-            
-            print('on index: ', i)
+
+            print("on index: ", i)
             if result is None:
                 break
 
