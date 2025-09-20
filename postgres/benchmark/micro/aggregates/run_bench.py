@@ -18,13 +18,13 @@ class Options(NamedTuple):
 def run_query(path, db, query, timeout):
     # run_bench_process.py -f AUTO_TRACEPROV_TIME -q 01 -o /tmp/rand.out -db microbench_agg_0
 
-    with open(path) as f:
-        normal_sql = f.read()
-        new_sql = f"set statement_timeout={timeout}s;\n" + normal_sql
+    #with open(path) as f:
+    #    normal_sql = f.read()
+    #    new_sql = f"set statement_timeout='{timeout}s';\n" + normal_sql
 
-    new_sql_file = f"/tmp/{uuid.uuid4()}.sql"
-    with open(new_sql_file, "w") as f:
-        f.write(new_sql)
+    #new_sql_file = f"/tmp/{uuid.uuid4()}.sql"
+    #with open(new_sql_file, "w") as f:
+    #    f.write(new_sql)
 
     file = f"/tmp/{uuid.uuid4()}.txt"
     args = [
@@ -38,6 +38,8 @@ def run_query(path, db, query, timeout):
         file,
         "-db",
         db,
+        '-t',
+        str(timeout)
     ]
     print("running: ", args)
 
