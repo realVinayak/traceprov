@@ -5,7 +5,7 @@ import subprocess
 from typing import NamedTuple
 import sys
 import uuid
-from .run_with_timeout import run_with_timeout
+from run_with_timeout import run_with_timeout
 
 SPECIAL_FILES = ["AUTO_TRACEPROV_TIME", "AUTO_TRACEPROV_MAT"]
 
@@ -33,7 +33,7 @@ def run_query(path, db, query, timeout):
     print("running: ", args)
 
     try:
-        run_with_timeout(" ".join(args), timeout_sec=timeout)
+        run_with_timeout((args), timeout_sec=timeout)
         with open(file) as f:
             result = float(f.read())
     except subprocess.TimeoutExpired:
