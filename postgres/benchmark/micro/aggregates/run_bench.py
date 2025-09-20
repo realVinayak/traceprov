@@ -139,6 +139,9 @@ def main():
 
     print(results)
 
+    
+    with open('microbench_agg_result.json', 'w') as f:
+        f.write(json.dumps(results))
 
 if __name__ == "__main__":
     main()

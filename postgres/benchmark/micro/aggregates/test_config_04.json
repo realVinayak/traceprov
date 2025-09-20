@@ -32,5 +32,5 @@
     ],
     "repeat": 5,
     "throwaway": 0,
-    "timeout": 600
+    "timeout": 300
 }
