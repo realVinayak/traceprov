@@ -60,6 +60,7 @@ def main():
         computed_time = end - start
 
     with open(parsed.outfile, "w") as f:
+        print('time: ', computed_time)
         f.write(str(computed_time))
 
 
