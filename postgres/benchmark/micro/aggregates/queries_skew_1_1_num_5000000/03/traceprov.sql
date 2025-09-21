@@ -1,4 +1,4 @@
-select *, mark_later(mapped_agg) FROM (
+select mark_later(mapped_agg) FROM (
     select 
         sum(val), 
         z, 
