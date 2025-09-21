@@ -72,7 +72,7 @@ def main():
             start = time.perf_counter()
             cursor.execute(new_sql)
             end = time.perf_counter()
-            computed_time = start - end
+            computed_time = end - start
         else:
             print("using shell")
             start = time.perf_counter()
