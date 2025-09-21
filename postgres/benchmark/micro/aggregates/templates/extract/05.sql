@@ -1,0 +1,1 @@
+select %GUESSED_ID%  FROM ( PROVENANCE OF ( select min_value, count(f.z) from (select min(val) as min_value, z from %TABLE% USE PROVENANCE (id) group by z) f group by min_value having (count(f.z)) > 900)) F;
