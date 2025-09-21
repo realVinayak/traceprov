@@ -770,3 +770,42 @@ Datum traceprov_agg_from_ptr_finalfunc(FunctionCallInfo fcinfo){
     // This works, and is fine.
     return traceprov_agg_key_finalfunc(fcinfo);
 }
+
+// These are dummy functions (mostly to benchmark the cost of calling functions from Postgres.)
+
+PG_FUNCTION_INFO_V1(traceprov_nop_sfunc);
+
+Datum traceprov_nop_sfunc(PG_FUNCTION_ARGS){
+    PG_RETURN_POINTER(NULL);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_finalfunc);
+
+Datum traceprov_nop_finalfunc(PG_FUNCTION_ARGS){
+    PG_RETURN_INT64(1);
+}
+
+
+PG_FUNCTION_INFO_V1(traceprov_nop_combine);
+
+Datum traceprov_nop_combine(PG_FUNCTION_ARGS){
+    PG_RETURN_INT64(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_serialize);
+
+Datum traceprov_nop_serialize(PG_FUNCTION_ARGS){
+
+    StringInfoData buf;
+    if (PG_ARGISNULL(0)) PG_RETURN_BYTEA_P(NULL);
+
+    pq_begintypsend(&buf);
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_deserialize);
+
+Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
+
+    PG_RETURN_POINTER(NULL);
+}
