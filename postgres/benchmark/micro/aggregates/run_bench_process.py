@@ -3,6 +3,8 @@ import os
 from typing import NamedTuple
 import time
 import uuid
+import psycopg2
+
 
 class Options(NamedTuple):
     file: str
@@ -10,6 +12,7 @@ class Options(NamedTuple):
     outfile: str
     db: str
     timeout: int
+    driver: bool
 
 
 def resolve_filename(file_name: str, query_num: str):
@@ -30,9 +33,20 @@ def main():
     parser.add_argument("-out", "--outfile", required=True, type=str)
     parser.add_argument("-db", "--db", required=True, type=str)
     parser.add_argument("-t", "--timeout", required=True, type=int)
+    parser.add_argument(
+        "--driver", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parsed: Options = parser.parse_args()
     filename = resolve_filename(parsed.file, parsed.q)
+
+    connection = psycopg2.connect(
+        database=parsed.db,
+        host="127.0.0.1",
+        user="postgres",
+        password="postgres",
+        port="5432",
+    )
 
     is_time = parsed.file == "AUTO_TRACEPROV_TIME"
 
@@ -41,7 +55,7 @@ def main():
     with open(filename) as f:
         new_sql = f"SET statement_timeout='{parsed.timeout}s';\n" + f.read()
 
-    with open(new_file_name, 'w') as wf:
+    with open(new_file_name, "w") as wf:
         wf.write(new_sql)
 
     if is_time:
@@ -49,18 +63,27 @@ def main():
             f"PGPASSWORD=postgres psql -U postgres {parsed.db} -f {new_file_name} --tuples > /tmp/time.out"
         )
         with open("/tmp/time.out") as f:
-            res_ = f.read().replace('SET', '')
+            res_ = f.read().replace("SET", "")
             computed_time = int(res_.strip().replace("\n", "")) / 1000
     else:
-        start = time.perf_counter()
-        os.system(
-            f"PGPASSWORD=postgres psql -U postgres {parsed.db} -f {new_file_name} --tuples > /dev/null"
-        )
-        end = time.perf_counter()
-        computed_time = end - start
+        if parsed.driver:
+            print("using driver")
+            cursor = connection.cursor()
+            start = time.perf_counter()
+            cursor.execute(new_sql)
+            end = time.perf_counter()
+            computed_time = start - end
+        else:
+            print("using shell")
+            start = time.perf_counter()
+            os.system(
+                f"PGPASSWORD=postgres psql -U postgres {parsed.db} -f {new_file_name} --tuples > /dev/null"
+            )
+            end = time.perf_counter()
+            computed_time = end - start
 
     with open(parsed.outfile, "w") as f:
-        print('time: ', computed_time)
+        print("time: ", computed_time)
         f.write(str(computed_time))
 
 
