@@ -400,13 +400,13 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     // This, essentially, just adds the padding to the beginning.
     // For optimization purposes, we don't actually write to this space (because it is empty)
     current_layer->current_row += current_layer->record_padding;
+	
+    // During benchmarking, this was a bottlenck (using struct computations)
+    *((int64*)current_layer->current_row) = agg_context->group_cnt;
 
-    ((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
+    //((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
     
-    int64 *pk_space = (int64*)((void*)(
-        &(((struct trace_file_forward_row*)current_layer->current_row)->group_count)) 
-        + sizeof(struct trace_file_forward_row)
-    );
+    int64 *pk_space = (int64*)((void*)(current_layer->current_row) + sizeof(struct trace_file_forward_row));
 
     for (int pk_id = 2; pk_id < PG_NARGS(); pk_id++, pk_space++){
         *pk_space = PG_GETARG_INT64(pk_id);
