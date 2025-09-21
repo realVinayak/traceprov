@@ -39,7 +39,8 @@ def run_query(path, db, query, timeout):
         "-db",
         db,
         '-t',
-        str(timeout)
+        str(timeout),
+        '--driver'
     ]
     print("running: ", args)
 
