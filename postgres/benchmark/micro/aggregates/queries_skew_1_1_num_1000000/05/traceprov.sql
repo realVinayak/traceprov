@@ -5,7 +5,7 @@ select mark_later(mapped_agg_later) FROM (
                 select min(val) as min_value, 
                     z,
                     traceprov_agg_key_parallel(1, id) as mapped_agg
-                    from %TABLE% 
+                    from skew_1_1_num_1000000 
                     group by z
             ) f 
         group by min_value 
