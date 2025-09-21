@@ -86,7 +86,7 @@ CREATE FUNCTION traceprov_agg_key_sfunc(state internal, int, BIGINT, BIGINT, BIG
 
 CREATE FUNCTION traceprov_nop_sfunc(state internal, int, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'traceprov_nop_sfunc' LANGUAGE C;
 CREATE FUNCTION traceprov_nop_finalfunc(state internal) RETURNS bigint AS '$libdir/__FILE__', 'traceprov_nop_finalfunc' LANGUAGE C;
-CREATE FUNCTION traceprov_nop_combine(state internal, state internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_nop_combine' LANGUAGE C;
+CREATE FUNCTION traceprov_nop_combine(internal, internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_nop_combine' LANGUAGE C;
 CREATE FUNCTION traceprov_nop_serialize(internal) RETURNS bytea AS '$libdir/__FILE__', 'traceprov_nop_serialize' LANGUAGE C;
 CREATE FUNCTION traceprov_nop_deserialize(bytea, internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_nop_deserialize' LANGUAGE C;
 
