@@ -140,7 +140,7 @@ def main():
     print(results)
 
     
-    with open('microbench_agg_result.json', 'w') as f:
+    with open(f'microbench_agg_result_{config["query_id"]}.json', 'w') as f:
         f.write(json.dumps(results))
 
 if __name__ == "__main__":
