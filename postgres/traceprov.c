@@ -400,13 +400,13 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     // This, essentially, just adds the padding to the beginning.
     // For optimization purposes, we don't actually write to this space (because it is empty)
     current_layer->current_row += current_layer->record_padding;
+	
+    // During benchmarking, this was a bottlenck (using struct computations)
+    *((int64*)current_layer->current_row) = agg_context->group_cnt;
 
-    ((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
+    //((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
     
-    int64 *pk_space = (int64*)((void*)(
-        &(((struct trace_file_forward_row*)current_layer->current_row)->group_count)) 
-        + sizeof(struct trace_file_forward_row)
-    );
+    int64 *pk_space = (int64*)((void*)(current_layer->current_row) + sizeof(struct trace_file_forward_row));
 
     for (int pk_id = 2; pk_id < PG_NARGS(); pk_id++, pk_space++){
         *pk_space = PG_GETARG_INT64(pk_id);
@@ -769,4 +769,43 @@ PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_finalfunc);
 Datum traceprov_agg_from_ptr_finalfunc(FunctionCallInfo fcinfo){
     // This works, and is fine.
     return traceprov_agg_key_finalfunc(fcinfo);
+}
+
+// These are dummy functions (mostly to benchmark the cost of calling functions from Postgres.)
+
+PG_FUNCTION_INFO_V1(traceprov_nop_sfunc);
+
+Datum traceprov_nop_sfunc(PG_FUNCTION_ARGS){
+    PG_RETURN_POINTER(NULL);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_finalfunc);
+
+Datum traceprov_nop_finalfunc(PG_FUNCTION_ARGS){
+    PG_RETURN_INT64(1);
+}
+
+
+PG_FUNCTION_INFO_V1(traceprov_nop_combine);
+
+Datum traceprov_nop_combine(PG_FUNCTION_ARGS){
+    PG_RETURN_INT64(1);
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_serialize);
+
+Datum traceprov_nop_serialize(PG_FUNCTION_ARGS){
+
+    StringInfoData buf;
+    if (PG_ARGISNULL(0)) PG_RETURN_BYTEA_P(NULL);
+
+    pq_begintypsend(&buf);
+    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
+}
+
+PG_FUNCTION_INFO_V1(traceprov_nop_deserialize);
+
+Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
+
+    PG_RETURN_POINTER(NULL);
 }
