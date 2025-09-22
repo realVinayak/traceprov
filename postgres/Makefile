@@ -57,10 +57,10 @@ traceprov:
 	sudo cp traceprov_$(suff).auto.sql /home/postgres/
 
 traceprov_infer:
-	g++ -O3 -I/usr/include/postgresql/14/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
+	g++ -O3 -I/usr/include/postgresql/14/server/ $(CFLAGS) traceprov_infer.cpp file_utils.c -o traceprov_infer.o
 
 traceprov_infer_dbg:
-	g++ -g -I/usr/include/postgresql/14/server/ -fno-omit-frame-pointer traceprov_infer.cpp file_utils.c -o traceprov_infer.o
+	g++ -g -I/usr/include/postgresql/14/server/ $(CFLAGS) -fno-omit-frame-pointer traceprov_infer.cpp file_utils.c -o traceprov_infer.o
 
 infer_set:
 	gcc -g -std=c++11 -O3 -Wall -fPIC -c -I/usr/include/postgresql/14/server/ file_utils.c -o file_utils_$(suff).o

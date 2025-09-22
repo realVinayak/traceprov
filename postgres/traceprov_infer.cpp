@@ -17,6 +17,8 @@
 
 #define PRINT_DEBUG(x) std::cout << "[traceprov]: " << '(' << __FILE__ << ',' << __LINE__ << ")\t" << x << "\t" << "ERRNO: " << errno << std::endl
 
+
+
 int dump_pk_records(std::vector<int64> ***, const char *, int, int);
 
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
@@ -93,7 +95,8 @@ void perform_local_inference(
     const int32 num_pk_records,
     std::vector<int64> **filtered_rows
 ){
-    
+    std::cout << "Starting local inference"  << std::endl;   
+    auto start = std::chrono::high_resolution_clock::now();	
     while (current_forward_row < current_final_row){
         current_forward_row = (void*)((uint64)record_padding + (uint64)current_forward_row);
 
@@ -101,12 +104,15 @@ void perform_local_inference(
                 for (int key_idx = 0; key_idx < num_pk_records; key_idx++){
                     int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
 
-                    filtered_rows[key_idx]->push_back(record_key);
+                    //filtered_rows[key_idx]->push_back(record_key);
                 }
             }
             current_forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), num_pk_records);
     }
-    
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "Took (thread): " << duration.count() << " ms" << std::endl;
     return;
 }
 
@@ -142,6 +148,9 @@ int main(int argc, char *argv[]){
 
     std::cout << "Using layer: " << layer_number << std::endl;
 
+#ifdef CONCURRENT
+    std::cout << "Using concurrent" << std::endl;
+#endif
     auto start = std::chrono::high_resolution_clock::now();
 
     struct traceprov_shared_context context;
@@ -259,9 +268,10 @@ int main(int argc, char *argv[]){
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) rows_per_worker[worker_id][key_idx] = new std::vector<int64>;
     }
 
-    std::thread *thread_pool = (std::thread*)malloc(sizeof(std::thread)*context.worker_count);
-
-    for (int worker_id = 0; worker_id < context.worker_count; worker_id++)
+#ifdef CONCURRENT
+    std::thread **thread_pool = (std::thread**)malloc(sizeof(std::thread)*context.worker_count);
+#endif
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++) {
 
         std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
         if (local_group_nos->size() == 0) continue;
@@ -284,25 +294,26 @@ int main(int argc, char *argv[]){
 
         const void *current_final_row = get_final_ptr(current_forward_row, bg_trace_layer);
 
-        thread_pool[worker_id] = std::thread(
+#ifdef CONCURRENT
+        thread_pool[worker_id] = new std::thread(
             perform_local_inference,             
             local_group_nos,
             current_forward_row,
             current_final_row,
             bg_trace_layer->record_padding,
             bg_trace_layer->num_pk_records,
-            rows_per_worker[0]
+            rows_per_worker[worker_id]
         );
-
-        // perform_local_inference(
-        //     local_group_nos,
-        //     current_forward_row,
-        //     current_final_row,
-        //     bg_trace_layer->record_padding,
-        //     bg_trace_layer->num_pk_records,
-        //     rows_per_worker[0]
-        // );
-
+#else
+        perform_local_inference(
+             local_group_nos,
+             current_forward_row,
+             current_final_row,
+             bg_trace_layer->record_padding,
+             bg_trace_layer->num_pk_records,
+             rows_per_worker[0]
+        );
+#endif
         // while (current_forward_row < current_final_row){
         //     current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
 
@@ -317,7 +328,9 @@ int main(int argc, char *argv[]){
         // }
     }
 
-    for (int worker_id = 0; worker_id < context.worker_count; worker_id++) thread_pool[worker_id].join();
+#ifdef CONCURRENT
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++) thread_pool[worker_id]->join();
+#endif
 
     for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
         uint64 total_sum = 0;
