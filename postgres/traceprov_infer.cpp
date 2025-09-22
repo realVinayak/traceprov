@@ -83,6 +83,14 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
     return final_row;
 }
 
+int local_group_search(std::vector<int64> * present_groups, int64 group_to_find){
+    return std::binary_search(present_groups->begin(), present_groups->end(), group_to_find);
+}
+
+int row_group_search(std::vector<int64> * vals, int64 group_num){
+    return std::binary_search(vals->begin(), vals->end(), group_num);
+}
+
 int main(int argc, char *argv[]){
 
     int layer_number = 1;
@@ -208,7 +216,7 @@ int main(int argc, char *argv[]){
             partial_group_row = (void*)((uint64)partial_group_layer->record_padding + (uint64)partial_group_row);
             const struct trace_file_partial_row *current_partial_row = (struct trace_file_partial_row *)partial_group_row;
             // Essentially, if the global group number gets found, store the local group number.
-            if (std::binary_search(present_groups->begin(), present_groups->end(), current_partial_row->global_group_number)){
+            if (local_group_search(present_groups, current_partial_row->global_group_number)){
                 groups_per_worker[current_partial_row->worker_id]->push_back(current_partial_row->local_group_number);
             }
 
@@ -253,7 +261,7 @@ int main(int argc, char *argv[]){
         while (current_forward_row < current_final_row){
             current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
 
-            if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
+            if (row_group_search(local_group_nos, ((struct trace_file_forward_row*)current_forward_row)->group_count)){
                 for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
                     int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
 
