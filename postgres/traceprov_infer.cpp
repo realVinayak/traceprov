@@ -16,7 +16,7 @@
 
 #define PRINT_DEBUG(x) std::cout << "[traceprov]: " << '(' << __FILE__ << ',' << __LINE__ << ")\t" << x << "\t" << "ERRNO: " << errno << std::endl
 
-int dump_pk_records(std::vector<int64> **, const char *, int);
+int dump_pk_records(std::vector<int64> ***, const char *, int, int);
 
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
     char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, worker_id, NULL);
@@ -254,7 +254,7 @@ int main(int argc, char *argv[]){
     std::vector<int64> *** rows_per_worker = (std::vector<int64>***)malloc(sizeof(std::vector<int64> **)*context.worker_count);
 
     for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
-        rows_per_worker[worker_id] = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(main_trace_layer->num_pk_records))
+        rows_per_worker[worker_id] = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(main_trace_layer->num_pk_records));
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) rows_per_worker[worker_id][key_idx] = new std::vector<int64>;
     }
 
@@ -357,7 +357,7 @@ int main(int argc, char *argv[]){
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
 
     if (output_id_file){
-        if ((dump_pk_records(filtered_rows, output_id_file, main_trace_layer->num_pk_records, context.worker_count))){
+        if ((dump_pk_records(rows_per_worker, output_id_file, main_trace_layer->num_pk_records, context.worker_count))){
             std::cout << "Error writing records to " << output_id_file << std::endl;
         }
     }
@@ -391,7 +391,7 @@ int dump_pk_records(std::vector<int64> ***pk_records, const char *out_file, int 
 
     for (int worker_index = 0; worker_index < worker_count; worker_index++){
 
-        const std::vector<int64> **local_worker_pks = pk_records[worker_index];
+        std::vector<int64> **local_worker_pks = pk_records[worker_index];
 
         for (int record_index = 0; record_index < local_worker_pks[0]->size(); record_index++){
             bool add_separator = false;
