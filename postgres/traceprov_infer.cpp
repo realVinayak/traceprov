@@ -83,6 +83,32 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
     return final_row;
 }
 
+// This performs row search for just a worker.
+void perform_local_inference(
+    std::vector<int64> *local_group_nos, 
+    void *current_forward_row,
+    const void *current_final_row,
+    uint32 record_padding,
+    const int32 num_pk_records,
+    std::vector<int64> **filtered_rows
+){
+    
+    while (current_forward_row < current_final_row){
+        current_forward_row = (void*)((uint64)record_padding + (uint64)current_forward_row);
+
+            if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
+                for (int key_idx = 0; key_idx < num_pk_records; key_idx++){
+                    int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
+
+                    filtered_rows[key_idx]->push_back(record_key);
+                }
+            }
+            current_forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), num_pk_records);
+    }
+    
+    return;
+}
+
 int main(int argc, char *argv[]){
 
     int layer_number = 1;
@@ -221,11 +247,16 @@ int main(int argc, char *argv[]){
 
     for (int worker_id = 0; worker_id < context.worker_count; worker_id++) std::cout << "WORKER: " << worker_id << " GROUPS: "  << groups_per_worker[worker_id]->size() << std::endl;
 
-    std::vector<int64> ** filtered_rows = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(main_trace_layer->num_pk_records));
+    // std::vector<int64> ** filtered_rows = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(main_trace_layer->num_pk_records));
 
-    for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
+    // for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
 
-    int iters_made = 0;
+    std::vector<int64> *** rows_per_worker = (std::vector<int64>***)malloc(sizeof(std::vector<int64> **)*context.worker_count);
+
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+        rows_per_worker[worker_id] = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(main_trace_layer->num_pk_records))
+        for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) rows_per_worker[worker_id][key_idx] = new std::vector<int64>;
+    }
 
     for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
@@ -250,23 +281,33 @@ int main(int argc, char *argv[]){
 
         const void *current_final_row = get_final_ptr(current_forward_row, bg_trace_layer);
 
-        while (current_forward_row < current_final_row){
-            current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
+        perform_local_inference(
+            local_group_nos,
+            current_forward_row,
+            current_final_row,
+            bg_trace_layer->record_padding,
+            bg_trace_layer->num_pk_records,
+            rows_per_worker[0]
+        );
 
-            if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
-                for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
-                    int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
+        // while (current_forward_row < current_final_row){
+        //     current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
 
-                    filtered_rows[key_idx]->push_back(record_key);
-                }
-            }
-            iters_made++;
-            current_forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), bg_trace_layer->num_pk_records);
-        }
+        //     if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
+        //         for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
+        //             int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
+
+        //             filtered_rows[key_idx]->push_back(record_key);
+        //         }
+        //     }
+        //     current_forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), bg_trace_layer->num_pk_records);
+        // }
     }
 
     for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
-        std::cout << "FILTERED: " << filtered_rows[pk_id]->size() << std::endl;
+        uint64 total_sum = 0;
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++) total_sum += rows_per_worker[worker_id][pk_id]->size();
+        std::cout << "FILTERED: " << total_sum << std::endl;
     }
     
     std::vector<int64> ** subq_records = NULL;
@@ -316,13 +357,13 @@ int main(int argc, char *argv[]){
     std::cout << "Took: " << duration.count() << " ms" << std::endl;
 
     if (output_id_file){
-        if ((dump_pk_records(filtered_rows, output_id_file, main_trace_layer->num_pk_records))){
+        if ((dump_pk_records(filtered_rows, output_id_file, main_trace_layer->num_pk_records, context.worker_count))){
             std::cout << "Error writing records to " << output_id_file << std::endl;
         }
     }
 
     if (subq_out_file){
-        if ((dump_pk_records(subq_records, subq_out_file, subq_width))){
+        if ((dump_pk_records(&subq_records, subq_out_file, subq_width, 1))){
             std::cout << "Error writing records to " << output_id_file << std::endl;
         }
     }
@@ -330,7 +371,7 @@ int main(int argc, char *argv[]){
 }
 
 // TODO: For the subquery, the width will be 1 + whatever from the layer.
-int dump_pk_records(std::vector<int64> **pk_records, const char *out_file, int width){
+int dump_pk_records(std::vector<int64> ***pk_records, const char *out_file, int width, int worker_count){
     std::cout << "Writing IDs to " << out_file << std::endl;
     int fd = open(out_file, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
     if (fd < 0){
@@ -348,15 +389,20 @@ int dump_pk_records(std::vector<int64> **pk_records, const char *out_file, int w
         return 1;
     }
 
-    for (int record_index = 0; record_index < pk_records[0]->size(); record_index++){
-        bool add_separator = false;
-        for (int key_index = 0; key_index < width; key_index++){
-            if (add_separator) output_ids << ",";
-            output_ids << pk_records[key_index]->at(record_index);
-            add_separator = true;
-        }
+    for (int worker_index = 0; worker_index < worker_count; worker_index++){
 
-        output_ids << std::endl;
+        const std::vector<int64> **local_worker_pks = pk_records[worker_index];
+
+        for (int record_index = 0; record_index < local_worker_pks[0]->size(); record_index++){
+            bool add_separator = false;
+            for (int key_index = 0; key_index < width; key_index++){
+                if (add_separator) output_ids << ",";
+                output_ids << local_worker_pks[key_index]->at(record_index);
+                add_separator = true;
+            }
+
+            output_ids << std::endl;
+        }
     }
     output_ids.close();
     return 0;
