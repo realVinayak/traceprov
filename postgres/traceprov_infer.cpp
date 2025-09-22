@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <streambuf>
+#include <thread>
 
 
 #include "traceprov.h"
@@ -258,7 +259,9 @@ int main(int argc, char *argv[]){
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) rows_per_worker[worker_id][key_idx] = new std::vector<int64>;
     }
 
-    for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+    std::thread *thread_pool = (std::thread*)malloc(sizeof(std::thread)*context.worker_count);
+
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++)
 
         std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
         if (local_group_nos->size() == 0) continue;
@@ -281,7 +284,8 @@ int main(int argc, char *argv[]){
 
         const void *current_final_row = get_final_ptr(current_forward_row, bg_trace_layer);
 
-        perform_local_inference(
+        thread_pool[worker_id] = std::thread(
+            perform_local_inference,             
             local_group_nos,
             current_forward_row,
             current_final_row,
@@ -289,6 +293,15 @@ int main(int argc, char *argv[]){
             bg_trace_layer->num_pk_records,
             rows_per_worker[0]
         );
+
+        // perform_local_inference(
+        //     local_group_nos,
+        //     current_forward_row,
+        //     current_final_row,
+        //     bg_trace_layer->record_padding,
+        //     bg_trace_layer->num_pk_records,
+        //     rows_per_worker[0]
+        // );
 
         // while (current_forward_row < current_final_row){
         //     current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
@@ -303,6 +316,8 @@ int main(int argc, char *argv[]){
         //     current_forward_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), bg_trace_layer->num_pk_records);
         // }
     }
+
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++) thread_pool[worker_id].join();
 
     for (int pk_id = 0; pk_id < main_trace_layer->num_pk_records; pk_id++){
         uint64 total_sum = 0;
