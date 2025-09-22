@@ -72,10 +72,10 @@ def main():
     with open("/tmp/gprom.out") as f:
         gprm_out = f.read()
 
-    BEGIN = "/tmp/gprom_base.sql"
+    BEGIN = "WITH"
     END = ";"
 
-    begin_index = gprm_out.index(BEGIN) + len(BEGIN)
+    begin_index = gprm_out.index(BEGIN)
     end_index = gprm_out.index(END)
 
     assert begin_index < end_index
@@ -84,7 +84,7 @@ def main():
 
     sql_str = (
         f"--- SQL OUT --- ON {time.replace(microsecond=0).isoformat()} \n"
-        + gprm_out[begin_index : end_index + 1]
+        + (gprm_out[begin_index : end_index + 1]).strip()
     )
 
     if parsed.verbose:
