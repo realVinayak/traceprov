@@ -1,0 +1,1 @@
+SELECT prov_skew__1__1__num__50000000_id FROM (PROVENANCE of (select count(*) as c, z from skew_1_1_num_50000000 USE PROVENANCE (id) group by z ORDER BY c desc limit 10 )) F;
