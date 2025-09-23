@@ -1,7 +1,7 @@
 import psycopg2
 import argparse
 import time
-
+import json
 
 def main():
     parser = argparse.ArgumentParser(prog="simple-psql-driver")
@@ -27,10 +27,10 @@ def main():
     cursor = connection.cursor()
 
     begin_execute = time.perf_counter()
-    cursor.execute(f"EXPLAIN (analyze, timing off) {sql_stmts}")
+    cursor.execute(f"EXPLAIN (analyze, timing off, format JSON) {sql_stmts}")
     end_execute = time.perf_counter()
     try:
-        result = list(cursor.fetchall())[0]
+        result = (list(cursor.fetchall())[0][0][0]['Execution Time'])
         print(result)
     except:
         pass
