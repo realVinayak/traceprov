@@ -1,4 +1,3 @@
---- SQL OUT --- ON 2025-09-23T20:47:38 
 WITH temp_view_2 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__100000000_id"
 FROM "skew_1_1_num_100000000" F0_0),

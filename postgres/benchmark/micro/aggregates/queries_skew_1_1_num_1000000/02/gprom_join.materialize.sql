@@ -1,4 +1,3 @@
---- SQL OUT --- ON 2025-09-20T17:09:21 
 CREATE TEMP TABLE gprom_lineage AS (
 WITH temp_view_2 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__1000000_id"

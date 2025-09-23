@@ -1,4 +1,3 @@
---- SQL OUT --- ON 2025-09-23T20:47:21 
 WITH temp_view_1 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__10000000_id", ROW_NUMBER() OVER () AS "_result_tid", 1 AS "_setprov_dup_count"
 FROM "skew_1_1_num_10000000" F0_0),

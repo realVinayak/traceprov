@@ -1,4 +1,3 @@
---- SQL OUT --- ON 2025-09-20T18:35:58 
 create temp table gprom_lineage AS (
 WITH temp_view_0 AS (
 SELECT /*+ materialize */ F0_0."AGGR_0" AS "avg(val)", F0_0."GROUP_0" AS "z", F0_0."prov_skew__1__1__num__5000000_id" AS "prov_skew__1__1__num__5000000_id", F0_0."_result_tid" AS "_result_tid", F0_0."_setprov_dup_count" AS "_setprov_dup_count"
