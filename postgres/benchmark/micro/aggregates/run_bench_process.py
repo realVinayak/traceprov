@@ -13,6 +13,7 @@ class Options(NamedTuple):
     db: str
     timeout: int
     driver: bool
+    analyze: bool
 
 
 def resolve_filename(file_name: str, query_num: str):
@@ -35,6 +36,9 @@ def main():
     parser.add_argument("-t", "--timeout", required=True, type=int)
     parser.add_argument(
         "--driver", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--analyze", action=argparse.BooleanOptionalAction, default=False
     )
 
     parsed: Options = parser.parse_args()
@@ -73,6 +77,18 @@ def main():
             cursor.execute(new_sql)
             end = time.perf_counter()
             computed_time = end - start
+        elif parsed.analyze:
+            print("using analyze")
+            cleaned_sql = new_sql.replace("\n", " ")
+            assert cleaned_sql.count(";") == 1
+            augmented_sql = f"EXPLAIN (analyze, timing off, format JSON) {cleaned_sql}"
+            cursor = connection.cursor()
+            cursor.execute(augmented_sql)
+            _analyze_result = cursor.fetchall()[0][0][0]
+            print(_analyze_result)
+            planning_time = _analyze_result["Plan"]["Planning Time"]
+            execution_time = _analyze_result["Execution Time"]
+            computed_time = (planning_time + execution_time) / 1000
         else:
             print("using shell")
             start = time.perf_counter()
