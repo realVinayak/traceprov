@@ -82,10 +82,7 @@ def main():
 
     time = datetime.datetime.now()
 
-    sql_str = (
-        f"--- SQL OUT --- ON {time.replace(microsecond=0).isoformat()} \n"
-        + (gprm_out[begin_index : end_index + 1]).strip()
-    )
+    sql_str = (gprm_out[begin_index : end_index + 1]).strip()
 
     if parsed.verbose:
         print(sql_str)
