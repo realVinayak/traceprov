@@ -1,3 +1,4 @@
+CREATE TEMP TABLE gprom_lineage AS (
 WITH temp_view_1 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__5000000_id", ROW_NUMBER() OVER () AS "_result_tid", 1 AS "_setprov_dup_count"
 FROM "skew_1_1_num_5000000" F0_0),
@@ -13,4 +14,4 @@ FROM (
 SELECT F0_0."AGGR_0" AS "c", F0_0."GROUP_0" AS "z", F0_0."prov_skew__1__1__num__5000000_id" AS "prov_skew__1__1__num__5000000_id", F0_0."_result_tid" AS "_result_tid", F0_0."_setprov_dup_count" AS "_setprov_dup_count"
 FROM (SELECT * FROM temp_view_0) F0_0
 ORDER BY "c" ASC NULLS LAST) F0_0) F0_0
-WHERE (F0_0."_result_tid" <= 10);
+WHERE (F0_0."_result_tid" <= 10));

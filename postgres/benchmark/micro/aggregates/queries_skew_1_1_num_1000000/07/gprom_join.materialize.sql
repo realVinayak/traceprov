@@ -1,3 +1,4 @@
+CREATE TEMP TABLE gprom_lineage as (
 WITH temp_view_2 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__1000000_id"
 FROM "skew_1_1_num_1000000" F0_0),
@@ -17,4 +18,4 @@ FROM (
 SELECT F0_0."AGGR_0" AS "c", F0_0."GROUP_0" AS "z", F0_0."prov_skew__1__1__num__1000000_id" AS "prov_skew__1__1__num__1000000_id"
 FROM (SELECT * FROM temp_view_0) F0_0
 ORDER BY "c" DESC NULLS LAST
-LIMIT 10) F0_0;
+LIMIT 10) F0_0);
