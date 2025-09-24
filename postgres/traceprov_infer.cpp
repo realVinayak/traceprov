@@ -95,7 +95,7 @@ int traceprov_sync(){
         goto end;
     }
 
-    for (int worker_id = 0; worker_id < context.worker_id; worker_id++){
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
         struct local_context *worker_local_context = &context.local_contexts[worker_id];
 
