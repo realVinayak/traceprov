@@ -113,7 +113,8 @@ int traceprov_sync(){
                 if (ptr == NULL){
                     PRINT_DEBUG("Skipping...");
                 }
-                if(msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC)){
+		std::cout << "Doing sync on - (WORKER: " << worker_id << ") LAYER: (" << layer_id << ")" << std::endl;
+		if(msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC)){
                     PRINT_DEBUG("Error doing the msync!");
                 }
             }
