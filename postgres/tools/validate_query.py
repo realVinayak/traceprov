@@ -61,7 +61,20 @@ class ValidSchema(AbstractCheck):
         
         cls.pass_(file_name)
 
-checks: List[AbstractCheck] = [OnlyOneStmt, NoInternalComment, ValidSchema]
+class MaterializationPresent(AbstractCheck):
+
+    @classmethod
+    def check(cls, connection, file_content: str, file_name: str):
+        
+        if 'materialize' not in file_name: return
+
+        file_content = file_content.lower()
+
+        if not file_content.startswith('create temp table'): raise cls(file_name)
+
+        cls.pass_(file_name)
+        
+checks: List[AbstractCheck] = [OnlyOneStmt, NoInternalComment, ValidSchema, MaterializationPresent]
 
 
 def validate_sql(connection, file_dir, file_name):
