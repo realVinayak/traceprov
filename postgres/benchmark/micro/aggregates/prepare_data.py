@@ -31,8 +31,8 @@ def insert_value(z_value, value, cursor, table):
 def generate_zifpian_distribution(num_groups, skew_param):
     zeta_value = sum([1 / pow(i, skew_param) for i in range(1, num_groups + 1)])
     probs = [1 / (pow(i, skew_param) * zeta_value) for i in range(1, num_groups + 1)]
-    np.isclose(sum(probs), 1)
-    print(sum(probs))
+    assert np.isclose(sum(probs), 1)
+    #print(sum(probs))
     return probs
 
 
@@ -75,6 +75,7 @@ def main():
     # parser.add_argument("-db", "--db", required=True, type=str)
     parsed: Options = parser.parse_args()
 
+    db_name = f"{parsed.db}_{parsed.num_groups}"
     pg_passwd = os.getenv("PGPASSWORD")
     assert pg_passwd
     base_connection = psycopg2.connect(
@@ -88,16 +89,17 @@ def main():
     if parsed.drop:
         cursor = base_connection.cursor()
         cursor.execute(f"COMMIT;")
-        cursor.execute(f"DROP DATABASE IF EXISTS {parsed.db};")
-        cursor.execute(f"CREATE DATABASE {parsed.db};")
+        cursor.execute(f"DROP DATABASE IF EXISTS {db_name};")
+        cursor.execute(f"CREATE DATABASE {db_name};")
 
     db_connection = psycopg2.connect(
-        database=parsed.db,
+        database=db_name,
         host="127.0.0.1",
         user="postgres",
         password=pg_passwd,
         port="5432",
     )
+    print('db name: ', db_name)
     db_cursor = db_connection.cursor()
     db_cursor.execute("select 1;")
     print(db_cursor.fetchall())
