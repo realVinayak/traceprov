@@ -19,6 +19,7 @@ extern "C" {
     #include "miscadmin.h"
     #include "traceprov.h"
     #include "file_utils.h"
+    #include "utils/builtins.h"
     PG_MODULE_MAGIC;
 }
 
@@ -404,10 +405,10 @@ extern "C" {
             elog(ERROR, "Error mmaping the shared context for sync!");
         }
 
-	int final_code = 0;
+	    int final_code = 0;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
-            
+
             struct local_context *worker_local_context = &context.local_contexts[worker_id];
 
             for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
@@ -428,8 +429,8 @@ extern "C" {
                     sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
                     messages->push_back(worker_layer);
                     final_code |= (msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC));
-		    if (final_code) {elog(ERROR, "Error doing the msync!");}
-                    
+		            if (final_code) {elog(ERROR, "Error doing the msync!");}
+   
                 }
             }
         }
@@ -441,9 +442,62 @@ extern "C" {
 
         for (std::string s: *messages){
             elog(INFO, "SYNC: %s", s.c_str());
-	}
-	elog(INFO, "Final code: %d", final_code);
+	    }
+        elog(INFO, "Final code: %d", final_code);
         PG_RETURN_INT64(duration_time);
     }
+
+    // Prints some useful statistics (like # of pks, # of groups)
+    PG_FUNCTION_INFO_V1(traceprov_layer_stat);
+
+    Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
+
+      int worker_id = 0;
+        
+      ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+      TupleDesc	tupdesc;
+      Tuplestorestate *tupstore;
+      MemoryContext per_query_ctx;
+      MemoryContext oldcontext;
+
+      const int32 layer_number = PG_GETARG_INT32(0);
+
+      if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+          ereport(ERROR,
+                  (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                  errmsg("set-valued function called in context that cannot accept a set")));
+      if (!(rsinfo->allowedModes & SFRM_Materialize))
+          ereport(ERROR,
+                  (errcode(ERRCODE_SYNTAX_ERROR),
+                  errmsg("materialize mode required, but it is not allowed in this context")));
+        
+      per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+      oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+      if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+          elog(ERROR, "return type must be a row type");
+      
+      tupstore = tuplestore_begin_heap(true, false, work_mem);
+      rsinfo->returnMode = SFRM_Materialize;
+      rsinfo->setResult = tupstore;
+      rsinfo->setDesc = tupdesc;
+
+      MemoryContextSwitchTo(oldcontext);
+
+      Datum records[3];
+      bool nulls[3];
+      memset(nulls, 0, sizeof(bool)*3);
+  
+      for (int record_id = 0; record_id < 20; record_id++){
+        records[0] = PG_RETURN_TEXT_P("TestValueHereColumn1!");
+        records[1] = PG_RETURN_TEXT_P("TestValueHereColumn2!");
+        records[2] = PG_RETURN_TEXT_P("TestValueHereColumn3!");
+        tuplestore_putvalues(tupstore, tupdesc, recors, nulls)
+      }
+
+      tuplestore_donestoring(tupstore);
+      return;
+    }
+
 };
 
