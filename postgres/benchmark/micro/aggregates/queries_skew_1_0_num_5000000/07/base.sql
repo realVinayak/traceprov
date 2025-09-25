@@ -1,0 +1,1 @@
+select count(*) as c, z from skew_1_0_num_5000000 group by z ORDER BY c desc limit 10;

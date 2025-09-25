@@ -1,0 +1,1 @@
+select prov_skew__1__0__num__5000000_id  FROM ( PROVENANCE OF ( select min_value, count(f.z) from (select min(val) as min_value, z from skew_1_0_num_5000000 USE PROVENANCE (id) group by z) f group by min_value having (count(f.z)) > 900)) F;
