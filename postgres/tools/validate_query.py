@@ -16,16 +16,22 @@ class Options(NamedTuple):
     password: str
     host: str
     port: str
+    fix: bool
 
 
 class AbstractCheck(Exception):
-    
+
     @classmethod
     def check(cls, connection, file_content: str, file_name: str): ...
-    
+
     @classmethod
     def pass_(cls, file_name):
-        print(cls.__name__, '(passed', file_name)
+        print(cls.__name__, "(passed", file_name)
+
+    @classmethod
+    def fix(cls, connection, file_content: str, file_name: str):
+        raise NotImplementedError("Not implemented for base class!")
+
 
 class OnlyOneStmt(AbstractCheck):
 
@@ -36,6 +42,7 @@ class OnlyOneStmt(AbstractCheck):
 
         cls.pass_(file_name)
 
+
 class NoInternalComment(AbstractCheck):
 
     @classmethod
@@ -45,12 +52,13 @@ class NoInternalComment(AbstractCheck):
 
         cls.pass_(file_name)
 
+
 class ValidSchema(AbstractCheck):
 
     @classmethod
     def check(cls, connection, file_content: str, file_name: str):
         file_as_stmt = f'EXPLAIN {file_content.replace("\n", " ")}'
-        
+
         try:
             cursor = connection.cursor()
             cursor.execute(file_as_stmt)
@@ -58,26 +66,46 @@ class ValidSchema(AbstractCheck):
         except Exception as e:
             msg = str(e)
             raise cls(f"Failed at {file_name}: {msg}")
-        
+
         cls.pass_(file_name)
+
 
 class MaterializationPresent(AbstractCheck):
 
     @classmethod
     def check(cls, connection, file_content: str, file_name: str):
-        
-        if 'materialize' not in file_name: return
+
+        if "materialize" not in file_name:
+            return
 
         file_content = file_content.lower()
 
-        if not file_content.startswith('create temp table'): raise cls(file_name)
+        if not file_content.startswith("create temp table"):
+            raise cls(file_name)
 
         cls.pass_(file_name)
-        
-checks: List[AbstractCheck] = [OnlyOneStmt, NoInternalComment, ValidSchema, MaterializationPresent]
+
+    @classmethod
+    def fix(cls, connection, file_content: str, file_name: str):
+
+        print(f"(cls.__name__): Fixing - {file_name}")
+        assert file_content.lower().startswith("with")
+        assert file_content.count(";") == 1
+
+        file_content = file_content.replace(";", ");")
+        new_file_content = "CREATE TEMP TABLE gprom_lineage AS (" + file_content
+        return new_file_content
 
 
-def validate_sql(connection, file_dir, file_name):
+checks: List[AbstractCheck] = [
+    OnlyOneStmt,
+    NoInternalComment,
+    ValidSchema,
+    MaterializationPresent,
+]
+
+
+def validate_sql(connection, file_dir, file_name, try_fix=False):
     abs_file_path = f"{file_name}"
 
     with open(abs_file_path) as f:
@@ -87,20 +115,38 @@ def validate_sql(connection, file_dir, file_name):
     flattend = "\n".join(non_comment_stmts)
 
     for check in checks:
-        check.check(connection, flattend, file_name)
+        try:
+            check.check(connection, flattend, file_name)
+        except AbstractCheck as e:
+            if try_fix:
+                new_content = e.fix(connection, flattend, file_name)
+                try:
+                    check.check(connection, new_content, file_name)
+                    with open(f"{file_name}.backup", "w") as f:
+                        f.write(flattend)
+                    with open(file_name, "w") as f:
+                        f.write(new_content)
+                    flattend = new_content
+                except Exception as e:
+                    print("Error fixing again!")
+                    raise e
+            else:
+                raise e
 
 
-def recursive_check(connection, current_dir, skip_list=[]):
+def recursive_check(connection, current_dir, skip_list=[], try_fix=False):
 
     for root, dirs, files in os.walk(current_dir):
         for file in files:
             complete_path = os.path.join(root, file)
-            if file.endswith(".sql") and not any(to_skip in file for to_skip in skip_list):
-                validate_sql(connection, root, complete_path)
+            if file.endswith(".sql") and not any(
+                to_skip in file for to_skip in skip_list
+            ):
+                validate_sql(connection, root, complete_path, try_fix)
 
         for next_dir in dirs:
             next_path = os.path.join(root, next_dir)
-            recursive_check(connection, next_path, skip_list)
+            recursive_check(connection, next_path, skip_list, try_fix)
 
 
 def main():
@@ -114,6 +160,8 @@ def main():
     parser.add_argument("-H", "--host", required=False, default="127.0.0.1")
     parser.add_argument("-P", "--port", required=False, default="5432")
 
+    parser.add_argument("--fix", action=argparse.BooleanOptionalAction, default=False)
+
     options: Options = parser.parse_args()
     print(options)
 
@@ -125,7 +173,7 @@ def main():
         port=options.port,
     )
 
-    recursive_check(connection, options.top_dir, options.skip)
+    recursive_check(connection, options.top_dir, options.skip, options.fix)
 
 
 if __name__ == "__main__":
