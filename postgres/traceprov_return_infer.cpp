@@ -394,7 +394,7 @@ extern "C" {
 
     PG_FUNCTION_INFO_V1(traceprov_sync_time);
 
-    Datum traceprov_sync_time(FunctionCallnfo fcinfo){
+    Datum traceprov_sync_time(FunctionCallInfo fcinfo){
         std::vector<std::string> *messages = new std::vector<std::string>;
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -403,6 +403,8 @@ extern "C" {
         if (map_traceprov_shared_context(&context)){
             elog(ERROR, "Error mmaping the shared context for sync!");
         }
+
+	int final_code = 0;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
             
@@ -423,9 +425,10 @@ extern "C" {
                         messages->push_back("Skipping");
                         continue;
                     }
-                    sprintf(work_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
+                    sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
                     messages->push_back(worker_layer);
-                    if(msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC)){elog(ERROR, "Error doing the msync!");}
+                    final_code |= (msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC));
+		    if (final_code) {elog(ERROR, "Error doing the msync!");}
                     
                 }
             }
@@ -437,8 +440,9 @@ extern "C" {
         uint64 duration_time = (uint64)duration.count();
 
         for (std::string s: *messages){
-            elog(INFO, "SYNC: ", s.c_str());
-        }
+            elog(INFO, "SYNC: %s", s.c_str());
+	}
+	elog(INFO, "Final code: %d", final_code);
         PG_RETURN_INT64(duration_time);
     }
 };
