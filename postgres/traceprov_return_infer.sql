@@ -25,7 +25,8 @@ CREATE OR REPLACE FUNCTION traceprov_layer_stat(
         OUT num_groups INT,
         OUT layer_number INT,
         OUT record_padding INT,
-        OUT layer_fd INT
+        OUT layer_fd INT,
+        OUT logged_record_count BIGINT
     )
     RETURNS SETOF record
     AS '$libdir/__FILE__', 'traceprov_layer_stat'
