@@ -489,14 +489,12 @@ extern "C" {
       memset(nulls, 0, sizeof(bool)*3);
   
       for (int record_id = 0; record_id < 20; record_id++){
-        records[0] = PG_RETURN_TEXT_P("TestValueHereColumn1!");
-        records[1] = PG_RETURN_TEXT_P("TestValueHereColumn2!");
-        records[2] = PG_RETURN_TEXT_P("TestValueHereColumn3!");
-        tuplestore_putvalues(tupstore, tupdesc, recors, nulls)
+      	records[0] = Int64GetDatumFast(20);
+        tuplestore_putvalues(tupstore, tupdesc, records, nulls);
       }
 
       tuplestore_donestoring(tupstore);
-      return;
+      return (Datum) 0;
     }
 
 };
