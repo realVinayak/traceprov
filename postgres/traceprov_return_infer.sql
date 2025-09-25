@@ -13,3 +13,8 @@ CREATE OR REPLACE FUNCTION traceprov_sync_time(IN integer)
     RETURNS BIGINT
     AS '$libdir/__FILE__', 'traceprov_sync_time'
     LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION traceprov_layer_stat(IN integer, OUT text, OUT text, OUT text)
+    RETURNS SETOF record
+    AS '$libdir/__FILE__', 'traceprov_layer_stat'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
