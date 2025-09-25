@@ -474,7 +474,7 @@ extern "C" {
       MemoryContext per_query_ctx;
       MemoryContext oldcontext;
 
-      const int32 filter_worker_number = PG_GETARG_INT32(0);
+      const int32 filter_worker_id = PG_GETARG_INT32(0);
       const int32 filter_layer_number = PG_GETARG_INT32(1);
 
       if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -519,20 +519,20 @@ extern "C" {
           
           struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
 
-          if (layer.layer_number == 0 || ()) continue;
+          if (layer.layer_number == 0) continue;
 
           if (filter_layer_number != -1 && layer.layer_number != filter_layer_number) continue;
 
-          record[TRACEPROV_LAYER_STAT::is_main_worker] = worker_id == context.main_worker_id;
-          record[TRACEPROV_LAYER_STAT::worker_id] = worker_id;
-          record[TRACEPROV_LAYER_STAT::layer_id] = layer.layer_number;
-          record[TRACEPROV_LAYER_STAT::num_pk_records] = layer.num_pk_records;
-          record[TRACEPROV_LAYER_STAT::layer_size] = layer.layer_size;
-          record[TRACEPROV_LAYER_STAT::num_groups] = layer.num_groups;
-          record[TRACEPROV_LAYER_STAT::layer_number] = layer.layer_number;
-          record[TRACEPROV_LAYER_STAT::record_padding] = layer.record_padding;
-          record[TRACEPROV_LAYER_STAT::layer_fd] = layer.layer_fd;
-          tuplestore_putvalues(tupstore, tupdesc, records, nulls);
+          record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
+          record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
+          record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
+          record[TRACEPROV_LAYER_STAT::num_pk_records] = Int32GetDatum(layer.num_pk_records);
+          record[TRACEPROV_LAYER_STAT::layer_size] = Int32GetDatum(layer.size);
+          record[TRACEPROV_LAYER_STAT::num_groups] = Int32GetDatum(layer.num_groups);
+          record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
+          record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
+          record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
+          tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
       }
       tuplestore_donestoring(tupstore);
