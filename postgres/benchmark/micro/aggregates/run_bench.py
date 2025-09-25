@@ -16,15 +16,6 @@ class Options(NamedTuple):
 
 
 def run_query(path, db, query, timeout):
-    # run_bench_process.py -f AUTO_TRACEPROV_TIME -q 01 -o /tmp/rand.out -db microbench_agg_0
-
-    #with open(path) as f:
-    #    normal_sql = f.read()
-    #    new_sql = f"set statement_timeout='{timeout}s';\n" + normal_sql
-
-    #new_sql_file = f"/tmp/{uuid.uuid4()}.sql"
-    #with open(new_sql_file, "w") as f:
-    #    f.write(new_sql)
 
     file = f"/tmp/{uuid.uuid4()}.txt"
     args = [
@@ -38,9 +29,9 @@ def run_query(path, db, query, timeout):
         file,
         "-db",
         db,
-        '-t',
+        "-t",
         str(timeout),
-        '--analyze'
+        "--analyze",
     ]
     print("running: ", args)
 
@@ -140,9 +131,12 @@ def main():
 
     print(results)
 
-    
-    with open(f'microbench_agg_result_{config["query_id"]}.json', 'w') as f:
-        f.write(json.dumps(results))
+    with open(
+        f'microbench_agg_result_{parsed.database}_{config["query_id"]}.json', "w"
+    ) as f:
+        results_db_aware = {parsed.database: results}
+        f.write(json.dumps(results_db_aware))
+
 
 if __name__ == "__main__":
     main()
