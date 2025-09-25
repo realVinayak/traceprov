@@ -83,10 +83,10 @@ extern "C" {
     }
 
     void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
-        const int64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
+        const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
         assert(gap >= 0);
         // Now, figure out what the last mapped region will have been (or the starting address of it.)
-        const int64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
+        const uint64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
         void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
         return final_row;
     }
@@ -460,6 +460,7 @@ extern "C" {
       layer_number,
       record_padding,
       layer_fd,
+      logged_record_count,
 
       NUM_COLUMNS
     };
@@ -523,6 +524,14 @@ extern "C" {
 
           if (filter_layer_number != -1 && layer.layer_number != filter_layer_number) continue;
 
+          const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_record)*sizeof(int64);
+
+          const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
+
+          if (final_ptr_offset % record_size){
+            elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
+          }
+
           record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
           record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
           record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
@@ -532,6 +541,7 @@ extern "C" {
           record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
           record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
           record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
+          record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(final_ptr_offset / record_size);
           tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
       }
