@@ -120,6 +120,23 @@ extern "C" {
         return;
     }
 
+    std::vector<int> *set_diff(std::vector<int> *first, std::vector<int> *second){
+      // set diff, assumes sorted.
+      int iter_first = 0;
+      int iter_second = 0;
+      std::vector<int> *set_diff_computed = new std::vector<int>;
+      while (iter_first < first->size()){
+              bool did_loop = false;
+              while((iter_second < second->size()) && (first->at(iter_first) == second->at(iter_second))) {
+                did_loop = true;
+                iter_second++;
+              }
+              if (did_loop) { iter_first++; continue;}
+              set_diff_computed->push_back(first->at(iter_first++));
+      }
+      return set_diff_computed;
+    }
+
     struct infer_result * perform_inference(
         const int layer_number,
         const int reference_layer, 
@@ -256,6 +273,8 @@ extern "C" {
         std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context.worker_count));
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<int64>;
 
+        std::vector<int64> *present_groups_found = new std::vector<int64>;
+
         if (partial_group_row != NULL){
             // Need to, now, find the rows in the partial file.
             const void *final_partial_group_row_ptr = get_final_ptr(partial_group_row, partial_group_layer);
@@ -266,6 +285,7 @@ extern "C" {
                 // Essentially, if the global group number gets found, store the local group number.
                 if (std::binary_search(present_groups->begin(), present_groups->end(), current_partial_row->global_group_number)){
                     groups_per_worker[current_partial_row->worker_id]->push_back(current_partial_row->local_group_number);
+                    present_groups_found->push_back(current_partial_row->global_group_number);
                 }
 
                 partial_group_row = (void*)((uint8*)partial_group_row + sizeof(struct trace_file_partial_row));
@@ -280,11 +300,14 @@ extern "C" {
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
 
         int iters_made = 0;
+        std::vector<int64>* main_worker_set_difference = nullptr;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
             std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
-            if (local_group_nos->size() == 0) continue;
+            // In case of main worker, we can be in the case where the group was completely within our portion of the table
+            // In that case, we'd miss logging it in the local_group_nos.
+            if (local_group_nos->size() == 0 && worker_id != context.main_worker_id) continue;
 
             std::sort(local_group_nos->begin(), local_group_nos->end());
 
@@ -307,7 +330,18 @@ extern "C" {
             while (current_forward_row < current_final_row){
                 current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
 
-                if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
+                bool found = false;
+                found = std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count);
+                if (!found && worker_id == context.main_worker_id){
+                  // Now, we'd need to compute the set difference. It is deferred till here.
+                  if (main_worker_set_difference  == nullptr){
+                    std::sort(present_groups_found->begin(), present_groups_found->end());
+                    main_worker_set_difference = set_difference(present_groups, present_groups_found);
+                  }
+                  found = std::binary_search(main_worker_set_difference->begin(), main_worker_set_difference->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count);
+                }
+
+                if (found){
                     for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
                         int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
 
