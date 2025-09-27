@@ -52,7 +52,6 @@ traceprov:
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/14/server/ utils.c -o utils_$(suff).o
 	gcc -g -O3 -Wall -shared traceprov_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_$(suff).so
 	sudo cp traceprov_$(suff).so /usr/lib/postgresql/14/lib
-	rm -f *.auto.sql
 	sed 's/__FILE__/traceprov_$(suff)/g' traceprov.sql > traceprov_$(suff).auto.sql
 	sudo cp traceprov_$(suff).auto.sql /home/postgres/
 
@@ -68,7 +67,6 @@ infer_set:
 	g++ -g -std=c++11 -O3 -Wall -fPIC -c -I/usr/include/postgresql/14/server/ traceprov_return_infer.cpp -o traceprov_return_$(suff).o
 	g++ -g -std=c++11 -O3 -Wall -shared traceprov_return_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_return_$(suff).so
 	sudo cp traceprov_return_$(suff).so /usr/lib/postgresql/14/lib
-	rm -f *.auto.sql
 	sed 's/__FILE__/traceprov_return_$(suff)/g' traceprov_return_infer.sql > traceprov_return_infer_$(suff).auto.sql
 	sed 's/__FILE__/traceprov_return_$(suff)/g' traceprov_return_infer_template.sql > traceprov_return_infer_template_$(suff).auto.sql
 	sudo cp traceprov_return_infer_$(suff).auto.sql /home/postgres/
