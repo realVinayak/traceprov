@@ -524,7 +524,7 @@ extern "C" {
 
           if (filter_layer_number != -1 && layer.layer_number != filter_layer_number) continue;
 
-          const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_record)*sizeof(int64);
+          const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
 
           const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
 
