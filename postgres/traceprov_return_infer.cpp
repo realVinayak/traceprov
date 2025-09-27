@@ -565,7 +565,16 @@ extern "C" {
           if (final_ptr_offset % record_size){
             elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
           }
-
+          
+	  int64 record_count = 0;
+	  if (layer.layer_number % 3 == 2) {
+	  	// In this case, it is group number. We don't define number of records precisely here.
+		// It is actually just whatever the main layer reports as the number of groups.
+		// Need -2 because layer numbers are 1-indexed
+		record_count = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
+	  } else {
+	  	record_count = final_ptr_offset / record_size;
+	  }
           record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
           record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
           record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
@@ -575,7 +584,7 @@ extern "C" {
           record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
           record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
           record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
-          record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(final_ptr_offset / record_size);
+          record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
           tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
       }
