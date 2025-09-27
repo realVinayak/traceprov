@@ -120,11 +120,11 @@ extern "C" {
         return;
     }
 
-    std::vector<int> *set_diff(std::vector<int> *first, std::vector<int> *second){
+    std::vector<int64> *set_diff(std::vector<int64> *first, std::vector<int64> *second){
       // set diff, assumes sorted.
-      int iter_first = 0;
-      int iter_second = 0;
-      std::vector<int> *set_diff_computed = new std::vector<int>;
+      int64 iter_first = 0;
+      int64 iter_second = 0;
+      std::vector<int64> *set_diff_computed = new std::vector<int64>;
       while (iter_first < first->size()){
               bool did_loop = false;
               while((iter_second < second->size()) && (first->at(iter_first) == second->at(iter_second))) {
@@ -336,7 +336,7 @@ extern "C" {
                   // Now, we'd need to compute the set difference. It is deferred till here.
                   if (main_worker_set_difference  == nullptr){
                     std::sort(present_groups_found->begin(), present_groups_found->end());
-                    main_worker_set_difference = set_difference(present_groups, present_groups_found);
+                    main_worker_set_difference = set_diff(present_groups, present_groups_found);
                   }
                   found = std::binary_search(main_worker_set_difference->begin(), main_worker_set_difference->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count);
                 }
