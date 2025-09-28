@@ -11,7 +11,11 @@ def get_files_in_directory(directory_path):
     files = []
     for entry in os.listdir(directory_path):
         full_path = os.path.join(directory_path, entry)
-        if os.path.isfile(full_path) and ".png" not in str(full_path):
+        if (
+            os.path.isfile(full_path)
+            and ".png" not in str(full_path)
+            and ".tsv" not in str(full_path)
+        ):
             files.append(full_path)
     return files
 
@@ -69,10 +73,11 @@ ignore_set = {
 }
 
 
-def plot_results(db_results, plots):
+def plot_results(db_results, plots, queries_sorted_order):
     all_results = {}
-    queries_sorted_order = ["03", "04", "05", "06", "07"]
+    # queries_sorted_order = ["03", "04", "05", "06", "07"]
     # queries_sorted_order = ["03", "04", "05", "06"]
+    # queries_sorted_order = ["03", "04"]
     sorted_labels = [
         "base",
         "gprom_join(base)",
@@ -185,7 +190,7 @@ def plot_results(db_results, plots):
     # print(all_results)
 
 
-def plot_results_driver(results_dir="./"):
+def plot_results_driver(queries_sorted_order, results_dir="./"):
     num_tuples = ["1M", "5M", "10M", "50M", "100M"]
     files = get_files_in_directory(results_dir)
 
@@ -207,7 +212,7 @@ def plot_results_driver(results_dir="./"):
     for _id, key in enumerate(sorted(grouped_per_db.keys())):
         print(key)
         plots = [axis[_id] for _, axis in all_figures]
-        flat_results = plot_results(grouped_per_db[key], plots)
+        flat_results = plot_results(grouped_per_db[key], plots, queries_sorted_order)
         for _, axis in all_figures:
             axis[_id].set_title(f"Number of groups: {key}")
         all_results.append((key, flat_results))
@@ -277,14 +282,19 @@ def flatten(combined_results, out_dir="./"):
 
 class Options(NamedTuple):
     input_dir: str
+    queries: list[str]
 
 
 def main():
     parser = argparse.ArgumentParser(prog="generate agg figures")
     parser.add_argument("-d", "--input_dir", type=str, required=True)
-
+    parser.add_argument("-q", "--queries", action="append", required=True)
     options: Options = parser.parse_args()
-    all_results_combined = plot_results_driver(options.input_dir)
+    print(options)
+
+    all_results_combined = plot_results_driver(
+        list(sorted(options.queries)), options.input_dir
+    )
     flatten(all_results_combined, options.input_dir)
 
 
