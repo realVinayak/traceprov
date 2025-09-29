@@ -190,7 +190,7 @@ def plot_results(db_results, plots, queries_sorted_order):
     # print(all_results)
 
 
-def plot_results_driver(queries_sorted_order, results_dir="./"):
+def plot_results_driver(queries_sorted_order, results_dir="./", out_dir="./"):
     num_tuples = ["1M", "5M", "10M", "50M", "100M"]
     files = get_files_in_directory(results_dir)
 
@@ -224,7 +224,7 @@ def plot_results_driver(queries_sorted_order, results_dir="./"):
     plt.tight_layout()
 
     for (fig, _), num_tup in zip(all_figures, num_tuples):
-        fig.savefig(f"{results_dir}/execution_time_{num_tup}.png", bbox_inches="tight")
+        fig.savefig(f"{out_dir}/execution_time_{num_tup}.png", bbox_inches="tight")
 
     return all_results
 
@@ -283,19 +283,24 @@ def flatten(combined_results, out_dir="./"):
 class Options(NamedTuple):
     input_dir: str
     queries: list[str]
+    out_dir: str
 
 
 def main():
     parser = argparse.ArgumentParser(prog="generate agg figures")
     parser.add_argument("-d", "--input_dir", type=str, required=True)
     parser.add_argument("-q", "--queries", action="append", required=True)
+    parser.add_argument("-o", "--out_dir", type=str, required=False, default=False)
     options: Options = parser.parse_args()
+    if options.out_dir is None:
+        options.out_dir = options.input_dir
     print(options)
 
     all_results_combined = plot_results_driver(
-        list(sorted(options.queries)), options.input_dir
+        list(sorted(options.queries)), options.input_dir, options.out_dir
     )
-    flatten(all_results_combined, options.input_dir)
+    print(all_results_combined)
+    flatten(all_results_combined, options.out_dir)
 
 
 if __name__ == "__main__":
