@@ -11,7 +11,11 @@ def get_files_in_directory(directory_path):
     files = []
     for entry in os.listdir(directory_path):
         full_path = os.path.join(directory_path, entry)
-        if os.path.isfile(full_path) and ".png" not in str(full_path):
+        if (
+            os.path.isfile(full_path)
+            and ".png" not in str(full_path)
+            and ".tsv" not in str(full_path)
+        ):
             files.append(full_path)
     return files
 
@@ -69,10 +73,11 @@ ignore_set = {
 }
 
 
-def plot_results(db_results, plots):
+def plot_results(db_results, plots, slowdown_plots, queries_sorted_order):
     all_results = {}
-    queries_sorted_order = ["03", "04", "05", "06", "07"]
+    # queries_sorted_order = ["03", "04", "05", "06", "07"]
     # queries_sorted_order = ["03", "04", "05", "06"]
+    # queries_sorted_order = ["03", "04"]
     sorted_labels = [
         "base",
         "gprom_join(base)",
@@ -170,23 +175,39 @@ def plot_results(db_results, plots):
             )
             # ax.bar_label(rects, padding=3, fontsize=6, rotation=30, fmt='%.2f')
         ax.set_xticks(queries_axis + 4.5 * width, queries_sorted_order)
-        # ax.set_ylabel("Execution Time (s)")
-        # ax.set_xlabel("Query")
-        # ax.set_title(f"Execution Time: {num}")
-        # plt.legend(loc='best')
-        # # fig.legend(loc='outside right center', ncols=1, bbox_to_anchor=(1.3, 0.5))
-        # plt.grid(axis="x", linestyle="--", alpha=0.7)
-        # plt.grid(axis="y", linestyle="--", alpha=0.7)
-        # plt.tight_layout()
         ax.set_yscale("log", base=10)
-        # plt.savefig(f'{out_dir}/execution_time_{scale}.png', bbox_inches='tight')
+
+    for outer_id, (num, num_result) in enumerate(all_results_sorted):
+        ax = slowdown_plots[outer_id]
+        base_timings = [res[1] for res in num_result[0][1]]
+
+        def slowdown(x, y):
+            if x is None or y is None:
+                return 0
+            return x / y
+
+        for idx, (impl, impl_results) in enumerate(num_result[1:]):
+            offset = width * idx
+            slowdowns = [
+                slowdown(res[1], base) for res, base in zip(impl_results, base_timings)
+            ]
+            rects = ax.scatter(
+                queries_axis + offset, slowdowns, label=impl, color=colors[idx]
+            )
+            for x, y in zip((queries_axis + offset), slowdowns):
+                ax.text(x * (1.01), y * (1.01), round(y, 2), size=6, rotation=45)
+            # ax.bar_label(rects, padding=3, fontsize=6, rotation=30, fmt='%.2f')
+        ax.set_xticks(queries_axis + 4.5 * width, queries_sorted_order)
     return all_results_sorted
     # print(all_results_sorted)
     # print(all_results)
 
 
-def plot_results_driver(results_dir="./"):
-    num_tuples = ["1M", "5M", "10M", "50M", "100M"]
+num_tuples = ["1M", "5M", "10M", "50M", "100M"]
+
+
+def plot_results_driver(queries_sorted_order, results_dir="./", out_dir="./"):
+
     files = get_files_in_directory(results_dir)
 
     def _reduce(previous: dict, current: str):
@@ -197,18 +218,28 @@ def plot_results_driver(results_dir="./"):
 
     plt.clf()
     all_figures = []
+    slowdown_figures = []
     for i in range(5):
         figure, axs = plt.subplots(1, 3, sharey=True)
         figure.set_size_inches(12, 6)
         all_figures.append((figure, axs))
+
+        figure2, axs2 = plt.subplots(1, 3)
+        figure2.set_size_inches(12, 6)
+        slowdown_figures.append((figure2, axs2))
 
     all_results = []
 
     for _id, key in enumerate(sorted(grouped_per_db.keys())):
         print(key)
         plots = [axis[_id] for _, axis in all_figures]
-        flat_results = plot_results(grouped_per_db[key], plots)
+        slowdown_plots = [axis[_id] for _, axis in slowdown_figures]
+        flat_results = plot_results(
+            grouped_per_db[key], plots, slowdown_plots, queries_sorted_order
+        )
         for _, axis in all_figures:
+            axis[_id].set_title(f"Number of groups: {key}")
+        for _, axis in slowdown_figures:
             axis[_id].set_title(f"Number of groups: {key}")
         all_results.append((key, flat_results))
 
@@ -219,7 +250,11 @@ def plot_results_driver(results_dir="./"):
     plt.tight_layout()
 
     for (fig, _), num_tup in zip(all_figures, num_tuples):
-        fig.savefig(f"{results_dir}/execution_time_{num_tup}.png", bbox_inches="tight")
+        fig.savefig(f"{out_dir}/execution_time_{num_tup}.png", bbox_inches="tight")
+
+    for (fig, axes), num_tup in zip(slowdown_figures, num_tuples):
+        axes[0].legend(loc="center right", prop=dict(size=8), bbox_to_anchor=(4.4, 0.5))
+        fig.savefig(f"{out_dir}/slowdown_{num_tup}.png", bbox_inches="tight")
 
     return all_results
 
@@ -277,15 +312,25 @@ def flatten(combined_results, out_dir="./"):
 
 class Options(NamedTuple):
     input_dir: str
+    queries: list[str]
+    out_dir: str
 
 
 def main():
     parser = argparse.ArgumentParser(prog="generate agg figures")
     parser.add_argument("-d", "--input_dir", type=str, required=True)
-
+    parser.add_argument("-q", "--queries", action="append", required=True)
+    parser.add_argument("-o", "--out_dir", type=str, required=False, default=False)
     options: Options = parser.parse_args()
-    all_results_combined = plot_results_driver(options.input_dir)
-    flatten(all_results_combined, options.input_dir)
+    if options.out_dir is None:
+        options.out_dir = options.input_dir
+    print(options)
+
+    all_results_combined = plot_results_driver(
+        list(sorted(options.queries)), options.input_dir, options.out_dir
+    )
+    print(all_results_combined)
+    flatten(all_results_combined, options.out_dir)
 
 
 if __name__ == "__main__":
