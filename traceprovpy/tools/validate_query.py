@@ -57,7 +57,8 @@ class ValidSchema(AbstractCheck):
 
     @classmethod
     def check(cls, connection, file_content: str, file_name: str):
-        file_as_stmt = f'EXPLAIN {file_content.replace("\n", " ")}'
+        file_content_flat = file_content.replace("\n", " ")
+        file_as_stmt = f"EXPLAIN {file_content_flat}"
 
         try:
             cursor = connection.cursor()
