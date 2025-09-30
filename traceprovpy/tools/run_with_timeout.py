@@ -34,7 +34,6 @@ class RunWithTimeoutOptions(NamedTuple):
 
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None:
-    print(options)
 
     file_dir = os.path.dirname(options.file_path)
 
