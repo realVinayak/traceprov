@@ -19,6 +19,9 @@ class Options(NamedTuple):
     fix: bool
 
 
+show_output = False
+
+
 class AbstractCheck(Exception):
 
     @classmethod
@@ -26,7 +29,8 @@ class AbstractCheck(Exception):
 
     @classmethod
     def pass_(cls, file_name):
-        print(cls.__name__, "(passed", file_name)
+        if show_output:
+            print(cls.__name__, "(passed", file_name)
 
     @classmethod
     def fix(cls, connection, file_content: str, file_name: str):
@@ -178,4 +182,5 @@ def main():
 
 
 if __name__ == "__main__":
+    show_output = True
     main()

@@ -7,7 +7,7 @@ import psycopg2
 import os
 import argparse
 
-from validate_query import validate_sql
+from .validate_query import validate_sql
 
 DEFAULT_REPEAT = 10
 DEFAULT_THROWAWAY = 5
@@ -64,7 +64,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None:
         cursor.execute(timeout_stmt)
         cursor.execute(augmented_sql)
         analyze_result = cursor.fetchall()[0][0][0]
-        print(analyze_result)
+        # print(analyze_result)
         planning_time = analyze_result["Planning Time"]
         execution_time = analyze_result["Execution Time"]
         computed_time = float((planning_time + execution_time) / 1000)
