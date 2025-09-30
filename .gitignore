@@ -24,3 +24,6 @@ postgres/benchmark/micro/aggregate/.ipynb_checkpoints/*
 postgres/benchmark/.config.json
 postgres/benchmark/micro/aggregates/*/*/*.backup
 postgres/benchmark/micro/aggregates/tmp/
+traceprovpy/__pycache__/
+traceprovpy.egg-info/
+traceprovpy/tools/__pycache__
