@@ -22,6 +22,12 @@ from pathlib import Path
 import os
 import argparse
 
+
+def _run_with_timeout(options: RunWithTimeoutOptions):
+    print(options.file_path)
+    return run_with_timeout(options)
+
+
 # Special files that we should always skip.
 SKIP_FILES = ["template_extract_gprom.sql"]
 
@@ -34,7 +40,7 @@ class ExtraQuery(NamedTuple):
 class QuerySpec(NamedTuple):
     key: str
     base: str
-    materialize: str | None
+    materialize: str | None = None
     extras: list[ExtraQuery] = []
 
     @staticmethod
@@ -44,7 +50,7 @@ class QuerySpec(NamedTuple):
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
         query_path = top_dir.joinpath(path)
-        assert query_path.exists()
+        assert query_path.exists(), "path not found: " + str(query_path)
         pack = get_run_options(query_path.as_posix())
         return pack
 
@@ -53,7 +59,9 @@ class QuerySpec(NamedTuple):
     ):
         base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)
         materialize_pack = (
-            QuerySpec.get_pack(self.materialize) if self.materialize else None
+            QuerySpec.get_pack(top_dir, self.materialize, get_run_options)
+            if self.materialize
+            else None
         )
         results = dict(base=[], materialize=[], extras=[])
 
@@ -63,14 +71,14 @@ class QuerySpec(NamedTuple):
                 f'echo "select reinit_state();" | PGPASSWORD={base_pack.password} psql -U {base_pack.user} {base_pack.db}'
             )
 
-            base_time = run_with_timeout(base_pack)
+            base_time = _run_with_timeout(base_pack)
             materialize_time = None
             assert (
                 base_time is not None
             ), f"the base query should always execute: {base_pack}, {self}!"
 
             if materialize_pack:
-                materialize_time = run_with_timeout(materialize_pack)
+                materialize_time = _run_with_timeout(materialize_pack)
 
             if iter < base_pack.throwaway:
                 continue
@@ -102,6 +110,9 @@ class GenericBenchmark(NamedTuple):
         top_dir: str,
         directories: list[QueryDirectory],
     ):
+        # Always run the analyze for statistics initially.
+        os.system(f'echo "ANALYZE;" | PGPASSWORD={password} psql -U {user} {db_name}')
+        print(directories)
 
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(
@@ -113,9 +124,13 @@ class GenericBenchmark(NamedTuple):
             combined_results = {}
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
-                results = query.spec.run_packs(top_dir, _get_options)
-                assert query.query_name not in combined_results
-                combined_results[query.query_name] = results
+                results = query.spec.run_packs(
+                    Path(top_dir) / directory.dir_name / query.query_name, _get_options
+                )
+                combined_results[query.query_name] = {
+                    **combined_results.get(query.query_name, {}),
+                    query.spec.key: results,
+                }
             results_from_dirs[directory.dir_name] = combined_results
 
         return results_from_dirs
