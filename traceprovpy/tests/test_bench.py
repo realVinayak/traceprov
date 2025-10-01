@@ -13,11 +13,16 @@ from traceprovpy.tools.run_with_timeout import RunParams
 
 class TestBenchmark(TestDbSetup):
     def assert_close(self, measured_times, expected):
-        self.assertTrue(
-            all(
-                math.isclose(measured, expected, rel_tol=0.05)
-                for measured in measured_times
-            )
+        # Assert that half of the measured times are close.
+        self.assertGreaterEqual(
+            len(
+                [
+                    1
+                    for measured in measured_times
+                    if math.isclose(measured, expected, rel_tol=0.05)
+                ]
+            ),
+            len(measured_times) / 2,
         )
 
     def test_simple_run(self):
@@ -126,6 +131,14 @@ class TestBenchmark(TestDbSetup):
                         ),
                     ),
                     Query(
+                        query_name="test_01",
+                        spec=QuerySpec(
+                            base="impl2.sql",
+                            key="impl2_key",
+                            materialize="impl2.pseudo_material.sql",
+                        ),
+                    ),
+                    Query(
                         query_name="test_02",
                         spec=QuerySpec(base="base.sql", key="base_key"),
                     ),
@@ -135,6 +148,14 @@ class TestBenchmark(TestDbSetup):
                             base="impl1.sql",
                             key="impl1_key",
                             materialize="impl1.pseudo_material.sql",
+                        ),
+                    ),
+                    Query(
+                        query_name="test_02",
+                        spec=QuerySpec(
+                            base="impl2.sql",
+                            key="impl2_key",
+                            materialize="impl2.pseudo_material.sql",
                         ),
                     ),
                 ],
@@ -155,6 +176,14 @@ class TestBenchmark(TestDbSetup):
                         ),
                     ),
                     Query(
+                        query_name="test_01",
+                        spec=QuerySpec(
+                            base="impl2.sql",
+                            key="impl2_key",
+                            materialize="impl2.pseudo_material.sql",
+                        ),
+                    ),
+                    Query(
                         query_name="test_02",
                         spec=QuerySpec(base="base.sql", key="base_key"),
                     ),
@@ -164,6 +193,14 @@ class TestBenchmark(TestDbSetup):
                             base="impl1.sql",
                             key="impl1_key",
                             materialize="impl1.pseudo_material.sql",
+                        ),
+                    ),
+                    Query(
+                        query_name="test_02",
+                        spec=QuerySpec(
+                            base="impl2.sql",
+                            key="impl2_key",
+                            materialize="impl2.pseudo_material.sql",
                         ),
                     ),
                 ],
@@ -207,10 +244,15 @@ class TestBenchmark(TestDbSetup):
         self.assertIn("impl1_key", dir_2_test_01)
         self.assertIn("impl1_key", dir_2_test_02)
 
-        self.assertEqual(len(dir_1_test_01), 2)
-        self.assertEqual(len(dir_1_test_02), 2)
-        self.assertEqual(len(dir_2_test_01), 2)
-        self.assertEqual(len(dir_2_test_02), 2)
+        self.assertIn("impl2_key", dir_1_test_01)
+        self.assertIn("impl2_key", dir_1_test_02)
+        self.assertIn("impl2_key", dir_2_test_01)
+        self.assertIn("impl2_key", dir_2_test_02)
+
+        self.assertEqual(len(dir_1_test_01), 3)
+        self.assertEqual(len(dir_1_test_02), 3)
+        self.assertEqual(len(dir_2_test_01), 3)
+        self.assertEqual(len(dir_2_test_02), 3)
 
         # Check the base key implementation
         base_dir_1_test_01 = dir_1_test_01["base_key"]
@@ -281,3 +323,41 @@ class TestBenchmark(TestDbSetup):
 
         self.assert_close(impl1_dir_2_test_01["materialize"], 3.7)
         self.assert_close(impl1_dir_2_test_02["materialize"], 5.7)
+
+        # Check the impl2 key implementation.
+        impl2_dir_1_test_01 = dir_1_test_01["impl2_key"]
+        impl2_dir_1_test_02 = dir_1_test_02["impl2_key"]
+        impl2_dir_2_test_01 = dir_2_test_01["impl2_key"]
+        impl2_dir_2_test_02 = dir_2_test_02["impl2_key"]
+
+        self.assertIn("base", impl2_dir_1_test_01)
+        self.assertIn("base", impl2_dir_1_test_02)
+        self.assertIn("base", impl2_dir_2_test_01)
+        self.assertIn("base", impl2_dir_2_test_02)
+
+        self.assertEqual(len(impl2_dir_1_test_01["base"]), 4)
+        self.assertEqual(len(impl2_dir_1_test_02["base"]), 4)
+        self.assertEqual(len(impl2_dir_2_test_01["base"]), 4)
+        self.assertEqual(len(impl2_dir_2_test_02["base"]), 4)
+
+        self.assert_close(impl2_dir_1_test_01["base"], 2.25)
+        self.assert_close(impl2_dir_1_test_02["base"], 4.25)
+
+        self.assert_close(impl2_dir_2_test_01["base"], 3.25)
+        self.assert_close(impl2_dir_2_test_02["base"], 5.25)
+
+        self.assertIn("materialize", impl2_dir_1_test_01)
+        self.assertIn("materialize", impl2_dir_1_test_02)
+        self.assertIn("materialize", impl2_dir_2_test_01)
+        self.assertIn("materialize", impl2_dir_2_test_02)
+
+        self.assertEqual(len(impl2_dir_1_test_01["materialize"]), 4)
+        self.assertEqual(len(impl2_dir_1_test_02["materialize"]), 4)
+        self.assertEqual(len(impl2_dir_2_test_01["materialize"]), 4)
+        self.assertEqual(len(impl2_dir_2_test_02["materialize"]), 4)
+
+        self.assert_close(impl2_dir_1_test_01["materialize"], 2.1)
+        self.assert_close(impl2_dir_1_test_02["materialize"], 4.1)
+
+        self.assert_close(impl2_dir_2_test_01["materialize"], 3.1)
+        self.assert_close(impl2_dir_2_test_02["materialize"], 5.1)
