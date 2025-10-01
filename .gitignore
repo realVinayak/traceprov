@@ -27,3 +27,4 @@ postgres/benchmark/micro/aggregates/tmp/
 traceprovpy/__pycache__/
 traceprovpy.egg-info/
 traceprovpy/tools/__pycache__
+traceprovpy/tests/__pycache__
