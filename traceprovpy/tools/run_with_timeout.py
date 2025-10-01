@@ -7,7 +7,7 @@ import psycopg2
 import os
 import argparse
 
-from .validate_query import validate_sql
+from traceprovpy.tools.validate_query import validate_sql
 
 DEFAULT_REPEAT = 10
 DEFAULT_THROWAWAY = 5
