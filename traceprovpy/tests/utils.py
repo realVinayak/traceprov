@@ -16,6 +16,8 @@ class TestDbSetup(TestCase):
             password=os.getenv("TRACEPROV_TEST_PASSWORD"),
             port="5432",
         )
+        cls.pg_user = os.getenv("TRACEPROV_TEST_USER")
+        cls.pg_password = os.getenv("TRACEPROV_TEST_PASSWORD")
         cls.intial_connection = initial_connection
 
         cursor = initial_connection.cursor()
