@@ -17,7 +17,11 @@
 #       -- Q02
 
 from typing import Callable, NamedTuple
-from traceprovpy.tools.run_with_timeout import run_with_timeout, RunWithTimeoutOptions
+from traceprovpy.tools.run_with_timeout import (
+    RunParams,
+    run_with_timeout,
+    RunWithTimeoutOptions,
+)
 from pathlib import Path
 import os
 import argparse
@@ -65,7 +69,7 @@ class QuerySpec(NamedTuple):
         )
         results = dict(base=[], materialize=[], extras=[])
 
-        for iter in range(base_pack.repeat + base_pack.throwaway):
+        for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
             print("ON INDEX: ", iter)
             os.system(
                 f'echo "select reinit_state();" | PGPASSWORD={base_pack.password} psql -U {base_pack.user} {base_pack.db}'
@@ -80,7 +84,7 @@ class QuerySpec(NamedTuple):
             if materialize_pack:
                 materialize_time = _run_with_timeout(materialize_pack)
 
-            if iter < base_pack.throwaway:
+            if iter < base_pack.params.throwaway:
                 continue
             results["base"].append(base_time)
             if materialize_time:
@@ -109,6 +113,7 @@ class GenericBenchmark(NamedTuple):
         db_name: str,
         top_dir: str,
         directories: list[QueryDirectory],
+        params=RunParams(repeat=4, throwaway=1),
     ):
         # Always run the analyze for statistics initially.
         os.system(f'echo "ANALYZE;" | PGPASSWORD={password} psql -U {user} {db_name}')
@@ -116,7 +121,11 @@ class GenericBenchmark(NamedTuple):
 
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(
-                user=user, password=password, db=db_name, file_path=file_path
+                user=user,
+                password=password,
+                db=db_name,
+                file_path=file_path,
+                params=params,
             )
 
         results_from_dirs = {}
