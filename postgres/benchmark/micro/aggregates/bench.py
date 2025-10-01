@@ -25,11 +25,28 @@ per_dir_queries = [
     ]
     for qnum in query_nums
 ]
+
 directories = [
     QueryDirectory(
         dir_name="queries_skew_1_0_num_1000000",
         queries=[q for per_dir in per_dir_queries for q in per_dir],
-    )
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_5000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_10000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_50000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_100000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
 ]
 
 result = benchmark.run(
