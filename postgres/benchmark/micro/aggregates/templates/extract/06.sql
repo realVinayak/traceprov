@@ -1,0 +1,1 @@
+SELECT %GUESSED_ID% FROM (PROVENANCE of (select count(*) as c, z from %TABLE% USE PROVENANCE (id) group by z ORDER BY c limit 10 )) F;

@@ -1,4 +1,4 @@
---- SQL OUT --- ON 2025-09-21T05:13:47 
+CREATE TEMP TABLE gprom_lineage AS (
 WITH temp_view_1 AS (
 SELECT /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0", F0_0."z" AS "GROUP_0", F0_0."prov_skew__1__1__num__5000000_id" AS "prov_skew__1__1__num__5000000_id", dense_rank() OVER ( ORDER BY F0_0."z") AS "_result_tid", row_number() OVER (PARTITION BY F0_0."z" ORDER BY F0_0."z") AS "_setprov_dup_count"
 FROM (
@@ -13,4 +13,4 @@ SELECT F0_0."AGGR_0" AS "min_value", F0_0."GROUP_0" AS "z", F0_0."prov_skew__1__
 FROM (SELECT * FROM temp_view_1) F0_0) F0_0) F0_0
 WHERE (F0_0."AGGR_0" > 900))
 SELECT F0_0."prov_skew__1__1__num__5000000_id" AS "prov_skew__1__1__num__5000000_id"
-FROM (SELECT * FROM temp_view_0) F0_0;
+FROM (SELECT * FROM temp_view_0) F0_0);

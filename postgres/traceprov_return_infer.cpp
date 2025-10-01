@@ -392,5 +392,58 @@ extern "C" {
         PG_RETURN_INT64(duration_time);
     }
 
+    PG_FUNCTION_INFO_V1(traceprov_sync_time);
+
+    Datum traceprov_sync_time(FunctionCallInfo fcinfo){
+        std::vector<std::string> *messages = new std::vector<std::string>;
+
+        auto start = std::chrono::high_resolution_clock::now();
+
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping the shared context for sync!");
+        }
+
+	int final_code = 0;
+
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+            
+            struct local_context *worker_local_context = &context.local_contexts[worker_id];
+
+            for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+
+                if (worker_local_context->cached_layers[layer_id].layer_number){
+                    void *ptr = NULL;
+                    map_layer_file(
+                        worker_local_context->cached_layers[layer_id].layer_number,
+                        worker_id,
+                        &ptr,
+                        worker_local_context->cached_layers[layer_id].size
+                    );
+                    char worker_layer[128] = {0};
+                    if (ptr == NULL){
+                        messages->push_back("Skipping");
+                        continue;
+                    }
+                    sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
+                    messages->push_back(worker_layer);
+                    final_code |= (msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC));
+		    if (final_code) {elog(ERROR, "Error doing the msync!");}
+                    
+                }
+            }
+        }
+
+        auto end = std::chrono::high_resolution_clock::now();
+
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        uint64 duration_time = (uint64)duration.count();
+
+        for (std::string s: *messages){
+            elog(INFO, "SYNC: %s", s.c_str());
+	}
+	elog(INFO, "Final code: %d", final_code);
+        PG_RETURN_INT64(duration_time);
+    }
 };
 
