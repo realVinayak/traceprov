@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "traceprovpy"
+version = "0.1.0"
+description = "TraceProv Python Interface"
+authors = [{ name="Vinayak Jha", email="vinayakj@uic.edu" }]
+readme = "README.md"
+requires-python = ">=3.7"
+
+[tool.setuptools]
+packages = ["traceprovpy"]
+
+[project.optional-dependencies]
+dev = ["pytest"]

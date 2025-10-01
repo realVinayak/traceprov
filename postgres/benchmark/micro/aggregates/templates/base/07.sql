@@ -1,0 +1,1 @@
+select count(*) as c, z from %TABLE% group by z ORDER BY c desc limit 10;

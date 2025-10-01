@@ -1,4 +1,3 @@
---- SQL OUT --- ON 2025-09-20T17:09:32 
 create temp table gprom_lineage as (
 WITH temp_view_1 AS (
 SELECT /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0", F0_0."z" AS "GROUP_0", F0_0."prov_skew__1__1__num__5000000_id" AS "prov_skew__1__1__num__5000000_id", dense_rank() OVER ( ORDER BY F0_0."z") AS "_result_tid", row_number() OVER (PARTITION BY F0_0."z" ORDER BY F0_0."z") AS "_setprov_dup_count"

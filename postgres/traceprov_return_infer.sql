@@ -8,3 +8,8 @@ CREATE OR REPLACE FUNCTION traceprov_infer_time(IN integer, IN integer, IN integ
     RETURNS BIGINT
     AS '$libdir/__FILE__', 'traceprov_infer_time'
     LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION traceprov_sync_time(IN integer)
+    RETURNS BIGINT
+    AS '$libdir/__FILE__', 'traceprov_sync_time'
+    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;

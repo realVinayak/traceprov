@@ -13,6 +13,7 @@ class Options(NamedTuple):
     db: str
     timeout: int
     driver: bool
+    analyze: bool
 
 
 def resolve_filename(file_name: str, query_num: str):
@@ -36,6 +37,9 @@ def main():
     parser.add_argument(
         "--driver", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--analyze", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parsed: Options = parser.parse_args()
     filename = resolve_filename(parsed.file, parsed.q)
@@ -53,7 +57,9 @@ def main():
     new_file_name = f"/tmp/{uuid.uuid4()}_file.sql"
 
     with open(filename) as f:
-        new_sql = f"SET statement_timeout='{parsed.timeout}s';\n" + f.read()
+        timeout_str = f"SET statement_timeout='{parsed.timeout}s';\n"
+        initial_sql_str = f.read()
+        new_sql = timeout_str + initial_sql_str
 
     with open(new_file_name, "w") as wf:
         wf.write(new_sql)
@@ -73,6 +79,24 @@ def main():
             cursor.execute(new_sql)
             end = time.perf_counter()
             computed_time = end - start
+        elif parsed.analyze:
+            print("using analyze")
+            cleaned_sql = initial_sql_str.replace("\n", " ")
+            assert cleaned_sql.count(";") == 1, cleaned_sql
+            augmented_sql = f"EXPLAIN (analyze, timing off, format JSON) {cleaned_sql}"
+            cursor = connection.cursor()
+            cursor.execute(timeout_str)
+            try:
+                cursor.execute(augmented_sql)
+                _analyze_result = cursor.fetchall()[0][0][0]
+                print(_analyze_result)
+                planning_time = _analyze_result["Planning Time"]
+                execution_time = _analyze_result["Execution Time"]
+                computed_time = (planning_time + execution_time) / 1000
+                cursor.close()
+            except Exception as e:
+                print(e)
+                computed_time = -1
         else:
             print("using shell")
             start = time.perf_counter()

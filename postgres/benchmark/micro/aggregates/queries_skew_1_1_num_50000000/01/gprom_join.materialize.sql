@@ -1,4 +1,4 @@
---- SQL OUT --- ON 2025-09-19T22:48:26 
+CREATE TEMP TABLE gprom_lineage AS (
 WITH temp_view_2 AS (
 SELECT /*+ materialize */ F0_0."id" AS "id", F0_0."z" AS "z", F0_0."val" AS "val", F0_0."id" AS "prov_skew__1__1__num__50000000_id"
 FROM "skew_1_1_num_50000000" F0_0),
@@ -14,4 +14,4 @@ temp_view_0 AS (
 SELECT /*+ materialize */ F0_0."AGGR_0" AS "count(val)", F0_0."GROUP_0" AS "z", F0_0."prov_skew__1__1__num__50000000_id" AS "prov_skew__1__1__num__50000000_id"
 FROM (SELECT * FROM temp_view_1) F0_0)
 SELECT F0_0."prov_skew__1__1__num__50000000_id" AS "prov_skew__1__1__num__50000000_id"
-FROM (SELECT * FROM temp_view_0) F0_0;
+FROM (SELECT * FROM temp_view_0) F0_0);

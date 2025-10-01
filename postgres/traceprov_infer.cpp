@@ -83,6 +83,54 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
     return final_row;
 }
 
+// Walks through the shared context, and msyncs each file it sees.
+int traceprov_sync(){
+
+    auto start = std::chrono::high_resolution_clock::now();
+    int rc = 0;
+    struct traceprov_shared_context context;
+
+    if (map_traceprov_shared_context(&context)){
+        rc = 1;
+        goto end;
+    }
+
+    for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+
+        struct local_context *worker_local_context = &context.local_contexts[worker_id];
+
+        // Ugh.
+        for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+
+            if (worker_local_context->cached_layers[layer_id].layer_number){
+                void *ptr = NULL;
+                map_layer_file(
+                    worker_local_context->cached_layers[layer_id].layer_number,
+                    worker_id,
+                    &ptr,
+                    worker_local_context->cached_layers[layer_id].size
+                );
+                if (ptr == NULL){
+                    PRINT_DEBUG("Skipping...");
+                }
+		std::cout << "Doing sync on - (WORKER: " << worker_id << ") LAYER: (" << layer_id << ")" << std::endl;
+		if(msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC)){
+                    PRINT_DEBUG("Error doing the msync!");
+                }
+            }
+        }
+    }
+
+end:
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    std::cout << "SYNC Took: " << duration.count() << " ms" << std::endl;
+
+    PRINT_DEBUG("Exiting sync!");
+    return rc;
+}
+
 int main(int argc, char *argv[]){
 
     int layer_number = 1;
@@ -92,6 +140,7 @@ int main(int argc, char *argv[]){
     int reference_layer = 0;
 
     int arg_index = 1;
+    bool is_sync = false;
 
     while (arg_index < argc){
         // Parse out layer number
@@ -110,9 +159,16 @@ int main(int argc, char *argv[]){
         if (strcmp(argv[arg_index], "-ref_layer") == 0){
             reference_layer = atoi(argv[arg_index + 1]);
         }
+        if (strcmp(argv[arg_index], "--sync") == 0){
+            is_sync = atoi(argv[arg_index + 1]) != 0;
+        }
         arg_index += 2;
     }
 
+    if (is_sync){
+        std::cout << "Is syncing!" << std::endl;
+        return traceprov_sync();
+    }
     std::cout << "Using layer: " << layer_number << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
