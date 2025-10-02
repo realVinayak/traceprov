@@ -34,14 +34,37 @@ class RunWithTimeoutOptions(NamedTuple):
     file_path: str
     host: str = DEFAULT_HOST
     port: str = DEFAULT_PORT
+    capture_output: bool = False
     params: RunParams = RunParams()
+    # Just some extra context stuff (like connections)
+    extras: dict | None = None
+    skip_validation: bool = False
+
+    def close_all(self):
+        if self.extras is None:
+            return
+        cached_connection = self.extras.get(CACHED_CONNECTION)
+        if cached_connection:
+            cached_connection.close()
 
 
-def run_with_timeout(options: RunWithTimeoutOptions) -> float | None:
+CACHED_CONNECTION = "_cached_connection"
+
+
+def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     file_dir = os.path.dirname(options.file_path)
 
-    connection = psycopg2.connect(
+    # The caching is used just once.
+    # That is, if the extras is a dict, then connection is stored.
+
+    cached_connection = None
+    should_cache_connection = False
+    if options.extras is not None:
+        should_cache_connection = True
+        cached_connection = options.extras.get(CACHED_CONNECTION)
+
+    connection = cached_connection or psycopg2.connect(
         database=options.db,
         host=options.host,
         user=options.user,
@@ -49,7 +72,15 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None:
         port=options.port,
     )
 
-    validate_sql(connection, file_dir, options.file_path)
+    if (
+        options.extras is not None
+        and should_cache_connection
+        and cached_connection is None
+    ):
+        options.extras[CACHED_CONNECTION] = connection
+
+    if not options.skip_validation:
+        validate_sql(connection, file_dir, options.file_path)
 
     if options.params.dry_run:
         return -1
@@ -68,14 +99,22 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None:
         cursor.execute(timeout_stmt)
         cursor.execute(augmented_sql)
         analyze_result = cursor.fetchall()[0][0][0]
-        # print(analyze_result)
         planning_time = analyze_result["Planning Time"]
         execution_time = analyze_result["Execution Time"]
         computed_time = float((planning_time + execution_time) / 1000)
+        if options.capture_output:
+            # Now, need to run the query again.
+            cursor.execute(flattend_sql_query)
+            captured_result = cursor.fetchall()
+            new_result = dict(timing=computed_time, captured=captured_result)
+            computed_time = new_result
     except psycopg2.errors.QueryCanceled:
         computed_time = None
 
     cursor.close()
+    # Don't close if caching the connection.
+    if not should_cache_connection:
+        connection.close()
 
     return computed_time
 
@@ -104,6 +143,13 @@ def run_from_cmd():
         default=DEFAULT_DRY_RUN,
     )
     parser.add_argument("-t", "--timeout", required=False, default=DEFAULT_TIMEOUT)
+    parser.add_argument(
+        "-c",
+        "--capture",
+        required=False,
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
 
     parsed = parser.parse_args()
     run_options = RunParams(
@@ -120,6 +166,7 @@ def run_from_cmd():
         host=parsed.host,
         port=parsed.port,
         params=run_options,
+        capture_output=parsed.capture,
     )
     measured_time = run_with_timeout(runtime_options)
     print("measured time: ", measured_time)

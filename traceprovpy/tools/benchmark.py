@@ -16,7 +16,7 @@
 #       -- Q01
 #       -- Q02
 
-from typing import Callable, NamedTuple
+from typing import Callable, Literal, NamedTuple
 from traceprovpy.tools.run_with_timeout import (
     RunParams,
     run_with_timeout,
@@ -32,13 +32,14 @@ def _run_with_timeout(options: RunWithTimeoutOptions):
     return run_with_timeout(options)
 
 
-# Special files that we should always skip.
-SKIP_FILES = ["template_extract_gprom.sql"]
-
-
 class ExtraQuery(NamedTuple):
     label: str
     query: str
+    # We allow some arbitrary queries to run, right after a previous query.
+    # The depends_on helps control when this query runs.
+    # For example, we'd run
+    should_run: Callable[["QuerySpec", Literal["base", "materialize"]], bool]
+    skip_validation: bool = False
 
 
 class QuerySpec(NamedTuple):
@@ -53,7 +54,10 @@ class QuerySpec(NamedTuple):
         path: str,
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
-        query_path = top_dir.joinpath(path)
+        if path.startswith("$ROOT"):
+            query_path = Path(path.replace("$ROOT", os.getcwd()))
+        else:
+            query_path = top_dir.joinpath(path)
         assert query_path.exists(), "path not found: " + str(query_path)
         pack = get_run_options(query_path.as_posix())
         return pack
@@ -69,6 +73,20 @@ class QuerySpec(NamedTuple):
         )
         results = dict(base=[], materialize=[], extras=[])
 
+        def _run_extras(extras: list[ExtraQuery], _extra_context: dict | None = None):
+            extra_results = dict()
+            for extra in extras:
+                extra_pack = QuerySpec.get_pack(
+                    top_dir, extra.query, get_run_options
+                )._replace(
+                    capture_output=True,
+                    extras=_extra_context,
+                    skip_validation=extra.skip_validation,
+                )
+                extra_result = _run_with_timeout(extra_pack)
+                extra_results[extra.label] = extra_result
+            return extra_results
+
         for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
             print("ON INDEX: ", iter)
             os.system(
@@ -81,14 +99,39 @@ class QuerySpec(NamedTuple):
                 base_time is not None
             ), f"the base query should always execute: {base_pack}, {self}!"
 
+            base_extras_to_run = [
+                extra for extra in self.extras if extra.should_run(self, "base")
+            ]
+
+            materialize_context = dict()
             if materialize_pack:
+                materialize_pack = materialize_pack._replace(extras=materialize_context)
                 materialize_time = _run_with_timeout(materialize_pack)
+                assert len(materialize_context) != 0
 
             if iter < base_pack.params.throwaway:
                 continue
             results["base"].append(base_time)
+
+            base_extra_results = _run_extras(base_extras_to_run)
+            materialize_extra_results = []
+
             if materialize_time:
                 results["materialize"].append(materialize_time)
+                mat_extras_to_run = [
+                    extra
+                    for extra in self.extras
+                    if extra.should_run(self, "materialize")
+                ]
+                materialize_extra_results = _run_extras(
+                    mat_extras_to_run, materialize_context
+                )
+
+            # This is where we end up closing the connections.
+            if materialize_pack:
+                materialize_pack.close_all()
+            results["extras"].append(base_extra_results)
+            results["extras"].append(materialize_extra_results)
 
         return results
 
@@ -113,7 +156,7 @@ class GenericBenchmark(NamedTuple):
         db_name: str,
         top_dir: str,
         directories: list[QueryDirectory],
-        params=RunParams(repeat=4, throwaway=1),
+        params=RunParams(),
     ):
         # Always run the analyze for statistics initially.
         os.system(f'echo "ANALYZE;" | PGPASSWORD={password} psql -U {user} {db_name}')

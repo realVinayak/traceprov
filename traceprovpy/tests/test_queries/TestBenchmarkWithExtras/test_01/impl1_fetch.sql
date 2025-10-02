@@ -1,0 +1,1 @@
+SELECT * FROM impl1_materialize;
