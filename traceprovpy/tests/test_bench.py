@@ -1,5 +1,6 @@
 from traceprovpy.tests.utils import TestDbSetup
 from traceprovpy.tools.benchmark import (
+    ExtraQuery,
     GenericBenchmark,
     Query,
     QueryDirectory,
@@ -361,3 +362,54 @@ class TestBenchmark(TestDbSetup):
 
         self.assert_close(impl2_dir_2_test_01["materialize"], 3.1)
         self.assert_close(impl2_dir_2_test_02["materialize"], 5.1)
+
+    def test_extras(self):
+        benchmark = GenericBenchmark("benchmarks-with-extras")
+        directories = [
+            QueryDirectory(
+                dir_name="dir_1",
+                queries=[
+                    Query(
+                        query_name="test_01",
+                        spec=QuerySpec(base="base.sql", key="base_key"),
+                    ),
+                    Query(
+                        query_name="test_01",
+                        spec=QuerySpec(
+                            base="impl1.sql",
+                            key="impl1_key",
+                            materialize="impl1_materialize.sql",
+                            extras=[
+                                ExtraQuery(
+                                    label="impl1_count",
+                                    query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_materialize_count.sql",
+                                    should_run=(
+                                        lambda _, b_or_m: b_or_m == "materialize"
+                                    ),
+                                    skip_validation=True,
+                                ),
+                                ExtraQuery(
+                                    label="impl1_fetch",
+                                    query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_fetch.sql",
+                                    should_run=(
+                                        lambda _, b_or_m: b_or_m == "materialize"
+                                    ),
+                                    skip_validation=True,
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        ]
+
+        result = benchmark.run(
+            TestBenchmark.pg_user,
+            TestBenchmark.pg_password,
+            TestBenchmark.test_db,
+            f"{os.getcwd()}/tests/test_queries/TestBenchmarkWithExtras",
+            directories,
+            params=RunParams(repeat=4, throwaway=1),
+        )
+
+        print(result)
