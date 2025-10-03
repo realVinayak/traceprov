@@ -154,6 +154,62 @@ class QueryDirectory(NamedTuple):
 class GenericBenchmark(NamedTuple):
     name: str
 
+    def run_from_argparse(
+        self,
+        directories: list[QueryDirectory],
+        params=RunParams(),
+    ):
+        parser = argparse.ArgumentParser(prog=f"run-{self.name}")
+        parser.add_argument("-u", "--user", required=True)
+        parser.add_argument("-p", "--password", required=True)
+        parser.add_argument("-db", "--db", required=True)
+        parser.add_argument("-suff", "--suff", required=True)
+        parser.add_argument("-tp_root", "--traceprov_root", required=True)
+        parser.add_argument("-t_root", "--test_root", required=True)
+
+        parsed = parser.parse_args()
+        self.setup(
+            parsed.user, parsed.password, parsed.db, parsed.traceprov_root, parsed.suff
+        )
+        return self.run(
+            parsed.user,
+            parsed.password,
+            parsed.db,
+            parsed.test_root,
+            directories,
+            params,
+        )
+
+    def setup(
+        self,
+        user: str,
+        password: str,
+        db_name: str,
+        traceprov_postgres_root: str,
+        suff: str = None,
+    ):
+        if suff is None:
+            suff = self.name
+        os.system(
+            f"cd {traceprov_postgres_root} && make clean && make traceprov suff={suff} && make infer_set suff={suff}"
+        )
+        traceprov_sql = Path(traceprov_postgres_root) / f"traceprov_{suff}.auto.sql"
+        traceprov_infer_set = (
+            Path(traceprov_postgres_root) / f"traceprov_return_infer_{suff}.auto.sql"
+        )
+        assert traceprov_sql.exists(), f"{traceprov_sql.as_posix()} should exist!"
+        assert (
+            traceprov_infer_set.exists()
+        ), f"{traceprov_infer_set.as_posix()} should exist!"
+
+        os.system(
+            f"PGPASSWORD={password} psql -U {user} {db_name} -f {traceprov_sql.as_posix()}"
+        )
+
+        os.system(
+            f"PGPASSWORD={password} psql -U {user} {db_name} -f {traceprov_infer_set.as_posix()}"
+        )
+
     def run(
         self,
         user: str,
