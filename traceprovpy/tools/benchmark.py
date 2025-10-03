@@ -114,7 +114,7 @@ class QuerySpec(NamedTuple):
             results["base"].append(base_time)
 
             base_extra_results = _run_extras(base_extras_to_run)
-            materialize_extra_results = []
+            materialize_extra_results = {}
 
             if materialize_time:
                 results["materialize"].append(materialize_time)
@@ -130,8 +130,13 @@ class QuerySpec(NamedTuple):
             # This is where we end up closing the connections.
             if materialize_pack:
                 materialize_pack.close_all()
-            results["extras"].append(base_extra_results)
-            results["extras"].append(materialize_extra_results)
+
+            merged_extra_results = {**base_extra_results, **materialize_extra_results}
+            assert len(base_extra_results) + len(materialize_extra_results) == len(
+                merged_extra_results
+            )
+            if len(merged_extra_results) > 0:
+                results["extras"].append(merged_extra_results)
 
         return results
 
