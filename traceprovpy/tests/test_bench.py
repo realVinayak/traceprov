@@ -413,3 +413,31 @@ class TestBenchmark(TestDbSetup):
         )
 
         print(result)
+
+        self.assertEqual(len(result), 1)
+        self.assertIn("dir_1", result)
+        dir_1_result = result["dir_1"]
+
+        self.assertEqual(len(dir_1_result), 1)
+        self.assertIn("test_01", dir_1_result)
+
+        dir_1_test_01_result = dir_1_result["test_01"]
+        self.assertIn("base_key", dir_1_test_01_result)
+        self.assertIn("impl1_key", dir_1_test_01_result)
+        self.assertEqual(len(dir_1_test_01_result), 2)
+
+        base_dir_1_test_01_result = dir_1_test_01_result["base_key"]
+        self.assertEqual(len(base_dir_1_test_01_result["base"]), 4)
+        self.assert_close(base_dir_1_test_01_result["base"], 3)
+        self.assertEqual(len(base_dir_1_test_01_result["extras"]), 0)
+
+        impl1_dir_1_test_01_result = dir_1_test_01_result["impl1_key"]
+        self.assertEqual(len(impl1_dir_1_test_01_result["base"]), 4)
+        self.assert_close(impl1_dir_1_test_01_result["base"], 2)
+        self.assertEqual(len(impl1_dir_1_test_01_result["extras"]), 4)
+
+        for extra in impl1_dir_1_test_01_result["extras"]:
+            self.assertEqual(extra["impl1_count"]["captured"], [(5,)])
+            self.assertEqual(
+                extra["impl1_fetch"]["captured"], [(1,), (2,), (3,), (4,), (5,)]
+            )
