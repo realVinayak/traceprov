@@ -1,25 +1,53 @@
 from traceprovpy.tools.benchmark import (
+    ExtraQuery,
     GenericBenchmark,
     Query,
     QueryDirectory,
     QuerySpec,
 )
+from traceprovpy.tools.run_with_timeout import RunParams
 
+# query_nums = ["03", "04", "05", "06", "07"]
+query_nums = ["04", "06", "05"]
 
-benchmark = GenericBenchmark("aggregates")
-
-
-query_nums = ["03", "04", "05", "06", "07"]
+RUN_IS_MATERIALIZE = lambda _, b_or_m: b_or_m == "materialize"
 
 per_dir_queries = [
     [
         Query(query_name=qnum, spec=QuerySpec(base="base.sql", key="base")),
+        #Query(
+        #    query_name=qnum,
+        #    spec=QuerySpec(
+        #        base="gprom_window.sql",
+        #        key="gprom_window",
+        #        materialize="gprom_window.materialize.sql",
+        #        extras=[
+        #            ExtraQuery(
+        #                label="gprom_window_materialize_count",
+        #                query="$ROOT/templates/gprom/mat_count.sql",
+        #                should_run=RUN_IS_MATERIALIZE,
+        #            ),
+        #        ],
+        #    ),
+        #),
         Query(
             query_name=qnum,
             spec=QuerySpec(
-                base="gprom_window.sql",
-                key="gprom_window",
-                materialize="gprom_window.materialize.sql",
+                base="traceprov.sql",
+                key="traceprov",
+                materialize=f"$ROOT/templates/traceprov/{qnum}.materialize.sql",
+                extras=[
+                    ExtraQuery(
+                        label="traceprov_materialize_count",
+                        query="$ROOT/templates/traceprov/mat_count.sql",
+                        should_run=RUN_IS_MATERIALIZE,
+                    ),
+                    ExtraQuery(
+                        label="traceprov_infer_time",
+                        query=f"$ROOT/templates/traceprov/{qnum}.infertime.sql",
+                        should_run=RUN_IS_MATERIALIZE,
+                    ),
+                ],
             ),
         ),
     ]
@@ -35,22 +63,30 @@ directories = [
         dir_name="queries_skew_1_0_num_5000000",
         queries=[q for per_dir in per_dir_queries for q in per_dir],
     ),
-    QueryDirectory(
-        dir_name="queries_skew_1_0_num_10000000",
-        queries=[q for per_dir in per_dir_queries for q in per_dir],
-    ),
-    QueryDirectory(
-        dir_name="queries_skew_1_0_num_50000000",
-        queries=[q for per_dir in per_dir_queries for q in per_dir],
-    ),
-    QueryDirectory(
-        dir_name="queries_skew_1_0_num_100000000",
-        queries=[q for per_dir in per_dir_queries for q in per_dir],
-    ),
+    # QueryDirectory(
+    #     dir_name="queries_skew_1_0_num_10000000",
+    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
+    # ),
+    # QueryDirectory(
+    #     dir_name="queries_skew_1_0_num_50000000",
+    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
+    # ),
+    # QueryDirectory(
+    #     dir_name="queries_skew_1_0_num_100000000",
+    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
+    # ),
 ]
 
-result = benchmark.run(
-    "postgres", "postgres", "microbench_agg_02_10", "./", directories
-)
+import json
+def main():
+    benchmark = GenericBenchmark("aggregates")
+    result = benchmark.run_from_argparse(
+        directories, params=RunParams(repeat=10, throwaway=1)
+    )
 
-print(result)
+    print(result)
+    with open("result_dump.json", 'w') as f:
+        f.write(json.dumps(result, indent=4))
+
+if __name__ == "__main__":
+    main()
