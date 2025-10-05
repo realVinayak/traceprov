@@ -18,13 +18,21 @@ DEFAULT_DRY_RUN = False
 
 
 class RunParams(NamedTuple):
-    repeat: int = DEFAULT_REPEAT
-    throwaway: int = DEFAULT_THROWAWAY
+    repeat: None | int = DEFAULT_REPEAT
+    throwaway: None | int = DEFAULT_THROWAWAY
     # the default timeout is of 10 minutes (pretty generous)
     timeout: int = DEFAULT_TIMEOUT
     # If it is dry run, don't run the actual test, but just make sure the queries
     # confirm to format correctly.
     dry_run: bool = False
+    execution_time: int = None
+
+    def validate(new_params):
+        if new_params.execution_time is not None and (
+            new_params.repeat is not None or new_params.throwaway is not None
+        ):
+            raise Exception("execution time or runtime params should be defined")
+        return new_params
 
 
 class RunWithTimeoutOptions(NamedTuple):
