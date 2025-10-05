@@ -15,7 +15,7 @@ RUN_IS_MATERIALIZE = lambda _, b_or_m: b_or_m == "materialize"
 per_dir_queries = [
     [
         Query(query_name=qnum, spec=QuerySpec(base="base.sql", key="base")),
-        #Query(
+        # Query(
         #    query_name=qnum,
         #    spec=QuerySpec(
         #        base="gprom_window.sql",
@@ -29,27 +29,27 @@ per_dir_queries = [
         #            ),
         #        ],
         #    ),
-        #),
-        Query(
-            query_name=qnum,
-            spec=QuerySpec(
-                base="traceprov.sql",
-                key="traceprov",
-                materialize=f"$ROOT/templates/traceprov/{qnum}.materialize.sql",
-                extras=[
-                    ExtraQuery(
-                        label="traceprov_materialize_count",
-                        query="$ROOT/templates/traceprov/mat_count.sql",
-                        should_run=RUN_IS_MATERIALIZE,
-                    ),
-                    ExtraQuery(
-                        label="traceprov_infer_time",
-                        query=f"$ROOT/templates/traceprov/{qnum}.infertime.sql",
-                        should_run=RUN_IS_MATERIALIZE,
-                    ),
-                ],
-            ),
-        ),
+        # ),
+        # Query(
+        #     query_name=qnum,
+        #     spec=QuerySpec(
+        #         base="traceprov.sql",
+        #         key="traceprov",
+        #         materialize=f"$ROOT/templates/traceprov/{qnum}.materialize.sql",
+        #         extras=[
+        #             ExtraQuery(
+        #                 label="traceprov_materialize_count",
+        #                 query="$ROOT/templates/traceprov/mat_count.sql",
+        #                 should_run=RUN_IS_MATERIALIZE,
+        #             ),
+        #             ExtraQuery(
+        #                 label="traceprov_infer_time",
+        #                 query=f"$ROOT/templates/traceprov/{qnum}.infertime.sql",
+        #                 should_run=RUN_IS_MATERIALIZE,
+        #             ),
+        #         ],
+        #     ),
+        # ),
     ]
     for qnum in query_nums
 ]
@@ -63,21 +63,23 @@ directories = [
         dir_name="queries_skew_1_0_num_5000000",
         queries=[q for per_dir in per_dir_queries for q in per_dir],
     ),
-    # QueryDirectory(
-    #     dir_name="queries_skew_1_0_num_10000000",
-    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
-    # ),
-    # QueryDirectory(
-    #     dir_name="queries_skew_1_0_num_50000000",
-    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
-    # ),
-    # QueryDirectory(
-    #     dir_name="queries_skew_1_0_num_100000000",
-    #     queries=[q for per_dir in per_dir_queries for q in per_dir],
-    # ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_10000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_50000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
+    QueryDirectory(
+        dir_name="queries_skew_1_0_num_100000000",
+        queries=[q for per_dir in per_dir_queries for q in per_dir],
+    ),
 ]
 
 import json
+
+
 def main():
     benchmark = GenericBenchmark("aggregates")
     result = benchmark.run_from_argparse(
@@ -85,8 +87,9 @@ def main():
     )
 
     print(result)
-    with open("result_dump.json", 'w') as f:
+    with open("result_dump.json", "w") as f:
         f.write(json.dumps(result, indent=4))
+
 
 if __name__ == "__main__":
     main()

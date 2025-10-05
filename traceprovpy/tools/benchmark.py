@@ -194,7 +194,9 @@ class GenericBenchmark(NamedTuple):
         self.setup(
             parsed.user, parsed.password, parsed.db, parsed.traceprov_root, parsed.suff
         )
-        return self.run(
+
+        start = time.perf_counter()
+        result = self.run(
             parsed.user,
             parsed.password,
             parsed.db,
@@ -202,6 +204,9 @@ class GenericBenchmark(NamedTuple):
             directories,
             params,
         )
+        end = time.perf_counter()
+        final_result = dict(result=result, time_taken=end - start)
+        return final_result
 
     def setup(
         self,
