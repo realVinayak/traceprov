@@ -25,6 +25,7 @@ from traceprovpy.tools.run_with_timeout import (
 from pathlib import Path
 import os
 import argparse
+import time
 
 
 def _run_with_timeout(options: RunWithTimeoutOptions):
@@ -87,8 +88,21 @@ class QuerySpec(NamedTuple):
                 extra_results[extra.label] = extra_result
             return extra_results
 
-        for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
-            print("ON INDEX: ", iter)
+        iter_count = 0
+        start_perf_counter = time.perf_counter()
+        while True:
+            # for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
+            end_perf_counter = time.perf_counter()
+            if base_pack.params.execution_time is not None:
+                if base_pack.params.execution_time <= (
+                    end_perf_counter - start_perf_counter
+                ):
+                    break
+            if base_pack.params.repeat is not None:
+                if iter_count >= base_pack.params.repeat + base_pack.params.throwaway:
+                    break
+
+            print("ON INDEX: ", iter_count)
             os.system(
                 f'echo "select reinit_state();" | PGPASSWORD={base_pack.password} psql -U {base_pack.user} {base_pack.db}'
             )
@@ -109,7 +123,11 @@ class QuerySpec(NamedTuple):
                 materialize_time = _run_with_timeout(materialize_pack)
                 assert len(materialize_context) != 0
 
-            if iter < base_pack.params.throwaway:
+            if (
+                base_pack.params.throwaway is not None
+                and iter_count < base_pack.params.throwaway
+            ):
+                iter_count += 1
                 continue
             results["base"].append(base_time)
 
@@ -131,12 +149,17 @@ class QuerySpec(NamedTuple):
             if materialize_pack:
                 materialize_pack.close_all()
 
-            merged_extra_results = {**base_extra_results, **materialize_extra_results}
+            merged_extra_results = {
+                **base_extra_results,
+                **materialize_extra_results,
+            }
             assert len(base_extra_results) + len(materialize_extra_results) == len(
                 merged_extra_results
             )
             if len(merged_extra_results) > 0:
                 results["extras"].append(merged_extra_results)
+
+            iter_count += 1
 
         return results
 
@@ -222,6 +245,7 @@ class GenericBenchmark(NamedTuple):
         # Always run the analyze for statistics initially.
         os.system(f'echo "ANALYZE;" | PGPASSWORD={password} psql -U {user} {db_name}')
         print(directories)
+        params.validate()
 
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(

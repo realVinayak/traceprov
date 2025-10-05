@@ -8,7 +8,7 @@ from traceprovpy.tools.benchmark import (
 )
 import os
 import math
-
+import time
 from traceprovpy.tools.run_with_timeout import RunParams
 
 
@@ -26,7 +26,7 @@ class TestBenchmark(TestDbSetup):
             len(measured_times) / 2,
         )
 
-    def test_simple_run(self):
+    def _simple_run(self, params: RunParams, do_length_check=True):
         benchmark = GenericBenchmark("simple-benchmark")
         directories = [
             QueryDirectory(
@@ -62,7 +62,7 @@ class TestBenchmark(TestDbSetup):
             TestBenchmark.test_db,
             f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories,
-            params=RunParams(repeat=4, throwaway=1),
+            params=params,
         )
         print(result)
         self.assertIn("dir_1", result)
@@ -102,16 +102,30 @@ class TestBenchmark(TestDbSetup):
         self.assertIn("base", base_dir_2_test_01)
         self.assertIn("base", base_dir_2_test_02)
 
-        self.assertEqual(len(base_dir_1_test_01["base"]), 4)
-        self.assertEqual(len(base_dir_1_test_02["base"]), 4)
-        self.assertEqual(len(base_dir_2_test_01["base"]), 4)
-        self.assertEqual(len(base_dir_2_test_02["base"]), 4)
+        if do_length_check:
+            # In case where we're running it for a set amount of time,
+            # we don't know beforehand what the length will be.
+            self.assertEqual(len(base_dir_1_test_01["base"]), 4)
+            self.assertEqual(len(base_dir_1_test_02["base"]), 4)
+            self.assertEqual(len(base_dir_2_test_01["base"]), 4)
+            self.assertEqual(len(base_dir_2_test_02["base"]), 4)
 
         self.assert_close(base_dir_1_test_01["base"], 2)
         self.assert_close(base_dir_1_test_02["base"], 4)
 
         self.assert_close(base_dir_2_test_01["base"], 3)
         self.assert_close(base_dir_2_test_02["base"], 5)
+
+    def test_simple_run(self):
+        params = RunParams(repeat=4, throwaway=1)
+        self._simple_run(params)
+
+    def test_simple_run_timed(self):
+        start_time = time.perf_counter()
+        params = RunParams(repeat=None, throwaway=None, execution_time=10)
+        self._simple_run(params, do_length_check=False)
+        end_time = time.perf_counter()
+        print(end_time - start_time)
 
     def test_multiple_implementations_materialize(self):
         benchmark = GenericBenchmark("materialize-benchmark")
