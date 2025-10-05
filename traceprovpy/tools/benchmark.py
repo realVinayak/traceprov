@@ -205,7 +205,7 @@ class GenericBenchmark(NamedTuple):
             params,
         )
         end = time.perf_counter()
-        final_result = dict(result=result, time_taken=end - start)
+        final_result = dict(result=result, time_taken=end - start, db=parsed.db)
         return final_result
 
     def setup(
@@ -250,7 +250,7 @@ class GenericBenchmark(NamedTuple):
         # Always run the analyze for statistics initially.
         os.system(f'echo "ANALYZE;" | PGPASSWORD={password} psql -U {user} {db_name}')
         print(directories)
-        params.validate()
+        #params.validate()
 
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(
