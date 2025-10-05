@@ -179,7 +179,7 @@ def main():
     )
 
     recursive_check(connection, options.top_dir, options.skip, options.fix)
-
+    connection.close()
 
 if __name__ == "__main__":
     show_output = True

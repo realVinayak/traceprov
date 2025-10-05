@@ -468,8 +468,10 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     if (region == 0){
         PG_RETURN_POINTER(((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]);
     }
-    
-    PG_RETURN_POINTER((((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
+    void *new_ptr = (((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG));
+    free(agg_context);
+    PG_RETURN_POINTER(new_ptr); 
+    //PG_RETURN_POINTER((((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
     // PG_RETURN_POINTER(ptr[region]);
 }
 
@@ -556,6 +558,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
        ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = other->worker_id;
        ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
        current_layer->current_row += sizeof(struct trace_file_partial_row);
+       free(other);
     }
 
     PG_RETURN_POINTER(reference_struct);
