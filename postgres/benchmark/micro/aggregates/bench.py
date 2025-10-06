@@ -8,10 +8,11 @@ from traceprovpy.tools.benchmark import (
 from traceprovpy.tools.run_with_timeout import RunParams
 
 # query_nums = ["03", "04", "05", "06", "07"]
-#query_nums = ["04", "06", "05"]
+# query_nums = ["04", "06", "05"]
 query_nums = ["04", "06", "07"]
 
 RUN_IS_MATERIALIZE = lambda _, b_or_m: b_or_m == "materialize"
+RUN_IS_BASE = lambda _, b_or_m: b_or_m == "base"
 
 per_dir_queries = [
     [
@@ -32,24 +33,24 @@ per_dir_queries = [
         #    ),
         # ),
         Query(
-             query_name=qnum,
-             spec=QuerySpec(
-                 base="traceprov.sql",
-                 key="traceprov",
-                 #materialize=f"$ROOT/templates/traceprov/{qnum}.materialize.sql",
-                 extras=[
-                     #ExtraQuery(
-                     #    label="traceprov_materialize_count",
-                     #    query="$ROOT/templates/traceprov/mat_count.sql",
-                     #    should_run=RUN_IS_MATERIALIZE,
-                     #),
-                     ExtraQuery(
-                         label="traceprov_infer_time",
-                         query=f"$ROOT/templates/traceprov/{qnum}.infertime.sql",
-                         should_run=RUN_IS_MATERIALIZE,
-                     ),
-                 ],
-             ),
+            query_name=qnum,
+            spec=QuerySpec(
+                base="traceprov.sql",
+                key="traceprov",
+                # materialize=f"$ROOT/templates/traceprov/{qnum}.materialize.sql",
+                extras=[
+                    # ExtraQuery(
+                    #    label="traceprov_materialize_count",
+                    #    query="$ROOT/templates/traceprov/mat_count.sql",
+                    #    should_run=RUN_IS_MATERIALIZE,
+                    # ),
+                    ExtraQuery(
+                        label="traceprov_infer_time",
+                        query=f"$ROOT/templates/traceprov/{qnum}.infertime.sql",
+                        should_run=RUN_IS_BASE,
+                    ),
+                ],
+            ),
         ),
     ]
     for qnum in query_nums
