@@ -10,7 +10,7 @@
 #include "traceprov_utils.h"
 #include <lib/stringinfo.h>
 #include "libpq/pqformat.h"
-
+#include "common/file_perm.h"
 
 PG_MODULE_MAGIC;
 
@@ -18,6 +18,8 @@ int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
 int grow_layer_file(struct traceprov_aggregate_layer *);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
+
+static char *traceprov_data_dir = NULL;
 
 static struct current_context traceprov_current = {
     .my_worker_id =                 255,
@@ -58,7 +60,18 @@ static int initialize_local_context(){
 
     int rc = 0, is_locked = 0;
 
-    int shared_context_fd = open(TRACEPROV_SHARED_CONTEXT, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
+    const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
+
+    char *shared_context_filename = malloc(size_shared_context_filename);
+    if (shared_context_filename == NULL){
+        elog(ERROR, "Couldn't allocate memory to hold shared context file");
+        return 1;
+    }
+    memset(shared_context_filename, 0, size_shared_context_filename);
+    sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
+    PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_filename);
+
+    int shared_context_fd = open(shared_context_filename, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
 
     if (shared_context_fd < 0){
         PRINT_ON_DEBUG("Error opening shared context file.");
@@ -135,7 +148,7 @@ static int initialize_local_context(){
     }
 
 exit_initialize_local_context:
-
+    if (shared_context_filename) free(shared_context_filename);
     int previous_error = rc;
     if (is_locked){
         if ((rc = flock(shared_context_fd, LOCK_UN))){
@@ -174,7 +187,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
             layer = traceprov_current.local_context->layers;
         }else{
             // Now, need to do dynamic memory allocation
-            char *layer_file_name = get_injected_str(TRACEPROV_PER_WORKER_FILE, traceprov_current.my_worker_id, NULL);
+            char *layer_file_name = get_injected_str(TRACEPROV_PER_WORKER_FILE,  DataDir, traceprov_current.my_worker_id, NULL);
             if (layer_file_name == NULL){
                 return 1;
             }
@@ -256,7 +269,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
 
     // Map the actual trace file for this layer.
     // Each worker gets its own trace file.
-    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, traceprov_current.my_worker_id, NULL);
+    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, traceprov_current.my_worker_id, NULL);
 
     if (file_name == NULL){
         return 1;
@@ -342,8 +355,28 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     traceprov_current.shared_context = NULL;
     traceprov_current.local_context = NULL;
 
-    int rc = remove_files_from_dir(TRACE_PROV_DIR);
-    PG_RETURN_INT32(rc);
+    if (traceprov_data_dir == NULL){
+        // Here, we create the str that we use everywhere else.
+        const size_t dir_str_size = strlen(TRACE_PROV_DIR) + strlen(DataDir) + 2;
+        traceprov_data_dir = malloc(dir_str_size);
+        if (traceprov_data_dir == NULL){
+            elog(ERROR, "Couldn't allocate memory to hold dir.");
+        }
+        sprintf(traceprov_data_dir, TRACE_PROV_DIR, DataDir);
+    }
+    PRINT_ON_DEBUG("TRACEPROV_DIR: %s", traceprov_data_dir);
+
+    int rc = create_dir_if_not_exists(traceprov_data_dir, pg_dir_create_mode);
+    if (rc){
+        PRINT_ON_DEBUG("Error creating dir: %d", rc);
+        PG_RETURN_INT32(rc);
+    }
+    rc = remove_files_from_dir(traceprov_data_dir);
+    if (rc){
+        PRINT_ON_DEBUG("Error removing files: %d", rc);
+    }
+
+    PG_RETURN_INT32(rc);    
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_sfunc);

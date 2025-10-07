@@ -18,8 +18,8 @@
 
 int dump_pk_records(std::vector<int64> **, const char *, int);
 
-int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
-    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, worker_id, NULL);
+int map_layer_file(const char *data_dir, int layer_number, int worker_id, void **ptr, int file_size){
+    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, data_dir, layer_number, worker_id, NULL);
     if (file_name == NULL) return 1;
     int fd = open(file_name, O_RDONLY);
     if (fd < 0) {
@@ -44,14 +44,27 @@ int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
     return 0;
 }
 
-int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
-    int shared_context_fd = open(TRACEPROV_SHARED_CONTEXT, O_RDONLY);
-    if (shared_context_fd < 0){
-        PRINT_DEBUG("Error opening the scratch file");
+int map_traceprov_shared_context(const char *data_dir, struct traceprov_shared_context *ptr){
+    const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(data_dir) + 1;
+
+    char *shared_context_filename = (char*)malloc(size_shared_context_filename);
+    if (shared_context_filename == NULL){
+        elog(ERROR, "Couldn't allocate memory to hold shared context file");
         return 1;
     }
+    memset(shared_context_filename, 0, size_shared_context_filename);
+    sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, data_dir);
+    struct traceprov_shared_context *temp_ptr;
+    int rc = 0;
 
-    struct traceprov_shared_context *temp_ptr = (struct traceprov_shared_context *)mmap(
+    int shared_context_fd = open(shared_context_filename, O_RDONLY);
+    if (shared_context_fd < 0){
+        PRINT_DEBUG("Error opening the scratch file");
+        rc = 1;
+        goto exit_map;
+    }
+
+    temp_ptr = (struct traceprov_shared_context *)mmap(
         NULL,
         TRACEPROV_SHARED_CONTEXT_SIZE,
         PROT_READ,
@@ -62,15 +75,17 @@ int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
 
     if (temp_ptr == MAP_FAILED){
         PRINT_DEBUG("Error mapping the scratch file");
-        return 1;
+        rc = 1;
+        goto exit_map;
     }
 
     PRINT_DEBUG("Map shared context succesful!");
 
     memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
 
-    close(shared_context_fd);
-
+exit_map:
+    if (shared_context_fd > 0) close(shared_context_fd);
+    if (shared_context_filename) free(shared_context_filename);
     return 0;
 }
 
@@ -84,13 +99,13 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
 }
 
 // Walks through the shared context, and msyncs each file it sees.
-int traceprov_sync(){
+int traceprov_sync(const char *data_dir){
 
     auto start = std::chrono::high_resolution_clock::now();
     int rc = 0;
     struct traceprov_shared_context context;
 
-    if (map_traceprov_shared_context(&context)){
+    if (map_traceprov_shared_context(data_dir, &context)){
         rc = 1;
         goto end;
     }
@@ -105,6 +120,7 @@ int traceprov_sync(){
             if (worker_local_context->cached_layers[layer_id].layer_number){
                 void *ptr = NULL;
                 map_layer_file(
+                    data_dir,
                     worker_local_context->cached_layers[layer_id].layer_number,
                     worker_id,
                     &ptr,
@@ -141,6 +157,7 @@ int main(int argc, char *argv[]){
 
     int arg_index = 1;
     bool is_sync = false;
+    char *data_dir = NULL;
 
     while (arg_index < argc){
         // Parse out layer number
@@ -149,6 +166,9 @@ int main(int argc, char *argv[]){
         }
         if (strcmp(argv[arg_index], "-f") == 0){
             output_id_file = argv[arg_index + 1];
+        }
+        if (strcmp(argv[arg_index], "-d") == 0){
+            data_dir = argv[arg_index + 1];
         }
         if (strcmp(argv[arg_index], "-s.out") == 0){
             subq_out_file = argv[arg_index + 1];
@@ -167,14 +187,14 @@ int main(int argc, char *argv[]){
 
     if (is_sync){
         std::cout << "Is syncing!" << std::endl;
-        return traceprov_sync();
+        return traceprov_sync(data_dir);
     }
     std::cout << "Using layer: " << layer_number << std::endl;
 
     auto start = std::chrono::high_resolution_clock::now();
 
     struct traceprov_shared_context context;
-    if (map_traceprov_shared_context(&context)){
+    if (map_traceprov_shared_context(data_dir, &context)){
         return 1;
     }
 
@@ -196,7 +216,7 @@ int main(int argc, char *argv[]){
     void *forward_row;
     void *partial_group_row = NULL;
 
-    if (map_layer_file(group_layer_number, context.main_worker_id, &group_layer_ptr, group_layer->size)){
+    if (map_layer_file(data_dir, group_layer_number, context.main_worker_id, &group_layer_ptr, group_layer->size)){
         PRINT_DEBUG("Error opening group layer file");
         return 1;
     }
@@ -206,7 +226,7 @@ int main(int argc, char *argv[]){
     if (reference_layer){
         const struct traceprov_aggregate_layer *group_reference_layer = &main_worker_context->cached_layers[reference_layer];
         void *group_reference_ptr = NULL;
-        if (map_layer_file(reference_layer + 1, context.main_worker_id, &group_reference_ptr, group_reference_layer->size)){
+        if (map_layer_file(data_dir, reference_layer + 1, context.main_worker_id, &group_reference_ptr, group_reference_layer->size)){
             PRINT_DEBUG("Error opening group reference layer");
             return 1;
         }
@@ -233,16 +253,16 @@ int main(int argc, char *argv[]){
         }
     }
 
-    if (map_layer_file(layer_number, context.main_worker_id, &forward_row, main_trace_layer->size)){
+    if (map_layer_file(data_dir, layer_number, context.main_worker_id, &forward_row, main_trace_layer->size)){
         PRINT_DEBUG("Error opening main trace file");
         return 1;
     }
 
     if (0 == access(
-        get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, partial_group_ln, main_worker_context->worker_id, NULL),
+        get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, data_dir, partial_group_ln, main_worker_context->worker_id, NULL),
         F_OK
     )){
-        if (map_layer_file(partial_group_ln, context.main_worker_id, &partial_group_row, partial_group_layer->size)){
+        if (map_layer_file(data_dir, partial_group_ln, context.main_worker_id, &partial_group_row, partial_group_layer->size)){
             PRINT_DEBUG("Error opening the partial trace file");
         }
     }
@@ -299,7 +319,7 @@ int main(int argc, char *argv[]){
             current_forward_row = forward_row;
         }else{
             void *local_fwd_row = NULL;
-            if (map_layer_file(layer_number, worker_id, &current_forward_row, bg_trace_layer->size)){
+            if (map_layer_file(data_dir, layer_number, worker_id, &current_forward_row, bg_trace_layer->size)){
                 PRINT_DEBUG("Error opening the bg trace file");
             }
         }
@@ -348,7 +368,7 @@ int main(int argc, char *argv[]){
             }
 
             void *subq_forward_row = NULL;
-            if (map_layer_file(subq_layer_number, worker_id, &subq_forward_row, bg_trace_layer->size)){
+            if (map_layer_file(data_dir, subq_layer_number, worker_id, &subq_forward_row, bg_trace_layer->size)){
                 PRINT_DEBUG("Error opening the subq trace file");
                 continue;
             }
