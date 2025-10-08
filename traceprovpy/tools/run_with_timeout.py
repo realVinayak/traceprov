@@ -35,13 +35,17 @@ class RunParams(NamedTuple):
         return new_params
 
 
-class RunWithTimeoutOptions(NamedTuple):
+class ConnectionParams(NamedTuple):
+    host: str
+    port: str
     user: str
     password: str
+
+
+class RunWithTimeoutOptions(NamedTuple):
     db: str
     file_path: str
-    host: str = DEFAULT_HOST
-    port: str = DEFAULT_PORT
+    connection_params: ConnectionParams
     capture_output: bool = False
     params: RunParams = RunParams()
     # Just some extra context stuff (like connections)
@@ -74,10 +78,10 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     connection = cached_connection or psycopg2.connect(
         database=options.db,
-        host=options.host,
-        user=options.user,
-        password=options.password,
-        port=options.port,
+        host=options.connection_params.host,
+        user=options.connection_params.user,
+        password=options.connection_params.password,
+        port=options.connection_params.port,
     )
 
     if (
@@ -166,15 +170,16 @@ def run_from_cmd():
         dry_run=parsed.dry_run,
         timeout=parsed.timeout,
     )
+
+    connection_params = ConnectionParams(
+        host=parsed.host, port=parsed.port, user=parsed.user, password=parsed.password
+    )
     runtime_options = RunWithTimeoutOptions(
-        user=parsed.user,
-        password=parsed.password,
         db=parsed.database,
         file_path=parsed.file_path,
-        host=parsed.host,
-        port=parsed.port,
         params=run_options,
         capture_output=parsed.capture,
+        connection_params=connection_params,
     )
     measured_time = run_with_timeout(runtime_options)
     print("measured time: ", measured_time)

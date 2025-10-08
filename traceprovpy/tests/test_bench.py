@@ -9,7 +9,7 @@ from traceprovpy.tools.benchmark import (
 import os
 import math
 import time
-from traceprovpy.tools.run_with_timeout import RunParams
+from traceprovpy.tools.run_with_timeout import ConnectionParams, RunParams
 
 
 class TestBenchmark(TestDbSetup):
@@ -56,12 +56,12 @@ class TestBenchmark(TestDbSetup):
                 ],
             ),
         ]
+
         result = benchmark.run(
-            TestBenchmark.pg_user,
-            TestBenchmark.pg_password,
-            TestBenchmark.test_db,
-            f"{os.getcwd()}/tests/test_queries/TestBenchmark",
-            directories,
+            db_name=TestBenchmark.test_db,
+            top_dir=f"{os.getcwd()}/tests/test_queries/TestBenchmark",
+            directories=directories,
+            connection_params=TestBenchmark.connection_params,
             params=params,
         )
         print(result)
@@ -223,11 +223,10 @@ class TestBenchmark(TestDbSetup):
         ]
 
         result = benchmark.run(
-            TestBenchmark.pg_user,
-            TestBenchmark.pg_password,
             TestBenchmark.test_db,
             f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories,
+            TestBenchmark.connection_params,
             params=RunParams(repeat=4, throwaway=1),
         )
 
@@ -418,11 +417,10 @@ class TestBenchmark(TestDbSetup):
         ]
 
         result = benchmark.run(
-            TestBenchmark.pg_user,
-            TestBenchmark.pg_password,
             TestBenchmark.test_db,
             f"{os.getcwd()}/tests/test_queries/TestBenchmarkWithExtras",
             directories,
+            TestBenchmark.connection_params,
             params=RunParams(repeat=4, throwaway=1),
         )
 
