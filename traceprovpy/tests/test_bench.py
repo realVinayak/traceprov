@@ -58,7 +58,6 @@ class TestBenchmark(TestDbSetup):
         ]
 
         result = benchmark.run(
-            db_name=TestBenchmark.test_db,
             top_dir=f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories=directories,
             connection_params=TestBenchmark.connection_params,
@@ -223,7 +222,6 @@ class TestBenchmark(TestDbSetup):
         ]
 
         result = benchmark.run(
-            TestBenchmark.test_db,
             f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories,
             TestBenchmark.connection_params,
@@ -417,7 +415,6 @@ class TestBenchmark(TestDbSetup):
         ]
 
         result = benchmark.run(
-            TestBenchmark.test_db,
             f"{os.getcwd()}/tests/test_queries/TestBenchmarkWithExtras",
             directories,
             TestBenchmark.connection_params,

@@ -58,6 +58,7 @@ class TestDbSetup(TestCase):
             port=cls.pg_port,
             user=cls.pg_user,
             password=cls.pg_password,
+            database=cls.test_db,
         )
 
     @classmethod

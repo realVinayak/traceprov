@@ -40,10 +40,20 @@ class ConnectionParams(NamedTuple):
     port: str
     user: str
     password: str
+    database: str
+
+    def get_flat(self):
+        flat_options = [
+            cell
+            for pack in dict(
+                U=self.user, h=self.host, p=self.port, d=self.database
+            ).items()
+            for cell in [f"-{pack[0]}", pack[1]]
+        ]
+        return " ".join(flat_options)
 
 
 class RunWithTimeoutOptions(NamedTuple):
-    db: str
     file_path: str
     connection_params: ConnectionParams
     capture_output: bool = False
@@ -77,7 +87,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         cached_connection = options.extras.get(CACHED_CONNECTION)
 
     connection = cached_connection or psycopg2.connect(
-        database=options.db,
+        database=options.connection_params.database,
         host=options.connection_params.host,
         user=options.connection_params.user,
         password=options.connection_params.password,
@@ -172,10 +182,13 @@ def run_from_cmd():
     )
 
     connection_params = ConnectionParams(
-        host=parsed.host, port=parsed.port, user=parsed.user, password=parsed.password
+        host=parsed.host,
+        port=parsed.port,
+        user=parsed.user,
+        password=parsed.password,
+        database=parsed.database,
     )
     runtime_options = RunWithTimeoutOptions(
-        db=parsed.database,
         file_path=parsed.file_path,
         params=run_options,
         capture_output=parsed.capture,
