@@ -104,8 +104,9 @@ class QuerySpec(NamedTuple):
                     break
 
             print("ON INDEX: ", iter_count)
+            flat_options = base_pack.connection_params.get_flat()
             os.system(
-                f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql -U {base_pack.connection_params.user} -h {base_pack.connection_params.host} -p {base_pack.connection_params.port} {base_pack.db}'
+                f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
             )
 
             base_time = _run_with_timeout(base_pack)
@@ -195,17 +196,19 @@ class GenericBenchmark(NamedTuple):
 
         parsed = parser.parse_args()
         connection_params = ConnectionParams(
-            host=parsed.host, port=parsed.port, user=parsed.user, password=parsed.port
+            host=parsed.host,
+            port=parsed.port,
+            user=parsed.user,
+            password=parsed.port,
+            database=parsed.db,
         )
-        self.setup(parsed.db, parsed.traceprov_root, connection_params, parsed.suff)
+        self.setup(parsed.traceprov_root, connection_params, parsed.suff)
 
         start = time.perf_counter()
         result = self.run(
-            parsed.user,
-            parsed.password,
-            parsed.db,
             parsed.test_root,
             directories,
+            connection_params,
             params,
         )
         end = time.perf_counter()
@@ -214,7 +217,6 @@ class GenericBenchmark(NamedTuple):
 
     def setup(
         self,
-        db_name: str,
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
         suff: str = None,
@@ -234,16 +236,15 @@ class GenericBenchmark(NamedTuple):
         ), f"{traceprov_infer_set.as_posix()} should exist!"
 
         os.system(
-            f"PGPASSWORD={connection_params.password} psql -U {connection_params.user} -h {connection_params.host} -p {connection_params.port} {db_name} -f {traceprov_sql.as_posix()}"
+            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()}"
         )
 
         os.system(
-            f"PGPASSWORD={connection_params.password} psql -U {connection_params.user} -h {connection_params.host} -p {connection_params.port} {db_name} -f {traceprov_infer_set.as_posix()}"
+            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()}"
         )
 
     def run(
         self,
-        db_name: str,
         top_dir: str,
         directories: list[QueryDirectory],
         connection_params: ConnectionParams,
@@ -251,7 +252,7 @@ class GenericBenchmark(NamedTuple):
     ):
         # Always run the analyze for statistics initially.
         os.system(
-            f'echo "ANALYZE;" | PGPASSWORD={connection_params.password} psql -U {connection_params.user} -h {connection_params.host} -p {connection_params.port} {db_name}'
+            f'echo "ANALYZE;" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
         )
         print(directories)
         params.validate()
@@ -259,7 +260,6 @@ class GenericBenchmark(NamedTuple):
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(
                 connection_params=connection_params,
-                db=db_name,
                 file_path=file_path,
                 params=params,
             )
