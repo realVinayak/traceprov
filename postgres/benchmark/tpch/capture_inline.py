@@ -51,6 +51,7 @@ def run_validate(
     config_file_name,
     db_name,
     infer_template_sql_file,
+    port,
     validate_sql_file=None,
     raw_sql_file=None,
 ):
@@ -82,7 +83,7 @@ def run_validate(
     start = time.perf_counter()
     assert (
         os.system(
-            f"PGPASSWORD=postgres psql -U postgres {db_name} -f /tmp/create_table_temp.sql > /tmp/temp.out"
+            f"PGPASSWORD=postgres psql -p {port} -U postgres {db_name} -f /tmp/create_table_temp.sql > /tmp/temp.out"
         )
         == 0
     )
@@ -111,7 +112,7 @@ def run_validate(
         f.write("\n".join(final_sql))
 
     get_run_cmd = (
-        lambda in_file, out_file: f"PGPASSWORD=postgres psql -U postgres {db_name} -A --field-separator='|' -P \"footer=off\" -f {in_file} > {out_file}"
+        lambda in_file, out_file: f"PGPASSWORD=postgres psql -p {port} -U postgres {db_name} -A --field-separator='|' -P \"footer=off\" -f {in_file} > {out_file}"
     )
 
     injected_run_cmd = get_run_cmd("/tmp/validate.sql", "/tmp/injected.out")

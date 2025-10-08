@@ -17,6 +17,10 @@ def run():
 
     validate_config_dirs = sys.argv[2]
     inline_capture_template = sys.argv[3]
+    if len(sys.argv) == 5:
+        port = sys.argv[4]
+    else:
+        port = "5432"
 
     with open(config_file) as cf:
         config = json.loads(cf.read())
@@ -39,7 +43,9 @@ def run():
             },
         }
 
-    safe_run(f'echo "analyze;" | PGPASSWORD=postgres psql -U postgres {db_name}')
+    safe_run(
+        f'echo "analyze;" | PGPASSWORD=postgres psql -p {port} -U postgres {db_name}'
+    )
 
     for test_dir in test_dirs:
         path = "/".join([*config_file.split("/")[:-1], test_dir, ""])
@@ -58,7 +64,7 @@ def run():
 
                 start = time.perf_counter()
                 safe_run(
-                    f"PGPASSWORD=postgres psql -U postgres {db_name} -f {path}base/{query}.sql > /dev/null"
+                    f"PGPASSWORD=postgres psql -p {port} -U postgres {db_name} -f {path}base/{query}.sql > /dev/null"
                 )
                 end = time.perf_counter()
 
@@ -82,11 +88,11 @@ def run():
                     test_dir,
                 )
                 safe_run(
-                    f'echo "select reinit_state();" | PGPASSWORD=postgres psql -U postgres {db_name}'
+                    f'echo "select reinit_state();" | PGPASSWORD=postgres psql -p {port} -U postgres {db_name}'
                 )
                 start = time.perf_counter()
                 safe_run(
-                    f"PGPASSWORD=postgres psql -U postgres {db_name} -f {path}traceprov/{query}.traceprov.sql > /dev/null"
+                    f"PGPASSWORD=postgres psql -p {port} -U postgres {db_name} -f {path}traceprov/{query}.traceprov.sql > /dev/null"
                 )
                 end = time.perf_counter()
 
@@ -126,6 +132,7 @@ def run():
                         validate_config,
                         db_name,
                         inline_capture_template,
+                        port,
                         validate_file_sql,
                         raw_sql_file=f"{path}base/{query}.sql",
                     )
