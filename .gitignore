@@ -30,3 +30,4 @@ traceprovpy.egg-info/
 traceprovpy/tools/__pycache__
 traceprovpy/tests/__pycache__
 traceprovpy/tools/stats/__pycache__
+postgres/benchmark/tpch/scale*/results/local_test_*
