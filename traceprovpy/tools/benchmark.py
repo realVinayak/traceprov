@@ -19,11 +19,13 @@
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
+    Preprocessor,
+    ReplaceFILE,
     RunParams,
     run_with_timeout,
     RunWithTimeoutOptions,
 )
-from pathlib import Path
+from pathlib import Path, PosixPath
 import os
 import argparse
 import time
@@ -40,6 +42,14 @@ def json_serial(obj):
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
 
+    if isinstance(obj, ReplaceFILE):
+        return dict(
+            preprocessor_type=ReplaceFILE.__name__, param=obj.replace_with_token
+        )
+
+    if isinstance(obj, PosixPath):
+        return obj.as_posix()
+
     raise TypeError("Type %s not serializable" % type(obj))
 
 
@@ -55,6 +65,9 @@ class ExtraQuery(NamedTuple):
     runs_after_base: bool = False
     runs_after_materialize: bool = False
     skip_validation: bool = False
+    preprocess: list[Preprocessor] = []
+    capture_output: bool = True
+    strict_run: bool = False
 
 
 class QuerySpec(NamedTuple):
@@ -94,10 +107,15 @@ class QuerySpec(NamedTuple):
                 extra_pack = QuerySpec.get_pack(
                     top_dir, extra.query, get_run_options
                 )._replace(
-                    capture_output=True,
+                    capture_output=extra.capture_output,
                     extras=_extra_context,
                     skip_validation=extra.skip_validation,
+                    strict_run=extra.strict_run,
                 )
+                if extra.preprocess:
+                    extra_pack = extra_pack._replace(
+                        preprocessors=[*extra_pack.preprocessors, *extra.preprocess]
+                    )
                 extra_result = _run_with_timeout(extra_pack)
                 extra_results[extra.label] = extra_result
             return extra_results
@@ -206,11 +224,15 @@ class GenericBenchmark(NamedTuple):
         None | Tuple[str, list[QueryDirectory], ConnectionParams, RunParams]
     ) = None
 
+    traceprov_path: str = None
+    tracprov_infer_set_path: str = None
+
     def run_from_argparse(
         self,
         directories: list[QueryDirectory],
         params=RunParams(),
     ):
+        assert self.traceprov_path is None and self.tracprov_infer_set_path is None
         parser = argparse.ArgumentParser(prog=f"run-{self.name}")
         parser.add_argument("-u", "--user", required=True)
         parser.add_argument("-p", "--password", required=True)
@@ -229,10 +251,10 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
 
         start = time.perf_counter()
-        called_benchmark, result = self.run(
+        called_benchmark, result = setup_bench.run(
             parsed.test_root,
             directories,
             connection_params,
@@ -303,6 +325,13 @@ class GenericBenchmark(NamedTuple):
             f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()}"
         )
 
+        traceprov_obj = f"traceprov_{suff}.so"
+        traceprv_infer_set_obj = f"traceprov_return_{suff}.so"
+
+        return self._replace(
+            traceprov_path=traceprov_obj, tracprov_infer_set_path=traceprv_infer_set_obj
+        )
+
     def run(
         self,
         top_dir: str,
@@ -327,7 +356,10 @@ class GenericBenchmark(NamedTuple):
             )
 
         results_from_dirs = {}
-        for directory in directories:
+        directories_preprocess_applied = [
+            self.setup_preprocess(directory) for directory in directories
+        ]
+        for directory in directories_preprocess_applied:
             combined_results = {}
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
@@ -340,13 +372,13 @@ class GenericBenchmark(NamedTuple):
                 }
             results_from_dirs[directory.dir_name] = combined_results
 
-        return GenericBenchmark(self.name, call_options), results_from_dirs
+        return self._replace(call_options=call_options), results_from_dirs
 
     def get_as_dict(self):
         # Basically, recursively calls get as dict.
         assert self.call_options is not None
 
-        base_serialized = dict(benchmark_name=self.name, top_dir=self.call_options[0])
+        base_serialized = dict(top_dir=self.call_options[0])
         directories_serialized = [
             directory.get_as_dict() for directory in self.call_options[1]
         ]
@@ -363,6 +395,33 @@ class GenericBenchmark(NamedTuple):
                 connection_params=connection_params_serialized,
                 runparams=runparams_serialized,
             ),
+            **(self._asdict()),
         }
 
         return serialized
+
+    def setup_preprocess(self, directory: QueryDirectory):
+        def _map_preprocess(preprocess: Preprocessor):
+            if not isinstance(preprocess, ReplaceFILE):
+                raise Exception("Not implemented other preprocess yet")
+            if preprocess.replace_with_token == "traceprov_path":
+                return ReplaceFILE(self.traceprov_path)
+            if preprocess.replace_with_token == "tracprov_infer_set_path":
+                return ReplaceFILE(self.tracprov_infer_set_path)
+            raise Exception(f"Unexpected token: {preprocess.replace_with_token}")
+
+        def _setup_preprocess(query: Query):
+            query_spec = query.spec
+            new_extras = [
+                extra._replace(
+                    preprocess=[
+                        _map_preprocess(preproc) for preproc in extra.preprocess
+                    ]
+                )
+                for extra in query_spec.extras
+            ]
+            new_query_spec = query_spec._replace(extras=new_extras)
+            return query._replace(spec=new_query_spec)
+
+        new_queries = [_setup_preprocess(q) for q in directory.queries]
+        return directory._replace(queries=new_queries)

@@ -1,0 +1,26 @@
+{
+    "id_table_name": "group_outer",
+    "id_file": "17.outer.ids",
+    "layer_number": 1,
+    "pk_order": [
+        "p_partkey",
+        "l_orderkey",
+        "l_linenumber",
+        "scratch_0"
+    ],
+    "inserts": [
+        {
+            "ref": "B",
+            "keys": [
+                "l_orderkey",
+                "l_linenumber"
+            ]
+        },
+        {
+            "ref": "A",
+            "keys": [
+                "p_partkey"
+            ]
+        }
+    ]
+}

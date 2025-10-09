@@ -1,0 +1,28 @@
+[
+    {
+        "layer_number": 1,
+        "pk_order": [
+            "p_partkey",
+            "l_orderkey",
+            "l_linenumber",
+            "scratch_0"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "B",
+                "keys": [
+                    "l_orderkey",
+                    "l_linenumber"
+                ]
+            },
+            {
+                "ref": "A",
+                "keys": [
+                    "p_partkey"
+                ]
+            }
+        ],
+        "reference_layer": 0,
+        "subq_layer": 0
+    }
+]

@@ -1,0 +1,1 @@
+drop function if exists traceprov_infer_ad4fa45f;

@@ -1,0 +1,34 @@
+[
+    {
+        "layer_number": 1,
+        "pk_order": [
+            "ps_suppkey",
+            "ps_partkey",
+            "s_suppkey",
+            "n_nationkey"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "A",
+                "keys": [
+                    "ps_partkey",
+                    "ps_suppkey"
+                ]
+            },
+            {
+                "ref": "B",
+                "keys": [
+                    "s_suppkey"
+                ]
+            },
+            {
+                "ref": "C",
+                "keys": [
+                    "n_nationkey"
+                ]
+            }
+        ],
+        "reference_layer": 0,
+        "subq_layer": 0
+    }
+]
