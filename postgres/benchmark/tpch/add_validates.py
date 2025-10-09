@@ -58,17 +58,17 @@ def make_layered(config_file):
     return layers
 
 
-def move_validates():
-    for root, dirs, config_files in os.walk("./validate_configs"):
-        assert len(dirs) == 0
-        for config_file in config_files:
-            config_file_path = f"{root}/{config_file}"
-            with open(config_file_path) as f:
-                raw_config = json.loads(f.read())
-            layered = make_layered(raw_config)
-            new_config_file = f"./validate_configs_layered/{config_file}"
-            with open(new_config_file, "w") as f:
-                f.write(json.dumps(layered, indent=4))
+# def move_validates():
+#     for root, dirs, config_files in os.walk("./validate_configs"):
+#         assert len(dirs) == 0
+#         for config_file in config_files:
+#             config_file_path = f"{root}/{config_file}"
+#             with open(config_file_path) as f:
+#                 raw_config = json.loads(f.read())
+#             layered = make_layered(raw_config)
+#             new_config_file = f"./validate_configs_layered/{config_file}"
+#             with open(new_config_file, "w") as f:
+#                 f.write(json.dumps(layered, indent=4))
 
 
 def main():
@@ -84,13 +84,40 @@ def main():
         if len(param_dirs) != 0:
             continue
 
+        if "results" in root:
+            continue
+
+        for file in leaf_files:
+            if "validate_template" in file:
+                break
+
         query_num = root.split("/")[-1]
 
         try:
-            with open(f"validate_configs/{query_num}.config.json") as f:
-                f.read()
-        except FileNotFoundError:
+            with open(f"validate_configs_layered/{query_num}.config.json") as f:
+                layer_config = json.loads(f.read())
+
+            with open(os.path.join(root, file)) as f:
+                template_sql = f.read()
+
+            for layer_id, layer in enumerate(layer_config):
+                table_name = f"layer_{layer_id}"
+                for insert in layer["pk_inserts"]:
+                    pk_list: list[str] = insert["keys"]
+                    projected = ",".join(pk_list)
+                    select_stmt = f"select {projected} from {table_name}"
+                    template_sql = template_sql.replace(
+                        f"%{insert['ref']}%", select_stmt
+                    )
+
+            print("initial file: ", file)
+            print(template_sql)
+            with open(f"{root}/lineage_restricted.sql", "x") as f:
+                f.write(template_sql)
+
+        except FileNotFoundError as e:
             not_found.add(query_num)
+            print(e)
             continue
         # We're at the leafs.
         print(root, leaf_files, query_num)
@@ -116,7 +143,7 @@ def add_validates():
                 layered_config = json.loads(f.read())
 
             query_idx = layered_config_file.replace(".config.json", "")
-            os.makedirs(f"./templates/layered/{query_idx}/", exist_ok=False)
+            # os.makedirs(f"./templates/layered/{query_idx}/", exist_ok=False)
 
             out_path = f"./templates/layered/{query_idx}/"
 
@@ -135,6 +162,7 @@ def add_validates():
                 create_func_sql = func_sql
                 drop_table_sql = f"DROP TABLE IF EXISTS layer_{layer_id};"
                 create_temp_table_sql = f"CREATE TEMP TABLE layer_{layer_id} AS SELECT * FROM {function_name}({layer['layer_number']}, {layer['reference_layer']}, {layer['subq_layer']});"
+                create_table_sql = f"CREATE TABLE layer_{layer_id} AS SELECT * FROM {function_name}({layer['layer_number']}, {layer['reference_layer']}, {layer['subq_layer']});"
                 drop_func_sql = f"drop function if exists {function_name};"
                 infer_time = f"select * from traceprov_infer_time({layer['layer_number']}, {layer['reference_layer']}, {layer['subq_layer']});"
                 sync_time = f"select * from traceprov_sync_time(0)"
@@ -145,16 +173,16 @@ def add_validates():
                     create_temp_table=create_temp_table_sql,
                     infer_time=infer_time,
                     sync_time=sync_time,
+                    create_table=create_table_sql,
                 )
 
                 for key, value in sql_pack.items():
                     out_file_name = f"{out_path}/layer_{layer_id}_{key}.sql"
-                    with open(out_file_name, "x") as f:
+                    with open(out_file_name, "w") as f:
                         f.write(value)
 
 
 if __name__ == "__main__":
     # main()
-    # move_validates()
     add_validates()
     ...
