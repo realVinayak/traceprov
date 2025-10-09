@@ -1,0 +1,45 @@
+{
+    "result": {
+        "params_default": {
+            "1": {
+                "base": {
+                    "base": [
+                        1.0860260000000002
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov": {
+                    "base": [
+                        1.202626
+                    ],
+                    "materialize": [],
+                    "extras": [
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_func": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_func": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_temp_table": 1.8345019999999999,
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "time_taken": 5.92855969700031,
+    "db": "tpch_01_v01",
+    "prefix": "local_test_0"
+}

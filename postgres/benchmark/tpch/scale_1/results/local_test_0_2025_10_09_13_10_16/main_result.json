@@ -1,0 +1,25 @@
+{
+    "result": {
+        "params_default": {
+            "1": {
+                "base": {
+                    "base": [
+                        1.054897
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov": {
+                    "base": [
+                        1.190403
+                    ],
+                    "materialize": [],
+                    "extras": []
+                }
+            }
+        }
+    },
+    "time_taken": 3.966968877997715,
+    "db": "tpch_01_v01",
+    "prefix": "local_test_0"
+}

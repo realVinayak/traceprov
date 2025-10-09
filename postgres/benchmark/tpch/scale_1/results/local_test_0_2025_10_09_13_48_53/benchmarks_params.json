@@ -1,0 +1,199 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "params_default",
+            "queries": [
+                {
+                    "query_name": "1",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": []
+                    }
+                },
+                {
+                    "query_name": "1",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_drop_table",
+                                "$ROOT/../templates/validate_layered/1/layer_0_drop_table.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_func",
+                                "$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_func",
+                                "$ROOT/../templates/validate_layered/1/layer_0_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "tracprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_temp_table",
+                                "$ROOT/../templates/validate_layered/1/layer_0_create_temp_table.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "127.0.0.1",
+        "port": "5432",
+        "user": "postgres",
+        "password": "postgres",
+        "database": "tpch_01_v01"
+    },
+    "runparams": {
+        "repeat": 1,
+        "throwaway": 0,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "tpch-scale-1",
+    "call_options": [
+        "./",
+        [
+            [
+                "params_default",
+                [
+                    [
+                        "1",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            []
+                        ]
+                    ],
+                    [
+                        "1",
+                        [
+                            "traceprov",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_drop_table",
+                                    "$ROOT/../templates/validate_layered/1/layer_0_drop_table.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_func",
+                                    "$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_func",
+                                    "$ROOT/../templates/validate_layered/1/layer_0_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "tracprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_temp_table",
+                                    "$ROOT/../templates/validate_layered/1/layer_0_create_temp_table.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "127.0.0.1",
+            "5432",
+            "postgres",
+            "postgres",
+            "tpch_01_v01"
+        ],
+        [
+            1,
+            0,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "traceprov_local_test_0.so",
+    "tracprov_infer_set_path": "traceprov_return_local_test_0.so"
+}

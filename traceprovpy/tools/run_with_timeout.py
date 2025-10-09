@@ -2,10 +2,11 @@
 # Returns the time took (via EXPLAIN ANALYZE)
 # Here, we also do the repeated runs (+ throwaways)
 
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 import psycopg2
 import os
 import argparse
+from pathlib import PosixPath
 
 from traceprovpy.tools.validate_query import validate_sql
 
@@ -53,6 +54,26 @@ class ConnectionParams(NamedTuple):
         return " ".join(flat_options)
 
 
+class Preprocessor:
+    def preprocess(self, in_content: str) -> str:
+        raise NotImplementedError("Needs to be implemented by a preprocessor")
+
+
+class ReplaceFILE(Preprocessor):
+    def __init__(
+        self,
+        replace_with_token: (
+            Literal["traceprov_path", "tracprov_infer_set_path"] | PosixPath
+        ),
+    ):
+        self.replace_with_token = replace_with_token
+
+    def preprocess(self, in_content: str) -> str:
+        if self.replace_with_token is None:
+            raise Exception("Expected replace token to be filled!")
+        return in_content.replace("__FILE__", self.replace_with_token)
+
+
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
     connection_params: ConnectionParams
@@ -61,6 +82,8 @@ class RunWithTimeoutOptions(NamedTuple):
     # Just some extra context stuff (like connections)
     extras: dict | None = None
     skip_validation: bool = False
+    preprocessors: list[Preprocessor] = []
+    strict_run: bool = False
 
     def close_all(self):
         if self.extras is None:
@@ -115,21 +138,36 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         non_comment_stmts = [stmt for stmt in sql_stmts if not stmt.startswith("--")]
         flattend_sql_query = " ".join(non_comment_stmts)
 
+    for preprocessor in options.preprocessors:
+
+        flattend_sql_query = preprocessor.preprocess(flattend_sql_query)
+
     timeout_stmt = f"SET statement_timeout = '{options.params.timeout}s';"
     augmented_sql = f"EXPLAIN (analyze, timing off, format JSON) {flattend_sql_query}"
 
     cursor = connection.cursor()
     try:
-        cursor.execute(timeout_stmt)
-        cursor.execute(augmented_sql)
-        analyze_result = cursor.fetchall()[0][0][0]
-        planning_time = analyze_result["Planning Time"]
-        execution_time = analyze_result["Execution Time"]
-        computed_time = float((planning_time + execution_time) / 1000)
-        if options.capture_output:
+        if not options.strict_run:
+            cursor.execute(timeout_stmt)
+            cursor.execute(augmented_sql)
+            analyze_result = cursor.fetchall()[0][0][0]
+            planning_time = analyze_result["Planning Time"]
+            execution_time = analyze_result["Execution Time"]
+            computed_time = dict(
+                explain_time=float((planning_time + execution_time) / 1000)
+            )
+
+        if options.capture_output or options.strict_run:
+            computed_time = None
             # Now, need to run the query again.
             cursor.execute(flattend_sql_query)
-            captured_result = cursor.fetchall()
+            try:
+                captured_result = cursor.fetchall()
+            except psycopg2.ProgrammingError as e:
+                if "no results to fetch" in str(e):
+                    captured_result = None
+                else:
+                    raise e
             new_result = dict(timing=computed_time, captured=captured_result)
             computed_time = new_result
     except psycopg2.errors.QueryCanceled:

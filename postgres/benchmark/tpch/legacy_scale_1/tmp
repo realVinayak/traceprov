@@ -1,0 +1,15 @@
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_1 qnum=17 scale=1 seed=1755693633
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_2 qnum=17 scale=1 seed=1755703766
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_3 qnum=17 scale=1 seed=1755708640
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_4 qnum=17 scale=1 seed=1755708649
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_5 qnum=17 scale=1 seed=1755708657
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_default qnum=17 scale=1 default=1
+
+----------------------------------------------------------------------------------------------------------------------------------
+
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_1 qnum=11 scale=1 seed=1755693633
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_2 qnum=11 scale=1 seed=1755703766
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_3 qnum=11 scale=1 seed=1755708640
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_4 qnum=11 scale=1 seed=1755708649
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_5 qnum=11 scale=1 seed=1755708657
+make validate_query target_dir=~/projects/traceprov/postgres/benchmark/tpch/scale_1/params_default qnum=11 scale=1 default=1
