@@ -57,7 +57,7 @@ class TestBenchmark(TestDbSetup):
             ),
         ]
 
-        result = benchmark.run(
+        _, result = benchmark.run(
             top_dir=f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories=directories,
             connection_params=TestBenchmark.connection_params,
@@ -221,7 +221,7 @@ class TestBenchmark(TestDbSetup):
             ),
         ]
 
-        result = benchmark.run(
+        _, result = benchmark.run(
             f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories,
             TestBenchmark.connection_params,
@@ -394,17 +394,13 @@ class TestBenchmark(TestDbSetup):
                                 ExtraQuery(
                                     label="impl1_count",
                                     query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_materialize_count.sql",
-                                    should_run=(
-                                        lambda _, b_or_m: b_or_m == "materialize"
-                                    ),
+                                    runs_after_materialize=True,
                                     skip_validation=True,
                                 ),
                                 ExtraQuery(
                                     label="impl1_fetch",
                                     query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_fetch.sql",
-                                    should_run=(
-                                        lambda _, b_or_m: b_or_m == "materialize"
-                                    ),
+                                    runs_after_materialize=True,
                                     skip_validation=True,
                                 ),
                             ],
@@ -414,7 +410,7 @@ class TestBenchmark(TestDbSetup):
             )
         ]
 
-        result = benchmark.run(
+        _, result = benchmark.run(
             f"{os.getcwd()}/tests/test_queries/TestBenchmarkWithExtras",
             directories,
             TestBenchmark.connection_params,
