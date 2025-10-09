@@ -4,8 +4,14 @@ import argparse
 import os
 import json
 import uuid
+import random
 
-simple_uuid = lambda: str(uuid.uuid4()).split("-")[0]
+random_var = random.Random()
+random_var.seed(4567)
+
+simple_uuid = lambda: str(uuid.UUID(int=random_var.getrandbits(128), version=4)).split(
+    "-"
+)[0]
 
 
 def remove_keys(in_dict: dict, to_remove: list[str]):
@@ -110,9 +116,9 @@ def add_validates():
                 layered_config = json.loads(f.read())
 
             query_idx = layered_config_file.replace(".config.json", "")
-            os.makedirs(f"./templates/validate_layered/{query_idx}/", exist_ok=False)
+            os.makedirs(f"./templates/layered/{query_idx}/", exist_ok=False)
 
-            out_path = f"./templates/validate_layered/{query_idx}/"
+            out_path = f"./templates/layered/{query_idx}/"
 
             for layer_id, layer in enumerate(layered_config):
                 # every layer gets its own function and table (for now, just for validation)
@@ -130,12 +136,15 @@ def add_validates():
                 drop_table_sql = f"DROP TABLE IF EXISTS layer_{layer_id};"
                 create_temp_table_sql = f"CREATE TEMP TABLE layer_{layer_id} AS SELECT * FROM {function_name}({layer['layer_number']}, {layer['reference_layer']}, {layer['subq_layer']});"
                 drop_func_sql = f"drop function if exists {function_name};"
-
+                infer_time = f"select * from traceprov_infer_time({layer['layer_number']}, {layer['reference_layer']}, {layer['subq_layer']});"
+                sync_time = f"select * from traceprov_sync_time(0)"
                 sql_pack = dict(
                     drop_table=drop_table_sql,
                     drop_function=drop_func_sql,
                     create_function=create_func_sql,
                     create_temp_table=create_temp_table_sql,
+                    infer_time=infer_time,
+                    sync_time=sync_time,
                 )
 
                 for key, value in sql_pack.items():

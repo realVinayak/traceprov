@@ -17,22 +17,28 @@ test_query = [
             key="traceprov",
             extras=[
                 ExtraQuery(
+                    label="traceprov_sync_time",
+                    query="$ROOT/../templates/layered/1/layer_0_sync_time.sql",
+                    runs_after_base=True,
+                    strict_run=True,
+                ),
+                ExtraQuery(
                     label="traceprov_drop_table",
-                    query="$ROOT/../templates/validate_layered/1/layer_0_drop_table.sql",
+                    query="$ROOT/../templates/layered/1/layer_0_drop_table.sql",
                     runs_after_base=True,
                     skip_validation=True,
                     strict_run=True,
                 ),
                 ExtraQuery(
                     label="traceprov_drop_func",
-                    query="$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                    query="$ROOT/../templates/layered/1/layer_0_drop_function.sql",
                     runs_after_base=True,
                     skip_validation=True,
                     strict_run=True,
                 ),
                 ExtraQuery(
                     label="traceprov_create_func",
-                    query="$ROOT/../templates/validate_layered/1/layer_0_create_function.sql",
+                    query="$ROOT/../templates/layered/1/layer_0_create_function.sql",
                     preprocess=[ReplaceFILE("tracprov_infer_set_path")],
                     runs_after_base=True,
                     skip_validation=True,
@@ -40,17 +46,23 @@ test_query = [
                 ),
                 ExtraQuery(
                     label="traceprov_create_temp_table",
-                    query="$ROOT/../templates/validate_layered/1/layer_0_create_temp_table.sql",
+                    query="$ROOT/../templates/layered/1/layer_0_create_temp_table.sql",
                     runs_after_base=True,
                     skip_validation=True,
                     capture_output=False,
                 ),
                 ExtraQuery(
                     label="traceprov_drop_function",
-                    query="$ROOT/../templates/validate_layered/1/layer_0_drop_function.sql",
+                    query="$ROOT/../templates/layered/1/layer_0_drop_function.sql",
                     runs_after_base=True,
                     strict_run=True,
                     skip_validation=True,
+                ),
+                ExtraQuery(
+                    label="traceprov_infer_time",
+                    query="$ROOT/../templates/layered/1/layer_0_infer_time.sql",
+                    runs_after_base=True,
+                    strict_run=True,
                 ),
             ],
         ),
@@ -63,7 +75,7 @@ directories = [QueryDirectory(dir_name="params_default", queries=test_query)]
 def main():
     benchmark = GenericBenchmark("tpch-scale-1")
     result = benchmark.run_from_argparse(
-        directories, params=RunParams(repeat=1, throwaway=0)
+        directories, params=RunParams(repeat=5, throwaway=0)
     )
     benchmark.dump_final_result(result)
 

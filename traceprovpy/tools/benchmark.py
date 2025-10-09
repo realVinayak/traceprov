@@ -139,7 +139,8 @@ class QuerySpec(NamedTuple):
             os.system(
                 f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
             )
-
+            base_context = dict()
+            base_pack = base_pack._replace(extras=base_context)
             base_time = _run_with_timeout(base_pack)
             materialize_time = None
             assert (
@@ -150,6 +151,8 @@ class QuerySpec(NamedTuple):
                 extra for extra in self.extras if extra.runs_after_base
             ]
 
+            base_extra_results = _run_extras(base_extras_to_run, base_context)
+            base_pack.close_all()
             materialize_context = dict()
             if materialize_pack:
                 materialize_pack = materialize_pack._replace(extras=materialize_context)
@@ -164,7 +167,6 @@ class QuerySpec(NamedTuple):
                 continue
             results["base"].append(base_time)
 
-            base_extra_results = _run_extras(base_extras_to_run)
             materialize_extra_results = {}
 
             if materialize_time:
