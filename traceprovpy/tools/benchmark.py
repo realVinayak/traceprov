@@ -16,7 +16,7 @@
 #       -- Q01
 #       -- Q02
 
-from typing import Callable, Literal, NamedTuple
+from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
     RunParams,
@@ -27,6 +27,20 @@ from pathlib import Path
 import os
 import argparse
 import time
+import json
+from datetime import date, datetime
+
+from traceprovpy.tools.stats.stats_collector import StatsCollector
+
+
+def json_serial(obj):
+    # We've some datetimes that aren't natively json serializable. So, we have this wrapper.
+    # Taken from stack overflow: https://stackoverflow.com/a/22238613.
+
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+
+    raise TypeError("Type %s not serializable" % type(obj))
 
 
 def _run_with_timeout(options: RunWithTimeoutOptions):
@@ -38,9 +52,8 @@ class ExtraQuery(NamedTuple):
     label: str
     query: str
     # We allow some arbitrary queries to run, right after a previous query.
-    # The depends_on helps control when this query runs.
-    # For example, we'd run
-    should_run: Callable[["QuerySpec", Literal["base", "materialize"]], bool]
+    runs_after_base: bool = False
+    runs_after_materialize: bool = False
     skip_validation: bool = False
 
 
@@ -116,7 +129,7 @@ class QuerySpec(NamedTuple):
             ), f"the base query should always execute: {base_pack}, {self}!"
 
             base_extras_to_run = [
-                extra for extra in self.extras if extra.should_run(self, "base")
+                extra for extra in self.extras if extra.runs_after_base
             ]
 
             materialize_context = dict()
@@ -139,9 +152,7 @@ class QuerySpec(NamedTuple):
             if materialize_time:
                 results["materialize"].append(materialize_time)
                 mat_extras_to_run = [
-                    extra
-                    for extra in self.extras
-                    if extra.should_run(self, "materialize")
+                    extra for extra in self.extras if extra.runs_after_materialize
                 ]
                 materialize_extra_results = _run_extras(
                     mat_extras_to_run, materialize_context
@@ -165,19 +176,35 @@ class QuerySpec(NamedTuple):
 
         return results
 
+    def get_as_dict(self):
+        return {**self._asdict(), "extras": [extra._asdict() for extra in self.extras]}
+
 
 class Query(NamedTuple):
     query_name: str
     spec: QuerySpec
+
+    def get_as_dict(self) -> dict[str, Any]:
+        return {**self._asdict(), "spec": self.spec._asdict()}
 
 
 class QueryDirectory(NamedTuple):
     dir_name: str
     queries: list[Query]
 
+    def get_as_dict(self) -> dict[str, Any]:
+        return {
+            **self._asdict(),
+            "queries": [query.get_as_dict() for query in self.queries],
+        }
+
 
 class GenericBenchmark(NamedTuple):
     name: str
+
+    call_options: (
+        None | Tuple[str, list[QueryDirectory], ConnectionParams, RunParams]
+    ) = None
 
     def run_from_argparse(
         self,
@@ -199,21 +226,54 @@ class GenericBenchmark(NamedTuple):
             host=parsed.host,
             port=parsed.port,
             user=parsed.user,
-            password=parsed.port,
+            password=parsed.password,
             database=parsed.db,
         )
         self.setup(parsed.traceprov_root, connection_params, parsed.suff)
 
         start = time.perf_counter()
-        result = self.run(
+        called_benchmark, result = self.run(
             parsed.test_root,
             directories,
             connection_params,
             params,
         )
         end = time.perf_counter()
-        final_result = dict(result=result, time_taken=end - start, db=parsed.db)
+        final_result = dict(
+            result=result,
+            time_taken=end - start,
+            db=parsed.db,
+            stats=StatsCollector().collect_stats("postgres", connection_params),
+            called_benchmark=called_benchmark,
+            prefix=parsed.suff,
+        )
         return final_result
+
+    def dump_final_result(self, final_result: dict, out_dir="./results/"):
+        os.makedirs(out_dir, exist_ok=True)
+        current_timestamp = datetime.now()
+        datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
+        result_dir = f"{out_dir}/{final_result['prefix']}_{datetime_string}/"
+        os.makedirs(result_dir, exist_ok=False)
+        stats = final_result["stats"]
+        called_benchmark: GenericBenchmark = final_result["called_benchmark"]
+        other_result = {
+            key: value
+            for (key, value) in final_result.items()
+            if key not in ["stats", "called_benchmark"]
+        }
+        with open(f"{result_dir}/stats.json", "w") as f:
+            f.write(json.dumps(stats, indent=4, default=json_serial))
+
+        with open(f"{result_dir}/main_result.json", "w") as f:
+            f.write(json.dumps(other_result, indent=4, default=json_serial))
+
+        with open(f"{result_dir}/benchmarks_params.json", "w") as f:
+            f.write(
+                json.dumps(
+                    called_benchmark.get_as_dict(), indent=4, default=json_serial
+                )
+            )
 
     def setup(
         self,
@@ -255,7 +315,9 @@ class GenericBenchmark(NamedTuple):
             f'echo "ANALYZE;" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
         )
         print(directories)
-        params.validate()
+
+        call_options = (top_dir, directories, connection_params, params)
+        # params.validate()
 
         def _get_options(file_path: str):
             return RunWithTimeoutOptions(
@@ -278,4 +340,29 @@ class GenericBenchmark(NamedTuple):
                 }
             results_from_dirs[directory.dir_name] = combined_results
 
-        return results_from_dirs
+        return GenericBenchmark(self.name, call_options), results_from_dirs
+
+    def get_as_dict(self):
+        # Basically, recursively calls get as dict.
+        assert self.call_options is not None
+
+        base_serialized = dict(benchmark_name=self.name, top_dir=self.call_options[0])
+        directories_serialized = [
+            directory.get_as_dict() for directory in self.call_options[1]
+        ]
+        connection_params_serialized = self.call_options[2]._asdict()
+        runparams_serialized = self.call_options[3]._asdict()
+
+        assert isinstance(self.call_options[2], ConnectionParams)
+        assert isinstance(self.call_options[3], RunParams)
+
+        serialized = {
+            **base_serialized,
+            **dict(
+                directories=directories_serialized,
+                connection_params=connection_params_serialized,
+                runparams=runparams_serialized,
+            ),
+        }
+
+        return serialized

@@ -86,6 +86,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         should_cache_connection = True
         cached_connection = options.extras.get(CACHED_CONNECTION)
 
+    print(options)
+
     connection = cached_connection or psycopg2.connect(
         database=options.connection_params.database,
         host=options.connection_params.host,
