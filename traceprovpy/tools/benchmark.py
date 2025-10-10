@@ -33,11 +33,12 @@ import json
 from datetime import date, datetime
 
 from traceprovpy.tools.stats.stats_collector import StatsCollector
+import decimal
 
 
 def json_serial(obj):
     # We've some datetimes that aren't natively json serializable. So, we have this wrapper.
-    # Taken from stack overflow: https://stackoverflow.com/a/22238613.
+    # Adapted from stack overflow: https://stackoverflow.com/a/22238613.
 
     if isinstance(obj, (datetime, date)):
         return obj.isoformat()
@@ -49,6 +50,9 @@ def json_serial(obj):
 
     if isinstance(obj, PosixPath):
         return obj.as_posix()
+
+    if isinstance(obj, decimal.Decimal):
+        return str(obj)
 
     raise TypeError("Type %s not serializable" % type(obj))
 
@@ -200,6 +204,24 @@ class QuerySpec(NamedTuple):
         return {**self._asdict(), "extras": [extra._asdict() for extra in self.extras]}
 
 
+class ValidationQuerySpec(QuerySpec):
+
+    def run_packs(self, top_dir, get_run_options):
+        base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
+        other_pack = ValidationQuerySpec.get_pack(
+            top_dir, self.materialize, get_run_options
+        )
+
+        base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
+        other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_pack.file_path} > /tmp/traceprov_other.out"
+        assert os.system(base_result) == 0
+        assert os.system(other_result) == 0
+        diff_return = os.system(
+            "diff -u /tmp/traceprov_base.out /tmp/traceprov_other.out"
+        )
+        return diff_return
+
+
 class Query(NamedTuple):
     query_name: str
     spec: QuerySpec
@@ -227,14 +249,14 @@ class GenericBenchmark(NamedTuple):
     ) = None
 
     traceprov_path: str = None
-    tracprov_infer_set_path: str = None
+    traceprov_infer_set_path: str = None
 
     def run_from_argparse(
         self,
         directories: list[QueryDirectory],
         params=RunParams(),
     ):
-        assert self.traceprov_path is None and self.tracprov_infer_set_path is None
+        assert self.traceprov_path is None and self.traceprov_infer_set_path is None
         parser = argparse.ArgumentParser(prog=f"run-{self.name}")
         parser.add_argument("-u", "--user", required=True)
         parser.add_argument("-p", "--password", required=True)
@@ -331,7 +353,8 @@ class GenericBenchmark(NamedTuple):
         traceprv_infer_set_obj = f"traceprov_return_{suff}.so"
 
         return self._replace(
-            traceprov_path=traceprov_obj, tracprov_infer_set_path=traceprv_infer_set_obj
+            traceprov_path=traceprov_obj,
+            traceprov_infer_set_path=traceprv_infer_set_obj,
         )
 
     def run(
@@ -408,8 +431,8 @@ class GenericBenchmark(NamedTuple):
                 raise Exception("Not implemented other preprocess yet")
             if preprocess.replace_with_token == "traceprov_path":
                 return ReplaceFILE(self.traceprov_path)
-            if preprocess.replace_with_token == "tracprov_infer_set_path":
-                return ReplaceFILE(self.tracprov_infer_set_path)
+            if preprocess.replace_with_token == "traceprov_infer_set_path":
+                return ReplaceFILE(self.traceprov_infer_set_path)
             raise Exception(f"Unexpected token: {preprocess.replace_with_token}")
 
         def _setup_preprocess(query: Query):

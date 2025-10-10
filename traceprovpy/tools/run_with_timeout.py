@@ -17,6 +17,8 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = "5432"
 DEFAULT_DRY_RUN = False
 
+CACHED_CONNECTION = "_cached_connection"
+
 
 class RunParams(NamedTuple):
     repeat: None | int = DEFAULT_REPEAT
@@ -63,7 +65,7 @@ class ReplaceFILE(Preprocessor):
     def __init__(
         self,
         replace_with_token: (
-            Literal["traceprov_path", "tracprov_infer_set_path"] | PosixPath
+            Literal["traceprov_path", "traceprov_infer_set_path"] | PosixPath
         ),
     ):
         self.replace_with_token = replace_with_token
@@ -89,11 +91,11 @@ class RunWithTimeoutOptions(NamedTuple):
         if self.extras is None:
             return
         cached_connection = self.extras.get(CACHED_CONNECTION)
+        cursor = cached_connection.cursor()
+        cursor.execute("COMMIT;")
+        cursor.close()
         if cached_connection:
             cached_connection.close()
-
-
-CACHED_CONNECTION = "_cached_connection"
 
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
