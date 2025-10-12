@@ -1,1 +1,0 @@
-select * from traceprov_infer_time(4, 0, 0);
