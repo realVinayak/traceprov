@@ -1,1 +1,0 @@
-drop function if exists traceprov_infer_6ab88db3;
