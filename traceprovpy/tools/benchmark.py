@@ -219,6 +219,7 @@ class ValidationQuerySpec(QuerySpec):
         diff_return = os.system(
             "diff -u /tmp/traceprov_base.out /tmp/traceprov_other.out"
         )
+        assert diff_return == 0
         return diff_return
 
 
@@ -267,7 +268,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
 
-        parsed = parser.parse_args()
+        parsed, _ = parser.parse_known_args()
         connection_params = ConnectionParams(
             host=parsed.host,
             port=parsed.port,
