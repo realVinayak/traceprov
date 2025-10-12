@@ -75,6 +75,12 @@ class ReplaceFILE(Preprocessor):
             raise Exception("Expected replace token to be filled!")
         return in_content.replace("__FILE__", self.replace_with_token)
 
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.replace_with_token))
+
+    def __repr__(self):
+        return f'ReplaceFILE("{self.replace_with_token}")'
+
 
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
@@ -110,8 +116,6 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     if options.extras is not None:
         should_cache_connection = True
         cached_connection = options.extras.get(CACHED_CONNECTION)
-
-    print(options)
 
     connection = cached_connection or psycopg2.connect(
         database=options.connection_params.database,
