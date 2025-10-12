@@ -12,12 +12,10 @@ def main():
     parser = argparse.ArgumentParser(prog="tpch-driver")
     parser.add_argument("-cfg", '--config', required=True, type=str)
     parser.add_argument("-l", '--layers', required=True, type=str)
-    parser.add_argument(
-        "--validate", action=argparse.BooleanOptionalAction, default=False
-    )
     parsed, _ = parser.parse_known_args()
     with open(parsed.config) as f:
         config = json.loads(f.read())
+    is_validate = config.get('validate', False)
 
     dir_queries = []
     
@@ -78,10 +76,10 @@ def main():
     
             extra_create_table = [
                 ExtraQuery(
-                    label=(f"traceprov_create_table_{layer_id}" if parsed.validate else f"traceprov_create_temp_table_{layer_id}"),
+                    label=(f"traceprov_create_table_{layer_id}" if is_validate else f"traceprov_create_temp_table_{layer_id}"),
                     query=(
                         f"$ROOT/../templates/layered/{query_name}/layer_{layer_id}_create_table.sql"
-                        if parsed.validate
+                        if is_validate
                         else f"$ROOT/../templates/layered/{query_name}/layer_{layer_id}_create_temp_table.sql"
                     ),
                     runs_after_base=True,
@@ -123,14 +121,14 @@ def main():
                         *extra_drop_function,
                         *extra_create_function,
                         *extra_create_table,
-                        *(extra_drop_tables_later if not parsed.validate else []),
+                        *(extra_drop_tables_later if not is_validate else []),
                         *extra_infer_time,
                     ],
                 ),
             )
 
             subdir_queries.append(traceprov_query)
-            if parsed.validate:
+            if is_validate:
                 subdir_queries.append(
                     Query(
                         query_name=query_name,
