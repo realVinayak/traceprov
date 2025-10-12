@@ -23,5 +23,9 @@
         "params_5",
         "params_default"
     ],
-    "validate": true
+    "validate": true,
+    "runTimeOptions": {
+        "repeat": 1,
+        "throwaway": 0
+    }
 }
