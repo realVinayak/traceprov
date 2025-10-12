@@ -144,7 +144,8 @@ def main():
             QueryDirectory(dir_name=subdir, queries=subdir_queries)
         )
     
-    benchmark.run_from_argparse(dir_queries, RunParams(repeat=1, throwaway=1))
+    result = benchmark.run_from_argparse(dir_queries, RunParams(**config.get('runTimeOptions', {})))
+    benchmark.dump_final_result(result)
 
 if __name__ == "__main__":
     main()
