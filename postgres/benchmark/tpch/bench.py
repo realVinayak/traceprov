@@ -1,4 +1,11 @@
-from traceprovpy.tools.benchmark import ExtraQuery, GenericBenchmark, Query, QueryDirectory, QuerySpec, ValidationQuerySpec
+from traceprovpy.tools.benchmark import (
+    ExtraQuery,
+    GenericBenchmark,
+    Query,
+    QueryDirectory,
+    QuerySpec,
+    ValidationQuerySpec,
+)
 from traceprovpy.tools.run_with_timeout import ReplaceFILE, RunParams
 import json
 import argparse
@@ -10,27 +17,29 @@ import argparse
 def main():
     benchmark = GenericBenchmark("tpch-driver")
     parser = argparse.ArgumentParser(prog="tpch-driver")
-    parser.add_argument("-cfg", '--config', required=True, type=str)
-    parser.add_argument("-l", '--layers', required=True, type=str)
+    parser.add_argument("-cfg", "--config", required=True, type=str)
+    parser.add_argument("-l", "--layers", required=True, type=str)
     parsed, _ = parser.parse_known_args()
     with open(parsed.config) as f:
-        config = json.loads(f.read())
-    is_validate = config.get('validate', False)
+        config: dict = json.loads(f.read())
+    is_validate = config.get("validate", False)
 
     dir_queries = []
-    
-    for subdir in config['subdirs']:
+
+    for subdir in config["subdirs"]:
         subdir_queries = []
-        for query_name in config['queries']:
+        for query_name in config["queries"]:
             query_name = str(query_name)
             subdir_queries.append(
-                Query(query_name=query_name, spec=QuerySpec(base="base.sql", key="base")),
+                Query(
+                    query_name=query_name, spec=QuerySpec(base="base.sql", key="base")
+                ),
             )
 
             with open(f"{parsed.layers}/{query_name}.config.json") as f:
                 _config = json.loads(f.read())
                 number_layers = len(_config)
-            
+
             extra_sync = [
                 ExtraQuery(
                     label="traceprov_sync_time",
@@ -73,10 +82,14 @@ def main():
                 )
                 for layer_id in range(number_layers)
             ]
-    
+
             extra_create_table = [
                 ExtraQuery(
-                    label=(f"traceprov_create_table_{layer_id}" if is_validate else f"traceprov_create_temp_table_{layer_id}"),
+                    label=(
+                        f"traceprov_create_table_{layer_id}"
+                        if is_validate
+                        else f"traceprov_create_temp_table_{layer_id}"
+                    ),
                     query=(
                         f"$ROOT/../templates/layered/{query_name}/layer_{layer_id}_create_table.sql"
                         if is_validate
@@ -110,20 +123,37 @@ def main():
                 for layer_id in range(number_layers)
             ]
 
+            extra_measure_count = [
+                ExtraQuery(
+                    label=f"traceprov_infer_count_{layer_id}",
+                    query=f"$INLINE-select count(*) from layer_{layer_id};",
+                    runs_after_base=True,
+                    strict_run=True,
+                )
+                for layer_id in range(number_layers)
+            ]
+
+            extras = [
+                *extra_sync,
+                *extra_drop_tables,
+                *extra_drop_function,
+                *extra_create_function,
+                *extra_create_table,
+                *(extra_drop_tables_later if not is_validate else []),
+                *extra_infer_time,
+                *extra_measure_count,
+            ]
+
+            extra_labels = [e.label for e in extras]
+
+            assert len(set(extra_labels)) == len(extra_labels)
+
             traceprov_query = Query(
                 query_name=query_name,
                 spec=QuerySpec(
                     base="traceprov.sql",
                     key="traceprov",
-                    extras=[
-                        *extra_sync,
-                        *extra_drop_tables,
-                        *extra_drop_function,
-                        *extra_create_function,
-                        *extra_create_table,
-                        *(extra_drop_tables_later if not is_validate else []),
-                        *extra_infer_time,
-                    ],
+                    extras=extras,
                 ),
             )
 
@@ -139,13 +169,14 @@ def main():
                         ),
                     ),
                 )
-        
-        dir_queries.append(
-            QueryDirectory(dir_name=subdir, queries=subdir_queries)
-        )
-    
-    result = benchmark.run_from_argparse(dir_queries, RunParams(**config.get('runTimeOptions', {})))
+
+        dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
+
+    result = benchmark.run_from_argparse(
+        dir_queries, RunParams(**config.get("runTimeOptions", {}))
+    )
     benchmark.dump_final_result(result)
+
 
 if __name__ == "__main__":
     main()
