@@ -1,1 +1,1 @@
-sudo python3 run_bench.py scale_1/config_validate.json validate_configs/ ../../traceprov_infer.o
+python3 ../bench.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_10_v02 -suff local_test_0 -tp_root ../../../ -t_root ./
