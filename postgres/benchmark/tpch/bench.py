@@ -176,6 +176,11 @@ def main():
     result = benchmark.run_from_argparse(
         dir_queries, RunParams(**config.get("runTimeOptions", {}))
     )
+    if "extras" in result:
+        raise Exception('Expected "extras" to be a reserved keyword.')
+
+    # Also store the arguments from cmd line.
+    result["extras"] = dict(config=parsed.config, layers=parsed.layers)
     benchmark.dump_final_result(result)
 
 
