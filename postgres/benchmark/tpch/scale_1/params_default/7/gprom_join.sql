@@ -1,19 +1,14 @@
---- SQL OUT --- ON 2025-09-12T14:47:58 
+-- prov_supplier_s__suppkey | prov_lineitem_l__orderkey | prov_lineitem_l__linenumber | prov_orders_o__orderkey | prov_customer_c__custkey | prov_nation_n__nationkey | prov_nation_1_n__nationkey
 
--- [1m[37m[40mERROR [0m[31m(query_operator_model_checker.c:482) [0mAttribute <n_nationkey> appears more than once in
-
--- [0m[30m[43mCrossProduct[0m []
---   [0m[30m[43mCrossProduct[0m []
---     [0m[30m[43mCrossProduct[0m []
---       [0m[30m[43mCrossProduct[0m []
---         [0m[30m[43mCrossProduct[0m []
---           [0m[30m[43mTableAccess[0m [supplier]
---           [0m[30m[43mTableAccess[0m [lineitem]
---         [0m[30m[43mTableAccess[0m [orders]
---       [0m[30m[43mTableAccess[0m [customer]
---     [0m[30m[43mTableAccess[0m [nation]
---   [0m[30m[43mTableAccess[0m [nation]
-
+SELECT 
+prov_supplier_s__suppkey,
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber,
+prov_orders_o__orderkey,
+prov_customer_c__custkey,
+prov_nation_n__nationkey,
+prov_nation_1_n__nationkey
+FROM (
 WITH temp_view_2 AS (
 SELECT F0_0."s_suppkey" AS "s_suppkey", F0_0."s_name" AS "s_name", F0_0."s_address" AS "s_address", F0_0."s_nationkey" AS "s_nationkey", F0_0."s_phone" AS "s_phone", F0_0."s_acctbal" AS "s_acctbal", F0_0."s_comment" AS "s_comment", F0_0."s_suppkey" AS "prov_supplier_s__suppkey"
 FROM "supplier" F0_0),
@@ -57,4 +52,6 @@ SELECT F0_0."supp_nation" AS "_P_SIDE_GROUP_0", F0_0."cust_nation" AS "_P_SIDE_G
 FROM (SELECT * FROM temp_view_1) F0_0) F1_0 ON (((F0_0."GROUP_2" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_2") AND ((F0_0."GROUP_1" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_1") AND (F0_0."GROUP_0" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_0"))))))
 SELECT F0_0."GROUP_0" AS "supp_nation", F0_0."GROUP_1" AS "cust_nation", F0_0."GROUP_2" AS "l_year", F0_0."AGGR_0" AS "revenue", F0_0."prov_supplier_s__suppkey" AS "prov_supplier_s__suppkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_customer_c__custkey" AS "prov_customer_c__custkey", F0_0."prov_nation_n__nationkey" AS "prov_nation_n__nationkey", F0_0."prov_nation_1_n__nationkey" AS "prov_nation_1_n__nationkey"
 FROM (SELECT * FROM temp_view_0) F0_0
-ORDER BY "supp_nation" ASC NULLS LAST, "cust_nation" ASC NULLS LAST, "l_year" ASC NULLS LAST;
+ORDER BY "supp_nation" ASC NULLS LAST, "cust_nation" ASC NULLS LAST, "l_year" ASC NULLS LAST
+) F;
+

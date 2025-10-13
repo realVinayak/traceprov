@@ -1,5 +1,9 @@
---- SQL OUT --- ON 2025-09-12T14:48:01 
 
+SELECT
+prov_orders_o__orderkey,
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber
+FROM (
 WITH temp_view_2 AS (
 SELECT F0_0."o_orderkey" AS "o_orderkey", F0_0."o_custkey" AS "o_custkey", F0_0."o_orderstatus" AS "o_orderstatus", F0_0."o_totalprice" AS "o_totalprice", F0_0."o_orderdate" AS "o_orderdate", F0_0."o_orderpriority" AS "o_orderpriority", F0_0."o_clerk" AS "o_clerk", F0_0."o_shippriority" AS "o_shippriority", F0_0."o_comment" AS "o_comment", F0_0."o_orderkey" AS "prov_orders_o__orderkey"
 FROM "orders" F0_0),
@@ -23,4 +27,5 @@ SELECT F0_0."AGG_GB_ARG2" AS "_P_SIDE_GROUP_0", F0_0."prov_orders_o__orderkey" A
 FROM (SELECT * FROM temp_view_1) F0_0) F1_0 ON ((F0_0."GROUP_0" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_0"))))
 SELECT F0_0."GROUP_0" AS "l_shipmode", F0_0."AGGR_0" AS "high_line_count", F0_0."AGGR_1" AS "low_line_count", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber"
 FROM (SELECT * FROM temp_view_0) F0_0
-ORDER BY "l_shipmode" ASC NULLS LAST;
+ORDER BY "l_shipmode" ASC NULLS LAST
+) F;
