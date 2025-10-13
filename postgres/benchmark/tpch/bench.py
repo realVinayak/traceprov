@@ -30,15 +30,33 @@ def main():
         subdir_queries = []
         for query_name in config["queries"]:
             query_name = str(query_name)
-            subdir_queries.append(
-                Query(
-                    query_name=query_name, spec=QuerySpec(base="base.sql", key="base")
-                ),
-            )
+            user_specs = config.get("specs", [])
+            if len(user_specs) == 0:
+                subdir_queries.append(
+                    Query(
+                        query_name=query_name,
+                        spec=QuerySpec(base="base.sql", key="base"),
+                    ),
+                )
+            else:
+                for spec in user_specs:
+                    spec_without_extras = {
+                        key: value for (key, value) in spec.items() if key != "extras"
+                    }
+                    extras = [ExtraQuery(**kwargs) for kwargs in spec.get("extras", [])]
+                    subdir_queries.append(
+                        Query(
+                            query_name=query_name,
+                            spec=QuerySpec(**spec_without_extras, extras=extras),
+                        ),
+                    )
 
             with open(f"{parsed.layers}/{query_name}.config.json") as f:
                 _config = json.loads(f.read())
                 number_layers = len(_config)
+
+            if not config.get("addTraceProv", True):
+                continue
 
             extra_sync = [
                 ExtraQuery(
