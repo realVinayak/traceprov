@@ -88,6 +88,12 @@ class QuerySpec(NamedTuple):
     ):
         if path.startswith("$ROOT"):
             query_path = Path(path.replace("$ROOT", os.getcwd()))
+        elif path.startswith("$INLINE-"):
+            # We allow passing queries inline (especially when it is convenient)
+            sql_query = path.replace("$INLINE-", '')
+            query_path = Path('/tmp/traceprov_inline_query.sql')
+            with open(query_path, 'w') as f:
+                f.write(sql_query)
         else:
             query_path = top_dir.joinpath(path)
         assert query_path.exists(), "path not found: " + str(query_path)
