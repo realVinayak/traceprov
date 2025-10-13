@@ -183,6 +183,6 @@ def add_validates():
 
 
 if __name__ == "__main__":
-    # main()
-    add_validates()
+    main()
+    # add_validates()
     ...

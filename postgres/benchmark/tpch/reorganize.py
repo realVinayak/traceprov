@@ -11,15 +11,12 @@ def main():
     parser = argparse.ArgumentParser("reorganize")
     parser.add_argument("-root", required=True)
     parser.add_argument("-new_root", required=True)
-    parser.add_argument("-common_root", required=True)
     parsed = parser.parse_args()
 
     root = parsed.root
     new_root = parsed.new_root
-    common_root = parsed.common_root
 
     os.makedirs(new_root, exist_ok=False)
-    os.makedirs(common_root, exist_ok=False)
 
     for root, param_dirs, leaf_files in os.walk(root):
         if len(param_dirs) == 0:
@@ -44,7 +41,7 @@ def main():
                 )
                 os.makedirs(f"{new_root}/{param_dir}/{query_num}", exist_ok=True)
                 assert not os.path.exists(
-                    "{new_root}/{param_dir}/{query_num}/{terminal_dir}.sql"
+                    f"{new_root}/{param_dir}/{query_num}/{terminal_dir}.sql"
                 )
                 print(root, query_num, leaf_file)
                 os.system(
