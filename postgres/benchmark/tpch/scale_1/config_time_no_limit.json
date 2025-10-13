@@ -1,0 +1,15 @@
+{
+    "queries": [
+        "2.no_limit",
+        "3.no_limit",
+        "10.no_limit"
+    ],
+    "validate": false,
+    "subdirs": [
+        "params_default"
+    ],
+    "runTimeOptions": {
+        "repeat": 2,
+        "throwaway": 0
+    }
+}
