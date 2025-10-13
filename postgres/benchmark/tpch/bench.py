@@ -129,6 +129,7 @@ def main():
                     query=f"$INLINE-select count(*) from layer_{layer_id};",
                     runs_after_base=True,
                     strict_run=True,
+                    skip_validation=True,
                 )
                 for layer_id in range(number_layers)
             ]
@@ -139,9 +140,9 @@ def main():
                 *extra_drop_function,
                 *extra_create_function,
                 *extra_create_table,
-                *(extra_drop_tables_later if not is_validate else []),
                 *extra_infer_time,
                 *extra_measure_count,
+                *(extra_drop_tables_later if not is_validate else []),
             ]
 
             extra_labels = [e.label for e in extras]
