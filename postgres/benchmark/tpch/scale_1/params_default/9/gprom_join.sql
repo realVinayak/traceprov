@@ -1,5 +1,14 @@
---- SQL OUT --- ON 2025-09-12T14:47:59 
 
+SELECT 
+prov_part_p__partkey,
+prov_supplier_s__suppkey,
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber,
+prov_partsupp_ps__partkey,
+prov_partsupp_ps__suppkey,
+prov_orders_o__orderkey,
+prov_nation_n__nationkey
+FROM (
 WITH temp_view_2 AS (
 SELECT F0_0."p_partkey" AS "p_partkey", F0_0."p_name" AS "p_name", F0_0."p_mfgr" AS "p_mfgr", F0_0."p_brand" AS "p_brand", F0_0."p_type" AS "p_type", F0_0."p_size" AS "p_size", F0_0."p_container" AS "p_container", F0_0."p_retailprice" AS "p_retailprice", F0_0."p_comment" AS "p_comment", F0_0."p_partkey" AS "prov_part_p__partkey"
 FROM "part" F0_0),
@@ -43,4 +52,5 @@ SELECT F0_0."nation" AS "_P_SIDE_GROUP_0", F0_0."o_year" AS "_P_SIDE_GROUP_1", F
 FROM (SELECT * FROM temp_view_1) F0_0) F1_0 ON (((F0_0."GROUP_1" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_1") AND (F0_0."GROUP_0" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_0")))))
 SELECT F0_0."GROUP_0" AS "nation", F0_0."GROUP_1" AS "o_year", F0_0."AGGR_0" AS "sum_profit", F0_0."prov_part_p__partkey" AS "prov_part_p__partkey", F0_0."prov_supplier_s__suppkey" AS "prov_supplier_s__suppkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber", F0_0."prov_partsupp_ps__partkey" AS "prov_partsupp_ps__partkey", F0_0."prov_partsupp_ps__suppkey" AS "prov_partsupp_ps__suppkey", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_nation_n__nationkey" AS "prov_nation_n__nationkey"
 FROM (SELECT * FROM temp_view_0) F0_0
-ORDER BY "nation" ASC NULLS LAST, "o_year" DESC NULLS LAST;
+ORDER BY "nation" ASC NULLS LAST, "o_year" DESC NULLS LAST
+) AS F;

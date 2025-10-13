@@ -1,21 +1,16 @@
---- SQL OUT --- ON 2025-09-12T14:47:58 
+-- prov_part_p__partkey | prov_supplier_s__suppkey | prov_lineitem_l__orderkey | prov_lineitem_l__linenumber | prov_orders_o__orderkey | prov_customer_c__custkey | prov_nation_n__nationkey | prov_nation_1_n__nationkey | prov_region_r__regionkey
 
--- [1m[37m[40mERROR [0m[31m(query_operator_model_checker.c:482) [0mAttribute <n_nationkey> appears more than once in
-
--- [0m[30m[43mCrossProduct[0m []
---   [0m[30m[43mCrossProduct[0m []
---     [0m[30m[43mCrossProduct[0m []
---       [0m[30m[43mCrossProduct[0m []
---         [0m[30m[43mCrossProduct[0m []
---           [0m[30m[43mCrossProduct[0m []
---             [0m[30m[43mTableAccess[0m [part]
---             [0m[30m[43mTableAccess[0m [supplier]
---           [0m[30m[43mTableAccess[0m [lineitem]
---         [0m[30m[43mTableAccess[0m [orders]
---       [0m[30m[43mTableAccess[0m [customer]
---     [0m[30m[43mTableAccess[0m [nation]
---   [0m[30m[43mTableAccess[0m [nation]
-
+SELECT 
+prov_part_p__partkey,
+prov_supplier_s__suppkey,
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber,
+prov_orders_o__orderkey,
+prov_customer_c__custkey,
+prov_nation_n__nationkey,
+prov_nation_1_n__nationkey,
+prov_region_r__regionkey
+FROM (
 WITH temp_view_1 AS (
 SELECT /*+ materialize */ date_part('YEAR', (F3_0."o_orderdate")::date) AS "o_year", (F2_0."l_extendedprice" * (1 - F2_0."l_discount")) AS "volume", F6_0."n_name" AS "nation"
 FROM ((((((("part" F0_0 CROSS JOIN "supplier" F1_0) CROSS JOIN "lineitem" F2_0) CROSS JOIN "orders" F3_0) CROSS JOIN "customer" F4_0) CROSS JOIN "nation" F5_0) CROSS JOIN "nation" F6_0) CROSS JOIN "region" F7_0)
@@ -75,4 +70,5 @@ SELECT F0_0."AGG_GB_ARG2" AS "_P_SIDE_GROUP_0", F0_0."prov_part_p__partkey" AS "
 FROM (SELECT * FROM temp_view_2) F0_0) F1_0 ON ((F0_0."GROUP_0" IS NOT DISTINCT FROM F1_0."_P_SIDE_GROUP_0"))))
 SELECT F0_0."GROUP_0" AS "o_year", (F0_0."AGGR_0" / F0_0."AGGR_1") AS "mkt_share", F0_0."prov_part_p__partkey" AS "prov_part_p__partkey", F0_0."prov_supplier_s__suppkey" AS "prov_supplier_s__suppkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_customer_c__custkey" AS "prov_customer_c__custkey", F0_0."prov_nation_n__nationkey" AS "prov_nation_n__nationkey", F0_0."prov_nation_1_n__nationkey" AS "prov_nation_1_n__nationkey", F0_0."prov_region_r__regionkey" AS "prov_region_r__regionkey"
 FROM (SELECT * FROM temp_view_0) F0_0
-ORDER BY "o_year" ASC NULLS LAST;
+ORDER BY "o_year" ASC NULLS LAST
+) AS F;

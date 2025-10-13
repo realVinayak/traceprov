@@ -1,5 +1,11 @@
---- SQL OUT --- ON 2025-09-12T14:47:59 
 
+SELECT
+prov_customer_c__custkey,
+prov_orders_o__orderkey,
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber,
+prov_nation_n__nationkey
+FROM (
 WITH temp_view_2 AS (
 SELECT F0_0."c_custkey" AS "c_custkey", F0_0."c_name" AS "c_name", F0_0."c_address" AS "c_address", F0_0."c_nationkey" AS "c_nationkey", F0_0."c_phone" AS "c_phone", F0_0."c_acctbal" AS "c_acctbal", F0_0."c_mktsegment" AS "c_mktsegment", F0_0."c_comment" AS "c_comment", F0_0."c_custkey" AS "prov_customer_c__custkey"
 FROM "customer" F0_0),
@@ -34,4 +40,5 @@ FROM (SELECT * FROM temp_view_1) F0_0) F1_0 ON (((F0_0."GROUP_6" IS NOT DISTINCT
 SELECT F0_0."GROUP_0" AS "c_custkey", F0_0."GROUP_1" AS "c_name", F0_0."AGGR_0" AS "revenue", F0_0."GROUP_2" AS "c_acctbal", F0_0."GROUP_4" AS "n_name", F0_0."GROUP_5" AS "c_address", F0_0."GROUP_3" AS "c_phone", F0_0."GROUP_6" AS "c_comment", F0_0."prov_customer_c__custkey" AS "prov_customer_c__custkey", F0_0."prov_orders_o__orderkey" AS "prov_orders_o__orderkey", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber", F0_0."prov_nation_n__nationkey" AS "prov_nation_n__nationkey"
 FROM (SELECT * FROM temp_view_0) F0_0
 ORDER BY "revenue" DESC NULLS LAST
-LIMIT 20;
+LIMIT 20
+) F;

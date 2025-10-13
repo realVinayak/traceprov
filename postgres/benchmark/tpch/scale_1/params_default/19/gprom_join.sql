@@ -1,5 +1,9 @@
---- SQL OUT --- ON 2025-09-12T14:48:02 
 
+SELECT
+prov_lineitem_l__orderkey,
+prov_lineitem_l__linenumber,
+prov_part_p__partkey
+FROM (
 WITH temp_view_1 AS (
 SELECT F0_0."l_orderkey" AS "l_orderkey", F0_0."l_partkey" AS "l_partkey", F0_0."l_suppkey" AS "l_suppkey", F0_0."l_linenumber" AS "l_linenumber", F0_0."l_quantity" AS "l_quantity", F0_0."l_extendedprice" AS "l_extendedprice", F0_0."l_discount" AS "l_discount", F0_0."l_tax" AS "l_tax", F0_0."l_returnflag" AS "l_returnflag", F0_0."l_linestatus" AS "l_linestatus", F0_0."l_shipdate" AS "l_shipdate", F0_0."l_commitdate" AS "l_commitdate", F0_0."l_receiptdate" AS "l_receiptdate", F0_0."l_shipinstruct" AS "l_shipinstruct", F0_0."l_shipmode" AS "l_shipmode", F0_0."l_comment" AS "l_comment", F0_0."l_orderkey" AS "prov_lineitem_l__orderkey", F0_0."l_linenumber" AS "prov_lineitem_l__linenumber"
 FROM "lineitem" F0_0),
@@ -18,4 +22,5 @@ SELECT F0_0."l_orderkey" AS "l_orderkey", F0_0."l_partkey" AS "l_partkey", F0_0.
 FROM ((SELECT * FROM temp_view_1) F0_0 CROSS JOIN (SELECT * FROM temp_view_2) F1_0)) F0_0
 WHERE (((((((((((F0_0."p_partkey" = F0_0."l_partkey") AND (F0_0."p_brand" = 'Brand#12')) AND F0_0."p_container" IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG')) AND (F0_0."l_quantity" >= 1)) AND (F0_0."l_quantity" <= (1 + 10))) AND (F0_0."p_size" >= 1)) AND (F0_0."p_size" <= 5)) AND F0_0."l_shipmode" IN ('AIR', 'AIR REG')) AND (F0_0."l_shipinstruct" = 'DELIVER IN PERSON')) OR (((((((((F0_0."p_partkey" = F0_0."l_partkey") AND (F0_0."p_brand" = 'Brand#23')) AND F0_0."p_container" IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK')) AND (F0_0."l_quantity" >= 10)) AND (F0_0."l_quantity" <= (10 + 10))) AND (F0_0."p_size" >= 1)) AND (F0_0."p_size" <= 10)) AND F0_0."l_shipmode" IN ('AIR', 'AIR REG')) AND (F0_0."l_shipinstruct" = 'DELIVER IN PERSON'))) OR (((((((((F0_0."p_partkey" = F0_0."l_partkey") AND (F0_0."p_brand" = 'Brand#34')) AND F0_0."p_container" IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG')) AND (F0_0."l_quantity" >= 20)) AND (F0_0."l_quantity" <= (20 + 10))) AND (F0_0."p_size" >= 1)) AND (F0_0."p_size" <= 15)) AND F0_0."l_shipmode" IN ('AIR', 'AIR REG')) AND (F0_0."l_shipinstruct" = 'DELIVER IN PERSON')))) F1_0 ON ((1 = 1))))
 SELECT F0_0."AGGR_0" AS "revenue", F0_0."prov_lineitem_l__orderkey" AS "prov_lineitem_l__orderkey", F0_0."prov_lineitem_l__linenumber" AS "prov_lineitem_l__linenumber", F0_0."prov_part_p__partkey" AS "prov_part_p__partkey"
-FROM (SELECT * FROM temp_view_0) F0_0;
+FROM (SELECT * FROM temp_view_0) F0_0
+) F;
