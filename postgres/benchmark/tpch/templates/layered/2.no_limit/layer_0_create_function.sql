@@ -7,4 +7,4 @@ CREATE OR REPLACE FUNCTION traceprov_infer_4b719ae7(
     )
     RETURNS SETOF record
     AS '$libdir/__FILE__', 'traceprov_infer'
-    LANGUAGE C IMMUTABLE STRICT PARALLEL SAFE;
+    LANGUAGE C STRICT PARALLEL SAFE;
