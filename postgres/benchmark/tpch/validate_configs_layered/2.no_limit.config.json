@@ -1,0 +1,87 @@
+[
+    {
+        "layer_number": 1,
+        "pk_order": [
+            "ps_suppkey",
+            "ps_partkey",
+            "s_suppkey",
+            "n_nationkey",
+            "r_regionkey"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "F",
+                "keys": [
+                    "ps_suppkey",
+                    "ps_partkey"
+                ]
+            },
+            {
+                "ref": "G",
+                "keys": [
+                    "s_suppkey"
+                ]
+            },
+            {
+                "ref": "H",
+                "keys": [
+                    "n_nationkey"
+                ]
+            },
+            {
+                "ref": "I",
+                "keys": [
+                    "r_regionkey"
+                ]
+            }
+        ],
+        "reference_layer": 0,
+        "subq_layer": 0
+    },
+    {
+        "layer_number": 0,
+        "pk_order": [
+            "p_partkey",
+            "s_suppkey",
+            "n_nationkey",
+            "r_regionkey",
+            "ps_suppkey",
+            "ps_partkey"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "A",
+                "keys": [
+                    "p_partkey"
+                ]
+            },
+            {
+                "ref": "B",
+                "keys": [
+                    "s_suppkey"
+                ]
+            },
+            {
+                "ref": "C",
+                "keys": [
+                    "n_nationkey"
+                ]
+            },
+            {
+                "ref": "D",
+                "keys": [
+                    "r_regionkey"
+                ]
+            },
+            {
+                "ref": "E",
+                "keys": [
+                    "ps_partkey",
+                    "ps_suppkey"
+                ]
+            }
+        ],
+        "reference_layer": 0,
+        "subq_layer": 4
+    }
+]

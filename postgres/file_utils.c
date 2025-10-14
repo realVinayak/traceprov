@@ -4,7 +4,7 @@
 #include <sys/file.h>
 #include <unistd.h>
 #include <dirent.h>
-
+#include <sys/stat.h>
 
 int remove_if_exists(const char *file){
     int rc = 0;
@@ -17,12 +17,13 @@ int remove_if_exists(const char *file){
     return 0;
 }
 
-char *get_injected_str(const char *file_template_name, int number, void *buffer){
+char *get_injected_str(const char *file_template_name, const char *dir, int number, void *buffer){
 
     char *file_name = (char*)buffer;
     
     size_t file_name_size = (strlen(file_template_name)
         // We can put in 32 chars at max.
+        + strlen(dir)
         + (32 * 8) 
         + 4
     );
@@ -40,17 +41,18 @@ char *get_injected_str(const char *file_template_name, int number, void *buffer)
 
 
     memset(file_name, 0, file_name_size);
-    sprintf(file_name, file_template_name, number);
+    sprintf(file_name, file_template_name, dir, number);
 
     return file_name;
 }
 
-char *get_bi_injected_str(const char *file_template_name, int first, int second, void *buffer){
+char *get_bi_injected_str(const char *file_template_name, const char *dir, int first, int second, void *buffer){
     char *file_name = (char*)buffer;
     
     size_t file_name_size = (strlen(file_template_name)
         // We can put in 32 chars at max.
-        + (32 * 8) 
+        + strlen(dir)
+        + 2*(32 * 8) 
         + 4
     );
 
@@ -67,7 +69,7 @@ char *get_bi_injected_str(const char *file_template_name, int first, int second,
 
 
     memset(file_name, 0, file_name_size);
-    sprintf(file_name, file_template_name, first, second);
+    sprintf(file_name, file_template_name, dir, first, second);
 
     return file_name;
 }
@@ -87,6 +89,24 @@ int remove_and_create(const char *file_name, int size){
     }
 
     return fd;
+}
+
+// Create a new dir, if it doesn't exist.
+// We use this as part of reinit_state
+// We _could_ do this as part of general run, but there can be potential race conditions
+// and unnecessary slowdown.
+int create_dir_if_not_exists(const char *dir, int mode){
+    DIR *folder = opendir(dir);
+    if (folder != NULL){
+        closedir(folder);
+        return 0;
+    }
+    int rc = 0;
+    int mkdir_response = mkdir(dir, mode);
+    if (mkdir_response != 0){
+        rc = 1;
+    }
+    return rc;
 }
 
 // Taken from https://stackoverflow.com/questions/11007494/how-to-delete-all-files-in-a-folder-but-not-delete-the-folder-using-nix-standar
