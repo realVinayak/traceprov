@@ -46,7 +46,7 @@ extern "C" {
             PRINT_ON_DEBUG("Error mmaping group layer file");
             return 1;
         }
-
+        close(fd);
         *ptr = temp_ptr;
         return 0;
     }
@@ -506,6 +506,7 @@ exit_map:
       record_padding,
       layer_fd,
       logged_record_count,
+      is_sorted_by_group_num,
 
       NUM_COLUMNS
     };
@@ -578,13 +579,37 @@ exit_map:
           }
           
 	  int64 record_count = 0;
+      // In some cases it is not defined (like for the group layer files.)
+      int32 is_sorted_by_group_no = -1;
 	  if (layer.layer_number % 3 == 2) {
 	  	// In this case, it is group number. We don't define number of records precisely here.
 		// It is actually just whatever the main layer reports as the number of groups.
 		// Need -2 because layer numbers are 1-indexed
 		record_count = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
 	  } else {
+        is_sorted_by_group_no = 1;
 	  	record_count = final_ptr_offset / record_size;
+        // Need to scan over the layer file to determine if it is sorted by group.
+        void *layer_mapped_ptr = NULL;
+        if (map_layer_file(layer.layer_number, worker_id, &layer_mapped_ptr, layer.size)){
+            elog(ERROR, "Encountered error when mapping the layer for stats");
+        }
+        const void *layer_final_ptr = get_final_ptr(layer_mapped_ptr, &layer);
+        uint64 last_group_number = 0;
+        
+        while (layer_mapped_ptr < layer_final_ptr){
+            layer_mapped_ptr += layer.record_padding;
+            const uint64 *typed_ptr = (uint64 *)layer_mapped_ptr;
+            const uint64 current_group_number = typed_ptr[layer.num_pk_records];
+            if (last_group_number == 0){
+                last_group_number = current_group_number;
+            }
+            if (current_group_number != 0 && current_group_number < last_group_number){
+                is_sorted_by_group_no = 0;
+            }
+            layer_mapped_ptr += sizeof(uint64)*(layer.num_pk_records + 1);
+            last_group_number = current_group_number;
+        }
 	  }
           record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
           record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
@@ -596,6 +621,8 @@ exit_map:
           record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
           record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
           record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
+          record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
+
           tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
       }
