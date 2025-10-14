@@ -1,3 +1,4 @@
+data/
 crimes.csv
 .vscode
 postgres/*.so
