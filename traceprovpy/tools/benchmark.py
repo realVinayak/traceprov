@@ -90,9 +90,9 @@ class QuerySpec(NamedTuple):
             query_path = Path(path.replace("$ROOT", os.getcwd()))
         elif path.startswith("$INLINE-"):
             # We allow passing queries inline (especially when it is convenient)
-            sql_query = path.replace("$INLINE-", '')
-            query_path = Path('/tmp/traceprov_inline_query.sql')
-            with open(query_path, 'w') as f:
+            sql_query = path.replace("$INLINE-", "")
+            query_path = Path("/tmp/traceprov_inline_query.sql")
+            with open(query_path, "w") as f:
                 f.write(sql_query)
         else:
             query_path = top_dir.joinpath(path)
@@ -153,9 +153,9 @@ class QuerySpec(NamedTuple):
             base_pack = base_pack._replace(extras=base_context)
             base_time = _run_with_timeout(base_pack)
             materialize_time = None
-            assert (
-                base_time is not None
-            ), f"the base query should always execute: {base_pack}, {self}!"
+            if base_time is None:
+                results["base"].append(dict(timeout=True))
+                break
 
             base_extras_to_run = [
                 extra for extra in self.extras if extra.runs_after_base
