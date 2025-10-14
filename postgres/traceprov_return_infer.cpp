@@ -587,6 +587,7 @@ exit_map:
 		// Need -2 because layer numbers are 1-indexed
 		record_count = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
 	  } else {
+        const bool is_pure_layer = layer.layer_number % 3 == 1;
         is_sorted_by_group_no = 1;
 	  	record_count = final_ptr_offset / record_size;
         // Need to scan over the layer file to determine if it is sorted by group.
@@ -600,7 +601,12 @@ exit_map:
         while (layer_mapped_ptr < layer_final_ptr){
             layer_mapped_ptr += layer.record_padding;
             const uint64 *typed_ptr = (uint64 *)layer_mapped_ptr;
-            const uint64 current_group_number = typed_ptr[layer.num_pk_records];
+            uint64 current_group_number = 0;
+            if (is_pure_layer){
+                current_group_number = typed_ptr[0];
+            }else{
+                current_group_number = typed_ptr[layer.num_pk_records];
+            }
             if (last_group_number == 0){
                 last_group_number = current_group_number;
             }
