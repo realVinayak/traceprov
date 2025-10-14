@@ -1,6 +1,6 @@
 
 
-CREATE TEMP TABLE gprom_materialized AS
+CREATE TEMP TABLE gprom_lineage AS
 SELECT
 prov_lineitem_l__orderkey,
 prov_lineitem_l__linenumber,

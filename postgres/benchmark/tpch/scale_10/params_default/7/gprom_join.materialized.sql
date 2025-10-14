@@ -1,7 +1,7 @@
 -- prov_supplier_s__suppkey | prov_lineitem_l__orderkey | prov_lineitem_l__linenumber | prov_orders_o__orderkey | prov_customer_c__custkey | prov_nation_n__nationkey | prov_nation_1_n__nationkey
 
 
-CREATE TEMP TABLE gprom_materialized AS 
+CREATE TEMP TABLE gprom_lineage AS 
 SELECT 
 prov_supplier_s__suppkey,
 prov_lineitem_l__orderkey,
