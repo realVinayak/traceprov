@@ -1,4 +1,4 @@
-CREATE TEMP TABLE gprom_materialized AS
+CREATE TEMP TABLE gprom_lineage AS
 SELECT
 prov_customer_c__custkey,
 prov_orders_o__orderkey,
