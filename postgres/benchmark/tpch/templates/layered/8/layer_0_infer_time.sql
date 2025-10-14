@@ -1,0 +1,1 @@
+select * from traceprov_infer_time(1, 0, 0);

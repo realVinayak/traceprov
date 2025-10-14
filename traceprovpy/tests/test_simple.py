@@ -1,5 +1,4 @@
-from unittest import TestCase
-from .utils import TestDbSetup
+from traceprovpy.tests.utils import TestDbSetup
 
 
 class TestSimple(TestDbSetup):

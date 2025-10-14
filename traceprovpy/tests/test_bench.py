@@ -1,5 +1,6 @@
 from traceprovpy.tests.utils import TestDbSetup
 from traceprovpy.tools.benchmark import (
+    ExtraQuery,
     GenericBenchmark,
     Query,
     QueryDirectory,
@@ -7,8 +8,8 @@ from traceprovpy.tools.benchmark import (
 )
 import os
 import math
-
-from traceprovpy.tools.run_with_timeout import RunParams
+import time
+from traceprovpy.tools.run_with_timeout import ConnectionParams, RunParams
 
 
 class TestBenchmark(TestDbSetup):
@@ -19,13 +20,13 @@ class TestBenchmark(TestDbSetup):
                 [
                     1
                     for measured in measured_times
-                    if math.isclose(measured, expected, rel_tol=0.05)
+                    if math.isclose(measured["explain_time"], expected, rel_tol=0.05)
                 ]
             ),
             len(measured_times) / 2,
         )
 
-    def test_simple_run(self):
+    def _simple_run(self, params: RunParams, do_length_check=True):
         benchmark = GenericBenchmark("simple-benchmark")
         directories = [
             QueryDirectory(
@@ -55,13 +56,12 @@ class TestBenchmark(TestDbSetup):
                 ],
             ),
         ]
-        result = benchmark.run(
-            TestBenchmark.pg_user,
-            TestBenchmark.pg_password,
-            TestBenchmark.test_db,
-            f"{os.getcwd()}/tests/test_queries/TestBenchmark",
-            directories,
-            params=RunParams(repeat=4, throwaway=1),
+
+        _, result = benchmark.run(
+            top_dir=f"{os.getcwd()}/tests/test_queries/TestBenchmark",
+            directories=directories,
+            connection_params=TestBenchmark.connection_params,
+            params=params,
         )
         print(result)
         self.assertIn("dir_1", result)
@@ -101,16 +101,30 @@ class TestBenchmark(TestDbSetup):
         self.assertIn("base", base_dir_2_test_01)
         self.assertIn("base", base_dir_2_test_02)
 
-        self.assertEqual(len(base_dir_1_test_01["base"]), 4)
-        self.assertEqual(len(base_dir_1_test_02["base"]), 4)
-        self.assertEqual(len(base_dir_2_test_01["base"]), 4)
-        self.assertEqual(len(base_dir_2_test_02["base"]), 4)
+        if do_length_check:
+            # In case where we're running it for a set amount of time,
+            # we don't know beforehand what the length will be.
+            self.assertEqual(len(base_dir_1_test_01["base"]), 4)
+            self.assertEqual(len(base_dir_1_test_02["base"]), 4)
+            self.assertEqual(len(base_dir_2_test_01["base"]), 4)
+            self.assertEqual(len(base_dir_2_test_02["base"]), 4)
 
         self.assert_close(base_dir_1_test_01["base"], 2)
         self.assert_close(base_dir_1_test_02["base"], 4)
 
         self.assert_close(base_dir_2_test_01["base"], 3)
         self.assert_close(base_dir_2_test_02["base"], 5)
+
+    def test_simple_run(self):
+        params = RunParams(repeat=4, throwaway=1)
+        self._simple_run(params)
+
+    def test_simple_run_timed(self):
+        start_time = time.perf_counter()
+        params = RunParams(repeat=None, throwaway=None, execution_time=10)
+        self._simple_run(params, do_length_check=False)
+        end_time = time.perf_counter()
+        print(end_time - start_time)
 
     def test_multiple_implementations_materialize(self):
         benchmark = GenericBenchmark("materialize-benchmark")
@@ -207,12 +221,10 @@ class TestBenchmark(TestDbSetup):
             ),
         ]
 
-        result = benchmark.run(
-            TestBenchmark.pg_user,
-            TestBenchmark.pg_password,
-            TestBenchmark.test_db,
+        _, result = benchmark.run(
             f"{os.getcwd()}/tests/test_queries/TestBenchmark",
             directories,
+            TestBenchmark.connection_params,
             params=RunParams(repeat=4, throwaway=1),
         )
 
@@ -361,3 +373,76 @@ class TestBenchmark(TestDbSetup):
 
         self.assert_close(impl2_dir_2_test_01["materialize"], 3.1)
         self.assert_close(impl2_dir_2_test_02["materialize"], 5.1)
+
+    def test_extras(self):
+        benchmark = GenericBenchmark("benchmarks-with-extras")
+        directories = [
+            QueryDirectory(
+                dir_name="dir_1",
+                queries=[
+                    Query(
+                        query_name="test_01",
+                        spec=QuerySpec(base="base.sql", key="base_key"),
+                    ),
+                    Query(
+                        query_name="test_01",
+                        spec=QuerySpec(
+                            base="impl1.sql",
+                            key="impl1_key",
+                            materialize="impl1_materialize.sql",
+                            extras=[
+                                ExtraQuery(
+                                    label="impl1_count",
+                                    query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_materialize_count.sql",
+                                    runs_after_materialize=True,
+                                    skip_validation=True,
+                                ),
+                                ExtraQuery(
+                                    label="impl1_fetch",
+                                    query="$ROOT/tests/test_queries/TestBenchmarkWithExtras/test_01/impl1_fetch.sql",
+                                    runs_after_materialize=True,
+                                    skip_validation=True,
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            )
+        ]
+
+        _, result = benchmark.run(
+            f"{os.getcwd()}/tests/test_queries/TestBenchmarkWithExtras",
+            directories,
+            TestBenchmark.connection_params,
+            params=RunParams(repeat=4, throwaway=1),
+        )
+
+        print(result)
+
+        self.assertEqual(len(result), 1)
+        self.assertIn("dir_1", result)
+        dir_1_result = result["dir_1"]
+
+        self.assertEqual(len(dir_1_result), 1)
+        self.assertIn("test_01", dir_1_result)
+
+        dir_1_test_01_result = dir_1_result["test_01"]
+        self.assertIn("base_key", dir_1_test_01_result)
+        self.assertIn("impl1_key", dir_1_test_01_result)
+        self.assertEqual(len(dir_1_test_01_result), 2)
+
+        base_dir_1_test_01_result = dir_1_test_01_result["base_key"]
+        self.assertEqual(len(base_dir_1_test_01_result["base"]), 4)
+        self.assert_close(base_dir_1_test_01_result["base"], 3)
+        self.assertEqual(len(base_dir_1_test_01_result["extras"]), 0)
+
+        impl1_dir_1_test_01_result = dir_1_test_01_result["impl1_key"]
+        self.assertEqual(len(impl1_dir_1_test_01_result["base"]), 4)
+        self.assert_close(impl1_dir_1_test_01_result["base"], 2)
+        self.assertEqual(len(impl1_dir_1_test_01_result["extras"]), 4)
+
+        for extra in impl1_dir_1_test_01_result["extras"]:
+            self.assertEqual(extra["impl1_count"]["captured"], [(5,)])
+            self.assertEqual(
+                extra["impl1_fetch"]["captured"], [(1,), (2,), (3,), (4,), (5,)]
+            )

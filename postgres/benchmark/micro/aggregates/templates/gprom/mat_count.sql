@@ -1,0 +1,1 @@
+select count(*) FROM gprom_lineage;

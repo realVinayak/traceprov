@@ -13,16 +13,15 @@
 #undef sprintf
 
 // TODO: Make this per-process to enable concurrent traceprovs.
-#define TRACE_PROV_DIR "/var/lib/postgresql/14/main/traceprov"
+// The prefix here is the base dir (root of data dir.)
+#define TRACE_PROV_DIR "%s/traceprov"
 
 #define DEFINE_TRACE_PROV_FILE(filename) TRACE_PROV_DIR filename
 
 // This will be formatted, both, the layer number and worker
 #define TRACEPROV_MAIN_TRACE_FILE       DEFINE_TRACE_PROV_FILE("/trace_file_%d_%d.tp")
 // This will be formatted with layer number
-#define TRACEPROV_PARTIAL_GROUP_BY_FILE DEFINE_TRACE_PROV_FILE("/partial_group_by_trace_%d.tp")
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
-#define TRACEPROV_SUBQUERY_TRACE        DEFINE_TRACE_PROV_FILE("/subq_trace_%d.tp")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))

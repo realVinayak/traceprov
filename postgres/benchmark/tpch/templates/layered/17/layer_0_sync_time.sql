@@ -1,0 +1,1 @@
+select * from traceprov_sync_time(0)
