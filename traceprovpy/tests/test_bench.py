@@ -20,7 +20,7 @@ class TestBenchmark(TestDbSetup):
                 [
                     1
                     for measured in measured_times
-                    if math.isclose(measured, expected, rel_tol=0.05)
+                    if math.isclose(measured["explain_time"], expected, rel_tol=0.05)
                 ]
             ),
             len(measured_times) / 2,
