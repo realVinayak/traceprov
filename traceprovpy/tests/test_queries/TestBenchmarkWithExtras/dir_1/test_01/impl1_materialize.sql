@@ -1,0 +1,1 @@
+create temp table impl1_materialize AS SELECT * FROM generate_series(1, 5);

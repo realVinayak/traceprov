@@ -23,11 +23,10 @@ extern "C" {
     PG_MODULE_MAGIC;
 }
 
-
 extern "C" {
 
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
-        char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, layer_number, worker_id, NULL);
+        char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
         if (file_name == NULL) return 1;
         int fd = open(file_name, O_RDONLY);
         if (fd < 0) {
@@ -53,13 +52,24 @@ extern "C" {
     }
 
     int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
-        int shared_context_fd = open(TRACEPROV_SHARED_CONTEXT, O_RDONLY);
-        if (shared_context_fd < 0){
-            PRINT_ON_DEBUG("Error opening the scratch file");
+        const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
+        int rc = 0;
+        struct traceprov_shared_context *temp_ptr;
+        char *shared_context_filename = (char*)malloc(size_shared_context_filename);
+        if (shared_context_filename == NULL){
+            elog(ERROR, "Couldn't allocate memory to hold shared context file");
             return 1;
         }
+        memset(shared_context_filename, 0, size_shared_context_filename);
+        sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
 
-        struct traceprov_shared_context *temp_ptr = (struct traceprov_shared_context *)mmap(
+        int shared_context_fd = open(shared_context_filename, O_RDONLY);
+        if (shared_context_fd < 0){
+            PRINT_ON_DEBUG("Error opening the scratch file");
+            goto exit_map;
+        }
+
+        temp_ptr = (struct traceprov_shared_context *)mmap(
             NULL,
             TRACEPROV_SHARED_CONTEXT_SIZE,
             PROT_READ,
@@ -70,16 +80,17 @@ extern "C" {
 
         if (temp_ptr == MAP_FAILED){
             PRINT_ON_DEBUG("Error mapping the scratch file");
-            return 1;
+            goto exit_map;
         }
 
         PRINT_ON_DEBUG("Map shared context succesful!");
 
         memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
 
-        close(shared_context_fd);
-
-        return 0;
+exit_map:
+        if (shared_context_fd > 0) close(shared_context_fd);
+        if (shared_context_filename) free(shared_context_filename);
+        return rc;
     }
 
     void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
@@ -256,7 +267,7 @@ extern "C" {
         }
 
         if (0 == access(
-            get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, partial_group_ln, main_worker_context->worker_id, NULL),
+            get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, partial_group_ln, main_worker_context->worker_id, NULL),
             F_OK
         )){
             if (map_layer_file(partial_group_ln, context.main_worker_id, &partial_group_row, partial_group_layer->size)){

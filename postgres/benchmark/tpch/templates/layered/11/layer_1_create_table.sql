@@ -1,0 +1,1 @@
+CREATE TABLE layer_1 AS SELECT * FROM traceprov_infer_e8f6ddd8(4, 0, 0);
