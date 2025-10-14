@@ -83,7 +83,7 @@ class MaterializationPresent(AbstractCheck):
         if "materialize" not in file_name:
             return
 
-        file_content = file_content.lower()
+        file_content = file_content.lower().strip()
 
         if not file_content.startswith("create temp table"):
             raise cls(file_name)
@@ -179,6 +179,7 @@ def main():
     )
 
     recursive_check(connection, options.top_dir, options.skip, options.fix)
+    connection.close()
 
 
 if __name__ == "__main__":

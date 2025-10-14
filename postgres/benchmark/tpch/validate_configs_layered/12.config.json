@@ -1,0 +1,27 @@
+[
+    {
+        "layer_number": 1,
+        "pk_order": [
+            "o_orderkey",
+            "l_orderkey",
+            "l_linenumber"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "A",
+                "keys": [
+                    "o_orderkey"
+                ]
+            },
+            {
+                "ref": "B",
+                "keys": [
+                    "l_orderkey",
+                    "l_linenumber"
+                ]
+            }
+        ],
+        "reference_layer": 0,
+        "subq_layer": 0
+    }
+]

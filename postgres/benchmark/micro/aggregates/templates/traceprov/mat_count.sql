@@ -1,0 +1,1 @@
+select count(*) FROM traceprov_infer_result;

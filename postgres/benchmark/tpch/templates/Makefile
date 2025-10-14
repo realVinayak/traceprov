@@ -1,5 +1,7 @@
+CURRENT_DIR = $(shell pwd)/
+
 qgen_dir := ~/projects/tpch_scratch/tpch_ext/dbgen/
-base_dir := ~/projects/prov/postgres/benchmark/tpch/templates/
+base_dir := $(CURRENT_DIR)
 seed_args = -r $(seed)
 
 custom_val_list := (11.a, 11.b, 17.a, 17.b)
@@ -55,6 +57,10 @@ queries:
 
 examples:
 	echo "make queries target_dir=~/projects/prov/postgres/benchmark/tpch/scale_1/params_5 scale=1 seed=1755708657"
+
+validate_query:
+	cd $(qgen_dir) && \
+	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $(qnum) > $(target_dir)/$(qnum)/validate_template.sql;
 
 %.sql:
 # 	rm -rf $(target_dir)

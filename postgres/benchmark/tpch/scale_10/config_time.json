@@ -1,5 +1,4 @@
 {
-    "db_name": "tpch_10_v02",
     "queries": [
         1,
         2,
@@ -18,25 +17,7 @@
         17,
         19
     ],
-    "_queries": [
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        14,
-        17,
-        19
-    ],
     "validate": false,
-    "repeat": 3,
     "subdirs": [
         "params_1",
         "params_2",
@@ -45,17 +26,8 @@
         "params_5",
         "params_default"
     ],
-    "validate_steps": {
-        "11": [
-            "a",
-            "b"
-        ],
-        "17": [
-            "a",
-            "b"
-        ]
-    },
-    "expected_diff_failures": [
-        "11"
-    ]
+    "runTimeOptions": {
+        "repeat": 1,
+        "throwaway": 2
+    }
 }

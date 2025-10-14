@@ -1,0 +1,19 @@
+[
+    {
+        "layer_number": 1,
+        "pk_order": [
+            "c_custkey",
+            "o_orderkey"
+        ],
+        "pk_inserts": [
+            {
+                "ref": "A",
+                "keys": [
+                    "c_custkey"
+                ]
+            }
+        ],
+        "reference_layer": 5,
+        "subq_layer": 0
+    }
+]

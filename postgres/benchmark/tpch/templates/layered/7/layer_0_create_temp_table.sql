@@ -1,0 +1,1 @@
+CREATE TEMP TABLE layer_0 AS SELECT * FROM traceprov_infer_772e2a45(1, 0, 0);

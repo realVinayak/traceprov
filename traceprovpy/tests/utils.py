@@ -2,6 +2,8 @@ from unittest import TestCase
 import psycopg2
 import os
 
+from traceprovpy.tools.run_with_timeout import ConnectionParams
+
 
 class TestDbSetup(TestCase):
     test_db: str = "test_traceprov_db"
@@ -18,6 +20,12 @@ class TestDbSetup(TestCase):
         )
         cls.pg_user = os.getenv("TRACEPROV_TEST_USER")
         cls.pg_password = os.getenv("TRACEPROV_TEST_PASSWORD")
+        if cls.pg_user is None or cls.pg_password is None:
+            raise Exception("Set TRACEPROV_TEST_USER and TRACEPROV_TEST_PASSWORD")
+        host = os.getenv("TRACEPROV_TEST_HOST", "127.0.0.1")
+        port = os.getenv("TRACEPROV_TEST_PORT", "5432")
+        cls.pg_host = host
+        cls.pg_port = port
         cls.intial_connection = initial_connection
 
         cursor = initial_connection.cursor()
@@ -28,10 +36,10 @@ class TestDbSetup(TestCase):
 
         db_connection = psycopg2.connect(
             database=cls.test_db,
-            host="127.0.0.1",
-            user=os.getenv("TRACEPROV_TEST_USER"),
-            password=os.getenv("TRACEPROV_TEST_PASSWORD"),
-            port="5432",
+            host=cls.pg_host,
+            port=cls.pg_port,
+            user=cls.pg_user,
+            password=cls.pg_password,
         )
 
         cls.db_connection = db_connection
@@ -45,6 +53,13 @@ class TestDbSetup(TestCase):
             db_cursor.execute("ROLLBACK;")
             raise
         db_cursor.close()
+        cls.connection_params = ConnectionParams(
+            host=cls.pg_host,
+            port=cls.pg_port,
+            user=cls.pg_user,
+            password=cls.pg_password,
+            database=cls.test_db,
+        )
 
     @classmethod
     def tearDownClass(cls):
