@@ -36,7 +36,12 @@ static int initialize_shared_context(int shared_context_fd){
     int rc = 0;
     // First, truncate the file to 0.
     if ((rc = ftruncate(shared_context_fd, 0))){
-        PRINT_ON_DEBUG("Error truncating shared context file.");
+        PRINT_ON_DEBUG("Error truncating shared context file to 0.");
+        return rc;
+    }
+    // Truncate to shared context size.
+    if ((rc = ftruncate(shared_context_fd, TRACEPROV_SHARED_CONTEXT_SIZE))){
+        PRINT_ON_DEBUG("Error truncating shared context file to shared context size..");
         return rc;
     }
 
@@ -45,12 +50,11 @@ static int initialize_shared_context(int shared_context_fd){
         PRINT_ON_DEBUG("Error doing lseek to beginning on shared context file");
         return 1;
     }
-
-    char buff[TRACEPROV_SHARED_CONTEXT_SIZE];
-    memset(buff, 0,TRACEPROV_SHARED_CONTEXT_SIZE);
     // Write the magic word.
-    write(shared_context_fd, &traceprov_shared_context_magic, sizeof(int32));
-    write(shared_context_fd, buff, TRACEPROV_SHARED_CONTEXT_SIZE - sizeof(int32));
+    if(write(shared_context_fd, &traceprov_shared_context_magic, sizeof(int32)) != sizeof(int32)){
+        PRINT_ON_DEBUG("Error writing required amount;");
+        return 1;
+    }
     return 0;
 }
 
@@ -92,7 +96,10 @@ static int initialize_local_context(){
 
     int32 magic_word = 0;
 
-    read(shared_context_fd, &magic_word, sizeof(int32));
+    if(read(shared_context_fd, &magic_word, sizeof(int32)) == -1){
+        PRINT_ON_DEBUG("Had error reading in magic word.");
+        goto exit_initialize_local_context;
+    }
 
     if (magic_word != traceprov_shared_context_magic){
         // The magic word didn't match. Need to initialize the file.
@@ -436,8 +443,6 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
 	
     // During benchmarking, this was a bottlenck (using struct computations)
     *((int64*)current_layer->current_row) = agg_context->group_cnt;
-
-    //((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
     
     int64 *pk_space = (int64*)((void*)(current_layer->current_row) + sizeof(struct trace_file_forward_row));
 
@@ -504,8 +509,6 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     void *new_ptr = (((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG));
     free(agg_context);
     PG_RETURN_POINTER(new_ptr); 
-    //PG_RETURN_POINTER((((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
-    // PG_RETURN_POINTER(ptr[region]);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_combine);

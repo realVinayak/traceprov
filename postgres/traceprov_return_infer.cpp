@@ -19,10 +19,13 @@ extern "C" {
     #include "miscadmin.h"
     #include "traceprov.h"
     #include "file_utils.h"
+    #include "utils/builtins.h"
     PG_MODULE_MAGIC;
 }
 
 extern "C" {
+
+    #define UNUSED(X) do {} while(0 && X);
 
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
@@ -45,7 +48,7 @@ extern "C" {
             PRINT_ON_DEBUG("Error mmaping group layer file");
             return 1;
         }
-
+        close(fd);
         *ptr = temp_ptr;
         return 0;
     }
@@ -93,16 +96,16 @@ exit_map:
     }
 
     void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
-        const int64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
+        const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
         assert(gap >= 0);
         // Now, figure out what the last mapped region will have been (or the starting address of it.)
-        const int64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
+        const uint64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
         void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
         return final_row;
     }
 
     struct infer_result {
-        int32 width;
+        size_t width;
         std::vector<int64> **ids;
     };
 
@@ -111,15 +114,15 @@ exit_map:
         TupleDesc tupdesc,
         const struct infer_result *result
     ){
-        const int32 width = result->width;
+        const size_t width = result->width;
         std::vector<int64> ** pk_records = result->ids;
         bool * nulls = (bool *)malloc(sizeof(bool)*width);
         memset(nulls, 0, sizeof(bool)*width);
 
         Datum *records = (Datum *)malloc(sizeof(Datum)*width);
 
-        for (int record_index = 0; record_index < pk_records[0]->size(); record_index++){
-            for (int key_index = 0; key_index < width; key_index++){
+        for (size_t record_index = 0; record_index < pk_records[0]->size(); record_index++){
+            for (size_t key_index = 0; key_index < width; key_index++){
                 records[key_index] = Int64GetDatumFast(pk_records[key_index]->at(record_index));
             }
 
@@ -130,10 +133,27 @@ exit_map:
         return;
     }
 
+    std::vector<int64> *set_diff(std::vector<int64> *first, std::vector<int64> *second){
+      // set diff, assumes sorted.
+      unsigned long int iter_first = 0;
+      unsigned long int iter_second = 0;
+      std::vector<int64> *set_diff_computed = new std::vector<int64>;
+      while (iter_first < first->size()){
+              bool did_loop = false;
+              while((iter_second < second->size()) && (first->at(iter_first) == second->at(iter_second))) {
+                did_loop = true;
+                iter_second++;
+              }
+              if (did_loop) { iter_first++; continue;}
+              set_diff_computed->push_back(first->at(iter_first++));
+      }
+      return set_diff_computed;
+    }
+
     struct infer_result * perform_inference(
-        const int layer_number,
-        const int reference_layer, 
-        const int subq_layer_number
+        const unsigned int layer_number,
+        const unsigned int reference_layer, 
+        const unsigned int subq_layer_number
         ){
 
         struct traceprov_shared_context context;
@@ -259,12 +279,12 @@ exit_map:
 
         if (partial_group_row) PRINT_ON_DEBUG("Using partial trace file");
 
-        void *final_row = get_final_ptr(forward_row, main_trace_layer);
-
         std::sort(present_groups->begin(), present_groups->end());
         
         std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context.worker_count));
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<int64>;
+
+        std::vector<int64> *present_groups_found = new std::vector<int64>;
 
         if (partial_group_row != NULL){
             // Need to, now, find the rows in the partial file.
@@ -276,6 +296,7 @@ exit_map:
                 // Essentially, if the global group number gets found, store the local group number.
                 if (std::binary_search(present_groups->begin(), present_groups->end(), current_partial_row->global_group_number)){
                     groups_per_worker[current_partial_row->worker_id]->push_back(current_partial_row->local_group_number);
+                    present_groups_found->push_back(current_partial_row->global_group_number);
                 }
 
                 partial_group_row = (void*)((uint8*)partial_group_row + sizeof(struct trace_file_partial_row));
@@ -290,11 +311,14 @@ exit_map:
         for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
 
         int iters_made = 0;
+        std::vector<int64>* main_worker_set_difference = nullptr;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
             std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
-            if (local_group_nos->size() == 0) continue;
+            // In case of main worker, we can be in the case where the group was completely within our portion of the table
+            // In that case, we'd miss logging it in the local_group_nos.
+            if (local_group_nos->size() == 0 && worker_id != context.main_worker_id) continue;
 
             std::sort(local_group_nos->begin(), local_group_nos->end());
 
@@ -302,11 +326,9 @@ exit_map:
             const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[layer_number - 1];
 
             void *current_forward_row = NULL;
-            void *last_forward_row = NULL;
             if (worker_id == context.main_worker_id){
                 current_forward_row = forward_row;
             }else{
-                void *local_fwd_row = NULL;
                 if (map_layer_file(layer_number, worker_id, &current_forward_row, bg_trace_layer->size)){
                     PRINT_ON_DEBUG("Error opening the bg trace file");
                 }
@@ -317,7 +339,18 @@ exit_map:
             while (current_forward_row < current_final_row){
                 current_forward_row = (void*)((uint64)bg_trace_layer->record_padding + (uint64)current_forward_row);
 
-                if (std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count)){
+                bool found = false;
+                found = std::binary_search(local_group_nos->begin(), local_group_nos->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count);
+                if (!found && worker_id == context.main_worker_id){
+                  // Now, we'd need to compute the set difference. It is deferred till here.
+                  if (main_worker_set_difference  == nullptr){
+                    std::sort(present_groups_found->begin(), present_groups_found->end());
+                    main_worker_set_difference = set_diff(present_groups, present_groups_found);
+                  }
+                  found = std::binary_search(main_worker_set_difference->begin(), main_worker_set_difference->end(), ((struct trace_file_forward_row*)current_forward_row)->group_count);
+                }
+
+                if (found){
                     for (int key_idx = 0; key_idx < bg_trace_layer->num_pk_records; key_idx++){
                         int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)current_forward_row), key_idx);
 
@@ -396,6 +429,8 @@ exit_map:
         struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
 
         auto end = std::chrono::high_resolution_clock::now();
+        
+        UNUSED(infer_result_computed);
 
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         uint64 duration_time = (uint64)duration.count();
@@ -415,10 +450,10 @@ exit_map:
             elog(ERROR, "Error mmaping the shared context for sync!");
         }
 
-	int final_code = 0;
+	    int final_code = 0;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
-            
+
             struct local_context *worker_local_context = &context.local_contexts[worker_id];
 
             for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
@@ -439,8 +474,8 @@ exit_map:
                     sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
                     messages->push_back(worker_layer);
                     final_code |= (msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC));
-		    if (final_code) {elog(ERROR, "Error doing the msync!");}
-                    
+		            if (final_code) {elog(ERROR, "Error doing the msync!");}
+   
                 }
             }
         }
@@ -452,9 +487,145 @@ exit_map:
 
         for (std::string s: *messages){
             elog(INFO, "SYNC: %s", s.c_str());
-	}
-	elog(INFO, "Final code: %d", final_code);
+	    }
+        elog(INFO, "Final code: %d", final_code);
         PG_RETURN_INT64(duration_time);
     }
+
+    // Prints some useful statistics (like # of pks, # of groups)
+    PG_FUNCTION_INFO_V1(traceprov_layer_stat);
+
+    enum TRACEPROV_LAYER_STAT {
+      is_main_worker,
+      worker_id,
+      layer_id,
+      num_pk_records,
+      layer_size,
+      num_groups,
+      layer_number,
+      record_padding,
+      layer_fd,
+      logged_record_count,
+      is_sorted_by_group_num,
+
+      NUM_COLUMNS
+    };
+
+    Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
+        
+      ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+      TupleDesc	tupdesc;
+      Tuplestorestate *tupstore;
+      MemoryContext per_query_ctx;
+      MemoryContext oldcontext;
+
+      if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+          ereport(ERROR,
+                  (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                  errmsg("set-valued function called in context that cannot accept a set")));
+      if (!(rsinfo->allowedModes & SFRM_Materialize))
+          ereport(ERROR,
+                  (errcode(ERRCODE_SYNTAX_ERROR),
+                  errmsg("materialize mode required, but it is not allowed in this context")));
+        
+      per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+      oldcontext = MemoryContextSwitchTo(per_query_ctx);
+
+      if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+          elog(ERROR, "return type must be a row type");
+      
+      tupstore = tuplestore_begin_heap(true, false, work_mem);
+      rsinfo->returnMode = SFRM_Materialize;
+      rsinfo->setResult = tupstore;
+      rsinfo->setDesc = tupdesc;
+
+      MemoryContextSwitchTo(oldcontext);
+
+      struct traceprov_shared_context context;
+
+      if (map_traceprov_shared_context(&context)){
+        elog(ERROR, "Error mmaping the shared context");
+      }
+
+      Datum record[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
+      bool nulls[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
+      memset(nulls, 0, sizeof(bool)*TRACEPROV_LAYER_STAT::NUM_COLUMNS);
+
+      for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+
+        struct local_context *worker_local_context = &context.local_contexts[worker_id];
+
+        for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+          
+          struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
+
+          if (layer.layer_number == 0) continue;
+
+          const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
+
+          const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
+
+          if (final_ptr_offset % record_size){
+            elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
+          }
+          
+	  int64 record_count = 0;
+      // In some cases it is not defined (like for the group layer files.)
+      int32 is_sorted_by_group_no = -1;
+	  if (layer.layer_number % 3 == 2) {
+	  	// In this case, it is group number. We don't define number of records precisely here.
+		// It is actually just whatever the main layer reports as the number of groups.
+		// Need -2 because layer numbers are 1-indexed
+		record_count = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
+	  } else {
+        const bool is_pure_layer = layer.layer_number % 3 == 1;
+        is_sorted_by_group_no = 1;
+	  	record_count = final_ptr_offset / record_size;
+        // Need to scan over the layer file to determine if it is sorted by group.
+        char *layer_mapped_ptr = NULL;
+        if (map_layer_file(layer.layer_number, worker_id, (void**)&layer_mapped_ptr, layer.size)){
+            elog(ERROR, "Encountered error when mapping the layer for stats");
+        }
+        const void *layer_final_ptr = get_final_ptr(layer_mapped_ptr, &layer);
+        uint64 last_group_number = 0;
+        
+        while (layer_mapped_ptr < layer_final_ptr){
+            layer_mapped_ptr += layer.record_padding;
+            const uint64 *typed_ptr = (uint64 *)layer_mapped_ptr;
+            uint64 current_group_number = 0;
+            if (is_pure_layer){
+                current_group_number = typed_ptr[0];
+            }else{
+                current_group_number = typed_ptr[layer.num_pk_records];
+            }
+            if (last_group_number == 0){
+                last_group_number = current_group_number;
+            }
+            if (current_group_number != 0 && current_group_number < last_group_number){
+                is_sorted_by_group_no = 0;
+            }
+            layer_mapped_ptr += sizeof(uint64)*(layer.num_pk_records + 1);
+            last_group_number = current_group_number;
+        }
+	  }
+          record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
+          record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
+          record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
+          record[TRACEPROV_LAYER_STAT::num_pk_records] = Int32GetDatum(layer.num_pk_records);
+          record[TRACEPROV_LAYER_STAT::layer_size] = Int32GetDatum(layer.size);
+          record[TRACEPROV_LAYER_STAT::num_groups] = Int32GetDatum(layer.num_groups);
+          record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
+          record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
+          record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
+          record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
+          record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
+
+          tuplestore_putvalues(tupstore, tupdesc, record, nulls);
+        }
+      }
+      tuplestore_donestoring(tupstore);
+      return (Datum) 0;
+    }
+
 };
 

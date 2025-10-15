@@ -11,6 +11,7 @@
 // Force using C's sprintf, yukkky.
 // Otherwise, Postgres' sprintf will be taken.
 #undef sprintf
+#undef snprintf
 
 // TODO: Make this per-process to enable concurrent traceprovs.
 // The prefix here is the base dir (root of data dir.)
@@ -128,7 +129,7 @@ static_assert(sizeof(struct traceprov_aggregate_layer) == 64, "Size mismatch.");
 
 static_assert(((TRACEPROV_PAGE_SIZE) % sizeof(struct traceprov_aggregate_layer)) == 0, "Expected complete layers per page");
 
-
+// TODO: Investigate is this is better off being page-aligned.
 struct local_context {
     int32   worker_pid;
     uint8   worker_id;
@@ -181,11 +182,18 @@ struct current_context {
 };
 
 struct traceprov_agg_context {
+    // Whether this aggregation was combined.
     int8 is_combined;
+    // Group count for this group.
     int64 group_cnt;
+    // Worker on which this group was processed.
     int8 worker_id;
+    // Layer number for this group.
     int32 layer_number;
 };
+
+// Whenever this condition fails, also need to update the function definition.
+static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
 #define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)
 
