@@ -436,8 +436,6 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
 	
     // During benchmarking, this was a bottlenck (using struct computations)
     *((int64*)current_layer->current_row) = agg_context->group_cnt;
-
-    //((struct trace_file_forward_row*)current_layer->current_row)->group_count = agg_context->group_cnt;
     
     int64 *pk_space = (int64*)((void*)(current_layer->current_row) + sizeof(struct trace_file_forward_row));
 
@@ -504,8 +502,6 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     void *new_ptr = (((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG));
     free(agg_context);
     PG_RETURN_POINTER(new_ptr); 
-    //PG_RETURN_POINTER((((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
-    // PG_RETURN_POINTER(ptr[region]);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_combine);
