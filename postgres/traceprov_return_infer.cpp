@@ -25,6 +25,8 @@ extern "C" {
 
 extern "C" {
 
+    #define UNUSED(X) do {} while(0 && X);
+
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
         if (file_name == NULL) return 1;
@@ -103,7 +105,7 @@ exit_map:
     }
 
     struct infer_result {
-        int32 width;
+        size_t width;
         std::vector<int64> **ids;
     };
 
@@ -112,15 +114,15 @@ exit_map:
         TupleDesc tupdesc,
         const struct infer_result *result
     ){
-        const int32 width = result->width;
+        const size_t width = result->width;
         std::vector<int64> ** pk_records = result->ids;
         bool * nulls = (bool *)malloc(sizeof(bool)*width);
         memset(nulls, 0, sizeof(bool)*width);
 
         Datum *records = (Datum *)malloc(sizeof(Datum)*width);
 
-        for (int record_index = 0; record_index < pk_records[0]->size(); record_index++){
-            for (int key_index = 0; key_index < width; key_index++){
+        for (size_t record_index = 0; record_index < pk_records[0]->size(); record_index++){
+            for (size_t key_index = 0; key_index < width; key_index++){
                 records[key_index] = Int64GetDatumFast(pk_records[key_index]->at(record_index));
             }
 
@@ -133,8 +135,8 @@ exit_map:
 
     std::vector<int64> *set_diff(std::vector<int64> *first, std::vector<int64> *second){
       // set diff, assumes sorted.
-      int64 iter_first = 0;
-      int64 iter_second = 0;
+      unsigned long int iter_first = 0;
+      unsigned long int iter_second = 0;
       std::vector<int64> *set_diff_computed = new std::vector<int64>;
       while (iter_first < first->size()){
               bool did_loop = false;
@@ -149,9 +151,9 @@ exit_map:
     }
 
     struct infer_result * perform_inference(
-        const int layer_number,
-        const int reference_layer, 
-        const int subq_layer_number
+        const unsigned int layer_number,
+        const unsigned int reference_layer, 
+        const unsigned int subq_layer_number
         ){
 
         struct traceprov_shared_context context;
@@ -277,8 +279,6 @@ exit_map:
 
         if (partial_group_row) PRINT_ON_DEBUG("Using partial trace file");
 
-        void *final_row = get_final_ptr(forward_row, main_trace_layer);
-
         std::sort(present_groups->begin(), present_groups->end());
         
         std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context.worker_count));
@@ -326,11 +326,9 @@ exit_map:
             const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[layer_number - 1];
 
             void *current_forward_row = NULL;
-            void *last_forward_row = NULL;
             if (worker_id == context.main_worker_id){
                 current_forward_row = forward_row;
             }else{
-                void *local_fwd_row = NULL;
                 if (map_layer_file(layer_number, worker_id, &current_forward_row, bg_trace_layer->size)){
                     PRINT_ON_DEBUG("Error opening the bg trace file");
                 }
@@ -431,6 +429,8 @@ exit_map:
         struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
 
         auto end = std::chrono::high_resolution_clock::now();
+        
+        UNUSED(infer_result_computed);
 
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         uint64 duration_time = (uint64)duration.count();
@@ -512,17 +512,12 @@ exit_map:
     };
 
     Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
-
-      int worker_id = 0;
         
       ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
       TupleDesc	tupdesc;
       Tuplestorestate *tupstore;
       MemoryContext per_query_ctx;
       MemoryContext oldcontext;
-
-      const int32 filter_worker_id = PG_GETARG_INT32(0);
-      const int32 filter_layer_number = PG_GETARG_INT32(1);
 
       if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
           ereport(ERROR,
@@ -558,8 +553,6 @@ exit_map:
 
       for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-        if (filter_worker_id != -1 && filter_worker_id != worker_id) continue;
-
         struct local_context *worker_local_context = &context.local_contexts[worker_id];
 
         for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
@@ -567,8 +560,6 @@ exit_map:
           struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
 
           if (layer.layer_number == 0) continue;
-
-          if (filter_layer_number != -1 && layer.layer_number != filter_layer_number) continue;
 
           const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
 
@@ -591,8 +582,8 @@ exit_map:
         is_sorted_by_group_no = 1;
 	  	record_count = final_ptr_offset / record_size;
         // Need to scan over the layer file to determine if it is sorted by group.
-        void *layer_mapped_ptr = NULL;
-        if (map_layer_file(layer.layer_number, worker_id, &layer_mapped_ptr, layer.size)){
+        char *layer_mapped_ptr = NULL;
+        if (map_layer_file(layer.layer_number, worker_id, (void**)&layer_mapped_ptr, layer.size)){
             elog(ERROR, "Encountered error when mapping the layer for stats");
         }
         const void *layer_final_ptr = get_final_ptr(layer_mapped_ptr, &layer);

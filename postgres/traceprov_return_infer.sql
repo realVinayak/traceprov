@@ -2,6 +2,7 @@ DROP FUNCTION IF EXISTS traceprov_infer(integer,integer,integer);
 DROP FUNCTION IF EXISTS traceprov_infer_time(integer,integer,integer);
 DROP FUNCTION IF EXISTS traceprov_sync_time(integer,integer,integer);
 DROP FUNCTION IF EXISTS traceprov_layer_stat(integer,integer);
+DROP FUNCTION IF EXISTS traceprov_layer_stat();
 
 CREATE OR REPLACE FUNCTION traceprov_infer(IN integer, IN integer, IN integer,
     OUT f1 integer, OUT f2 integer)
@@ -20,8 +21,6 @@ CREATE OR REPLACE FUNCTION traceprov_sync_time(IN integer)
     LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION traceprov_layer_stat(
-        IN  integer,
-        IN  integer,
         OUT is_main_worker INT,
         OUT worker_id INT,
         OUT layer_id INT,
