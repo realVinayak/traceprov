@@ -11,6 +11,7 @@
 // Force using C's sprintf, yukkky.
 // Otherwise, Postgres' sprintf will be taken.
 #undef sprintf
+#undef snprintf
 
 // TODO: Make this per-process to enable concurrent traceprovs.
 // The prefix here is the base dir (root of data dir.)
