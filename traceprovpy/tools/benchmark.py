@@ -17,6 +17,7 @@
 #       -- Q02
 
 from typing import Any, Callable, NamedTuple, Tuple
+from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
     Preprocessor,
@@ -213,6 +214,7 @@ class QuerySpec(NamedTuple):
 class ValidationQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options):
+        print("[validation]: ", self.base, self.materialize)
         base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
         other_pack = ValidationQuerySpec.get_pack(
             top_dir, self.materialize, get_run_options
@@ -265,11 +267,7 @@ class GenericBenchmark(NamedTuple):
     ):
         assert self.traceprov_path is None and self.traceprov_infer_set_path is None
         parser = argparse.ArgumentParser(prog=f"run-{self.name}")
-        parser.add_argument("-u", "--user", required=True)
-        parser.add_argument("-p", "--password", required=True)
-        parser.add_argument("-H", "--host", required=False, default="127.0.0.1")
-        parser.add_argument("-P", "--port", required=False, default="5432")
-        parser.add_argument("-db", "--db", required=True)
+        postgres_connection_from_cmd(parser)
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
