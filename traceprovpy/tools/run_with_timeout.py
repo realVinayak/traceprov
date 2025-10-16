@@ -55,6 +55,23 @@ class ConnectionParams(NamedTuple):
         ]
         return " ".join(flat_options)
 
+    @staticmethod
+    def make_simple_connection(parsed):
+        connection_params = ConnectionParams(
+            host=parsed.host,
+            port=parsed.port,
+            user=parsed.user,
+            password=parsed.password,
+            database=parsed.db,
+        )
+        return psycopg2.connect(
+            database=connection_params.database,
+            host=connection_params.host,
+            user=connection_params.user,
+            password=connection_params.password,
+            port=connection_params.port,
+        )
+
 
 class Preprocessor:
     def preprocess(self, in_content: str) -> str:
@@ -103,6 +120,12 @@ class RunWithTimeoutOptions(NamedTuple):
         if cached_connection:
             cached_connection.close()
 
+    def get_explain(self, connection):
+        if connection.server_version >= 180000:
+            return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
+        else:
+            return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
@@ -149,7 +172,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         flattend_sql_query = preprocessor.preprocess(flattend_sql_query)
 
     timeout_stmt = f"SET statement_timeout = '{options.params.timeout}s';"
-    augmented_sql = f"EXPLAIN (analyze, timing off, format JSON) {flattend_sql_query}"
+    augmented_sql = f"{options.get_explain()} {flattend_sql_query}"
 
     cursor = connection.cursor()
     try:
