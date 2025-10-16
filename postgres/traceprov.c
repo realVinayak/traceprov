@@ -12,6 +12,10 @@
 #include "libpq/pqformat.h"
 #include "common/file_perm.h"
 
+#if (PG_MAJORVERSION_NUM == 18)
+#include "varatt.h"
+#endif
+
 PG_MODULE_MAGIC;
 
 int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
@@ -146,9 +150,15 @@ static int initialize_local_context(){
     traceprov_current.local_context->worker_id = traceprov_current.my_worker_id;
     traceprov_current.local_context->worker_pid = MyProcPid;
 
+    #if (PG_MAJORVERSION_NUM == 14)
     if (!IsBackgroundWorker){
         shared_context->main_worker_id = traceprov_current.my_worker_id;
     }
+    #else
+    if (!AmBackgroundWorkerProcess()){
+        shared_context->main_worker_id = traceprov_current.my_worker_id;
+    }
+    #endif
 
     if (rc || !is_locked){
         elog(ERROR, "Expected rc to be 0, and the shared context file to be locked.");
@@ -786,21 +796,21 @@ PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_combine);
 
 Datum traceprov_agg_from_ptr_combine(PG_FUNCTION_ARGS){
     elog(ERROR, "Didn't expect combine to be called");
-    PG_RETURN_POINTER(1);
+    PG_RETURN_POINTER(NULL);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_serialize);
 
 Datum traceprov_agg_from_ptr_serialize(PG_FUNCTION_ARGS){
     elog(ERROR, "Didn't expect serialize to be called");
-    PG_RETURN_POINTER(1);
+    PG_RETURN_POINTER(NULL);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_deserialize);
 
 Datum traceprov_agg_from_ptr_deserialize(PG_FUNCTION_ARGS){
     elog(ERROR, "Didn't expect deserialize to be called");
-    PG_RETURN_POINTER(1);
+    PG_RETURN_POINTER(NULL);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_finalfunc);

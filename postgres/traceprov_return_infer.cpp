@@ -11,6 +11,7 @@
 #include <chrono>
 #include <algorithm>
 #include <unistd.h>
+#undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
 extern "C" {
     #include "postgres.h"
@@ -24,6 +25,7 @@ extern "C" {
 }
 
 extern "C" {
+    // static_assert(!(HAVE__BUILTIN_TYPES_COMPATIBLE_P))
 
     #define UNUSED(X) do {} while(0 && X);
 
@@ -89,7 +91,7 @@ extern "C" {
 
         memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
 
-exit_map:
+    exit_map:
         if (shared_context_fd > 0) close(shared_context_fd);
         if (shared_context_filename) free(shared_context_filename);
         return rc;
@@ -129,7 +131,9 @@ exit_map:
             tuplestore_putvalues(tupstore, tupdesc, records, nulls);
         }
 
+        #if (PG_MAJORVERSION_NUM != 18)
         tuplestore_donestoring(tupstore);
+        #endif
         return;
     }
 
@@ -623,7 +627,9 @@ exit_map:
           tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
       }
+      #if (PG_MAJORVERSION_NUM != 18)
       tuplestore_donestoring(tupstore);
+      #endif
       return (Datum) 0;
     }
 
