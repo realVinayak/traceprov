@@ -214,6 +214,7 @@ class QuerySpec(NamedTuple):
 class ValidationQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options):
+        print("[validation]: ", self.base, self.materialize)
         base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
         other_pack = ValidationQuerySpec.get_pack(
             top_dir, self.materialize, get_run_options

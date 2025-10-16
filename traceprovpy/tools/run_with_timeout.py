@@ -172,7 +172,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         flattend_sql_query = preprocessor.preprocess(flattend_sql_query)
 
     timeout_stmt = f"SET statement_timeout = '{options.params.timeout}s';"
-    augmented_sql = f"{options.get_explain()} {flattend_sql_query}"
+    augmented_sql = f"{options.get_explain(connection)} {flattend_sql_query}"
 
     cursor = connection.cursor()
     try:
