@@ -2,15 +2,6 @@
 word-dot = $(word $2,$(subst ., ,$1))
 word-dot-rest = $(word $2,$(subst ., ,$2))
 
-ifndef PG_VERSION
-# latest version, at the moment.
-PG_VERSION := 18
-endif
-
-ifndef suff
-suff := default
-endif
-
 all: traceprov infer_set
 
 clean:
@@ -18,6 +9,16 @@ clean:
 	rm -f *.o
 	rm -f *.auto.sql
 	rm -f *.ids
+
+buildSetup:
+	@if [ "$(PG_VERSION)" = "" ]; then echo "PG_VERSION not set!" && exit 1; else echo "PG_VERSION: $(PG_VERSION)"; fi
+# ifndef PG_VERSION
+# $(error PG Version is not set)
+# endif
+
+ifndef suff
+suff := default
+endif
 
 module:
 	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ $(src).c -o $(src)_$(suff).o
@@ -34,7 +35,7 @@ sql:
 binary_search:
 	sudo make module src=binary_search suff=$(suff) sql=create_b_search
 
-traceprov:
+traceprov: buildSetup
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ traceprov.c -o traceprov_$(suff).o
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ file_utils.c -o file_utils_$(suff).o
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ utils.c -o utils_$(suff).o
@@ -49,7 +50,7 @@ traceprov_infer:
 traceprov_infer_dbg:
 	g++ -g -I/usr/include/postgresql/$(PG_VERSION)/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
 
-infer_set:
+infer_set: buildSetup
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ file_utils.c -o file_utils_$(suff).o
 	gcc -g -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ utils.c -o utils_$(suff).o
 	g++ -g -std=c++11 -O3 -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ traceprov_return_infer.cpp -o traceprov_return_$(suff).o

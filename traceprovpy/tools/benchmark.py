@@ -22,6 +22,7 @@ from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
     Preprocessor,
     ReplaceFILE,
+    ReplaceSelectivity,
     RunParams,
     run_with_timeout,
     RunWithTimeoutOptions,
@@ -47,6 +48,11 @@ def json_serial(obj):
     if isinstance(obj, ReplaceFILE):
         return dict(
             preprocessor_type=ReplaceFILE.__name__, param=obj.replace_with_token
+        )
+
+    if isinstance(obj, ReplaceSelectivity):
+        return dict(
+            preprocessor_type=ReplaceSelectivity.__name__, param=obj.selectivity
         )
 
     if isinstance(obj, PosixPath):
@@ -80,6 +86,7 @@ class QuerySpec(NamedTuple):
     base: str
     materialize: str | None = None
     extras: list[ExtraQuery] = []
+    preprocess: list[Preprocessor] = []
 
     @staticmethod
     def get_pack(
@@ -104,9 +111,13 @@ class QuerySpec(NamedTuple):
     def run_packs(
         self, top_dir: Path, get_run_options: Callable[[str], RunWithTimeoutOptions]
     ):
-        base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)
+        base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)._replace(
+            preprocessors=self.preprocess
+        )
         materialize_pack = (
-            QuerySpec.get_pack(top_dir, self.materialize, get_run_options)
+            QuerySpec.get_pack(top_dir, self.materialize, get_run_options)._replace(
+                preprocessors=self.preprocess
+            )
             if self.materialize
             else None
         )
@@ -271,6 +282,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
+        parser.add_argument("-pg_version", required=int)
 
         parsed, _ = parser.parse_known_args()
         connection_params = ConnectionParams(
@@ -280,7 +292,9 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        setup_bench = self.setup(
+            parsed.traceprov_root, connection_params, parsed.suff, parsed.pg_version
+        )
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
@@ -331,12 +345,17 @@ class GenericBenchmark(NamedTuple):
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
         suff: str = None,
+        pg_version: str = None,
     ):
+        if pg_version is None:
+            raise Exception("PG version is not set!")
         if suff is None:
             suff = self.name
-        os.system(
-            f"cd {traceprov_postgres_root} && make clean && make traceprov suff={suff} && make infer_set suff={suff}"
+        response = os.system(
+            f"cd {traceprov_postgres_root} && make clean && make traceprov suff={suff} PG_VERSION={pg_version} && make infer_set suff={suff} PG_VERSION={pg_version}"
         )
+        if response != 0:
+            raise Exception("Make failed!")
         traceprov_sql = Path(traceprov_postgres_root) / f"traceprov_{suff}.auto.sql"
         traceprov_infer_set = (
             Path(traceprov_postgres_root) / f"traceprov_return_infer_{suff}.auto.sql"
