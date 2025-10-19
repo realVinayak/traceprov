@@ -1,20 +1,20 @@
 -- traceprov_agg_key aggregate.
-DROP AGGREGATE traceprov_agg_key(BIGINT);
-DROP AGGREGATE traceprov_agg_key(int, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key(BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key(int, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 
 -- traceprov_agg_from_ptr aggregate
-DROP AGGREGATE traceprov_agg_from_ptr(int, int, BIGINT);
-DROP AGGREGATE traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr(int, int, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
 
 -- Functions
 DROP FUNCTION   IF EXISTS reinit_state(INTEGER); -- This is here for historical reasons.
@@ -54,6 +54,14 @@ DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT)
 DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
+-- nops.
+DROP AGGREGATE  IF EXISTS traceprov_nop(int, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_nop_sfunc(state internal, int, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_nop_finalfunc(state internal);
+DROP FUNCTION   IF EXISTS traceprov_nop_combine(internal, internal);
+DROP FUNCTION   IF EXISTS traceprov_nop_serialize(internal);
+DROP FUNCTION   IF EXISTS traceprov_nop_deserialize(bytea, internal);
 
 CREATE FUNCTION reinit_state() RETURNS INTEGER AS '$libdir/__FILE__', 'reinit_state' LANGUAGE C;
 
