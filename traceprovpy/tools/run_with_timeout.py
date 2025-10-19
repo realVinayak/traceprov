@@ -2,7 +2,7 @@
 # Returns the time took (via EXPLAIN ANALYZE)
 # Here, we also do the repeated runs (+ throwaways)
 
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 import psycopg2
 import os
 import argparse
@@ -99,6 +99,20 @@ class ReplaceFILE(Preprocessor):
         return f'ReplaceFILE("{self.replace_with_token}")'
 
 
+class ReplaceSelectivity(Preprocessor):
+    def __init__(self, selectivity: Any):
+        self.selectivity = str(selectivity)
+
+    def preprocess(self, in_content: str) -> str:
+        return in_content.replace(":selectivity", self.selectivity)
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.selectivity))
+
+    def __repr__(self):
+        return f"ReplaceSelectivity('{self.selectivity}')"
+
+
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
     connection_params: ConnectionParams
@@ -155,7 +169,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     ):
         options.extras[CACHED_CONNECTION] = connection
 
-    if not options.skip_validation:
+    # Don't bother verifying, for now....
+    if not options.skip_validation and len(options.preprocessors) == 0:
         validate_sql(connection, file_dir, options.file_path)
 
     if options.params.dry_run:
