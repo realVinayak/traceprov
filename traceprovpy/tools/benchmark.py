@@ -272,12 +272,11 @@ class GenericBenchmark(NamedTuple):
     traceprov_infer_set_path: str = None
 
     def run_from_argparse(
-        self,
-        directories: list[QueryDirectory],
-        params=RunParams(),
+        self, directories: list[QueryDirectory], params=RunParams(), parser=None
     ):
         assert self.traceprov_path is None and self.traceprov_infer_set_path is None
-        parser = argparse.ArgumentParser(prog=f"run-{self.name}")
+        if parser is None:
+            parser = argparse.ArgumentParser(prog=f"run-{self.name}")
         postgres_connection_from_cmd(parser)
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
@@ -365,12 +364,18 @@ class GenericBenchmark(NamedTuple):
             traceprov_infer_set.exists()
         ), f"{traceprov_infer_set.as_posix()} should exist!"
 
-        os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()}"
+        assert (
+            os.system(
+                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
+            )
+            == 0
         )
 
-        os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()}"
+        assert (
+            os.system(
+                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()} -v ON_ERROR_STOP=1"
+            )
+            == 0
         )
 
         traceprov_obj = f"traceprov_{suff}.so"
