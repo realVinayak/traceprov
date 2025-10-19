@@ -11,12 +11,10 @@ postgres/trials/*/*.injected.sql
 postgres/trials/*/*.ids
 postgres/trials/*/*.fidelity.sql
 postgres/benchmark/tpch/scale_1_base_check/check_answers/*.log
-postgres/benchmark/tpch/__pycache__/
 postgres/benchmark/tpch/temp.out
 postgres/benchmark/tpch/baseline_result_store.json
 postgres/benchmark/tpch/traceprov_result_store.json
 postgres/benchmark/tpch/*.ids
-postgres/benchmark/micro/*/__pycache__
 postgres/benchmark/micro/layer_grow/*.o
 postgres/benchmark/micro/layer_grow/*.tp
 postgres/benchmark/micro/layer_grow/*.out
@@ -26,9 +24,7 @@ postgres/benchmark/.config.json
 postgres/benchmark/micro/aggregates/*/*/*.backup
 postgres/benchmark/micro/aggregates/tmp/
 postgres/benchmark/micro/aggregates/results/local_test_*
-traceprovpy/__pycache__/
+__pycache__/
 traceprovpy.egg-info/
-traceprovpy/tools/__pycache__
-traceprovpy/tests/__pycache__
-traceprovpy/tools/stats/__pycache__
-postgres/benchmark/tpch/scale*/results/local_test_*
+*.tmp
+local_test_*/
