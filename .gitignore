@@ -21,7 +21,6 @@ postgres/benchmark/micro/layer_grow/*.out
 postgres/benchmark/micro/aggregate/*
 postgres/benchmark/micro/aggregate/.ipynb_checkpoints/*
 postgres/benchmark/.config.json
-postgres/benchmark/micro/aggregates/*/*/*.backup
 postgres/benchmark/micro/aggregates/tmp/
 postgres/benchmark/micro/aggregates/results/local_test_*
 __pycache__/
@@ -29,3 +28,4 @@ traceprovpy.egg-info/
 *.tmp
 local_test_*/
 temp.out.sql
+*.sql.backup
