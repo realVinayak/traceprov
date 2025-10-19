@@ -6,7 +6,11 @@ from traceprovpy.tools.benchmark import (
     QueryDirectory,
     QuerySpec,
 )
-from traceprovpy.tools.run_with_timeout import ReplaceSelectivity, RunParams
+from traceprovpy.tools.run_with_timeout import (
+    ReplaceFILE,
+    ReplaceSelectivity,
+    RunParams,
+)
 
 
 def get_filter_group(num_groups, selectivity):
@@ -104,6 +108,81 @@ directories = lambda num_groups, selectivity: [
                             strict_run=True,
                             skip_validation=True,
                         )
+                    ],
+                ),
+            ),
+            Query(
+                query_name="predicate_post",
+                spec=QuerySpec(
+                    base="traceprov.sql",
+                    key=f"traceprov_{selectivity}",
+                    preprocess=[
+                        ReplaceSelectivity(get_filter_group(num_groups, selectivity))
+                    ],
+                    extras=[
+                        ExtraQuery(
+                            label="traceprov_sync_time",
+                            query=f"$INLINE-select * from traceprov_sync_time(0);",
+                            runs_after_base=True,
+                            strict_run=True,
+                        ),
+                        # ExtraQuery(
+                        #     label="traceprov_get_tables_before",
+                        #     query=f"$INLINE-SELECT table_name FROM information_schema.tables;",
+                        #     runs_after_base=True,
+                        #     strict_run=True,
+                        #     skip_validation=True,
+                        # ),
+                        ExtraQuery(
+                            label="traceprov_drop_table",
+                            query=f"$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                            runs_after_base=True,
+                            strict_run=True,
+                            skip_validation=True,
+                        ),
+                        # ExtraQuery(
+                        #     label="traceprov_get_tables_later",
+                        #     query=f"$INLINE-SELECT table_name FROM information_schema.tables;",
+                        #     runs_after_base=True,
+                        #     strict_run=True,
+                        #     skip_validation=True,
+                        # ),
+                        ExtraQuery(
+                            label="traceprov_drop_function",
+                            query=f"$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                            runs_after_base=True,
+                            strict_run=True,
+                            skip_validation=True,
+                        ),
+                        ExtraQuery(
+                            label="traceprov_create_function",
+                            query=f"$ROOT/templates/predicate_post/traceprov_create_function.sql",
+                            runs_after_base=True,
+                            strict_run=True,
+                            skip_validation=True,
+                            preprocess=[ReplaceFILE("traceprov_infer_set_path")],
+                        ),
+                        ExtraQuery(
+                            label="traceprov_materialize",
+                            query=f"$ROOT/templates/predicate_post/traceprov_materialize.sql",
+                            runs_after_base=True,
+                            skip_validation=True,
+                            capture_output=False,
+                        ),
+                        ExtraQuery(
+                            label="traceprov_infer_time",
+                            query=f"$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                            runs_after_base=True,
+                            strict_run=True,
+                            skip_validation=True,
+                        ),
+                        ExtraQuery(
+                            label="traceprov_infer_count",
+                            query=f"$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                            runs_after_base=True,
+                            strict_run=True,
+                            skip_validation=True,
+                        ),
                     ],
                 ),
             ),

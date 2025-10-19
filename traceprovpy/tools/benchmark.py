@@ -94,6 +94,7 @@ class QuerySpec(NamedTuple):
         path: str,
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
+        print(path)
         if path.startswith("$ROOT"):
             query_path = Path(path.replace("$ROOT", os.getcwd()))
         elif path.startswith("$INLINE-"):
@@ -142,10 +143,21 @@ class QuerySpec(NamedTuple):
                 extra_results[extra.label] = extra_result
             return extra_results
 
+        original_get_options = get_run_options
+
+        def _new_get_run_options(*args, **kwargs):
+            options = original_get_options(*args, **kwargs)
+            return options._replace(skip_validation=True)
+
         iter_count = 0
         start_perf_counter = time.perf_counter()
         while True:
             # for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
+            if iter_count > 0:
+                base_pack = base_pack._replace(skip_validation=True)
+                if materialize_pack is not None:
+                    materialize_pack = materialize_pack._replace(skip_validation=True)
+                get_run_options = _new_get_run_options
             end_perf_counter = time.perf_counter()
             if base_pack.params.execution_time is not None:
                 if base_pack.params.execution_time <= (

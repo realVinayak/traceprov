@@ -148,6 +148,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     # The caching is used just once.
     # That is, if the extras is a dict, then connection is stored.
 
+    # print(options)
     cached_connection = None
     should_cache_connection = False
     if options.extras is not None:
@@ -169,6 +170,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     ):
         options.extras[CACHED_CONNECTION] = connection
 
+    print("SKIP VALIDATION: ", options.skip_validation)
     # Don't bother verifying, for now....
     if not options.skip_validation and len(options.preprocessors) == 0:
         validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)
@@ -190,6 +192,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     augmented_sql = f"{options.get_explain(connection)} {flattend_sql_query}"
 
     cursor = connection.cursor()
+    # print(connection, cursor)
     try:
         if not options.strict_run:
             cursor.execute(timeout_stmt)
@@ -201,6 +204,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
                 explain_time=float((planning_time + execution_time) / 1000)
             )
 
+        # print(flattend_sql_query)
         if options.capture_output or options.strict_run:
             computed_time = None
             # Now, need to run the query again.
@@ -208,10 +212,12 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
             try:
                 captured_result = cursor.fetchall()
             except psycopg2.ProgrammingError as e:
+                # print(str(e))
                 if "no results to fetch" in str(e):
                     captured_result = None
                 else:
                     raise e
+            # print("captured result", captured_result)
             new_result = dict(timing=computed_time, captured=captured_result)
             computed_time = new_result
     except psycopg2.errors.QueryCanceled:
