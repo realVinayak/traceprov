@@ -8,7 +8,7 @@ import os
 import argparse
 from pathlib import PosixPath
 
-from traceprovpy.tools.validate_query import validate_sql
+from traceprovpy.tools.validate_query import validate_sql, ALL_CHECKS
 
 DEFAULT_REPEAT = 10
 DEFAULT_THROWAWAY = 5
@@ -171,7 +171,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     # Don't bother verifying, for now....
     if not options.skip_validation and len(options.preprocessors) == 0:
-        validate_sql(connection, file_dir, options.file_path)
+        validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)
 
     if options.params.dry_run:
         return -1

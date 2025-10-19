@@ -103,6 +103,14 @@ class MaterializationPresent(AbstractCheck):
         return new_file_content
 
 
+ALL_CHECKS = [
+    OnlyOneStmt,
+    NoInternalComment,
+    ValidSchema,
+    MaterializationPresent,
+]
+
+
 def validate_sql(connection, file_dir, checks, file_name, try_fix=False):
     abs_file_path = f"{file_name}"
 
@@ -172,12 +180,7 @@ def main():
         port=options.port,
     )
 
-    checks: List[AbstractCheck] = [
-        OnlyOneStmt,
-        NoInternalComment,
-        ValidSchema,
-        MaterializationPresent,
-    ]
+    checks: List[AbstractCheck] = ALL_CHECKS
 
     if not options.schema:
         checks = [check for check in checks if check is not ValidSchema]
