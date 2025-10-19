@@ -156,7 +156,7 @@ directories = lambda num_groups, selectivity: [
                         ),
                         ExtraQuery(
                             label="traceprov_create_function",
-                            query=f"$ROOT/templates/predicate_post/traceprov_create_function.sql",
+                            query=f"$ROOT/templates/traceprov_create_function.sql",
                             runs_after_base=True,
                             strict_run=True,
                             skip_validation=True,
@@ -164,7 +164,7 @@ directories = lambda num_groups, selectivity: [
                         ),
                         ExtraQuery(
                             label="traceprov_materialize",
-                            query=f"$ROOT/templates/predicate_post/traceprov_materialize.sql",
+                            query=f"$ROOT/templates/traceprov_materialize.sql",
                             runs_after_base=True,
                             skip_validation=True,
                             capture_output=False,
