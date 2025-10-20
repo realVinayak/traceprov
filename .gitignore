@@ -29,3 +29,4 @@ traceprovpy.egg-info/
 local_test_*/
 temp.out.sql
 *.sql.backup
+tmp.sql
