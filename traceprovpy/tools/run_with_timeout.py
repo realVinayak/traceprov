@@ -57,13 +57,7 @@ class ConnectionParams(NamedTuple):
 
     @staticmethod
     def make_simple_connection(parsed):
-        connection_params = ConnectionParams(
-            host=parsed.host,
-            port=parsed.port,
-            user=parsed.user,
-            password=parsed.password,
-            database=parsed.db,
-        )
+        connection_params = ConnectionParams.make_from_parsed(parsed)
         return psycopg2.connect(
             database=connection_params.database,
             host=connection_params.host,
@@ -71,6 +65,17 @@ class ConnectionParams(NamedTuple):
             password=connection_params.password,
             port=connection_params.port,
         )
+
+    @staticmethod
+    def make_from_parsed(parsed):
+        connection_params = ConnectionParams(
+            host=parsed.host,
+            port=parsed.port,
+            user=parsed.user,
+            password=parsed.password,
+            database=parsed.db,
+        )
+        return connection_params
 
 
 class Preprocessor:
