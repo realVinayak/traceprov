@@ -145,8 +145,11 @@ def recursive_check(connection, current_dir, checks, skip_list=[], try_fix=False
     for root, dirs, files in os.walk(current_dir):
         for file in files:
             complete_path = os.path.join(root, file)
-            if file.endswith(".sql") and not any(
-                to_skip in file for to_skip in skip_list
+            # print(skip_list)
+            if (
+                file.endswith(".sql")
+                and not any(to_skip in file for to_skip in skip_list)
+                and not any(to_skip in complete_path for to_skip in skip_list)
             ):
                 validate_sql(connection, root, checks, complete_path, try_fix)
 
