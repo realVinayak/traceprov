@@ -20,7 +20,7 @@ ifndef suff
 suff := default
 endif
 
-module:
+module: buildSetup
 	gcc -g -Wall -fPIC -c -I/usr/include/postgresql/$(PG_VERSION)/server/ $(src).c -o $(src)_$(suff).o
 	gcc -g -Wall -shared $(src)_$(suff).o -o $(src)_$(suff).so
 	sudo cp $(src)_$(suff).so /usr/lib/postgresql/$(PG_VERSION)/lib

@@ -17,6 +17,7 @@ def insert_partition(cursor, partition_size, group_index, sql):
         create_count = min(CHUNK_SIZE, remaining)
         remaining -= create_count
         assert create_count >= 0
+        print(create_count)
         tuples = [
             (group_index + _id, -1 * (group_index), group_index)
             for _id in range(create_count)
@@ -24,9 +25,7 @@ def insert_partition(cursor, partition_size, group_index, sql):
         execute_values(cursor, sql, tuples)
 
 
-def make_data(connection, num_rows: int, num_groups: int) -> None:
-    partition = num_rows / num_groups
-    assert num_rows % num_groups == 0  # make things simpler.
+def make_data(connection, num_rows: int, num_groups: int, partition: int) -> None:
     with open("create_table.template.sql") as f:
         create_table_template = f.read()
 
@@ -78,8 +77,11 @@ def main():
     cursor.execute("select version();")
     print(cursor.fetchall())
     cursor.close()
+    partition = int(num_rows / num_groups)
+    assert num_rows % num_groups == 0  # make things simpler.
+    print("using partition: ", partition)
     if parsed.data:
-        make_data(connection, num_rows, num_groups)
+        make_data(connection, num_rows, num_groups, partition)
     else:
         print("info: skipping data creation")
     connection.close()
