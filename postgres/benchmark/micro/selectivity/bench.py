@@ -15,6 +15,7 @@ from traceprovpy.tools.run_with_timeout import (
 
 def get_filter_group(num_groups, selectivity, mode):
     multiplier = -1 if mode == "pre" else 1
+    print(num_groups * selectivity, "num_gs")
     return int(selectivity * num_groups / 100) * multiplier
 
 
@@ -209,16 +210,25 @@ def main():
     benchmark = GenericBenchmark("selectivity")
     parser = argparse.ArgumentParser("selectivity-driver")
     parser.add_argument("--sel_num_groups", required=True, type=int)
-    parser.add_argument("--sel_selectivity", required=True, type=int)
+    parser.add_argument("--sel_selectivity", required=True, type=float)
     parser.add_argument("--sel_mode", required=True, type=str)
+    parser.add_argument(
+        "--sel_dry_run", action=argparse.BooleanOptionalAction, default=False
+    )
 
     parsed, _ = parser.parse_known_args()
     print(parsed)
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
-    #dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
+
+    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
     dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     selectivity_directories = []
     for dir_name in dir_names:
+        print(
+            get_filter_group(
+                parsed.sel_num_groups, parsed.sel_selectivity, parsed.sel_mode
+            )
+        )
         selectivity_directories.extend(
             make_directory(
                 dir_name,
@@ -228,6 +238,9 @@ def main():
             )
         )
 
+    if parsed.sel_dry_run:
+        print(selectivity_directories)
+        return
     result = benchmark.run_from_argparse(
         selectivity_directories, params=RunParams(repeat=2, throwaway=2)
     )

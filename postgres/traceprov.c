@@ -12,7 +12,7 @@
 #include "libpq/pqformat.h"
 #include "common/file_perm.h"
 
-#if (PG_MAJORVERSION_NUM == 18)
+#if (PG_MAJORVERSION_NUM >= 16)
 #include "varatt.h"
 #endif
 
@@ -150,7 +150,7 @@ static int initialize_local_context(){
     traceprov_current.local_context->worker_id = traceprov_current.my_worker_id;
     traceprov_current.local_context->worker_pid = MyProcPid;
 
-    #if (PG_MAJORVERSION_NUM == 14)
+    #if (PG_MAJORVERSION_NUM <= 16)
     if (!IsBackgroundWorker){
         shared_context->main_worker_id = traceprov_current.my_worker_id;
     }

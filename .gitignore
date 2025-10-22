@@ -30,3 +30,5 @@ local_test_*/
 temp.out.sql
 *.sql.backup
 tmp.sql
+postgres/benchmark/micro/set_operations
+postgres/complex.*
