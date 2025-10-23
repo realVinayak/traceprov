@@ -1,1 +1,0 @@
-CREATE TEMP TABLE traceprov_infer_result AS (SELECT * FROM traceprov_infer(1, 0, 0));
