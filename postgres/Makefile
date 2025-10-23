@@ -1,7 +1,13 @@
+#CPP := /Users/uicdbgroup/.nix-profile/bin/g++
+#CC := /Users/uicdbgroup/.nix-profile/bin/gcc
+CPP := /usr/bin/g++
+CC := /usr/bin/gcc
+
 all: traceprov infer_set
 
 clean:
 	rm -f *.so
+	rm -f *.dylib
 	rm -f *.o
 	rm -f *.auto.sql
 	rm -f *.ids
@@ -31,8 +37,8 @@ SQL_OUTPUT_DIR := /home/postgres/
 endif
 
 module: buildSetup
-	gcc -g -Wall -fPIC -c -I$(INCLUDE_DIR) $(src).c -o $(src)_$(suff).o
-	gcc -g -Wall -shared $(src)_$(suff).o -o $(src)_$(suff).so
+	$(CC) -g -Wall -fPIC -c -I$(INCLUDE_DIR) $(src).c -o $(src)_$(suff).o
+	$(CC) -g -Wall -shared $(src)_$(suff).o -o $(src)_$(suff).so
 	sudo cp $(src)_$(suff).so $(PKG_LIB_DIR)
 	rm -f *.auto.sql
 	sed 's/__FILE__/$(src)_$(suff)/g' $(sql).sql > $(sql)_$(src)_$(suff).auto.sql
@@ -46,11 +52,11 @@ binary_search:
 	sudo make module src=binary_search suff=$(suff) sql=create_b_search
 
 traceprov: buildSetup
-	gcc -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) traceprov.c -o traceprov_$(suff).o
-	gcc -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) file_utils.c -o file_utils_$(suff).o
-	gcc -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) utils.c -o utils_$(suff).o
-	gcc -g -O3 -Wall -shared traceprov_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_$(suff).so
-	sudo cp traceprov_$(suff).so $(PKG_LIB_DIR)
+	$(CC) -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) traceprov.c -o traceprov_$(suff).o
+	$(CC) -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) file_utils.c -o file_utils_$(suff).o
+	$(CC) -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) utils.c -o utils_$(suff).o
+	$(CC) -g -O3 -Wall -bundle -flat_namespace -undefined suppress traceprov_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_$(suff).dylib
+	sudo cp traceprov_$(suff).dylib $(PKG_LIB_DIR)
 	sed 's/__FILE__/traceprov_$(suff)/g' traceprov.sql > traceprov_$(suff).auto.sql
 	@if [ "$(USE_DEF)" = "0" ]; then echo "copying SQL!" && sudo cp traceprov_$(suff).auto.sql $(SQL_OUTPUT_DIR); fi
 
@@ -61,11 +67,11 @@ traceprov_infer_dbg:
 	g++ -g -I/usr/include/postgresql/$(PG_VERSION)/server/ traceprov_infer.cpp file_utils.c -o traceprov_infer.o
 
 infer_set: buildSetup
-	gcc -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) file_utils.c -o file_utils_$(suff).o
-	gcc -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) utils.c -o utils_$(suff).o
-	g++ -g -std=c++11 -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) traceprov_return_infer.cpp -o traceprov_return_$(suff).o
-	g++ -g -std=c++11 -O3 -Wall -shared traceprov_return_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_return_$(suff).so
-	sudo cp traceprov_return_$(suff).so $(PKG_LIB_DIR)
+	$(CC) -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) file_utils.c -o file_utils_$(suff).o
+	$(CC) -g -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) utils.c -o utils_$(suff).o
+	$(CPP) -g -std=c++11 -O3 -Wall -fPIC -c -I$(INCLUDE_DIR) traceprov_return_infer.cpp -o traceprov_return_$(suff).o
+	$(CPP) -g -std=c++11 -O3 -Wall -bundle -flat_namespace -undefined suppress  traceprov_return_$(suff).o file_utils_$(suff).o utils_$(suff).o -o traceprov_return_$(suff).dylib
+	sudo cp traceprov_return_$(suff).dylib $(PKG_LIB_DIR)
 	sed 's/__FILE__/traceprov_return_$(suff)/g' traceprov_return_infer.sql > traceprov_return_infer_$(suff).auto.sql
 	sed 's/__FILE__/traceprov_return_$(suff)/g' traceprov_return_infer_template.sql > traceprov_return_infer_template_$(suff).auto.sql
 	@if [ "$(USE_DEF)" = "0" ]; then echo "copying SQL!" && sudo cp traceprov_return_infer_$(suff).auto.sql $(SQL_OUTPUT_DIR); fi

@@ -30,7 +30,7 @@
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
 // The below should also be changed.
-#define TRACEPROV_PAGE_SIZE             (1L << 12)
+#define TRACEPROV_PAGE_SIZE             (1L << 16)
 // Defines the maximum number of workers currently supported.
 #define TRACEPROV_MAX_WORKERS           256
 // Defines the maximum number of layers per worker, before it begins
