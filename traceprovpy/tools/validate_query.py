@@ -6,6 +6,7 @@ import argparse
 from typing import List, NamedTuple
 import os
 import psycopg2
+import json
 
 
 class Options(NamedTuple):
@@ -142,20 +143,28 @@ def validate_sql(connection, file_dir, checks, file_name, try_fix=False):
 
 def recursive_check(connection, current_dir, checks, skip_list=[], try_fix=False):
 
+    skipped = []
     for root, dirs, files in os.walk(current_dir):
         for file in files:
             complete_path = os.path.join(root, file)
             # print(skip_list)
-            if (
-                file.endswith(".sql")
-                and not any(to_skip in file for to_skip in skip_list)
+            if not file.endswith(".sql"):
+                continue
+            if skip_list is None or (
+                not any(to_skip in file for to_skip in skip_list)
                 and not any(to_skip in complete_path for to_skip in skip_list)
             ):
                 validate_sql(connection, root, checks, complete_path, try_fix)
+            else:
+                skipped.append(complete_path)
 
         for next_dir in dirs:
             next_path = os.path.join(root, next_dir)
-            recursive_check(connection, next_path, checks, skip_list, try_fix)
+            skipped.extend(
+                recursive_check(connection, next_path, checks, skip_list, try_fix)
+            )
+
+    return skipped
 
 
 def main():
@@ -187,8 +196,14 @@ def main():
 
     if not options.schema:
         checks = [check for check in checks if check is not ValidSchema]
-    recursive_check(connection, options.top_dir, checks, options.skip, options.fix)
+    skipped = recursive_check(
+        connection, options.top_dir, checks, options.skip, options.fix
+    )
     connection.close()
+    print("SKIPPED")
+    with open("skipped.tmp", "w") as f:
+        f.write(json.dumps(skipped, indent=4))
+    print(skipped)
 
 
 if __name__ == "__main__":
