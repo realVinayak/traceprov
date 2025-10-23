@@ -201,7 +201,7 @@ def main():
 
     dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
-    selectivity_directories = []
+    selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
             get_filter_group(
@@ -216,6 +216,15 @@ def main():
                 parsed.sel_selectivity,
             )
         )
+
+    # As part of validation, also need to check that all the keys are distinct.
+    # In general, that may not be true.
+    keys = [
+        [q.spec.key for q in directory.queries] for directory in selectivity_directories
+    ]
+
+    for key in keys:
+        assert len(key) == len(set(key)), f"mismatch: {key}"
 
     if parsed.sel_dry_run:
         print(selectivity_directories)
