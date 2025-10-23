@@ -294,6 +294,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
         parser.add_argument("-pg_version", required=int)
+        parser.add_argument('--use_def', action=argparse.BooleanOptionalAction, default=True)
 
         parsed, _ = parser.parse_known_args()
         connection_params = ConnectionParams(
@@ -304,7 +305,7 @@ class GenericBenchmark(NamedTuple):
             database=parsed.db,
         )
         setup_bench = self.setup(
-            parsed.traceprov_root, connection_params, parsed.suff, parsed.pg_version
+            parsed.traceprov_root, connection_params, parsed.suff, parsed.pg_version, parsed.use_def
         )
 
         start = time.perf_counter()
@@ -357,13 +358,14 @@ class GenericBenchmark(NamedTuple):
         connection_params: ConnectionParams,
         suff: str = None,
         pg_version: str = None,
+        use_def: bool = True
     ):
         if pg_version is None:
             raise Exception("PG version is not set!")
         if suff is None:
             suff = self.name
         response = os.system(
-            f"cd {traceprov_postgres_root} && make clean && make traceprov suff={suff} PG_VERSION={pg_version} && make infer_set suff={suff} PG_VERSION={pg_version}"
+            f"cd {traceprov_postgres_root} && make clean && make traceprov suff={suff} PG_VERSION={pg_version} USE_DEF={int(use_def)} && make infer_set suff={suff} PG_VERSION={pg_version} USE_DEF={int(use_def)}"
         )
         if response != 0:
             raise Exception("Make failed!")
@@ -390,8 +392,8 @@ class GenericBenchmark(NamedTuple):
             == 0
         )
 
-        traceprov_obj = f"traceprov_{suff}.so"
-        traceprv_infer_set_obj = f"traceprov_return_{suff}.so"
+        traceprov_obj = f"traceprov_{suff}.dylib"
+        traceprv_infer_set_obj = f"traceprov_return_{suff}.dylib"
 
         return self._replace(
             traceprov_path=traceprov_obj,

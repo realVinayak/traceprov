@@ -1,6 +1,7 @@
 data/
 crimes.csv
 .vscode
+*.dylib
 postgres/*.so
 postgres/*.o
 playground/
