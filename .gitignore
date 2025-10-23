@@ -27,6 +27,7 @@ postgres/benchmark/micro/aggregates/results/local_test_*
 __pycache__/
 traceprovpy.egg-info/
 *.tmp
+*.tmp.py
 local_test_*/
 temp.out.sql
 *.sql.backup

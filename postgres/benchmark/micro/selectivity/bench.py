@@ -20,8 +20,10 @@ def get_filter_group(num_groups, selectivity, mode):
 
 
 def make_directory(dir_name, mode, num_groups, selectivity):
-    computed_preprocess = ReplaceSelectivity(get_filter_group(num_groups, selectivity, mode))
-    print('using preprocess', computed_preprocess.selectivity)
+    computed_preprocess = ReplaceSelectivity(
+        get_filter_group(num_groups, selectivity, mode)
+    )
+    print("using preprocess", computed_preprocess.selectivity)
     return [
         QueryDirectory(
             dir_name=dir_name,
@@ -58,9 +60,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_window.sql",
                         materialize="gprom_window.materialize.sql",
                         key=f"gprom_window_selectivity_{selectivity}",
-                        preprocess=[
-                            computed_preprocess
-                        ],
+                        preprocess=[computed_preprocess],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -78,9 +78,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_join_heuristics.sql",
                         materialize="gprom_join_heuristics.materialize.sql",
                         key=f"gprom_join_heuristics_{selectivity}",
-                        preprocess=[
-                            computed_preprocess
-                        ],
+                        preprocess=[computed_preprocess],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -98,9 +96,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_window_heuristics.sql",
                         materialize="gprom_window_heuristics.materialize.sql",
                         key=f"gprom_window_heuristics_{selectivity}",
-                        preprocess=[
-                            computed_preprocess
-                        ],
+                        preprocess=[computed_preprocess],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -117,9 +113,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                     spec=QuerySpec(
                         base="traceprov.sql",
                         key=f"traceprov_{selectivity}",
-                        preprocess=[
-                            computed_preprocess
-                        ],
+                        preprocess=[computed_preprocess],
                         extras=[
                             ExtraQuery(
                                 label="traceprov_sync_time",
@@ -208,7 +202,7 @@ def main():
 
     dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
-    selectivity_directories = []
+    selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
             get_filter_group(
@@ -223,6 +217,15 @@ def main():
                 parsed.sel_selectivity,
             )
         )
+
+    # As part of validation, also need to check that all the keys are distinct.
+    # In general, that may not be true.
+    keys = [
+        [q.spec.key for q in directory.queries] for directory in selectivity_directories
+    ]
+
+    for key in keys:
+        assert len(key) == len(set(key)), f"mismatch: {key}"
 
     if parsed.sel_dry_run:
         print(selectivity_directories)
