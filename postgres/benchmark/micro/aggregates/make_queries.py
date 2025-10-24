@@ -35,12 +35,13 @@ def main():
     parser.add_argument(
         "--remove", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument("-gnum", required=False, type=str, default="./")
 
     postgres_connection_from_cmd(parser)
     # GpromOptions.add_parse_options(parser)
 
     parsed, _ = parser.parse_known_args()
-    query_dir = f"queries_{parsed.table_name}/{parsed.qnum}/"
+    query_dir = f"{parsed.gnum}/queries_{parsed.table_name}/{parsed.qnum}/"
 
     if parsed.remove:
         os.system(f"rm -rf {query_dir}/")
@@ -50,13 +51,19 @@ def main():
     table_name = parsed.table_name
 
     template_base = cleanup(
-        open_template("base", parsed.qnum), guessed_id_column, table_name
+        open_template(f"base/{parsed.gnum}/", parsed.qnum),
+        guessed_id_column,
+        table_name,
     )
     template_traceprov = cleanup(
-        open_template("traceprov", parsed.qnum), guessed_id_column, table_name
+        open_template(f"traceprov/{parsed.gnum}", parsed.qnum),
+        guessed_id_column,
+        table_name,
     )
     template_extract_gprom = cleanup(
-        open_template("extract", parsed.qnum), guessed_id_column, table_name
+        open_template(f"extract/{parsed.gnum}", parsed.qnum),
+        guessed_id_column,
+        table_name,
     )
 
     with open(f"{query_dir}/base.sql", "w") as f:
