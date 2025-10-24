@@ -286,6 +286,8 @@ class GenericBenchmark(NamedTuple):
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
     ):
+        if len(directories) == 0:
+            raise Exception("Trying to run test without any dirs!")
         assert self.traceprov_path is None and self.traceprov_infer_set_path is None
         if parser is None:
             parser = argparse.ArgumentParser(prog=f"run-{self.name}")
