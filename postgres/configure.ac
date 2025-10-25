@@ -1,0 +1,9 @@
+AC_INIT([traceprov],[1.0])
+AM_INIT_AUTOMAKE([foreign])
+AC_PROG_CC
+AC_PROG_CXX
+LT_INIT
+AC_CONFIG_FILES([Makefile])
+TRACEPROV_PG_INCLUDE_DIR="$(pg_config --includedir-server)"
+AC_SUBST([TRACEPROV_PG_INCLUDE_DIR])
+AC_OUTPUT
