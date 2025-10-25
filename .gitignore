@@ -54,3 +54,4 @@ config.status
 config.sub
 configure
 postgres/bld/*
+*/*.o.dSYM/
