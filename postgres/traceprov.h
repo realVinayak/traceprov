@@ -30,8 +30,11 @@
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
 // The below should also be changed.
-#ifndef TRACEPROV_PAGE_SIZE
+#ifndef TRACEPROV_PAGE_SIZE_RAW
 static_assert(0, "page size not defined!");
+#else
+// The casting is helpful.
+#define TRACEPROV_PAGE_SIZE ((long int) TRACEPROV_PAGE_SIZE_RAW)
 #endif
 
 // #define TRACEPROV_PAGE_SIZE             (1L << 12)
