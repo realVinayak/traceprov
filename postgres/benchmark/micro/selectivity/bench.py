@@ -20,6 +20,9 @@ def get_filter_group(num_groups, selectivity, mode):
 
 
 def make_directory(dir_name, mode, num_groups, selectivity):
+    replaces_selectivity = ReplaceSelectivity(
+        get_filter_group(num_groups, selectivity, mode)
+    )
     return [
         QueryDirectory(
             dir_name=dir_name,
@@ -29,11 +32,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                     spec=QuerySpec(
                         base="base.sql",
                         key=f"base_selectivity_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                     ),
                 ),
                 Query(
@@ -42,11 +41,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_join.sql",
                         materialize="gprom_join.materialize.sql",
                         key=f"gprom_join_selectivity_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -64,11 +59,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_window.sql",
                         materialize="gprom_window.materialize.sql",
                         key=f"gprom_window_selectivity_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -86,11 +77,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_join_heuristics.sql",
                         materialize="gprom_join_heuristics.materialize.sql",
                         key=f"gprom_join_heuristics_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -108,11 +95,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         base="gprom_window_heuristics.sql",
                         materialize="gprom_window_heuristics.materialize.sql",
                         key=f"gprom_window_heuristics_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                         extras=[
                             ExtraQuery(
                                 label="count",
@@ -129,11 +112,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                     spec=QuerySpec(
                         base="traceprov.sql",
                         key=f"traceprov_{selectivity}",
-                        preprocess=[
-                            ReplaceSelectivity(
-                                get_filter_group(num_groups, selectivity, mode)
-                            )
-                        ],
+                        preprocess=[replaces_selectivity],
                         extras=[
                             ExtraQuery(
                                 label="traceprov_sync_time",
@@ -220,8 +199,8 @@ def main():
     print(parsed)
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
-    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
+    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
+    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     selectivity_directories = []
     for dir_name in dir_names:
         print(
@@ -242,7 +221,7 @@ def main():
         print(selectivity_directories)
         return
     result = benchmark.run_from_argparse(
-        selectivity_directories, params=RunParams(repeat=2, throwaway=2)
+        selectivity_directories, params=RunParams(repeat=10, throwaway=5)
     )
     print(result)
     benchmark.dump_final_result(result)
