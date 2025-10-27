@@ -170,8 +170,11 @@ class QuerySpec(NamedTuple):
 
             print("ON INDEX: ", iter_count)
             flat_options = base_pack.connection_params.get_flat()
-            os.system(
-                f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
+            assert (
+                os.system(
+                    f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
+                )
+                == 0
             )
             base_context = dict()
             base_pack = base_pack._replace(extras=base_context)
@@ -403,8 +406,11 @@ class GenericBenchmark(NamedTuple):
         params=RunParams(),
     ):
         # Always run the analyze for statistics initially.
-        os.system(
-            f'echo "ANALYZE;" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
+        assert (
+            os.system(
+                f'echo "ANALYZE;" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
+            )
+            == 0
         )
         print(directories)
 
