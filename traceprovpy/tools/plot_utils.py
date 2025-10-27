@@ -44,12 +44,12 @@ class Plotable(NamedTuple):
     values: list[float]
 
     def compute_median(self) -> float:
-        if len(self.values) == 0:
+        if len(self.values) < 10:
             return 0.0
         return statistics.median(self.values)
 
     def compute_stddev(self) -> float:
-        if len(self.values) == 0:
+        if len(self.values) < 10:
             return 0.0
         stdev = statistics.stdev(self.values)
         print(self.label, stdev, self.values)
