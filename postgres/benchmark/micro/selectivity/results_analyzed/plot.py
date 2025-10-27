@@ -47,10 +47,12 @@ class SelectivityBenchmarkPlot(BenchmarkPlot):
     def assert_values_same(self, in_dict: dict):
         reduced_set = set()
         for key, values in in_dict.items():
-            assert len(set(values)) == 1
-            reduced_set.add(str(values))
-            print("key:", key, "unique value:", list(set(values))[0])
-        assert len(reduced_set) == 1
+            assert len(set(values)) <= 1
+            if len(set(values)) == 0:
+                continue
+            reduced_set.add(str(values[0]))
+            print("key:", key, "unique value:", list(set(values)))
+        assert len(reduced_set) <= 1, f"{len(reduced_set)}, {reduced_set}"
 
     def sanity_checks(self, main_result):
         # For a given result, the infer from gprom and traceprov should be equal.
@@ -116,9 +118,34 @@ PLOT_ORDER_SELECTIVITY_BENCH = [
     "traceprov (F + S + I + M)",
 ]
 
+PLOT_ORDER_RESTRICTED_SELECTIVITY_BENCH = [
+    "base",
+    "gprom_join (materialize)",
+    "gprom_join_heuristics (materialize)",
+    "gprom_window (materialize)",
+    "gprom_window_heuristics (materialize)",
+    # "traceprov (F)",
+    # "traceprov (F + S + I)",
+    "traceprov (F + S + I + M)",
+]
+
+PLOT_ORDER_TRACEPROV = [
+    "base",
+    "traceprov (F)",
+    "traceprov (F + S + I)",
+    "traceprov (F + S + I + M)",
+]
+
 
 def get_explain_time(result_list: list[dict[str, float]]):
-    return [result["explain_time"] for result in result_list]
+    explain_times = []
+    for result in result_list:
+        if "explain_time" not in result:
+            assert "timeout" in result
+            print(result)
+            return []
+        explain_times.append(result["explain_time"])
+    return explain_times
 
 
 def merge_plotables(
@@ -236,16 +263,34 @@ QUERY_RESULT_ORDER = ["predicate_post", "predicate_pre"]
 
 import numpy as np
 
-WIDTH = 0.04
+WIDTH = 0.06
 
 
-def plot_plotables(extracted: EXTRACTED_PLOTABLES):
+def plot_plotables(
+    extracted: EXTRACTED_PLOTABLES,
+    plot_order,
+    suffix="",
+    use_log=True,
+    add_stddev=False,
+    add_values=False,
+    width=WIDTH,
+    bbox_to_anchor=(1, 0.7),
+):
     for directory, queries_per_dir in extracted.items():
         plt.clf()
-        figure, *axis = plt.subplots(
+        figure, axis = plt.subplots(
             1, len(queries_per_dir), sharey=True, layout="constrained"
         )
-        # figure.set_size_inches(12, 6)
+        slowdown_figure, slowdown_axis = plt.subplots(
+            1, len(queries_per_dir), sharey=True, layout="constrained"
+        )
+
+        print("AXIS", axis)
+        figure.set_size_inches(18, 7)
+        slowdown_figure.set_size_inches(18, 7)
+
+        figure.suptitle(f"Execution Time vs Selectivity ({directory})")
+        slowdown_figure.suptitle("Slowdown vs Selectivity")
         sorted_queries_per_dir = sorted(
             queries_per_dir.items(),
             key=lambda q_name: QUERY_RESULT_ORDER.index(q_name[0]),
@@ -253,33 +298,78 @@ def plot_plotables(extracted: EXTRACTED_PLOTABLES):
         for _idx, (query, query_result) in enumerate(sorted_queries_per_dir):
             x_axis = np.arange(len(query_result))
             category_sorted = sorted(query_result.items(), key=lambda qr: float(qr[0]))
-
-            for cat_id, expected_category in enumerate(PLOT_ORDER_SELECTIVITY_BENCH):
-                offset = cat_id * WIDTH
+            basetime = dict()
+            for cat_id, expected_category in enumerate(plot_order):
+                offset = cat_id * width
                 # First, try to find this one.
                 founds = []
-                for _, category_values in category_sorted:
+                stddevs = []
+                slowdowns = []
+
+                for category_name, category_values in category_sorted:
+                    print(query, category_name)
                     _finds = [
                         c for c in category_values if c.label == expected_category
                     ]
                     if len(_finds) == 0:
                         found = 0
+                        stddev = 0
                     else:
                         assert len(_finds) == 1
                         found = _finds[0].compute_median()
+                        stddev = _finds[0].compute_stddev()
+                    if cat_id == 0:
+                        basetime[category_name] = found
+                    else:
+                        slowdowns.append(found / basetime[category_name])
                     founds.append(found)
-                axis[_idx].bar(
+                    stddevs.append(stddev)
+                if add_stddev:
+                    stdev_args = dict(yerr=stddevs)
+                else:
+                    stdev_args = dict()
+                bars = axis[_idx].bar(
                     x_axis + offset,
                     founds,
-                    WIDTH,
+                    width,
                     label=expected_category,
                     color=SelectivityBenchmarkPlot.colors[cat_id],
+                    **stdev_args,
                 )
+                if add_values:
+                    axis[_idx].bar_label(
+                        bars, fmt="%.2f", fontsize=6, rotation=60, padding=3
+                    )
+
+                if len(slowdowns):
+                    assert len(slowdowns) == len(x_axis)
+                    slowdown_axis[_idx].scatter(
+                        x_axis,
+                        slowdowns,
+                        label=expected_category,
+                        color=SelectivityBenchmarkPlot.colors[cat_id],
+                    )
             axis[_idx].set_xticks(
-                x_axis + WIDTH * 5.5, [tup[0] for tup in category_sorted]
+                x_axis + width * len(plot_order) / 2,
+                [tup[0] for tup in category_sorted],
             )
-            axis[_idx].legend(prop=dict(size=8), bbox_to_anchor=(1, 0.7))
-        figure.savefig(f"{directory}.png")
+            slowdown_axis[_idx].set_xticks(
+                x_axis,
+                [tup[0] for tup in category_sorted],
+            )
+            axis[_idx].set_title(f"Query: {query}")
+            slowdown_axis[_idx].set_title(f"Query: {query}")
+            if use_log:
+                axis[_idx].set_yscale("log", base=10)
+            slowdown_axis[_idx].set_yscale("log", base=10)
+        axis[-1].legend(prop=dict(size=8), bbox_to_anchor=bbox_to_anchor)
+        slowdown_axis[-1].legend(prop=dict(size=8), bbox_to_anchor=bbox_to_anchor)
+        for ax in axis:
+            ax.set(xlabel="Selectivity (%)", ylabel="Execution time (s)")
+        for ax in slowdown_axis:
+            ax.set(xlabel="Selectivity (%)", ylabel="Slowdown")
+        figure.savefig(f"{directory}_{suffix}.png")
+        slowdown_figure.savefig(f"{directory}_slowdown_{suffix}.png")
 
 
 def main():
@@ -304,7 +394,23 @@ def main():
     with open("test_py_out.tmp.py", "w") as f:
         f.write(repr(plotables))
 
-    plot_plotables(plotables)
+    plot_plotables(plotables, PLOT_ORDER_SELECTIVITY_BENCH, "all")
+    plot_plotables(
+        plotables,
+        PLOT_ORDER_RESTRICTED_SELECTIVITY_BENCH,
+        "materialize",
+        add_values=True,
+        width=0.12,
+    )
+    plot_plotables(
+        plotables,
+        PLOT_ORDER_TRACEPROV,
+        "traceprov",
+        use_log=False,
+        add_values=True,
+        width=0.15,
+        bbox_to_anchor=(1, 1),
+    )
     # print(combined_results)
 
 
