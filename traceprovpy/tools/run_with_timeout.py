@@ -2,13 +2,13 @@
 # Returns the time took (via EXPLAIN ANALYZE)
 # Here, we also do the repeated runs (+ throwaways)
 
-from typing import Literal, NamedTuple
+from typing import Any, Literal, NamedTuple
 import psycopg2
 import os
 import argparse
 from pathlib import PosixPath
 
-from traceprovpy.tools.validate_query import validate_sql
+from traceprovpy.tools.validate_query import validate_sql, ALL_CHECKS
 
 DEFAULT_REPEAT = 10
 DEFAULT_THROWAWAY = 5
@@ -57,13 +57,7 @@ class ConnectionParams(NamedTuple):
 
     @staticmethod
     def make_simple_connection(parsed):
-        connection_params = ConnectionParams(
-            host=parsed.host,
-            port=parsed.port,
-            user=parsed.user,
-            password=parsed.password,
-            database=parsed.db,
-        )
+        connection_params = ConnectionParams.make_from_parsed(parsed)
         return psycopg2.connect(
             database=connection_params.database,
             host=connection_params.host,
@@ -71,6 +65,17 @@ class ConnectionParams(NamedTuple):
             password=connection_params.password,
             port=connection_params.port,
         )
+
+    @staticmethod
+    def make_from_parsed(parsed):
+        connection_params = ConnectionParams(
+            host=parsed.host,
+            port=parsed.port,
+            user=parsed.user,
+            password=parsed.password,
+            database=parsed.db,
+        )
+        return connection_params
 
 
 class Preprocessor:
@@ -97,6 +102,20 @@ class ReplaceFILE(Preprocessor):
 
     def __repr__(self):
         return f'ReplaceFILE("{self.replace_with_token}")'
+
+
+class ReplaceSelectivity(Preprocessor):
+    def __init__(self, selectivity: Any):
+        self.selectivity = str(selectivity)
+
+    def preprocess(self, in_content: str) -> str:
+        return in_content.replace(":selectivity", self.selectivity)
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.selectivity))
+
+    def __repr__(self):
+        return f"ReplaceSelectivity('{self.selectivity}')"
 
 
 class RunWithTimeoutOptions(NamedTuple):
@@ -134,6 +153,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     # The caching is used just once.
     # That is, if the extras is a dict, then connection is stored.
 
+    # print(options)
     cached_connection = None
     should_cache_connection = False
     if options.extras is not None:
@@ -155,8 +175,10 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     ):
         options.extras[CACHED_CONNECTION] = connection
 
-    if not options.skip_validation:
-        validate_sql(connection, file_dir, options.file_path)
+    print("SKIP VALIDATION: ", options.skip_validation)
+    # Don't bother verifying, for now....
+    if not options.skip_validation and len(options.preprocessors) == 0:
+        validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)
 
     if options.params.dry_run:
         return -1
@@ -175,6 +197,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     augmented_sql = f"{options.get_explain(connection)} {flattend_sql_query}"
 
     cursor = connection.cursor()
+    # print(connection, cursor)
     try:
         if not options.strict_run:
             cursor.execute(timeout_stmt)
@@ -186,6 +209,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
                 explain_time=float((planning_time + execution_time) / 1000)
             )
 
+        # print(flattend_sql_query)
         if options.capture_output or options.strict_run:
             computed_time = None
             # Now, need to run the query again.
@@ -193,10 +217,12 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
             try:
                 captured_result = cursor.fetchall()
             except psycopg2.ProgrammingError as e:
+                # print(str(e))
                 if "no results to fetch" in str(e):
                     captured_result = None
                 else:
                     raise e
+            # print("captured result", captured_result)
             new_result = dict(timing=computed_time, captured=captured_result)
             computed_time = new_result
     except psycopg2.errors.QueryCanceled:

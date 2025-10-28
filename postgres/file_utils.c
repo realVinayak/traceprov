@@ -114,7 +114,7 @@ int remove_files_from_dir(const char *dir){
     // These are data types defined in the "dirent" header
     DIR *folder = opendir(dir);
     struct dirent *next_file;
-    char filepath[512];
+    char filepath[2048];
 
     while ( (next_file = readdir(folder)) != NULL )
     {

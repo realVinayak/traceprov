@@ -1,0 +1,11 @@
+JOIN:
+gprom -passwd postgres -host 127.0.0.1 -port 5432 -user postgres -backend postgres -db playground -Pexecutor sql -Loperator_verbose TRUE
+
+WINDOW:
+gprom -passwd postgres -host 127.0.0.1 -port 5432 -user postgres -backend postgres -db playground -prov_instrument_agg_window -prov_use_composable -Pexecutor sql -Loperator_verbose TRUE
+
+HEURISTICS (JOIN):
+gprom -passwd postgres -host 127.0.0.1 -port 5432 -user postgres -backend postgres -db playground -Pexecutor sql -Loperator_verbose TRUE -heuristic_opt TRUE
+
+HEURISTICS (WINDOW):
+gprom -passwd postgres -host 127.0.0.1 -port 5432 -user postgres -backend postgres -db playground -Pexecutor sql -prov_instrument_agg_window -prov_use_composable -Pexecutor sql -Loperator_verbose TRUE -heuristic_opt TRUE
