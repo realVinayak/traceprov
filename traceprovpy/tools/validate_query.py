@@ -6,6 +6,7 @@ import argparse
 from typing import List, NamedTuple
 import os
 import psycopg2
+import json
 
 
 class Options(NamedTuple):
@@ -17,6 +18,7 @@ class Options(NamedTuple):
     host: str
     port: str
     fix: bool
+    schema: bool
 
 
 show_output = False
@@ -94,7 +96,7 @@ class MaterializationPresent(AbstractCheck):
     def fix(cls, connection, file_content: str, file_name: str):
 
         print(f"(cls.__name__): Fixing - {file_name}")
-        assert file_content.lower().startswith("with")
+        # assert file_content.lower().startswith("with")
         assert file_content.count(";") == 1
 
         file_content = file_content.replace(";", ");")
@@ -102,7 +104,7 @@ class MaterializationPresent(AbstractCheck):
         return new_file_content
 
 
-checks: List[AbstractCheck] = [
+ALL_CHECKS = [
     OnlyOneStmt,
     NoInternalComment,
     ValidSchema,
@@ -110,7 +112,7 @@ checks: List[AbstractCheck] = [
 ]
 
 
-def validate_sql(connection, file_dir, file_name, try_fix=False):
+def validate_sql(connection, file_dir, checks, file_name, try_fix=False):
     abs_file_path = f"{file_name}"
 
     with open(abs_file_path) as f:
@@ -139,19 +141,30 @@ def validate_sql(connection, file_dir, file_name, try_fix=False):
                 raise e
 
 
-def recursive_check(connection, current_dir, skip_list=[], try_fix=False):
+def recursive_check(connection, current_dir, checks, skip_list=[], try_fix=False):
 
+    skipped = []
     for root, dirs, files in os.walk(current_dir):
         for file in files:
             complete_path = os.path.join(root, file)
-            if file.endswith(".sql") and not any(
-                to_skip in file for to_skip in skip_list
+            # print(skip_list)
+            if not file.endswith(".sql"):
+                continue
+            if skip_list is None or (
+                not any(to_skip in file for to_skip in skip_list)
+                and not any(to_skip in complete_path for to_skip in skip_list)
             ):
-                validate_sql(connection, root, complete_path, try_fix)
+                validate_sql(connection, root, checks, complete_path, try_fix)
+            else:
+                skipped.append(complete_path)
 
         for next_dir in dirs:
             next_path = os.path.join(root, next_dir)
-            recursive_check(connection, next_path, skip_list, try_fix)
+            skipped.extend(
+                recursive_check(connection, next_path, checks, skip_list, try_fix)
+            )
+
+    return skipped
 
 
 def main():
@@ -166,6 +179,7 @@ def main():
     parser.add_argument("-P", "--port", required=False, default="5432")
 
     parser.add_argument("--fix", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--schema", action=argparse.BooleanOptionalAction, default=True)
 
     options: Options = parser.parse_args()
     print(options)
@@ -178,8 +192,18 @@ def main():
         port=options.port,
     )
 
-    recursive_check(connection, options.top_dir, options.skip, options.fix)
+    checks: List[AbstractCheck] = ALL_CHECKS
+
+    if not options.schema:
+        checks = [check for check in checks if check is not ValidSchema]
+    skipped = recursive_check(
+        connection, options.top_dir, checks, options.skip, options.fix
+    )
     connection.close()
+    print("SKIPPED")
+    with open("skipped.tmp", "w") as f:
+        f.write(json.dumps(skipped, indent=4))
+    print(skipped)
 
 
 if __name__ == "__main__":

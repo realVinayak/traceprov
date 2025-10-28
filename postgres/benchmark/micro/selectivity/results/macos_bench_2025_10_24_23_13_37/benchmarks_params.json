@@ -1,0 +1,2191 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "1_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_selectivity_0.05",
+                        "base": "gprom_join.sql",
+                        "materialize": "gprom_join.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_selectivity_0.05",
+                        "base": "gprom_window.sql",
+                        "materialize": "gprom_window.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_heuristics_0.05",
+                        "base": "gprom_join_heuristics.sql",
+                        "materialize": "gprom_join_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_heuristics_0.05",
+                        "base": "gprom_window_heuristics.sql",
+                        "materialize": "gprom_window_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "traceprov_0.05",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "5_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_selectivity_0.05",
+                        "base": "gprom_join.sql",
+                        "materialize": "gprom_join.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_selectivity_0.05",
+                        "base": "gprom_window.sql",
+                        "materialize": "gprom_window.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_heuristics_0.05",
+                        "base": "gprom_join_heuristics.sql",
+                        "materialize": "gprom_join_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_heuristics_0.05",
+                        "base": "gprom_window_heuristics.sql",
+                        "materialize": "gprom_window_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "traceprov_0.05",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "10_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_selectivity_0.05",
+                        "base": "gprom_join.sql",
+                        "materialize": "gprom_join.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_selectivity_0.05",
+                        "base": "gprom_window.sql",
+                        "materialize": "gprom_window.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_heuristics_0.05",
+                        "base": "gprom_join_heuristics.sql",
+                        "materialize": "gprom_join_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_heuristics_0.05",
+                        "base": "gprom_window_heuristics.sql",
+                        "materialize": "gprom_window_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "traceprov_0.05",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "50_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_selectivity_0.05",
+                        "base": "gprom_join.sql",
+                        "materialize": "gprom_join.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_selectivity_0.05",
+                        "base": "gprom_window.sql",
+                        "materialize": "gprom_window.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_heuristics_0.05",
+                        "base": "gprom_join_heuristics.sql",
+                        "materialize": "gprom_join_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_heuristics_0.05",
+                        "base": "gprom_window_heuristics.sql",
+                        "materialize": "gprom_window_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "traceprov_0.05",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "100_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_selectivity_0.05",
+                        "base": "gprom_join.sql",
+                        "materialize": "gprom_join.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_selectivity_0.05",
+                        "base": "gprom_window.sql",
+                        "materialize": "gprom_window.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_join_heuristics_0.05",
+                        "base": "gprom_join_heuristics.sql",
+                        "materialize": "gprom_join_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "gprom_window_heuristics_0.05",
+                        "base": "gprom_window_heuristics.sql",
+                        "materialize": "gprom_window_heuristics.materialize.sql",
+                        "extras": [
+                            [
+                                "count",
+                                "$INLINE-select count(*) from gprom_lineage;",
+                                false,
+                                true,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_pre",
+                    "spec": {
+                        "key": "traceprov_0.05",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "-5"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "127.0.0.1",
+        "port": "5460",
+        "user": "vinny",
+        "password": "vinny",
+        "database": "microbench_selectivity_10000"
+    },
+    "runparams": {
+        "repeat": 10,
+        "throwaway": 5,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "selectivity",
+    "call_options": [
+        "./",
+        [
+            [
+                "1_000_000",
+                [
+                    [
+                        "predicate_pre",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_selectivity_0.05",
+                            "gprom_join.sql",
+                            "gprom_join.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_selectivity_0.05",
+                            "gprom_window.sql",
+                            "gprom_window.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_heuristics_0.05",
+                            "gprom_join_heuristics.sql",
+                            "gprom_join_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_heuristics_0.05",
+                            "gprom_window_heuristics.sql",
+                            "gprom_window_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "traceprov_0.05",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "5_000_000",
+                [
+                    [
+                        "predicate_pre",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_selectivity_0.05",
+                            "gprom_join.sql",
+                            "gprom_join.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_selectivity_0.05",
+                            "gprom_window.sql",
+                            "gprom_window.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_heuristics_0.05",
+                            "gprom_join_heuristics.sql",
+                            "gprom_join_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_heuristics_0.05",
+                            "gprom_window_heuristics.sql",
+                            "gprom_window_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "traceprov_0.05",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "10_000_000",
+                [
+                    [
+                        "predicate_pre",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_selectivity_0.05",
+                            "gprom_join.sql",
+                            "gprom_join.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_selectivity_0.05",
+                            "gprom_window.sql",
+                            "gprom_window.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_heuristics_0.05",
+                            "gprom_join_heuristics.sql",
+                            "gprom_join_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_heuristics_0.05",
+                            "gprom_window_heuristics.sql",
+                            "gprom_window_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "traceprov_0.05",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "50_000_000",
+                [
+                    [
+                        "predicate_pre",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_selectivity_0.05",
+                            "gprom_join.sql",
+                            "gprom_join.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_selectivity_0.05",
+                            "gprom_window.sql",
+                            "gprom_window.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_heuristics_0.05",
+                            "gprom_join_heuristics.sql",
+                            "gprom_join_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_heuristics_0.05",
+                            "gprom_window_heuristics.sql",
+                            "gprom_window_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "traceprov_0.05",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "100_000_000",
+                [
+                    [
+                        "predicate_pre",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_selectivity_0.05",
+                            "gprom_join.sql",
+                            "gprom_join.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_selectivity_0.05",
+                            "gprom_window.sql",
+                            "gprom_window.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_join_heuristics_0.05",
+                            "gprom_join_heuristics.sql",
+                            "gprom_join_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "gprom_window_heuristics_0.05",
+                            "gprom_window_heuristics.sql",
+                            "gprom_window_heuristics.materialize.sql",
+                            [
+                                [
+                                    "count",
+                                    "$INLINE-select count(*) from gprom_lineage;",
+                                    false,
+                                    true,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_pre",
+                        [
+                            "traceprov_0.05",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "-5"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "127.0.0.1",
+            "5460",
+            "vinny",
+            "vinny",
+            "microbench_selectivity_10000"
+        ],
+        [
+            10,
+            5,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "libtraceprovmacos_bench",
+    "traceprov_infer_set_path": "libtraceprov_infermacos_bench"
+}
