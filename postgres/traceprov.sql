@@ -63,6 +63,14 @@ DROP FUNCTION   IF EXISTS traceprov_nop_combine(internal, internal);
 DROP FUNCTION   IF EXISTS traceprov_nop_serialize(internal);
 DROP FUNCTION   IF EXISTS traceprov_nop_deserialize(bytea, internal);
 
+-- log input->pointers
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
 CREATE FUNCTION reinit_state() RETURNS INTEGER AS '$libdir/__FILE__', 'reinit_state' LANGUAGE C;
 
 CREATE FUNCTION test_local_setup(INTEGER, INTEGER) RETURNS INTEGER AS '$libdir/__FILE__', 'test_local_setup' LANGUAGE C;

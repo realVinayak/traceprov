@@ -286,6 +286,7 @@ def plot_plotables(
         )
 
         print("AXIS", axis)
+        print("DIR: ", directory)
         figure.set_size_inches(18, 7)
         slowdown_figure.set_size_inches(18, 7)
 

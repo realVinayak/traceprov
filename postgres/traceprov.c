@@ -439,7 +439,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     // This is why we look at "end of memory zone" in the layer.
     // We could, totally, compute it here, but looking at cached makes things faster.
     // However, since the records are padded, the current pointer will always be EQUAL
-    // to theend  pointer. That is, there can be a case where we'd have to check for greater or less.
+    // to theend  pointer. That is, there cann't be a case where we'd have to check for greater or less.
 
     if (unlikely(current_layer->current_row == current_layer->end_of_memory_zone)){
         if (unlikely(rc = grow_layer_file(current_layer))){
@@ -858,3 +858,44 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
 
     PG_RETURN_POINTER(NULL);
 }
+
+// Takes multiple input bigints, logs them, and makes a pointer out of it.
+// In general, we'd want to reuse the pointers, rather than log them, and generate a pointer again.
+// However, this becomes needed in a join, for example, where the pointer can be duplicated.
+// In that case, the pointer is not safely unique, so need to create this structure.
+PG_FUNCTION_INFO_V1(traceprov_make_ptr);
+
+Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
+    int rc = 0;
+    const int layer_number = PG_GETARG_INT32(1);
+    const int num_records = PG_NARGS() - 1; // 1 for layer number
+
+    // Doing -1 because otherwise we have another space for group number.
+    if ((rc = initialize_local_and_layer(layer_number, num_records, true))){
+        PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
+        elog(ERROR, "Error setting up local or layer: %d", rc);
+    }
+
+    struct traceprov_aggregate_layer *current_layer = get_layer(layer_number);
+
+    if (unlikely(current_layer->current_row == current_layer->end_of_memory_zone)){
+        if (unlikely(rc = grow_layer_file(current_layer))){
+            elog(ERROR, "Received an error when growing trace file.");
+        }
+    }
+
+    // Pad before.
+    current_layer->current_row += current_layer->record_padding;
+
+    int64 *pk_space = (int64*)(current_layer->current_row);
+    for (int arg_idx = 1; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
+        // Don't bother writing, it is 0x0 (from truncate anyways)
+        if (PG_ARGISNULL(arg_idx)) continue;
+        *pk_space = PG_GETARG_INT64(arg_idx);
+    }
+
+    // Here, we return pointer to the group space.
+    current_layer->current_row = (void *)&pk_space[1];
+    PG_RETURN_POINTER(pk_space);
+}
+
