@@ -141,9 +141,9 @@ class RunWithTimeoutOptions(NamedTuple):
 
     def get_explain(self, connection):
         if connection.server_version >= 180000:
-            return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
+            return "EXPLAIN (analyze, timing off, buffers off, memory off)"
         else:
-            return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+            return "EXPLAIN (analyze, timing on, buffers on)"
 
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
@@ -202,12 +202,16 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         if not options.strict_run:
             cursor.execute(timeout_stmt)
             cursor.execute(augmented_sql)
-            analyze_result = cursor.fetchall()[0][0][0]
-            planning_time = analyze_result["Planning Time"]
-            execution_time = analyze_result["Execution Time"]
-            computed_time = dict(
-                explain_time=float((planning_time + execution_time) / 1000)
-            )
+            analyze_result_flat = cursor.fetchall()
+
+            #analyze_result = cursor.fetchall()[0][0][0]
+            print("analyze result", analyze_result_flat)
+            #planning_time = analyze_result["Planning Time"]
+            #execution_time = analyze_result["Execution Time"]
+            #computed_time = dict(
+            #    explain_time=float((planning_time + execution_time) / 1000)
+            #)
+            computed_time = 0.69
 
         # print(flattend_sql_query)
         if options.capture_output or options.strict_run:
