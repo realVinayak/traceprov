@@ -200,6 +200,7 @@ class QuerySpec(NamedTuple):
                 base_pack.params.throwaway is not None
                 and iter_count < base_pack.params.throwaway
             ):
+                if materialize_pack: materialize_pack.close_all()
                 iter_count += 1
                 continue
             results["base"].append(base_time)
