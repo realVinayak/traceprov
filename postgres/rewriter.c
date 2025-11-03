@@ -148,10 +148,14 @@ Query * performTraceProvRewrite(
         rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext);
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
         ListCell *targetEntryCursor;
-        foreach(targetEntryCursor, rteTargets){
-            // Add the colname to ref here.
-            const TargetEntry *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
-            rte->eref->colnames = lappend(rte->eref->colnames,  makeString(currentTarget->resname));
+        if (rte->rtekind != RTE_RELATION){
+            // Seems like all the columns are included, if the RTE is relation.
+            // So, technically, we don't need the columns.
+            foreach(targetEntryCursor, rteTargets){
+                // Add the colname to ref here.
+                const TargetEntry *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
+                rte->eref->colnames = lappend(rte->eref->colnames,  makeString(currentTarget->resname));
+            }
         }
     }
 
@@ -159,7 +163,7 @@ Query * performTraceProvRewrite(
         // We're in an aggregation.
         // In this case, use all the generated targets, and log them, and generate pointers.
         // We'll also have to nest the entire query in a subquery block (only if we're at the top level)
-        // So, it is actually two functions.
+        // So, it is actually two functions. The nesting occurs at the top level (since that is the only place mark is explicitly needed)
         traceprovAggregateRewrite(
             parse,
             targetsToAdd,
