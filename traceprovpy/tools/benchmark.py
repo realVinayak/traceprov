@@ -287,7 +287,12 @@ class GenericBenchmark(NamedTuple):
     traceprov_infer_set_path: str = None
 
     def run_from_argparse(
-        self, directories: list[QueryDirectory], params=RunParams(), parser=None
+        self,
+        directories: list[QueryDirectory],
+        params=RunParams(),
+        parser=None,
+        assertions: Callable[[ConnectionParams], None] = None,
+        needs_setup=True
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
@@ -307,8 +312,14 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        if assertions:
+            assertions(connection_params)
 
+        if needs_setup:
+            setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        else:
+            setup_bench = self
+            print("skipping setup!")
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
             parsed.test_root,

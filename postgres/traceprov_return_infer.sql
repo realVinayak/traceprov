@@ -36,3 +36,8 @@ CREATE OR REPLACE FUNCTION traceprov_layer_stat(
     RETURNS SETOF record
     AS '$libdir/__FILE__', 'traceprov_layer_stat'
     LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION traceprov_infer_poly(IN integer, IN bigint, IN integer, IN integer, IN integer)
+    RETURNS text
+    AS '$libdir/__FILE__', 'traceprov_infer_poly'
+    LANGUAGE C STRICT PARALLEL SAFE;

@@ -11,7 +11,12 @@
 #include <chrono>
 #include <algorithm>
 #include <unistd.h>
+#include <list>
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
+
+// #ifndef TRACEPROV_PAGE_SIZE
+// #define TRACEPROV_PAGE_SIZE 0
+// #endif
 
 extern "C" {
     #include "postgres.h"
@@ -22,12 +27,41 @@ extern "C" {
     #include "file_utils.h"
     #include "utils/builtins.h"
     PG_MODULE_MAGIC;
+
+    #define TRACEPROV_OTIMES    " ⊗ "
+    #define TRACEPROV_PLUS      " ⊕ "
+    #define TRACEPROV_SOMETHING "𝟙"
+    #define TRACEPROV_DELTA     "δ"
 }
 
 extern "C" {
-    // static_assert(!(HAVE__BUILTIN_TYPES_COMPATIBLE_P))
 
     #define UNUSED(X) do {} while(0 && X);
+
+    #define CACHED_LAYERS 24
+
+    struct mmap_entry {
+        void *ptr;
+        size_t size;
+    };
+
+    std::list<struct mmap_entry> *mmap_entries = NULL;
+
+    static inline void initialize_mmap_entries(){
+        if (mmap_entries == NULL){
+            mmap_entries = new std::list<struct mmap_entry>;
+        }
+        if (mmap_entries == NULL){
+            elog(ERROR, "Error making the mmap entries");
+        }
+    }
+
+    static inline void cleanup_mmap(){
+        for (struct mmap_entry &entry: *mmap_entries){
+            munmap(entry.ptr, entry.size);
+        };
+        mmap_entries = NULL;
+    }
 
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
@@ -52,11 +86,19 @@ extern "C" {
         }
         close(fd);
         *ptr = temp_ptr;
+
+        struct mmap_entry entry = {
+            .ptr = temp_ptr,
+            .size = file_size * TRACEPROV_PAGE_SIZE
+        };
+
+        mmap_entries->push_back(entry);
         return 0;
     }
 
     int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
         const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
+        struct mmap_entry entry;
         int rc = 0;
         struct traceprov_shared_context *temp_ptr;
         char *shared_context_filename = (char*)malloc(size_shared_context_filename);
@@ -91,6 +133,13 @@ extern "C" {
 
         memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
 
+        entry = {
+            .ptr = temp_ptr,
+            .size = TRACEPROV_SHARED_CONTEXT_SIZE
+        };
+
+        mmap_entries->push_back(entry);
+    
     exit_map:
         if (shared_context_fd > 0) close(shared_context_fd);
         if (shared_context_filename) free(shared_context_filename);
@@ -157,7 +206,11 @@ extern "C" {
     struct infer_result * perform_inference(
         const unsigned int layer_number,
         const unsigned int reference_layer, 
-        const unsigned int subq_layer_number
+        const unsigned int subq_layer_number,
+        // This is for generating polynomials.
+        // Basically, when this is done, it'll perform inference _just_ for this group.
+        // TODO: Handle nested groups for polynomial generation?
+        const uint64 final_group_pointer_ref
         ){
 
         struct traceprov_shared_context context;
@@ -254,18 +307,55 @@ extern "C" {
             std::sort(groups_to_filter->begin(), groups_to_filter->end());
         }
 
-        for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
-            const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
-            int should_add = false;
-            if (reference_layer){
-                should_add = std::binary_search(groups_to_filter->begin(), groups_to_filter->end(), gr->in_result);
-            }else{
-                should_add = gr->in_result;
+
+        if (final_group_pointer_ref == 0){
+            for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
+                const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
+                int should_add = false;
+                if (reference_layer){
+                    should_add = std::binary_search(groups_to_filter->begin(), groups_to_filter->end(), gr->in_result);
+                }else{
+                    should_add = gr->in_result;
+                }
+                if (should_add){
+                    present_groups->push_back(group_idx + 1);
+                }
             }
-            if (should_add){
-                present_groups->push_back(group_idx + 1);
+        }else{
+    
+            const int final_region_number = TRACEPROV_NUM_REGIONS_GROUP(group_layer->size);
+
+            // We need to be quick here (because this path will be taken for each of the group)
+            // To do so, we use a mask.
+            // Need to be careful here. The mask depends on which region we are checking.
+            int region_number = 0;
+            for (region_number = 0; region_number < final_region_number; region_number++){
+
+                const uint64 region_start = ((uint64*)group_layer->current_row)[region_number];
+                const uint64 region_end = region_number == 0 ? (uint64)((char*)(void*)region_start + TRACEPROV_PAGE_SIZE) : (uint64)((char*)(void*)region_start + (TRACEPROV_INCREMENT_GROUP_BY_PG*TRACEPROV_PAGE_SIZE));
+
+                if (final_group_pointer_ref >= region_start && final_group_pointer_ref < region_end){
+                    // We've now found the region where the page belongs too.
+                    // From here, we can compute the group number.
+                    // First, need to compute how many groups were before us. This is done by computing the number of pages, and dividing it by single group size.
+                    // This is written like below to improve readibility.
+                    const uint64 pages_behind = (region_number == 0) ? 0 : ((region_number == 1 ? 1 : (1 + (region_number - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG)));
+                    const uint64 group_size = ((group_layer->num_pk_records + 1)*sizeof(int64));
+                    const uint64 groups_behind = (pages_behind * TRACEPROV_PAGE_SIZE) / group_size;
+                    const uint64 group_index_within_range = (((uint64)final_group_pointer_ref - (uint64)((((void**)(group_layer->current_row))[region_number]))) / group_size) + 1;
+                    const uint64 final_group_number = group_index_within_range + groups_behind;
+
+                    present_groups->push_back(final_group_number);
+                    break;
+                }
+            }
+            
+            if (present_groups->size() == 0){
+                assert(0);
+                elog(ERROR, "Didn't find the region!");
             }
         }
+
 
         if (map_layer_file(layer_number, context.main_worker_id, &forward_row, main_trace_layer->size)){
             PRINT_ON_DEBUG("Error opening main trace file");
@@ -377,6 +467,7 @@ extern "C" {
 
     Datum traceprov_infer(FunctionCallInfo fcinfo){
 
+        initialize_mmap_entries();
 
         ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
         TupleDesc	tupdesc;
@@ -411,8 +502,9 @@ extern "C" {
 
         MemoryContextSwitchTo(oldcontext);
 
-        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
+        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number, 0);
         store_inference(tupstore, tupdesc, infer_result_computed);
+        cleanup_mmap();
 
         return (Datum) 0;
     }
@@ -428,9 +520,10 @@ extern "C" {
         const int32 reference_layer = PG_GETARG_INT32(1);
         const int32 subq_layer_number = PG_GETARG_INT32(2);
 
+        initialize_mmap_entries();
         auto start = std::chrono::high_resolution_clock::now();
 
-        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
+        struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number, 0);
 
         auto end = std::chrono::high_resolution_clock::now();
         
@@ -439,12 +532,16 @@ extern "C" {
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         uint64 duration_time = (uint64)duration.count();
 
+        cleanup_mmap();
         PG_RETURN_INT64(duration_time);
     }
 
     PG_FUNCTION_INFO_V1(traceprov_sync_time);
 
     Datum traceprov_sync_time(FunctionCallInfo fcinfo){
+
+        initialize_mmap_entries();
+
         std::vector<std::string> *messages = new std::vector<std::string>;
 
         auto start = std::chrono::high_resolution_clock::now();
@@ -493,7 +590,9 @@ extern "C" {
             elog(INFO, "SYNC: %s", s.c_str());
 	    }
         elog(INFO, "Final code: %d", final_code);
+        cleanup_mmap();
         PG_RETURN_INT64(duration_time);
+
     }
 
     // Prints some useful statistics (like # of pks, # of groups)
@@ -516,6 +615,8 @@ extern "C" {
     };
 
     Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
+
+      initialize_mmap_entries();
         
       ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
       TupleDesc	tupdesc;
@@ -630,7 +731,65 @@ extern "C" {
       #if (PG_MAJORVERSION_NUM != 18)
       tuplestore_donestoring(tupstore);
       #endif
+      cleanup_mmap();
       return (Datum) 0;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_infer_poly);
+
+    Datum traceprov_infer_poly(PG_FUNCTION_ARGS){
+        StringInfoData buf;
+        initStringInfo(&buf);
+
+        initialize_mmap_entries();
+
+        const int32 layer_number = PG_GETARG_INT32(0);
+        const uint64 reference_ptr = (uint64)(PG_GETARG_INT64(1));
+        const int32 width = (uint64)(PG_GETARG_INT32(2));
+
+        const int32 idx_present = (uint64)(PG_GETARG_INT32(3));
+        const int32 idx_in_poly = (uint64)(PG_GETARG_INT32(4));
+        struct infer_result *infer_result_computed = perform_inference(
+            layer_number,
+            0,
+            0,
+            reference_ptr
+        );
+
+        cleanup_mmap();
+        std::string tuple_repr = "";
+        bool needs_outer_sep = false;
+        for (int record_num = 0; record_num < infer_result_computed->ids[0]->size(); record_num++){
+            bool needs_sep = false;
+            std::string row_repr = "";
+            for (int key_id = 0; key_id < width; key_id++){
+                if (needs_sep){
+                    row_repr += TRACEPROV_OTIMES;
+                }
+                needs_sep = true;
+                std::string value = TRACEPROV_SOMETHING;
+                if (key_id == idx_in_poly){
+                    value = std::to_string(infer_result_computed->ids[idx_present]->at(record_num));
+                }
+                row_repr += value;
+            }
+            if (width > 1){
+                row_repr = "(" + row_repr + ")";
+            }
+            if (needs_outer_sep){
+                tuple_repr += TRACEPROV_PLUS;
+            }
+            needs_outer_sep = true;
+            tuple_repr += row_repr;
+        }
+
+        std::string final_repr ="";
+        final_repr.append(TRACEPROV_DELTA);
+        final_repr.append("((");
+        final_repr.append(tuple_repr);
+        final_repr.append("))");
+
+        PG_RETURN_TEXT_P(cstring_to_text(final_repr.c_str()));
     }
 
 };
