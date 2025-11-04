@@ -20,6 +20,7 @@
 #include "access/tupdesc.h"
 #include "utils/guc.h"
 #include "nodes/print.h"
+#include "nodes/nodes.h"
 
 PG_MODULE_MAGIC;
 
@@ -90,6 +91,8 @@ static Query *addNestedQuery(
     TraceProvParseContext *
 );
 
+static void adjustJoinAliasVars(List *, List *, List *, int, List **, List **);
+
 void _PG_init(){
     planner_hook = traceprov_rewriter_driver;
 }
@@ -132,6 +135,7 @@ PlannedStmt *traceprov_rewriter(
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
     return standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
 }
+
 // Recursively perform the traceprov rewrite.
 Query * performTraceProvRewrite(
     Query *parse, 
@@ -140,6 +144,10 @@ Query * performTraceProvRewrite(
 ){
 
     List *targetsToAdd = NIL;
+    // We need to store what are the targets for each rte. Then, when we walk through the join tree,
+    // we'll need to add these attributes to the joinaliasvars. However, interestingly, things seem to work without changing the joinaliasvar??
+    // But, eh, they are added anyways (maybe there's a bug downstream that occurs....)
+    List *targetsPerRTE = NIL;
 
     ListCell *rteCell;
     foreach(rteCell, parse->rtable){
@@ -147,16 +155,7 @@ Query * performTraceProvRewrite(
         List *rteTargets = NIL;
         rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext);
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
-        ListCell *targetEntryCursor;
-        if (rte->rtekind != RTE_RELATION){
-            // Seems like all the columns are included, if the RTE is relation.
-            // So, technically, we don't need the columns.
-            foreach(targetEntryCursor, rteTargets){
-                // Add the colname to ref here.
-                const TargetEntry *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
-                rte->eref->colnames = lappend(rte->eref->colnames,  makeString(currentTarget->resname));
-            }
-        }
+        targetsPerRTE = lappend(targetsPerRTE, rteTargets);
     }
 
     if (parse->hasAggs){
@@ -171,6 +170,12 @@ Query * performTraceProvRewrite(
             tpContext
         );
     }
+
+    // We don't care about the top-level returned join alias vars.
+    adjustJoinAliasVars(targetsPerRTE, parse->jointree->fromlist, parse->rtable, -1, NULL, NULL);
+
+    // Now, need to recursively go through the join tree and adjust the joinaliasvars
+    // adjustJoinAliasVars();
     // In this case, simply extend the target list.
     ListCell *targetEntryCursor;
 
@@ -230,7 +235,7 @@ void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TracePr
                     );
                     // This is a dummy entry for now.
                     // This is needed to propagate the resorig* fields.
-                    TargetEntry *newTargetEntry = makeTargetEntry((Expr*)newVar, 0, targetName, false);
+                    TargetEntry *newTargetEntry = makeTargetEntry((Expr*)newVar, indexAttrId, targetName, false);
                     newTargetEntry->resorigcol = indexAttrId;
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
@@ -253,11 +258,12 @@ void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TracePr
             TargetEntry *childTarget = tpTarget->targetEntry;
             const Var *newVar = makeVarFromTargetEntry(rteIndex, childTarget);
             TargetEntry *newTarget = makeTargetEntry(
-                (Expr *)newVar, 0, childTarget->resname, false
+                (Expr *)newVar, childTarget->resno, childTarget->resname, false
             );
             newTarget->resorigcol = childTarget->resorigcol;
             newTarget->resorigtbl = childTarget->resorigtbl;
             targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget));
+            rte->eref->colnames = lappend(rte->eref->colnames, makeString(childTarget->resname));
         }
     }
 
@@ -494,4 +500,97 @@ List *appendAtResJunk(List *old, TargetEntry *newTe){
     }
     Assert(list_length(newList) == (list_length(old) + 1));
     return newList;
+}
+
+// First list is the list of targets created, for each rte.
+// Second list is the list of join expressions.
+// Third list is the rte list (where we'll find the current join rte and adjust the join aliasvar)
+static void adjustJoinAliasVars(
+    List *createdTargets, 
+    List *joinExprns, 
+    List *rteList,
+    int parentJoinIndex,
+    // OUT: new alias vars
+    List **newAliasVars,
+    // OUT: new alias var names
+    List **newAliasNames
+){
+    if (parentJoinIndex == 0 || (parentJoinIndex < 0 && parentJoinIndex != -1)){
+        elog(ERROR, "expected the parent join index to always be set to either -1 or > 0!");
+    }
+    ListCell *rteCell;
+    List *createdAliases = NIL;
+    List *createdAliasNames = NIL;
+    foreach(rteCell, joinExprns){
+        Node *targetNode = (Node *)lfirst(rteCell);
+        if (IsA(targetNode, JoinExpr)){
+            JoinExpr *joinExpr = (JoinExpr *)targetNode;
+            List *leftAlias = NIL, *rightAlias = NIL, *leftAliasNames = NIL, *rightAliasNames = NIL;
+            // Get the aliases from left side
+            adjustJoinAliasVars(createdTargets, list_make1(joinExpr->larg), rteList, joinExpr->rtindex, &leftAlias, &leftAliasNames);
+            // Get the alias from the right side.
+            adjustJoinAliasVars(createdTargets, list_make1(joinExpr->rarg), rteList, joinExpr->rtindex, &rightAlias, &rightAliasNames);
+            List *combinedAlias = list_concat_copy(leftAlias, rightAlias);
+            List *combinedAliasNames = list_concat_copy(leftAliasNames, rightAliasNames);
+            RangeTblEntry *rte = list_nth(rteList, joinExpr->rtindex - 1);
+            rte->joinaliasvars = combinedAlias;
+            rte->eref->colnames = combinedAliasNames;
+            createdAliases = list_concat_copy(createdAliases, combinedAlias);
+            createdAliasNames = list_concat_copy(createdAliasNames, combinedAliasNames);
+        } else if (IsA(targetNode, RangeTblRef)){
+            // This is, basically, the base case.
+            // Here, need to first search all the 
+            RangeTblRef *rangeTableRef = (RangeTblRef *)targetNode;
+            // Find the previous aliases of this, first.
+            // it is possible that we're not in a join tree at all
+            // in this case, we obviously won't find previous aliases.
+            // this can be checked by looking at parentJoinIndex (it'll be -1 otherwise.)
+            if (parentJoinIndex > 0){
+                RangeTblEntry *rte = list_nth(rteList, parentJoinIndex - 1);
+                List *parentJoinAliasVars = rte->joinaliasvars;
+                List *varsForCurrentRef = NIL;
+                List *varNamesForCurrentRef = NIL;
+                ListCell *cursor;
+                foreach(cursor, parentJoinAliasVars){
+                    const Node *varCell = (Node *)lfirst(cursor);
+                    if (!IsA(varCell, Var)){
+                        elog(ERROR, "Expected the entries of join alias vars to be all Vars");
+                    }
+                    Var *aliasVar = (Var *)varCell;
+                    if (aliasVar->varno == rangeTableRef->rtindex){
+                        varsForCurrentRef = lappend(varsForCurrentRef, aliasVar);
+                        varNamesForCurrentRef = lappend(varNamesForCurrentRef, list_nth(rte->eref->colnames, foreach_current_index(cursor)));
+                    }
+                }
+
+                // The below assertion is skipped because there can be some cases where all the columns have been
+                // removed via USING. In that case, it is possible that there are no alias vars for this table.
+                // if (list_length(varsForCurrentRef) == 0){
+                //     elog(ERROR, "expected to find some alias vars for the current range table");
+                // }
+
+                // Need to append newly created vars (from the createdTargets, finally)
+                List *rangeCreatedTargets = list_nth(createdTargets, rangeTableRef->rtindex - 1);
+                cursor = NULL;
+                foreach(cursor, rangeCreatedTargets){
+                    const TraceProvTarget *target = ((TraceProvTarget *)lfirst(cursor));
+                    if (!IsA(target->targetEntry, TargetEntry)){
+                        elog(ERROR, "Expected the entries of created targets to be all targets");
+                    }
+                    varsForCurrentRef = lappend(varsForCurrentRef, makeVarFromTargetEntry(rangeTableRef->rtindex, target->targetEntry));
+                    varNamesForCurrentRef = lappend(varNamesForCurrentRef, makeString(target->targetEntry->resname));
+                }
+                createdAliases = list_concat_copy(createdAliases, varsForCurrentRef);
+                createdAliasNames = list_concat_copy(createdAliasNames, varNamesForCurrentRef);
+            }
+        } else {
+            elog(ERROR, "Got unexpected node type, during adjusting!");
+        }
+    }
+    if (newAliasVars){
+        *newAliasVars = createdAliases;
+    }
+    if (newAliasNames){
+        *newAliasNames = createdAliasNames;
+    }
 }
