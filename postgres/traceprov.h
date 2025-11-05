@@ -24,6 +24,7 @@
 // This will be formatted with layer number
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
+#define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
 

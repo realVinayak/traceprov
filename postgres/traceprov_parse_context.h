@@ -42,6 +42,7 @@ char *tpParseGetUniqueAlias(TraceProvParseContext *);
 TraceProvEntry *makeTraceProvEntry();
 
 TraceProvDependency *makeTraceProvDependency(TraceProvLayerNumber, List *, List *);
-void traceprovPrintDependency(TraceProvDependency *);
-
+void traceprovPrintDependency(const TraceProvDependency *);
+void serializeTraceProvDepedency(const TraceProvDependency *);
+const TraceProvDependency*deserializeTraceProvDependency(void);
 #endif

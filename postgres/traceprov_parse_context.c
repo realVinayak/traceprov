@@ -1,6 +1,8 @@
 #include "traceprov_parse_context.h"
 #include "postgres.h"
 #include "lib/stringinfo.h"
+#include "traceprov.h"
+#include "miscadmin.h"
 
 // to simulate classes.
 TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *context){
@@ -61,7 +63,7 @@ void appendIndentAware(StringInfoData *buf, int indentCount){
     }
 }
 
-char * traceprovSerializeDependency(int indent, TraceProvDependency *graph){
+char * traceprovDependencyToString(int indent, const TraceProvDependency *graph){
     StringInfoData buf;
     initStringInfo(&buf);
     appendIndentAware(&buf, indent);
@@ -83,7 +85,7 @@ char * traceprovSerializeDependency(int indent, TraceProvDependency *graph){
     foreach(childCursor, graph->children){
         appendStringInfo(&buf, "\n");
         TraceProvDependency *child = (TraceProvDependency *)lfirst(childCursor);
-        appendStringInfo(&buf, "\t%s", traceprovSerializeDependency(indent + 1, child));
+        appendStringInfo(&buf, "\t%s", traceprovDependencyToString(indent + 1, child));
     }
     if (list_length(graph->children)) appendIndentAware(&buf, indent);
     appendStringInfo(&buf, "\t]\n");
@@ -92,7 +94,104 @@ char * traceprovSerializeDependency(int indent, TraceProvDependency *graph){
     return buf.data;
 }
 
-void traceprovPrintDependency(TraceProvDependency *graph){
+void traceprovPrintDependency(const TraceProvDependency *graph){
     elog(INFO, "TraceProvDependency: ");
-    elog(INFO, "\n%s", traceprovSerializeDependency(0, graph));
+    elog(INFO, "\n%s", traceprovDependencyToString(0, graph));
+}
+
+// void serializeTraceProvDependencies(List *graphs);
+
+// This is not in the header for a reason, nothing outside of this file
+// should know that this even exists.
+typedef struct TraceProvDependencyHeader {
+    uint32 idx; // own's index (each block has a unique index)
+    uint32 numberOfEntries; // Number of entries
+    uint32 numberOfDirectChildren; // Number of direct children.
+} TraceProvDependencyHeader;
+
+void failSafeWrite(FILE *file, const void *buff, size_t length){
+    size_t written = fwrite(buff, length, 1, file);
+    if (written != 1){
+        elog(ERROR, "Error dumping the graph!");
+    }
+}
+
+void failSafeRead(FILE *file, void *buff, size_t length){
+    const size_t readValues = fread(buff, length, 1, file);
+    if (readValues != 1){
+        elog(ERROR, "Error reading from the graph file!");
+    }
+}
+
+void _serializeTraceProvDepedency(const TraceProvDependency *, FILE *);
+const TraceProvDependency *_deserializeTraceProvDependency(FILE *);
+
+void serializeTraceProvDepedency(const TraceProvDependency *graph){
+    const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
+    FILE *fptr = fopen(dumpPath, "wb"); 
+    if (fptr == NULL) {
+        elog(ERROR, "Error opening file for dumping graph!");
+    }
+    elog(INFO, "Serializing: ");
+    traceprovPrintDependency(graph);
+    _serializeTraceProvDepedency(graph, fptr);
+    fclose(fptr);
+}
+
+void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *outputFile){
+    TraceProvDependencyHeader *header = palloc0_object(TraceProvDependencyHeader);
+    header->numberOfEntries = list_length(graph->entries);
+    header->numberOfDirectChildren = list_length(graph->children);
+    failSafeWrite(outputFile, header, sizeof(TraceProvDependencyHeader));
+    failSafeWrite(outputFile, &graph->headNumber, sizeof(graph->headNumber));
+    
+    ListCell *entryCursor;
+    // Write the entries next.
+    foreach(entryCursor, graph->entries){
+        const TraceProvEntry *entry = (TraceProvEntry *)lfirst(entryCursor);
+        failSafeWrite(outputFile, entry, sizeof(TraceProvEntry));
+    }
+
+    ListCell *childCursor;
+    foreach(childCursor, graph->children){
+        const TraceProvDependency *childGraph = (TraceProvDependency *)lfirst(childCursor);
+        _serializeTraceProvDepedency(childGraph, outputFile);
+    }
+}
+
+const TraceProvDependency* deserializeTraceProvDependency(){
+    const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
+    FILE *fptr = fopen(dumpPath, "rb"); 
+    if (fptr == NULL) {
+        elog(ERROR, "Error opening file for dumping graph!");
+    }
+    const TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
+    fclose(fptr);
+    elog(INFO, "Deserializing: ");
+    traceprovPrintDependency(graph);
+    return graph;
+}
+
+const TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
+    TraceProvDependencyHeader header;
+    failSafeRead(file, &header, sizeof(TraceProvDependencyHeader));
+    TraceProvDependency *graph = palloc0_object(TraceProvDependency);
+    failSafeRead(file, &graph->headNumber, sizeof(graph->headNumber));
+
+    List *entries = NIL;
+    for (uint32 idx = 0; idx < header.numberOfEntries; idx++){
+        TraceProvEntry *entry = palloc0_object(TraceProvEntry);
+        // Here, we should never get an eof.
+        failSafeRead(file, entry, sizeof(TraceProvEntry));
+        entries = lappend(entries, entry);
+    }
+
+    List *children = NIL;
+    for (uint32 idx = 0; idx < header.numberOfDirectChildren; idx++){
+        children = lappend(children, (void*) _deserializeTraceProvDependency(file));
+    }
+    
+    graph->children = children;
+    graph->entries = entries;
+    return graph;
 }
