@@ -25,8 +25,9 @@
 PG_MODULE_MAGIC;
 
 // The function name to use, for aggregation over simple primary keys.
-#define TRACEPROV_AGG_NAME_FUNC_NAME "traceprov_agg_key_parallel"
+#define TRACEPROV_AGG_FUNC_NAME "traceprov_agg_key_parallel"
 #define TRACEPROV_MARK_LATER_FUNC_NAME "mark_later"
+#define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 
 typedef struct TraceProvTarget {
     bool isPointer;
@@ -329,7 +330,7 @@ void traceprovAggregateRewrite(
     // TODO: Think about mixed cases (say, first three are pointers, next two are ints.)
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
-    Node *funcCallNode = getFunctionCallNode(TRACEPROV_AGG_NAME_FUNC_NAME, argVars);
+    Node *funcCallNode = getFunctionCallNode(TRACEPROV_AGG_FUNC_NAME, argVars);
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,
@@ -380,6 +381,8 @@ Query *addNestedQuery(
         }
         if (currentTarget->graph){
             traceprovPrintDependency(currentTarget->graph);
+            serializeTraceProvDepedency(currentTarget->graph);
+            deserializeTraceProvDependency();
         }
     }
     if (list_length(pointerTargets) == 0){
