@@ -31,12 +31,18 @@ PG_MODULE_MAGIC;
 typedef struct TraceProvTarget {
     bool isPointer;
     TargetEntry *targetEntry;
+    TraceProvDependency *graph;
 } TraceProvTarget;
 
-TraceProvTarget *makeTraceProvTarget(bool isPointer, TargetEntry *targetEntry){
+TraceProvTarget *makeTraceProvTarget(
+    bool isPointer, 
+    TargetEntry *targetEntry,
+    TraceProvDependency *dependency
+){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
     tpTarget->targetEntry = targetEntry;
+    tpTarget->graph = dependency;
     return tpTarget;
 }
 
@@ -239,7 +245,7 @@ void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TracePr
                     newTargetEntry->resorigcol = indexAttrId;
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry));
+                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL));
                 }
             }
             ReleaseSysCache(indexTuple);
@@ -262,7 +268,9 @@ void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TracePr
             );
             newTarget->resorigcol = childTarget->resorigcol;
             newTarget->resorigtbl = childTarget->resorigtbl;
-            targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget));
+            // Propogate the graph (if there is one)
+            // That can happen, for example, if for example the aggregation is nested inside a subquery.
+            targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph));
             rte->eref->colnames = lappend(rte->eref->colnames, makeString(childTarget->resname));
         }
     }
@@ -279,23 +287,40 @@ void traceprovAggregateRewrite(
     Assert(parse->hasAggs);
     // Need to add the exprs from the targets.
     ListCell *targetEntryCursor;
+    TraceProvLayerNumber layerNumber = tpParseGetLayerNumber(tpContext);
     // Need to also add the layer number (the first argument)
     Node * layerNumberConst = (Node *) makeConst(
         INT4OID, 
         -1, 
         InvalidOid,
         sizeof(int32),
-        Int32GetDatum(tpParseGetLayerNumber(tpContext)), 
+        Int32GetDatum(layerNumber), 
         false,
         true
     );
     // The layer number is the first argument.
     List *argVars = list_make1(layerNumberConst);
+    List *entries = NIL;
+    List *childGraphs = NIL;
     foreach(targetEntryCursor, targetEntriesToLog){
-        const TargetEntry *target = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
+        const TraceProvTarget *tpTarget = ((TraceProvTarget *)lfirst(targetEntryCursor));
+        const TargetEntry *target = tpTarget->targetEntry;
         argVars = lappend(argVars, target->expr);
+        TraceProvEntry *tpEntry = makeTraceProvEntry();
+        if (tpTarget->graph != NULL){
+            if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
+                elog(ERROR, "Expected no table info to for the pointer node");
+            }
+            childGraphs = lappend(childGraphs, tpTarget->graph);
+            tpEntry->kind = TP_ENTRY_KIND_POINTER;
+        }else{
+            tpEntry->kind = TP_ENTRY_KIND_BASE_RELATION;
+            tpEntry->relId = target->resorigtbl;
+            tpEntry->attr = target->resno;
+        }
+        entries = lappend(entries, tpEntry);
     }
-    
+
     // Need to make the func exprn.
     // Postgres' parser has all the logic already to determine functions,
     // and even adding type castes when types can be implicitly converted (like int->bigint)
@@ -305,7 +330,6 @@ void traceprovAggregateRewrite(
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
     Node *funcCallNode = getFunctionCallNode(TRACEPROV_AGG_NAME_FUNC_NAME, argVars);
-    // Add the new target.
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,
@@ -314,7 +338,12 @@ void traceprovAggregateRewrite(
                 0,
                 pstrdup("mapped_agg"),
                 false
-            )
+            ),
+            makeTraceProvDependency(
+                layerNumber,
+                childGraphs,
+                entries
+            )   
         )
     );
 }
@@ -349,13 +378,15 @@ Query *addNestedQuery(
             // Varno will be 1, because it is the only table.
             pointerTargets = lappend(pointerTargets, makeVarFromTargetEntry(1, currentTarget->targetEntry));
         }
+        if (currentTarget->graph){
+            traceprovPrintDependency(currentTarget->graph);
+        }
     }
     if (list_length(pointerTargets) == 0){
         // No pointers, no need to call the mark function.
         // Return the original query in this case.
         return base;
     }
-    Node *mark_later_func = getFunctionCallNode(TRACEPROV_MARK_LATER_FUNC_NAME, pointerTargets);
 
     // Make the new table.
     RangeTblEntry *newTable = makeNode(RangeTblEntry);
@@ -383,12 +414,6 @@ Query *addNestedQuery(
         }
     }
 
-    newTargetList = lappend(newTargetList, makeTargetEntry(
-        (Expr *)mark_later_func,
-        list_length(newTargetList) + 1,
-        pstrdup("marked"),
-        false
-    ));
 
     newTable->eref = makeAlias(pstrdup(aliasName), colNames);
     newTable->inFromCl = true;
@@ -406,7 +431,20 @@ Query *addNestedQuery(
 
     Query *targetQuery = cloneQueryForTP(base);
     targetQuery->rtable = list_make1(newTable);
-    targetQuery->jointree = fromExpr,
+    targetQuery->jointree = fromExpr;
+
+    ListCell *pointerTarget;
+    foreach(pointerTarget, pointerTargets){
+        int i = 0;
+        Node *mark_later_func = getFunctionCallNode(TRACEPROV_MARK_LATER_FUNC_NAME, list_make1(lfirst(pointerTarget)));
+        newTargetList = lappend(newTargetList, makeTargetEntry(
+            (Expr *)mark_later_func,
+            list_length(newTargetList) + 1,
+            psprintf("marked_%d", (i++)),
+            false
+        ));
+    }
+
     targetQuery->targetList = newTargetList;
     return targetQuery;
 }
