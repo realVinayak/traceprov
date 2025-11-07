@@ -1,6 +1,6 @@
 DROP FUNCTION IF EXISTS traceprov_infer(integer,integer,integer);
 DROP FUNCTION IF EXISTS traceprov_infer_time(integer,integer,integer);
-DROP FUNCTION IF EXISTS traceprov_sync_time(integer,integer,integer);
+DROP FUNCTION IF EXISTS traceprov_sync_time(integer);
 DROP FUNCTION IF EXISTS traceprov_layer_stat(integer,integer);
 DROP FUNCTION IF EXISTS traceprov_layer_stat();
 
@@ -35,4 +35,9 @@ CREATE OR REPLACE FUNCTION traceprov_layer_stat(
     )
     RETURNS SETOF record
     AS '$libdir/__FILE__', 'traceprov_layer_stat'
+    LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE OR REPLACE FUNCTION traceprov_infer_graph()
+    RETURNS BIGINT
+    AS '$libdir/__FILE__', 'traceprov_infer_graph'
     LANGUAGE C STRICT PARALLEL SAFE;
