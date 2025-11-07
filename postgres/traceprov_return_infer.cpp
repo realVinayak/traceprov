@@ -21,6 +21,7 @@ extern "C" {
     #include "traceprov.h"
     #include "file_utils.h"
     #include "utils/builtins.h"
+    #include "traceprov_parse_context.h"
     PG_MODULE_MAGIC;
 }
 
@@ -152,6 +153,100 @@ extern "C" {
               set_diff_computed->push_back(first->at(iter_first++));
       }
       return set_diff_computed;
+    }
+
+    // Takes the computation graph, and performs inference using it.
+    // TODO: The tagging is needed in the case where aggregate is performed (finalized) in parallel worker
+    // In that case, the result will, incorrectly, be a pointer (need to fix that.)
+    static void perform_inference_graph_worker(
+        struct traceprov_shared_context *sharedContext,
+        const TraceProvDependency *graph,
+        std::vector<int64> *reference,
+        uint8 worker_id
+    ){
+        // We need to get the recorded input in the layer file (given the reference)
+        // It is possible that we used parallel (omitted for now.)
+        const TraceProvLayerNumber layerNumber = graph->headNumber;
+        const struct local_context *context = &sharedContext->local_contexts[worker_id];
+        const struct traceprov_aggregate_layer *layer = &context->cached_layers[graph->headNumber - 1];
+
+        std::sort(reference->begin(), reference->end());
+
+        void *ptr_layer_row = NULL;
+        if (map_layer_file(layerNumber, worker_id, &ptr_layer_row, layer->size)){
+            PRINT_ON_DEBUG("Error opening group layer file");
+            elog(ERROR, "Error opening group layer file");
+        }
+
+        const void *ptr_final_row = get_final_ptr(ptr_layer_row, layer);
+        const int entryCount = list_length(graph->entries);
+
+        std::vector<std::vector<int64>*> *entriesValues = new std::vector<std::vector<int64>*>;
+        for (int i = 0; i < entryCount; i++){
+            entriesValues->push_back(new std::vector<int64>);
+        }
+
+        if ( layer->num_pk_records != list_length(graph->entries)){
+            elog(ERROR, "expected to log the count of entries");
+        }
+
+        while (ptr_layer_row < ptr_final_row){
+            ptr_layer_row = (void *)(((uint64)layer->record_padding) + (uint64)ptr_layer_row);
+            bool found = false;
+            found = std::binary_search(reference->begin(), reference->end(), ((struct trace_file_forward_row*)ptr_layer_row)->group_count);
+            if (found){
+                for (int key_idx = 0; key_idx < layer->num_pk_records; key_idx++){
+                    const int64 record_key = *GET_PK_FROM_ROW(((struct trace_file_forward_row*)ptr_layer_row), key_idx);
+                    entriesValues->at(key_idx)->push_back(record_key);
+                }
+            }
+            
+            ptr_layer_row = (void*)GET_PK_FROM_ROW(((struct trace_file_forward_row*)ptr_layer_row), layer->num_pk_records);
+        }
+
+        for (int i = 0, pointerChildIdx=0; i < entryCount; i++){
+            elog(INFO, "Computed lengths: %ld", entriesValues->at(i)->size());
+            const TraceProvEntry *tpEntry = (TraceProvEntry *)list_nth(graph->entries, i);
+            // If it is a pointer, also need to keep recursing down to the children.
+            if (tpEntry->kind == TraceProvEntryKind::TP_ENTRY_KIND_POINTER){
+                perform_inference_graph_worker(
+                    sharedContext,
+                    (TraceProvDependency *)list_nth(graph->children, pointerChildIdx),
+                    entriesValues->at(i),
+                    worker_id
+                );
+                pointerChildIdx++;
+            }
+        }
+    }
+
+    void perform_inference_driver(){
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping shared context");
+        }
+
+        const TraceProvDependency *graph =  deserializeTraceProvDependency();
+        const int group_layer_number = graph->headNumber + 1;
+        void *group_layer_ptr = NULL;
+        const struct local_context *main_worker_context = &context.local_contexts[context.main_worker_id];
+        const struct traceprov_aggregate_layer *main_trace_layer = &main_worker_context->cached_layers[graph->headNumber - 1];
+        const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
+
+        std::vector<int64> *top_level_values = new std::vector<int64>;
+        if (map_layer_file(group_layer_number, context.main_worker_id, &group_layer_ptr, group_layer->size)){
+            PRINT_ON_DEBUG("Error opening group layer file");
+            elog(ERROR, "Error opening group layer file");
+        }
+
+        for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
+            const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
+            if (gr->in_result){
+                top_level_values->push_back(group_idx+1);
+            }
+        }
+
+        perform_inference_graph_worker(&context, graph, top_level_values, 0);
     }
 
     struct infer_result * perform_inference(
@@ -415,6 +510,14 @@ extern "C" {
         store_inference(tupstore, tupdesc, infer_result_computed);
 
         return (Datum) 0;
+    }
+
+    // Performs inference via the graph.
+    PG_FUNCTION_INFO_V1(traceprov_infer_graph);
+
+    Datum traceprov_infer_graph(PG_FUNCTION_ARGS){
+        perform_inference_driver();
+        PG_RETURN_INT64(0);
     }
 
     PG_FUNCTION_INFO_V1(traceprov_infer_time);

@@ -12,6 +12,18 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT,
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 
+-- traceprov_agg_key_offset aggregate.
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
 -- traceprov_agg_from_ptr aggregate
 DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr(int, int, BIGINT);
 DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
@@ -33,6 +45,9 @@ DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, int, BIGINT, B
 DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_agg_key_finalfunc(state internal);
+
+-- Agg key offset (stores the offset.)
+DROP FUNCTION   IF EXISTS traceprov_agg_key_offset_finalfunc(state internal);
 
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_sfunc(state internal, INT, INT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_agg_from_ptr_combine(internal, internal);
@@ -82,6 +97,7 @@ CREATE FUNCTION traceprov_agg_key_deserialize(bytea, internal) RETURNS internal 
 CREATE FUNCTION traceprov_agg_key_combine(internal, internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_key_combine' LANGUAGE C;
 
 CREATE FUNCTION mark_later(bigint) RETURNS INTEGER AS '$libdir/__FILE__', 'mark_later' LANGUAGE C PARALLEL SAFE;
+CREATE FUNCTION traceprov_agg_key_offset_finalfunc(state internal) RETURNS bigint AS '$libdir/__FILE__', 'traceprov_agg_key_offset_finalfunc' LANGUAGE C;
 
 CREATE AGGREGATE traceprov_agg_key(int, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc, 
@@ -221,6 +237,116 @@ CREATE AGGREGATE traceprov_agg_key_parallel(int, BIGINT, BIGINT, BIGINT, BIGINT,
     STYPE = internal, 
     SSPACE = 32,
     FINALFUNC = traceprov_agg_key_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
+    COMBINEFUNC = traceprov_agg_key_combine,
+    SERIALFUNC = traceprov_agg_key_serialize,
+    DESERIALFUNC = traceprov_agg_key_deserialize,
+    PARALLEL = SAFE
+);
+
+CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
+    SFUNC = traceprov_agg_key_sfunc, 
+    STYPE = internal, 
+    SSPACE = 32,
+    FINALFUNC = traceprov_agg_key_offset_finalfunc, 
     COMBINEFUNC = traceprov_agg_key_combine,
     SERIALFUNC = traceprov_agg_key_serialize,
     DESERIALFUNC = traceprov_agg_key_deserialize,

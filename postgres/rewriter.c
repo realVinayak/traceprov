@@ -27,6 +27,7 @@ PG_MODULE_MAGIC;
 // The function name to use, for aggregation over simple primary keys.
 #define TRACEPROV_AGG_FUNC_NAME "traceprov_agg_key_parallel"
 #define TRACEPROV_MARK_LATER_FUNC_NAME "mark_later"
+// in cases where aggregate is nested, we need to get the offsets directly.
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 
 typedef struct TraceProvTarget {
@@ -64,7 +65,8 @@ PlannedStmt *traceprov_rewriter(
 static Query* performTraceProvRewrite(
     Query *, 
     List **,
-    TraceProvParseContext *
+    TraceProvParseContext *,
+    bool
 );
 
 // Performs rewrite on an RTE.
@@ -73,7 +75,8 @@ static void rteRewrite(
     RangeTblEntry *, 
     List **, 
     Index,
-    TraceProvParseContext *
+    TraceProvParseContext *,
+    bool
 );
 
 /*
@@ -81,7 +84,7 @@ static void rteRewrite(
  * The input target entries become the entries that we log.
 */
 static void traceprovAggregateRewrite(
-    Query *, List *, List **, TraceProvParseContext *
+    Query *, List *, List **, TraceProvParseContext *, bool
 );
 
 static Query *cloneQueryForTP(Query *);
@@ -133,7 +136,7 @@ PlannedStmt *traceprov_rewriter(
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
     List *topLevelTargets = NIL;
-    Query *traceprovParse = performTraceProvRewrite(parse, &topLevelTargets, &context);
+    Query *traceprovParse = performTraceProvRewrite(parse, &topLevelTargets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
     // TODO: Need some kind of structure that stores the path of values.
     // Now, need to rewrite the entire query to a subquery.
@@ -147,7 +150,8 @@ PlannedStmt *traceprov_rewriter(
 Query * performTraceProvRewrite(
     Query *parse, 
     List **addedTargets,
-    TraceProvParseContext *tpContext
+    TraceProvParseContext *tpContext,
+    bool parentHasAggs
 ){
 
     List *targetsToAdd = NIL;
@@ -160,7 +164,8 @@ Query * performTraceProvRewrite(
     foreach(rteCell, parse->rtable){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
-        rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext);
+        // TODO: hasAggs needs to also include distinct?
+        rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, parse->hasAggs);
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
         targetsPerRTE = lappend(targetsPerRTE, rteTargets);
     }
@@ -174,7 +179,8 @@ Query * performTraceProvRewrite(
             parse,
             targetsToAdd,
             &targetsToAdd,
-            tpContext
+            tpContext,
+            parentHasAggs
         );
     }
 
@@ -201,7 +207,13 @@ Query * performTraceProvRewrite(
 }
 
 // Get the primary keys for a single rte (merged during recursive caller)
-void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TraceProvParseContext *tpContext){
+void rteRewrite(
+    RangeTblEntry *rte, 
+    List **addedTargets, 
+    Index rteIndex, 
+    TraceProvParseContext *tpContext,
+    bool parentHasAggs
+){
     List *targetsToAdd = NIL;
 
     if (rte->rtekind == RTE_RELATION){
@@ -255,7 +267,7 @@ void rteRewrite(RangeTblEntry *rte, List **addedTargets, Index rteIndex, TracePr
     } else if (rte->rtekind == RTE_SUBQUERY){
         List *childTargets = NIL;
         // All the next queries aren't the root.
-        rte->subquery = performTraceProvRewrite(rte->subquery, &childTargets, tpContext);
+        rte->subquery = performTraceProvRewrite(rte->subquery, &childTargets, tpContext, parentHasAggs);
         // In this case, need to convert the targets into vars.
         // Basically, the targets of the child layer become the vars for this layer.
         // These vars then get converted into new targets.
@@ -283,7 +295,8 @@ void traceprovAggregateRewrite(
     Query *parse, 
     List *targetEntriesToLog, 
     List **pCreatedTargets,
-    TraceProvParseContext *tpContext
+    TraceProvParseContext *tpContext,
+    bool parentHasAggs
 ){
     Assert(parse->hasAggs);
     // Need to add the exprs from the targets.
@@ -330,7 +343,7 @@ void traceprovAggregateRewrite(
     // TODO: Think about mixed cases (say, first three are pointers, next two are ints.)
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
-    Node *funcCallNode = getFunctionCallNode(TRACEPROV_AGG_FUNC_NAME, argVars);
+    Node *funcCallNode = getFunctionCallNode( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,

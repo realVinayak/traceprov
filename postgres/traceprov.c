@@ -899,3 +899,13 @@ Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
     PG_RETURN_POINTER(pk_space);
 }
 
+PG_FUNCTION_INFO_V1(traceprov_agg_key_offset_finalfunc);
+
+Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
+    if (unlikely(PG_ARGISNULL(0))){
+        PG_RETURN_NULL();
+    }
+
+    struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    PG_RETURN_INT64(agg_context->group_cnt);
+}
