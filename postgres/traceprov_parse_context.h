@@ -1,11 +1,13 @@
 #ifndef __TRACEPROV_PARSE_CONTEXT__
 #define __TRACEPROV_PARSE_CONTEXT__
 #include "c.h"
+#include "utils/palloc.h"
 #include "nodes/pg_list.h"
 #include "access/attnum.h"
 
 #define TRACEPROV_LAYER_INCREMENT_BOUNDARY 3
 #define TRACEPROV_TICKER "/*(traceprov)*/"
+#define TRACEPROV_SET_TICKER "/*(traceprov-set)*/"
 
 typedef uint32 TraceProvLayerNumber;
 

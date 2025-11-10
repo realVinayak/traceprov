@@ -62,6 +62,13 @@ PlannedStmt *traceprov_rewriter(
 	ParamListInfo
 );
 
+PlannedStmt *traceprov_set_test(
+    Query *,
+    const char *,
+    int,
+	ParamListInfo
+);
+
 static Query* performTraceProvRewrite(
     Query *, 
     List **,
@@ -87,7 +94,7 @@ static void traceprovAggregateRewrite(
     Query *, List *, List **, TraceProvParseContext *, bool
 );
 
-static Query *cloneQueryForTP(Query *);
+static Query *cloneQueryForTP(const Query *);
 
 // Appends a resjunk to end.
 // Appends a non-resjunk to just before the first resjunk.
@@ -119,6 +126,10 @@ PlannedStmt *traceprov_rewriter_driver(
 ){
     // Scan the input str for ticker, and only then perform rewrites, to not mess with
     // other queries.
+    bool is_traceprov_set_query = strstr(query_string, TRACEPROV_SET_TICKER) != NULL;
+    if (parse->setOperations && is_traceprov_set_query){
+        return traceprov_set_test(parse, query_string, cursorOptions, boundParams);
+    }
     bool is_traceprov_query = strstr(query_string, TRACEPROV_TICKER) != NULL;
     if (is_traceprov_query){
         return traceprov_rewriter(parse, query_string, cursorOptions, boundParams);
@@ -132,19 +143,219 @@ PlannedStmt *traceprov_rewriter(
     int cursorOptions,
 	ParamListInfo boundParams
 ){
-    // For simplicity, only handle this case for now.
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
     List *topLevelTargets = NIL;
     Query *traceprovParse = performTraceProvRewrite(parse, &topLevelTargets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
-    // TODO: Need some kind of structure that stores the path of values.
     // Now, need to rewrite the entire query to a subquery.
     Query *traceprovTopQuery = addNestedQuery(traceprovParse, topLevelTargets, &context);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
     return standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
 }
+
+static RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContext *context){
+    RangeTblEntry *tblEntry = makeNode(RangeTblEntry);
+    char *aliasName = tpParseGetUniqueAlias(context);
+    tblEntry->alias = makeAlias(aliasName, NIL);
+    List *colNames = NIL;
+    ListCell *targetEntryCursor = NULL;
+    foreach(targetEntryCursor, subQuery->targetList){
+        TargetEntry *te = (TargetEntry *)lfirst(targetEntryCursor);
+        colNames = lappend(colNames, makeString(pstrdup(te->resname)));
+    }
+    tblEntry->eref = makeAlias(pstrdup(aliasName), colNames);
+    // Doesn't seem like this will have any side-effects (at this stage at least)
+    tblEntry->inFromCl = false;
+    tblEntry->rtekind = RTE_SUBQUERY;
+    tblEntry->subquery = subQuery;
+    return tblEntry;
+}
+
+List *addSubqueryToArgs(Query *subquery, TraceProvParseContext *context, const List *rootRTEList, Node **destination){
+    RangeTblEntry *rte = rangeTableEntryFromSubquery(subquery, context);
+    List *clonedRTEList = list_copy(rootRTEList);
+    clonedRTEList = lappend(clonedRTEList, rte);
+    RangeTblRef  *rtr = makeNode(RangeTblRef);
+    rtr->rtindex = list_length(clonedRTEList);
+    *destination = (Node*)rtr;
+    return clonedRTEList;
+}
+
+/*
+In all cases where there is no modification, we don't do anything special.
+The idea is that it'll return either a new query (added to RTE) or null (not done anything to it.)
+If is a leaf, it returns NULL.
+There are 3 steps to all this mess
+1. Break query up into subqueries
+2. Fixup references in rtables
+3. Convert INTERSECTION -> Joins and UNION -> Distincts.
+There is some possibility to overlap these steps, but breaking them up simplifies implementation.
+For example, technically, reference fix can be done during join construction, but whatever.
+Doing it this way, also, actually makes debugging easier (since upto step 2, and to see if doing this
+funky stuff increases the cost).
+*/
+
+Query *traceprov_breakup_sets(
+    // Needed to check if the current is the same as the parent.
+    SetOperation rootSetOpType, 
+    bool rootIsAll,
+    // Needed to copy over the RTEs
+    List *rootRteList,
+    Node *level,
+    Query *baseQuery,
+    TraceProvParseContext *context
+){
+    if (!IsA(level, RangeTblRef) && !IsA(level, SetOperationStmt)){
+        elog(ERROR, "Expected either range table ref or set operation stmt. Got : %d", level->type);
+    }
+    // No need to do anything.
+    if (IsA(level, RangeTblRef)) return NULL;
+    
+    SetOperationStmt *setOp = (SetOperationStmt *)level;
+    bool isConsistent = setOp->all == rootIsAll && setOp->op == rootSetOpType;
+    if (!isConsistent){
+        // In this case, we'll break the query up.
+        // Temporarily, preserve the RTEs (they get adjusted later)
+        Query *set_subquery = cloneQueryForTP(baseQuery);
+        // We don't bother doing a deep copu over rtables here.
+        // Since a rtable entry won't exist in more than 1 rtable,
+        // we don't need to do a deep copy of rtables.
+        set_subquery->rtable = list_copy(baseQuery->rtable);
+        // Apparently this gets set to empty list, when there are set operations.
+        set_subquery->jointree = makeFromExpr(NIL, NULL);
+        // Here, the types must be same that came from the corresponding set operations.
+        // So, here, need to look at the set operations.
+        // TODO: Test how casting may affect things (especially during union / intersect)
+        if (
+            (list_length(setOp->colTypes) != list_length(setOp->colTypmods)) 
+            || (list_length(setOp->colTypes) != list_length(setOp->colCollations))
+        ){
+            elog(ERROR, "Expected lengths to be the same!");
+        }
+
+        ListCell *colTypeCursor, *colTypModCursor, *colCollationCursor;
+        int idx = 0;
+        List *set_subquery_targetlist = NIL;
+        forthree(colTypeCursor, setOp->colTypes, colTypModCursor, setOp->colTypmods, colCollationCursor, setOp->colCollations){
+            idx++;
+            Var *var = makeVar(
+                1, 
+                idx, 
+                lfirst_oid(colTypeCursor),
+                lfirst_int(colTypModCursor),
+                lfirst_oid(colCollationCursor),
+                0
+            );
+            TargetEntry *target = makeTargetEntry(
+                (Expr*)var,
+                idx,
+                tpParseGetUniqueAlias(context),
+                false
+            );
+            set_subquery_targetlist = lappend(set_subquery_targetlist, target);
+        }
+        set_subquery->targetList = set_subquery_targetlist;
+        // Make the current setup root of the setop that follows.
+        set_subquery->setOperations = (Node*)setOp;
+        if(traceprov_breakup_sets(setOp->op, setOp->all, set_subquery->rtable, (Node*)setOp, set_subquery, context)){
+            elog(ERROR, "Didn't expect recursive call to breakup sets to ever return a value!");
+        }
+        return set_subquery;
+    }
+    // In this case, we'll need to check the left and the right.
+    // Possibly, we'll need to append the returned result into the rtables
+    // and use subquery refs.
+    Query *largQuery = traceprov_breakup_sets(rootSetOpType, rootIsAll, rootRteList, setOp->larg, baseQuery, context);
+    Query *rargQuery = traceprov_breakup_sets(rootSetOpType, rootIsAll, rootRteList, setOp->rarg, baseQuery, context);
+
+    List *newRTEList = list_copy(rootRteList);
+    if (largQuery != NULL){
+        // In this case, (same for rargquery), need to add the returned query to the RTE list, and replace the reference of the larg
+        // to the one in CTE. This finishes the break up, of the query.
+        newRTEList = addSubqueryToArgs(largQuery, context, newRTEList, &setOp->larg);
+    }
+    if (rargQuery != NULL){
+        newRTEList = addSubqueryToArgs(rargQuery, context, newRTEList, &setOp->rarg);
+    }
+    baseQuery->rtable = newRTEList;
+    return NULL;
+}
+
+List *traceprovFindUsedRefs(Node *level){
+    if (level == NULL){
+        // Nothing to do.
+        return NIL;
+    }
+    if (!IsA(level, RangeTblRef) && !IsA(level, SetOperationStmt)){
+        elog(ERROR, "Expected either range table ref or set operation stmt. Got : %d", level->type);
+    }
+    // No need to do anything.
+    if (IsA(level, RangeTblRef)) return list_make1(level);
+    SetOperationStmt *setOp = (SetOperationStmt *)level;
+    return list_concat_copy(traceprovFindUsedRefs(setOp->larg), traceprovFindUsedRefs(setOp->rarg));
+}
+
+// Fixes up references.
+// It is possible that rtes that are no longer needed appear in the query.
+// To check for that, recursively, go through the set operation tree, find refs that appear, and only choose those refs.
+void traceprov_fixup_references(Query* query){
+    List *usedReferences = traceprovFindUsedRefs(query->setOperations);
+    List *newRTEList = NIL;
+    ListCell *usedReferenceCursor = NULL;
+
+    if (usedReferences != NIL){
+        foreach(usedReferenceCursor, usedReferences){
+            RangeTblRef *ref = (RangeTblRef *)lfirst(usedReferenceCursor);
+            Node *correspondingRTE = list_nth(query->rtable, ((ref)->rtindex - 1));
+            newRTEList = lappend(newRTEList, correspondingRTE);
+            (ref)->rtindex = list_length(newRTEList);
+        }
+    }else{
+        newRTEList = query->rtable;
+    }
+
+    ListCell *rteCursor;
+    foreach(rteCursor, newRTEList){
+        RangeTblEntry *entry = (RangeTblEntry *)lfirst(rteCursor);
+        if (entry->rtekind == RTE_SUBQUERY){
+            traceprov_fixup_references(entry->subquery);
+        }
+    }
+    query->rtable = newRTEList;
+}
+
+Query *traceprov_set_rewriter(Query *initial){
+    TraceProvParseContext context;
+    tpParseInitializeContext(&context);
+    SetOperationStmt *stmt = (SetOperationStmt *)initial->setOperations;
+    if(traceprov_breakup_sets(
+        stmt->op,
+        stmt->all,
+        list_copy(initial->rtable),
+        (Node*)stmt,
+        initial,
+        &context
+    ) != NULL){
+        elog(ERROR, "expected top-level call to return no query!");
+    }
+    traceprov_fixup_references(initial);
+    return initial;
+}
+
+PlannedStmt *traceprov_set_test(
+    Query *parse,
+    const char *query_string,
+    int cursorOptions,
+	ParamListInfo boundParams
+){
+    Query *newQuery = traceprov_set_rewriter(parse);
+    if (Debug_print_parse)
+        elog_node_display(LOG, "traceprov set tree", newQuery, Debug_pretty_print);
+    return standard_planner(newQuery, query_string, cursorOptions, boundParams);
+}
+
 
 // Recursively perform the traceprov rewrite.
 Query * performTraceProvRewrite(
@@ -168,6 +379,10 @@ Query * performTraceProvRewrite(
         rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, parse->hasAggs);
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
         targetsPerRTE = lappend(targetsPerRTE, rteTargets);
+    }
+
+    if (parse->hasAggs && parse->setOperations != NULL){
+        elog(ERROR, "Didn't expect aggregation and set operations to both set!");
     }
 
     if (parse->hasAggs){
@@ -408,7 +623,7 @@ Query *addNestedQuery(
     RangeTblEntry *newTable = makeNode(RangeTblEntry);
     // we don't alias the table, so this is fine not being set.
     char *aliasName = tpParseGetUniqueAlias(context);
-    newTable->alias = makeAlias(aliasName, NULL);
+    newTable->alias = makeAlias(aliasName, NIL);
     List *newTargetList = NIL;
     targetEntryCursor = NULL;
     List *colNames = NIL;
@@ -465,7 +680,7 @@ Query *addNestedQuery(
     return targetQuery;
 }
 
-Query *cloneQueryForTP(Query *base){
+Query *cloneQueryForTP(const Query *base){
     Query *targetQuery = makeNode(Query);
     targetQuery->commandType = base->commandType;
     targetQuery->querySource = base->querySource;
