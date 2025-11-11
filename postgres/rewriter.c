@@ -21,6 +21,9 @@
 #include "utils/guc.h"
 #include "nodes/print.h"
 #include "nodes/nodes.h"
+#include "catalog/pg_operator.h"
+#include "parser/parse_oper.h"
+#include "nodes/nodeFuncs.h"
 
 PG_MODULE_MAGIC;
 
@@ -216,6 +219,7 @@ Query *traceprov_breakup_sets(
     SetOperationStmt *setOp = (SetOperationStmt *)level;
     bool isConsistent = setOp->all == rootIsAll && setOp->op == rootSetOpType;
     if (!isConsistent){
+        elog(INFO, "Breaking up the query!");
         // In this case, we'll break the query up.
         // Temporarily, preserve the RTEs (they get adjusted later)
         Query *set_subquery = cloneQueryForTP(baseQuery);
@@ -326,6 +330,329 @@ void traceprov_fixup_references(Query* query){
     query->rtable = newRTEList;
 }
 
+// These functions only need to care about perform a specific type of rewrite, since all the other ones are handled
+// by putting them in a different table.
+static void union_to_union_all(Node *node){
+    // UNION -> UNION ALL
+    if (!IsA(node, SetOperationStmt)) return;
+
+    SetOperationStmt *stmt = (SetOperationStmt *)node;
+    if (stmt->op != SETOP_UNION) elog(ERROR, "Expected node to be of union!, got: %d", stmt->op);
+    stmt->all = true;
+    stmt->op = SETOP_UNION;
+    union_to_union_all(stmt->larg);
+    union_to_union_all(stmt->rarg);
+}
+
+Node *
+createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
+{
+	Form_pg_operator operator;
+	DistinctExpr *equal;
+	Expr *notExpr;
+    HeapTuple tup = NULL;
+	Operator operTuple;
+    Oid eqOpOid;
+
+    get_sort_group_operators(leftChild->vartype, false, true, false, NULL, &eqOpOid, NULL, NULL);
+
+    if (OidIsValid(eqOpOid))
+    {
+        tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(eqOpOid));
+        if (HeapTupleIsValid(tup)){
+            operTuple = (Operator)tup;
+        }else{
+            elog(ERROR, "Heap tuple not valid!");
+        }
+    }
+
+	operator = (Form_pg_operator) GETSTRUCT(operTuple);
+
+	equal = makeNode (DistinctExpr);
+	equal->args = list_make2(leftChild, rightChild);
+	equal->opfuncid = operator->oprcode;
+	equal->opno = eqOpOid;
+	equal->opresulttype = operator->oprresult;
+	equal->opretset = false;
+
+	ReleaseSysCache (tup);
+
+	notExpr = makeBoolExpr(NOT_EXPR, list_make1(equal), -1);
+
+	return (Node *) notExpr;
+}
+
+/*
+ * Creates a logical AND expression for a list of expressions.
+ */
+
+Node *
+createAndFromList (List *exprs)
+{
+	ListCell *lc;
+	Node *node;
+	Node *result;
+
+	if (list_length(exprs) == 0)
+		return NULL;
+	if (list_length(exprs) == 1)
+		return (Node *) linitial(exprs);
+
+	result = (Node *) linitial(exprs);
+
+    for_each_from(lc, exprs, 1){
+		node = (Node *) lfirst(lc);
+		result = (Node *) makeBoolExpr(AND_EXPR, list_make2(node, result), -1);
+    }
+
+	return result;
+}
+
+/*
+ * Creates an equality condition expression for two lists of attributes.
+ * E.g. A = (a,b,c) and B = (d,e,f) then the following condition would be created:
+ * a = d AND b = e AND c = f. If neq is true the whole condition is negated.
+ */
+
+static Node *
+createEqualityCondition (List* leftAttrs, List* rightAttrs, Index leftIndex, Index rightIndex, bool neq)
+{
+	ListCell *leftLc;
+	ListCell *rightLc;
+	TargetEntry *curLeft;
+	TargetEntry *curRight;
+	OpExpr *equal;
+	List *equalConds;
+	Var *leftOp;
+	Var *rightOp;
+	Node *curRoot;
+
+	equalConds = NIL;
+
+	Assert (list_length(leftAttrs) == list_length(rightAttrs));
+
+	/* create List of OpExpr nodes for equality conditions */
+	forboth (leftLc, leftAttrs, rightLc, rightAttrs)
+	{
+		curLeft = (TargetEntry *) lfirst(leftLc);
+		curRight = (TargetEntry *) lfirst(rightLc);
+
+		/* create Var for left operand of equality expr */
+		leftOp = makeVar (leftIndex + 1,
+				curLeft->resno,
+				exprType ((Node *) curLeft->expr),
+				exprTypmod ((Node *) curLeft->expr),
+                exprCollation((Node *) curLeft->expr),
+				0);
+
+		/* create Var for right operand of equality expr */
+		rightOp = makeVar (rightIndex + 1,
+				curRight->resno,
+				exprType ((Node *) curRight->expr),
+				exprTypmod ((Node *) curRight->expr),
+                exprCollation ((Node *) curRight->expr),
+				0);
+
+		/* get equality operator for the var's type */
+		equal = (OpExpr *) createNotDistinctConditionForVars (leftOp, rightOp);
+
+		/* append current equality condition to equalConds List */
+		equalConds = lappend (equalConds, equal);
+	}
+
+	curRoot = (Node *) createAndFromList(equalConds);
+
+	/* negation required */
+	if (neq)
+		curRoot = (Node *) makeBoolExpr(NOT_EXPR, list_make1(curRoot), -1);
+
+	return curRoot;
+}
+
+Query *handleIntersect(Query *base){
+    // Here, need to replace the intersect with a join.
+    // For each table pair present, need to construct the join, and the join tree.
+    // Basically, all the intersects within this block are consumed into a join.
+    // It doesn't matter what join order is used (optimizer might reorder it anyways)
+    // Simplest order is the one in RTElist, so it is directly used.
+    const List *usedReferences = traceprovFindUsedRefs(base->setOperations);
+    if (list_length(usedReferences) != list_length(base->rtable)){
+        elog(ERROR, "Expected the used references to be of the same size as setOperations");
+    }
+    if (list_length(usedReferences) < 2){
+        elog(ERROR, "Expected at least 2 elements for the join!");
+    }
+    RangeTblEntry *firstRTE = (RangeTblEntry*) lfirst(list_head(base->rtable));
+    if (firstRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
+    firstRTE->inFromCl = true;
+    List *addedJoins = NIL;
+    ListCell *rteCursor;
+    RangeTblEntry *lastJoinEntry = NULL;
+    JoinExpr *joinExpr = NULL;
+
+    // Start from the next table.
+    int i = 1;
+    for_each_from(rteCursor, base->rtable, 1){
+        i++;
+        RangeTblEntry *nextRTE = (RangeTblEntry *)lfirst(rteCursor);
+        if (nextRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
+        nextRTE->inFromCl = true;
+        List *colNames = NIL;
+        ListCell *targetVarCursor;
+        if (lastJoinEntry == NULL){
+            lastJoinEntry = makeNode(RangeTblEntry);
+            lastJoinEntry->joinleftcols = NIL;
+            lastJoinEntry->joinrightcols = NIL;
+            // TODO: This should probably be changed when handling traceprov attrs.
+            foreach(targetVarCursor, firstRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
+                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
+                colNames = lappend(colNames, makeString(te->resname));
+                lastJoinEntry->joinleftcols = lappend_int(lastJoinEntry->joinleftcols, foreach_current_index(targetVarCursor) + 1);
+            }
+
+            targetVarCursor = NULL;
+            foreach(targetVarCursor, nextRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
+                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
+                colNames = lappend(colNames, makeString(te->resname));
+                lastJoinEntry->joinrightcols = lappend_int(lastJoinEntry->joinrightcols, foreach_current_index(targetVarCursor) + 1);
+            }
+            lastJoinEntry->eref = makeAlias(pstrdup("unnamed join"), colNames);
+            lastJoinEntry->rtekind = RTE_JOIN;
+            joinExpr = makeNode(JoinExpr);
+            RangeTblRef *l_rtr = makeNode(RangeTblRef);
+            RangeTblRef *r_rtr = makeNode(RangeTblRef);
+            l_rtr->rtindex = 1;
+            r_rtr->rtindex = 2;
+            joinExpr->larg = (Node*)l_rtr;
+            joinExpr->rarg = (Node*)r_rtr;
+            joinExpr->isNatural = false;
+            joinExpr->quals = createEqualityCondition(firstRTE->subquery->targetList, nextRTE->subquery->targetList, 1, 2, false);
+        }else{
+            RangeTblEntry *clonedRTE = copyObject(lastJoinEntry);
+            const int originalLength = list_length(clonedRTE->joinaliasvars);
+            colNames = clonedRTE->eref->colnames;
+            clonedRTE->joinrightcols = NIL;
+            clonedRTE->joinleftcols = NIL;
+            foreach(targetVarCursor, nextRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
+                clonedRTE->joinaliasvars = lappend(clonedRTE->joinaliasvars, makeVarFromTargetEntry(1, te));
+                colNames = lappend(colNames, makeString(te->resname));
+                clonedRTE->joinrightcols = lappend_int(clonedRTE->joinrightcols, foreach_current_index(targetVarCursor) + 1);
+            }
+            for (int i = 0; i < originalLength; i++){
+                clonedRTE->joinleftcols = lappend_int(clonedRTE->joinleftcols, i+1);
+            }
+            lastJoinEntry = clonedRTE;
+            JoinExpr *nextJoinExpr = makeNode(JoinExpr);
+            nextJoinExpr->larg = (Node*)joinExpr;
+            RangeTblRef *r_rtr = makeNode(RangeTblRef);
+            r_rtr->rtindex = i;
+            nextJoinExpr->rarg = (Node*)r_rtr;
+            nextJoinExpr->isNatural = false;
+            nextJoinExpr->quals = createEqualityCondition(firstRTE->subquery->targetList, nextRTE->subquery->targetList, 1, i, false);
+            joinExpr = nextJoinExpr;
+        }
+        addedJoins = lappend(addedJoins, lastJoinEntry);
+        joinExpr->rtindex = list_length(base->rtable) + list_length(addedJoins);
+    }
+    FromExpr *fromExpr = makeFromExpr(list_make1(joinExpr), NULL);
+    base->rtable = list_concat_copy(base->rtable, addedJoins);
+    base->jointree = fromExpr;
+    return base;
+}
+
+
+void zip_target_sortgroupclause(List *group_clauses, List *target_list){
+    int i = 0;
+    ListCell *group_clause_cursor;
+    ListCell *target_list_cursor;
+    forboth(group_clause_cursor, group_clauses, target_list_cursor, target_list){
+        i++;
+        SortGroupClause *group_clause = (SortGroupClause *)lfirst(group_clause_cursor);
+        TargetEntry *target_entry = (TargetEntry *)lfirst(target_list_cursor);
+        group_clause->tleSortGroupRef = i;
+        target_entry->ressortgroupref = i; 
+    }
+}
+
+Query *traceprov_rewrite_sets_to_joins(Query *base, TraceProvParseContext *context){
+    // Performs following rewrites
+    // UNION -> UNION ALL + Distinct
+    // INTERSECT ALL -> JOIN
+    // INTERSECT -> JOIN + DISTINCT
+
+    // Nothing to do.
+    if (base->setOperations == NULL) return base;
+    if (!IsA(base->setOperations, SetOperationStmt))
+        elog(ERROR, "Expected top level set operation to be SetOperationStmt");
+
+    SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
+    bool wasAll = stmt->all;
+
+    Query *modified = NULL;
+    if (stmt->op == SETOP_UNION) {
+        union_to_union_all((Node*)stmt);
+        if (!wasAll){
+            // Here, modified needs to, actually, needs to refer to a subquery.
+            // For intersect, this is not needed.
+            modified = cloneQueryForTP(base);
+            ListCell *targetEntryCursor;
+            foreach(targetEntryCursor, base->targetList){
+                TargetEntry *baseTargetEntry = (TargetEntry *)lfirst(targetEntryCursor);
+                modified->targetList = lappend(modified->targetList, makeTargetEntry(
+                    (Expr*)makeVarFromTargetEntry(1, baseTargetEntry),
+                    baseTargetEntry->resno,
+                    (baseTargetEntry->resname == NULL ? NULL : pstrdup(baseTargetEntry->resname)),
+                    false
+                ));
+            }
+            RangeTblEntry *rte = rangeTableEntryFromSubquery(base, context);
+            rte->inFromCl = true;
+            modified->rtable = list_make1(rte);
+            RangeTblRef *rtr = makeNode(RangeTblRef);
+            rtr->rtindex = 1;
+            modified->jointree = makeFromExpr(list_make1(rtr), NULL);
+        }else{
+            modified = base;
+        }
+    } else if (stmt->op == SETOP_INTERSECT){
+        modified = handleIntersect(base);
+        // Remove the set ops (but only if it is intersect)
+        modified->setOperations = NULL;
+    }
+
+    if (!wasAll){
+        elog(INFO, "Trying to make a distinct in setop!");
+        // Need to add a distinct operation.
+        // Here, actually, group-by is used (rather than distinct), because that's what traceprov will use.
+        if (list_length(stmt->groupClauses) == 0){
+            elog(ERROR, "Expected length of group clauses to defined, when not all!");
+        }
+        if (list_length(stmt->groupClauses) != list_length(modified->targetList)){
+            // TODO: Disable this, when dealing with provenance..
+            elog(ERROR, "Expected the length of group clauses to match target list");
+        }
+        if (list_length(modified->groupClause) != 0){
+            elog(INFO, "Expected no aggregates already, in the modified group clause");
+        }
+        modified->groupClause = list_copy_deep(stmt->groupClauses);
+        zip_target_sortgroupclause(modified->groupClause, modified->targetList);
+        // TODO: Enable this when adding traceprov?
+        // modified->hasAggs = true;
+    }
+    // Now, iterate through the RTE and do this recursively.
+    ListCell *rteCursor = NULL;
+    foreach(rteCursor, modified->rtable){
+        RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
+        if (rte->rtekind == RTE_SUBQUERY){
+            rte->subquery = traceprov_rewrite_sets_to_joins(rte->subquery, context);
+        }
+    }
+    return modified;
+}
+
 Query *traceprov_set_rewriter(Query *initial){
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
@@ -341,7 +668,7 @@ Query *traceprov_set_rewriter(Query *initial){
         elog(ERROR, "expected top-level call to return no query!");
     }
     traceprov_fixup_references(initial);
-    return initial;
+    return traceprov_rewrite_sets_to_joins(initial, &context);
 }
 
 PlannedStmt *traceprov_set_test(
@@ -403,7 +730,6 @@ Query * performTraceProvRewrite(
     adjustJoinAliasVars(targetsPerRTE, parse->jointree->fromlist, parse->rtable, -1, NULL, NULL);
 
     // Now, need to recursively go through the join tree and adjust the joinaliasvars
-    // adjustJoinAliasVars();
     // In this case, simply extend the target list.
     ListCell *targetEntryCursor;
 
