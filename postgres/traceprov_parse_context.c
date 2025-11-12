@@ -15,11 +15,16 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     // The first layer is 1.
     context->global_layer_number = 1;
     context->unique_idx = 0;
+    context->simple_incrementor = 0;
 }
 
 char *tpParseGetUniqueAlias(TraceProvParseContext *context){
     unsigned long long int incremented = context->unique_idx++;
     return psprintf("tp_table_%lld", incremented);
+}
+
+int tpParseGetUniqueNumber(TraceProvParseContext *context){
+    return ++(context->simple_incrementor);
 }
 
 TraceProvEntry *makeTraceProvEntry(){

@@ -34,12 +34,14 @@ typedef struct TraceProvDependency {
 typedef struct TraceProvParseContext {
     TraceProvLayerNumber global_layer_number;
     unsigned long long int unique_idx;
+    int simple_incrementor;
 } TraceProvParseContext;
 
 void tpParseInitializeContext(TraceProvParseContext *);
 
 TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *);
 char *tpParseGetUniqueAlias(TraceProvParseContext *);
+int tpParseGetUniqueNumber(TraceProvParseContext *);
 
 TraceProvEntry *makeTraceProvEntry();
 
