@@ -136,3 +136,16 @@ List *traceProvFlatten(List *inList){
     }
     return newList;
 }
+
+List* traceProvAppendTargets(List *traceProvTargets, List *targetList){
+    ListCell *targetEntryCursor;
+    foreach(targetEntryCursor, traceProvTargets){
+        // Add target entry to the parse->targetlist.
+        TargetEntry *target = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
+        // Here is an ugly case.
+        // It is possible that the attributes we're grouping over don't appear as resjunk.
+        // In that case, we'll need to adjust the references in the sort refs.
+        targetList = traceProvAppendAtResJunk(targetList, target);
+    }
+    return targetList;
+}

@@ -34,24 +34,6 @@ PG_MODULE_MAGIC;
 // in cases where aggregate is nested, we need to get the offsets directly.
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 
-typedef struct TraceProvTarget {
-    bool isPointer;
-    TargetEntry *targetEntry;
-    TraceProvDependency *graph;
-} TraceProvTarget;
-
-TraceProvTarget *makeTraceProvTarget(
-    bool isPointer, 
-    TargetEntry *targetEntry,
-    TraceProvDependency *dependency
-){
-    TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
-    tpTarget->isPointer = isPointer;
-    tpTarget->targetEntry = targetEntry;
-    tpTarget->graph = dependency;
-    return tpTarget;
-}
-
 PlannedStmt *traceprov_rewriter_driver(
     Query *, 
     const char *,
@@ -95,7 +77,7 @@ static void rteRewrite(
  * The input target entries become the entries that we log.
 */
 static void traceprovAggregateRewrite(
-    Query *, List *, List **, TraceProvParseContext *, bool
+    const List *, List **, TraceProvParseContext *, bool
 );
 
 static Query *cloneQueryForTP(const Query *);
@@ -149,6 +131,13 @@ PlannedStmt *traceprov_rewriter(
     Query *traceprovParse = performTraceProvRewrite(parse, &topLevelTargets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
     // Now, need to rewrite the entire query to a subquery.
+    ListCell *teCursor;
+    foreach(teCursor, topLevelTargets){
+        const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(teCursor));
+        if (currentTarget->graph){
+            traceprovPrintDependency(currentTarget->graph);
+        }
+    }
     Query *traceprovTopQuery = addNestedQuery(traceprovParse, topLevelTargets, &context);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
@@ -269,9 +258,9 @@ Query *traceprov_breakup_sets(
     // Possibly, we'll need to append the returned result into the rtables
     // and use subquery refs.
     Query *largQuery = traceprov_breakup_sets(rootSetOpType, rootIsAll, rootRteList, setOp->larg, baseQuery, context);
-    Query *rargQuery = traceprov_breakup_sets(rootSetOpType, rootIsAll, rootRteList, setOp->rarg, baseQuery, context);
+    Query *rargQuery = traceprov_breakup_sets(rootSetOpType, rootIsAll, baseQuery->rtable, setOp->rarg, baseQuery, context);
 
-    List *newRTEList = list_copy(rootRteList);
+    List *newRTEList = list_copy(baseQuery->rtable);
     if (largQuery != NULL){
         // In this case, (same for rargquery), need to add the returned query to the RTE list, and replace the reference of the larg
         // to the one in CTE. This finishes the break up, of the query.
@@ -601,7 +590,12 @@ void zip_target_sortgroupclause(List *group_clauses, List *target_list){
 Query *traceprov_rewrite_sets_to_joins(
     Query *base, 
     TraceProvParseContext *context,
-    List *ignoreList
+    // For UNIONs (and INTERSECTS), these columns are skipped for aggregation.
+    // That is, the grouping is performed without these columns present.
+    // These attributes also act the input to the aggregate function.
+    List *ignoreList,
+    List **createdTargets,
+    bool aggregatedInParent
 ){
     // Performs following rewrites
     // UNION -> UNION ALL + Distinct
@@ -610,8 +604,9 @@ Query *traceprov_rewrite_sets_to_joins(
 
     // Nothing to do.
     if (base->setOperations == NULL) return base;
-    if (!IsA(base->setOperations, SetOperationStmt))
-        elog(ERROR, "Expected top level set operation to be SetOperationStmt");
+    if (!IsA(base->setOperations, SetOperationStmt)) elog(ERROR, "Expected top level set operation to be SetOperationStmt");
+    
+    List *flattenedAddedTargets = traceProvFlatten(ignoreList);
 
     SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
     bool wasAll = stmt->all;
@@ -655,24 +650,36 @@ Query *traceprov_rewrite_sets_to_joins(
         if (list_length(stmt->groupClauses) == 0){
             elog(ERROR, "Expected length of group clauses to defined, when not all!");
         }
-        if (list_length(stmt->groupClauses) != list_length(modified->targetList)){
-            // TODO: Disable this, when dealing with provenance..
-            elog(ERROR, "Expected the length of group clauses to match target list");
-        }
         if (list_length(modified->groupClause) != 0){
             elog(INFO, "Expected no aggregates already, in the modified group clause");
         }
         modified->groupClause = list_copy_deep(stmt->groupClauses);
         zip_target_sortgroupclause(modified->groupClause, modified->targetList);
-        // TODO: Enable this when adding traceprov?
-        // modified->hasAggs = true;
+        List *newTargetList = NIL;
+        for (int i = 0; i < list_length(modified->targetList); i++){
+            if (i < (list_length(modified->targetList) - list_length(flattenedAddedTargets))){
+                newTargetList = lappend(newTargetList, list_nth(modified->targetList, i));
+                continue;
+            }
+        }
+        modified->targetList = newTargetList;
+        List *aggregated = NIL;
+        traceprovAggregateRewrite(
+            flattenedAddedTargets,
+            &aggregated,
+            context,
+            aggregatedInParent 
+        );
+        modified->hasAggs = true;
+        if (createdTargets) *createdTargets = aggregated;
+        modified->targetList = traceProvAppendTargets(aggregated, modified->targetList);
     }
-    // Now, iterate through the RTE and do this recursively.
+
     ListCell *rteCursor = NULL;
     foreach(rteCursor, modified->rtable){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
         if (rte->rtekind == RTE_SUBQUERY){
-            rte->subquery = traceprov_rewrite_sets_to_joins(rte->subquery, context, ignoreList);
+            rte->subquery = traceprov_rewrite_sets_to_joins(rte->subquery, context, ignoreList, NULL, modified->hasAggs);
         }
     }
     return modified;
@@ -693,7 +700,7 @@ Query *traceprov_set_rewriter(Query *initial){
         elog(ERROR, "expected top-level call to return no query!");
     }
     traceprov_fixup_references(initial);
-    return traceprov_rewrite_sets_to_joins(initial, &context, NIL);
+    return traceprov_rewrite_sets_to_joins(initial, &context, NIL, NULL, false);
 }
 
 PlannedStmt *traceprov_set_test(
@@ -733,6 +740,7 @@ List *adjustUnionSetOps(
     rteCursor = NULL;
     ListCell *extraTargetCursor;
     List *newExtraTargets = NIL;
+
     forboth(rteCursor, queryRteList, extraTargetCursor, extraTargets){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
         Query *subquery = rte->subquery;
@@ -740,6 +748,7 @@ List *adjustUnionSetOps(
         List *extraTargetsForRte = (List *)lfirst(extraTargetCursor);
         List *newlyCreatedTargets = NIL;
         if (padding > 0){
+            elog(INFO, "Needed to perform a padding!");
             // In this case, need to add padding NULLs.
             List *nullList = traceProvGetNullList(padding, INT8OID, -1, InvalidOid);
             ListCell *nullListCursor;
@@ -749,12 +758,14 @@ List *adjustUnionSetOps(
                 newlyCreatedTargets = lappend(newlyCreatedTargets, newTe);
             }
         }
+        const int setNumber = (tpParseGetUniqueNumber(context));
+        tpAddSetPaddingItem(context, setNumber, padding);
         Expr *subqNumberExpr = (Expr*)makeConst(
             INT8OID,
             -1,
             InvalidOid,
             sizeof(int64),
-            Int64GetDatum((tpParseGetUniqueNumber(context))),
+            Int64GetDatum(setNumber),
             false,
             true
         );
@@ -777,16 +788,51 @@ List *adjustUnionSetOps(
                 newTe->resname,
                 false
             );
+            bool isSetPointer = foreach_current_index(newlyCreatedTargetCursor) == list_length(newlyCreatedTargets) - 1;
             extraTargetsForRte = lappend(
                 extraTargetsForRte,
                 makeTraceProvTarget(
                     false,
                     targetInParent,
-                    NULL
+                    NULL,
+                    setNumber,
+                    isSetPointer
                 )
             );
         }
-        newExtraTargets = lappend(newExtraTargets, extraTargetsForRte);
+        ListCell *targetCursor;
+        List *extraTargetsTyped = NIL;
+        foreach(targetCursor, extraTargetsForRte){
+            // Here, also need to cast all into INT8s.
+            TraceProvTarget *tpTarget = (TraceProvTarget *)(lfirst(targetCursor));
+            TargetEntry *copiedTarget = copyObject(tpTarget->targetEntry);
+            Expr *expr = copiedTarget->expr;
+            if (IsA(expr, Const)){
+                const Const *constExpr = (Const*)expr;
+                if (constExpr->consttype != INT8OID || constExpr->constcollid != InvalidOid || constExpr->consttypmod != -1){
+                    elog(ERROR, "Expected the const's types to be already aligned.");
+                }
+            } else if(IsA(expr, Var)){
+                Var *varExpr = (Var *)expr;
+                if (varExpr->vartype != INT8OID){
+                    varExpr->vartype = INT8OID;
+                    varExpr->vartypmod = -1;
+                    varExpr->varcollid = InvalidOid;
+                }
+            } else {
+                elog(ERROR, "Got unexpected expr (the tp should always be var or const!)");
+            }
+            extraTargetsTyped = lappend(
+                extraTargetsTyped,
+                makeTraceProvTarget(
+                    tpTarget->isPointer,
+                    copiedTarget,
+                    tpTarget->graph,
+                    setNumber,
+                    tpTarget->isSetPointer
+            ));
+        }
+        newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
     }
 
     List *setOpFlattened = traceProvFindUsedRefs((Node*)root, true);
@@ -833,13 +879,17 @@ Query * performTraceProvRewrite(
     bool parentHasAggs
 ){
 
+    bool purePointerInParent = parentHasAggs || parse->hasAggs;
     if (parse->hasAggs && parse->setOperations != NULL){
         elog(ERROR, "Didn't expect aggregation and set operations to both set!");
     }
 
     if (parse->setOperations != NULL){
+        // Assert that there are no res junks, if there are set operations.
+        traceProvAssertNoResJunk(parse->rtable);
         // Normalize the query here.
         SetOperationStmt *stmt = (SetOperationStmt *)parse->setOperations;
+        purePointerInParent |= !stmt->all;
         if(traceprov_breakup_sets(
             stmt->op,
             stmt->all,
@@ -864,7 +914,7 @@ Query * performTraceProvRewrite(
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
         // TODO: hasAggs needs to also include distinct?
-        rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, parse->hasAggs);
+        rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, purePointerInParent);
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
         targetsPerRTE = lappend(targetsPerRTE, rteTargets);
     }
@@ -875,7 +925,6 @@ Query * performTraceProvRewrite(
         // We'll also have to nest the entire query in a subquery block (only if we're at the top level)
         // So, it is actually two functions. The nesting occurs at the top level (since that is the only place mark is explicitly needed)
         traceprovAggregateRewrite(
-            parse,
             targetsToAdd,
             &targetsToAdd,
             tpContext,
@@ -904,23 +953,18 @@ Query * performTraceProvRewrite(
         }
     }else{
         // We don't care about the top-level returned join alias vars.
+        // need to recursively go through the join tree and adjust the joinaliasvars
         adjustJoinAliasVars(targetsPerRTE, parse->jointree->fromlist, parse->rtable, -1, NULL, NULL);
     }
 
-    // Now, need to recursively go through the join tree and adjust the joinaliasvars
     // In this case, simply extend the target list.
-    ListCell *targetEntryCursor;
-    foreach(targetEntryCursor, targetsToAdd){
-        // Add target entry to the parse->targetlist.
-        TargetEntry *target = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
-        // Here is an ugly case.
-        // It is possible that the attributes we're grouping over don't appear as resjunk.
-        // In that case, we'll need to adjust the references in the sort refs.
-        parse->targetList = traceProvAppendAtResJunk(parse->targetList, target);
-    }
+    parse->targetList = traceProvAppendTargets(targetsToAdd, parse->targetList);
 
-    // Now, we try to rewrite the setops to joins (or more.)
-    parse = traceprov_rewrite_sets_to_joins(parse, tpContext, targetsPerRTE);
+    List *addedFromSetOps = NIL;
+    parse = traceprov_rewrite_sets_to_joins(parse, tpContext, targetsPerRTE, &addedFromSetOps, parentHasAggs);
+    if (addedFromSetOps != NIL){
+        targetsToAdd = addedFromSetOps;
+    }
 
     if (addedTargets) *addedTargets = targetsToAdd;
     return parse;
@@ -978,7 +1022,7 @@ void rteRewrite(
                     newTargetEntry->resorigcol = indexAttrId;
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL));
+                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false));
                 }
             }
             ReleaseSysCache(indexTuple);
@@ -1003,7 +1047,7 @@ void rteRewrite(
             newTarget->resorigtbl = childTarget->resorigtbl;
             // Propogate the graph (if there is one)
             // That can happen, for example, if for example the aggregation is nested inside a subquery.
-            targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph));
+            targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph, tpTarget->setNumber, tpTarget->isSetPointer));
             rte->eref->colnames = lappend(rte->eref->colnames, makeString(childTarget->resname));
         }
     }
@@ -1012,13 +1056,11 @@ void rteRewrite(
 }
 
 void traceprovAggregateRewrite(
-    Query *parse, 
-    List *targetEntriesToLog, 
+    const List *targetEntriesToLog,
     List **pCreatedTargets,
     TraceProvParseContext *tpContext,
     bool parentHasAggs
 ){
-    Assert(parse->hasAggs);
     // Need to add the exprs from the targets.
     ListCell *targetEntryCursor;
     TraceProvLayerNumber layerNumber = tpParseGetLayerNumber(tpContext);
@@ -1037,21 +1079,7 @@ void traceprovAggregateRewrite(
     List *entries = NIL;
     List *childGraphs = NIL;
     foreach(targetEntryCursor, targetEntriesToLog){
-        const TraceProvTarget *tpTarget = ((TraceProvTarget *)lfirst(targetEntryCursor));
-        const TargetEntry *target = tpTarget->targetEntry;
-        argVars = lappend(argVars, target->expr);
-        TraceProvEntry *tpEntry = makeTraceProvEntry();
-        if (tpTarget->graph != NULL){
-            if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
-                elog(ERROR, "Expected no table info to for the pointer node");
-            }
-            childGraphs = lappend(childGraphs, tpTarget->graph);
-            tpEntry->kind = TP_ENTRY_KIND_POINTER;
-        }else{
-            tpEntry->kind = TP_ENTRY_KIND_BASE_RELATION;
-            tpEntry->relId = target->resorigtbl;
-            tpEntry->attr = target->resno;
-        }
+        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(targetEntryCursor)), &childGraphs, &argVars);
         entries = lappend(entries, tpEntry);
     }
 
@@ -1077,7 +1105,9 @@ void traceprovAggregateRewrite(
                 layerNumber,
                 childGraphs,
                 entries
-            )   
+            ),
+            0,
+            false  
         )
     );
 }
