@@ -1,5 +1,6 @@
 #ifndef __TRACEPROV_REWRITER_UTILS__
 #define __TRACEPROV_REWRITER_UTILS__
+#include "postgres.h"
 #include "c.h"
 #include "nodes/pg_list.h"
 #include "nodes/parsenodes.h"
@@ -16,5 +17,6 @@ List *traceProvDupInt(int, int);
 List *traceProvDupOid(Oid, int);
 
 List *traceProvFlatten(List *);
+List* traceProvAppendTargets(List *, List *);
 
 #endif

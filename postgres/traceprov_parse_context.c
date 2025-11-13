@@ -16,6 +16,8 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     context->global_layer_number = 1;
     context->unique_idx = 0;
     context->simple_incrementor = 0;
+    context->properties = palloc0_object(TraceProvParseGraphProperties);
+    context->properties->setPaddingMap = NIL;
 }
 
 char *tpParseGetUniqueAlias(TraceProvParseContext *context){
@@ -25,6 +27,74 @@ char *tpParseGetUniqueAlias(TraceProvParseContext *context){
 
 int tpParseGetUniqueNumber(TraceProvParseContext *context){
     return ++(context->simple_incrementor);
+}
+
+// Add the set number (and the performed padding) to the context's properties
+void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padding){
+    TraceProvSetPaddingMapItem *mapItem = palloc0_object(TraceProvSetPaddingMapItem);
+    mapItem->setNumber = setNumber;
+    mapItem->padding = padding;
+    context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, mapItem);
+}
+
+
+TraceProvTarget *makeTraceProvTarget(
+    bool isPointer, 
+    TargetEntry *targetEntry,
+    TraceProvDependency *dependency,
+    int isUnionSet,
+    bool isSetPointer
+){
+    TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
+    tpTarget->isPointer = isPointer;
+    tpTarget->targetEntry = targetEntry;
+    tpTarget->graph = dependency;
+    tpTarget->setNumber = isUnionSet;
+    tpTarget->isSetPointer = isSetPointer;
+    return tpTarget;
+}
+
+void _assertIsArtificial(const TargetEntry *target){
+    if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
+        elog(ERROR, "Expected no table info to for the pointer node");
+    }
+}
+
+
+TraceProvEntry *tpResolveEntry(
+    const TraceProvTarget * tpTarget, 
+    List **childGraphs,
+    List **exprs
+){
+    const TargetEntry *target = tpTarget->targetEntry;
+    *exprs = lappend(*exprs, target->expr);
+    TraceProvEntry *tpEntry = makeTraceProvEntry();
+    TraceProvDependency *graph = tpTarget->graph;
+    if (tpTarget->isSetPointer){
+        tpEntry->kind = TP_ENTRY_SET_POINTER;
+        _assertIsArtificial(target);
+        if (tpTarget->graph != NULL)
+            elog(ERROR, "Expected the graph for set pointer to be null!");
+        graph = NULL;
+    }else{
+        if (graph != NULL){
+            if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
+                elog(ERROR, "Expected no table info to for the pointer node");
+            }
+            tpEntry->kind = TP_ENTRY_KIND_POINTER;
+        }else{
+            tpEntry->kind = TP_ENTRY_KIND_BASE_RELATION;
+            tpEntry->relId = target->resorigtbl;
+            tpEntry->resNo = target->resno;
+            tpEntry->attrNumber = target->resorigcol;
+        }
+        // Because there can be multiple graphs for the set. so, this makes things nicer.
+        if (tpTarget->setNumber > 0) graph = TRACEPROV_SET_GRAPH;
+    }
+    *childGraphs = lappend(*childGraphs, graph);
+    tpEntry->setNumber = tpTarget->setNumber;
+
+    return tpEntry;
 }
 
 TraceProvEntry *makeTraceProvEntry(){
@@ -51,13 +121,19 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
         kindStr = "TP_ENTRY_KIND_BASE_RELATION";
     }else if (entry->kind == TP_ENTRY_KIND_POINTER){
         kindStr = "TP_ENTRY_KIND_POINTER";
+    } else if (entry->kind == TP_ENTRY_SET_POINTER){
+        kindStr = "TP_ENTRY_SET_POINTER";
+    }else{
+        elog(ERROR, "Got invalid kind: %d", entry->kind);
     }
     appendStringInfo(
         &buf, 
-        "[TraceProvEntry (kind: %s, relid: %d, attr: %d)]",
+        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d)]",
         kindStr,
         entry->relId,
-        entry->attr
+        entry->resNo,
+        entry->attrNumber,
+        entry->setNumber
     );
     return buf.data;
 }
@@ -69,6 +145,11 @@ void appendIndentAware(StringInfoData *buf, int indentCount){
 }
 
 char * traceprovDependencyToString(int indent, const TraceProvDependency *graph){
+    if (graph == NULL){
+        return pstrdup("<NULL>");
+    } else if (graph == TRACEPROV_SET_GRAPH){
+        return pstrdup("<UNION SET GRAPH>");
+    }
     StringInfoData buf;
     initStringInfo(&buf);
     appendIndentAware(&buf, indent);
@@ -104,14 +185,13 @@ void traceprovPrintDependency(const TraceProvDependency *graph){
     elog(INFO, "\n%s", traceprovDependencyToString(0, graph));
 }
 
-// void serializeTraceProvDependencies(List *graphs);
-
 // This is not in the header for a reason, nothing outside of this file
 // should know that this even exists.
 typedef struct TraceProvDependencyHeader {
     uint32 idx; // own's index (each block has a unique index)
     uint32 numberOfEntries; // Number of entries
     uint32 numberOfDirectChildren; // Number of direct children.
+    TraceProvDependency *graphPtr; // Useful to detect if the graph is null or not.
 } TraceProvDependencyHeader;
 
 void failSafeWrite(FILE *file, const void *buff, size_t length){
@@ -144,23 +224,28 @@ void serializeTraceProvDepedency(const TraceProvDependency *graph){
 }
 
 void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *outputFile){
-    TraceProvDependencyHeader *header = palloc0_object(TraceProvDependencyHeader);
-    header->numberOfEntries = list_length(graph->entries);
-    header->numberOfDirectChildren = list_length(graph->children);
-    failSafeWrite(outputFile, header, sizeof(TraceProvDependencyHeader));
-    failSafeWrite(outputFile, &graph->headNumber, sizeof(graph->headNumber));
-    
-    ListCell *entryCursor;
-    // Write the entries next.
-    foreach(entryCursor, graph->entries){
-        const TraceProvEntry *entry = (TraceProvEntry *)lfirst(entryCursor);
-        failSafeWrite(outputFile, entry, sizeof(TraceProvEntry));
-    }
 
-    ListCell *childCursor;
-    foreach(childCursor, graph->children){
-        const TraceProvDependency *childGraph = (TraceProvDependency *)lfirst(childCursor);
-        _serializeTraceProvDepedency(childGraph, outputFile);
+    TraceProvDependencyHeader *header = palloc0_object(TraceProvDependencyHeader);
+    if (TRACEPROV_GRAPH_IS_VALID(graph)){
+        header->numberOfEntries = list_length(graph->entries);
+        header->numberOfDirectChildren = list_length(graph->children);
+    }
+    memcpy(&header->graphPtr, &graph, sizeof(TraceProvDependency *));
+    failSafeWrite(outputFile, header, sizeof(TraceProvDependencyHeader));
+    if (TRACEPROV_GRAPH_IS_VALID(graph)){
+        failSafeWrite(outputFile, &graph->headNumber, sizeof(graph->headNumber));
+        ListCell *entryCursor;
+        // Write the entries next.
+        foreach(entryCursor, graph->entries){
+            const TraceProvEntry *entry = (TraceProvEntry *)lfirst(entryCursor);
+            failSafeWrite(outputFile, entry, sizeof(TraceProvEntry));
+        }
+
+        ListCell *childCursor;
+        foreach(childCursor, graph->children){
+            const TraceProvDependency *childGraph = (TraceProvDependency *)lfirst(childCursor);
+            _serializeTraceProvDepedency(childGraph, outputFile);
+        }
     }
 }
 
@@ -180,23 +265,28 @@ const TraceProvDependency* deserializeTraceProvDependency(){
 const TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
     TraceProvDependencyHeader header;
     failSafeRead(file, &header, sizeof(TraceProvDependencyHeader));
-    TraceProvDependency *graph = palloc0_object(TraceProvDependency);
-    failSafeRead(file, &graph->headNumber, sizeof(graph->headNumber));
+    if (TRACEPROV_GRAPH_IS_VALID(header.graphPtr)){
+        TraceProvDependency *graph = palloc0_object(TraceProvDependency);
+        failSafeRead(file, &graph->headNumber, sizeof(graph->headNumber));
 
-    List *entries = NIL;
-    for (uint32 idx = 0; idx < header.numberOfEntries; idx++){
-        TraceProvEntry *entry = palloc0_object(TraceProvEntry);
-        // Here, we should never get an eof.
-        failSafeRead(file, entry, sizeof(TraceProvEntry));
-        entries = lappend(entries, entry);
+        List *entries = NIL;
+        for (uint32 idx = 0; idx < header.numberOfEntries; idx++){
+            TraceProvEntry *entry = palloc0_object(TraceProvEntry);
+            // Here, we should never get an eof.
+            failSafeRead(file, entry, sizeof(TraceProvEntry));
+            entries = lappend(entries, entry);
+        }
+
+        List *children = NIL;
+        for (uint32 idx = 0; idx < header.numberOfDirectChildren; idx++){
+            children = lappend(children, (void*) _deserializeTraceProvDependency(file));
+        }
+        
+        graph->children = children;
+        graph->entries = entries;
+        return graph;
+    }else{
+        return header.graphPtr;
     }
 
-    List *children = NIL;
-    for (uint32 idx = 0; idx < header.numberOfDirectChildren; idx++){
-        children = lappend(children, (void*) _deserializeTraceProvDependency(file));
-    }
-    
-    graph->children = children;
-    graph->entries = entries;
-    return graph;
 }
