@@ -90,8 +90,8 @@ TraceProvEntry *makeTraceProvEntry();
 
 TraceProvDependency *makeTraceProvDependency(TraceProvLayerNumber, List *, List *);
 void traceprovPrintDependency(const TraceProvDependency *);
-void serializeTraceProvDepedency(const TraceProvDependency *);
-const TraceProvDependency*deserializeTraceProvDependency(void);
+void serializeTraceProvDepedency(List *);
+List *deserializeTraceProvDependency(void);
 
 typedef struct TraceProvTarget {
     bool isPointer;

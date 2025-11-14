@@ -37,7 +37,6 @@ void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padd
     context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, mapItem);
 }
 
-
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
@@ -230,6 +229,11 @@ void traceprovPrintDependency(const TraceProvDependency *graph){
     elog(INFO, "JSON: %s", traceProvDependencyToJson(graph));
 }
 
+typedef struct TraceProvDependencyMetaHeader {
+    // Number of graphs being stored.
+    uint32 numGraphs;
+} TraceProvDependencyMetaHeader;
+
 // This is not in the header for a reason, nothing outside of this file
 // should know that this even exists.
 typedef struct TraceProvDependencyHeader {
@@ -254,17 +258,26 @@ void failSafeRead(FILE *file, void *buff, size_t length){
 }
 
 void _serializeTraceProvDepedency(const TraceProvDependency *, FILE *);
-const TraceProvDependency *_deserializeTraceProvDependency(FILE *);
+TraceProvDependency *_deserializeTraceProvDependency(FILE *);
 
-void serializeTraceProvDepedency(const TraceProvDependency *graph){
+// Serializes multiple graphs in the graph file.
+// This needs to be a list, because we can multiple pointers.
+void serializeTraceProvDepedency(List *graphs){
+    ListCell *graphCursor;
     const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
     FILE *fptr = fopen(dumpPath, "wb"); 
     if (fptr == NULL) {
         elog(ERROR, "Error opening file for dumping graph!");
     }
-    elog(INFO, "Serializing: ");
-    traceprovPrintDependency(graph);
-    _serializeTraceProvDepedency(graph, fptr);
+    TraceProvDependencyMetaHeader metaHeader;
+    metaHeader.numGraphs = list_length(graphs);
+    failSafeWrite(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
+    foreach(graphCursor, graphs){
+        const TraceProvDependency *graph = (TraceProvDependency *)(lfirst(graphCursor));
+        elog(INFO, "Serializing: ");
+        traceprovPrintDependency(graph);
+        _serializeTraceProvDepedency(graph, fptr);
+    }
     fclose(fptr);
 }
 
@@ -294,20 +307,31 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
     }
 }
 
-const TraceProvDependency* deserializeTraceProvDependency(){
+// Returns list of deserialized graphs.
+List* deserializeTraceProvDependency(){
     const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
     FILE *fptr = fopen(dumpPath, "rb"); 
     if (fptr == NULL) {
         elog(ERROR, "Error opening file for dumping graph!");
     }
-    const TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
+    TraceProvDependencyMetaHeader metaHeader;
+    failSafeRead(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
+    if (metaHeader.numGraphs <= 0){
+        elog(ERROR, "Got invalid number of graphs in the file: %d", metaHeader.numGraphs);
+    }
+    List *graphs = NIL;
+    for (int i = 0; i < metaHeader.numGraphs; i++){
+        TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
+        elog(INFO, "Deserializing: ");
+        traceprovPrintDependency(graph);
+        graphs = lappend(graphs, graph);
+    }
+
     fclose(fptr);
-    elog(INFO, "Deserializing: ");
-    traceprovPrintDependency(graph);
-    return graph;
+    return graphs;
 }
 
-const TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
+TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
     TraceProvDependencyHeader header;
     failSafeRead(file, &header, sizeof(TraceProvDependencyHeader));
     if (TRACEPROV_GRAPH_IS_VALID(header.graphPtr)){
