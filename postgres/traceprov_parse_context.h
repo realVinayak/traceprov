@@ -114,4 +114,5 @@ TraceProvTarget *makeTraceProvTarget(
 
 TraceProvEntry *tpResolveEntry(const TraceProvTarget *, List **, List**);
 
+char *traceProvDependencyToJson(const TraceProvDependency *);
 #endif

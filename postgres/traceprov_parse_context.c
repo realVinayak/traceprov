@@ -144,6 +144,50 @@ void appendIndentAware(StringInfoData *buf, int indentCount){
     }
 }
 
+// Makes things easier, ngl.
+// The output can then be used on other formats too.
+char *traceProvDependencyToJson(const TraceProvDependency *graph){
+    StringInfoData buf;
+    initStringInfo(&buf);
+    appendStringInfo(&buf, "{");
+    appendStringInfo(&buf, "\"graphType\":");
+    if (graph == NULL){
+        appendStringInfo(&buf, "\"NULL\"");
+    }else if (graph == TRACEPROV_SET_GRAPH){
+        appendStringInfo(&buf, "\"SET_GRAPH\"");
+    }else{
+        appendStringInfo(&buf, "\"REGULAR\"");
+        appendStringInfo(&buf, ",");
+        appendStringInfo(&buf, "\"headNumber\": %d,", graph->headNumber);
+        appendStringInfo(&buf, "\"entries\": [");
+        ListCell *entryCursor;
+        bool needsSep = false;
+        foreach(entryCursor, graph->entries){
+            if (needsSep){
+                appendStringInfo(&buf, ",");
+            }
+            needsSep = true;
+            TraceProvEntry *entry = (TraceProvEntry*)lfirst(entryCursor);
+            appendStringInfo(&buf, "\"%s\"", serializeTraceProvEntry(entry));
+        }
+        appendStringInfo(&buf, "],");
+        ListCell *childCursor;
+        appendStringInfo(&buf, "\"children\": [");
+        needsSep = false;
+        foreach(childCursor, graph->children){
+            if (needsSep){
+                appendStringInfo(&buf, ",");
+            }
+            needsSep = true;
+            TraceProvDependency *child = (TraceProvDependency *)lfirst(childCursor);
+            appendStringInfo(&buf, "%s", traceProvDependencyToJson(child));
+        }
+        appendStringInfo(&buf, "]");
+    }
+    appendStringInfo(&buf, "}");
+    return buf.data;
+}
+
 char * traceprovDependencyToString(int indent, const TraceProvDependency *graph){
     if (graph == NULL){
         return pstrdup("<NULL>");
@@ -183,6 +227,7 @@ char * traceprovDependencyToString(int indent, const TraceProvDependency *graph)
 void traceprovPrintDependency(const TraceProvDependency *graph){
     elog(INFO, "TraceProvDependency: ");
     elog(INFO, "\n%s", traceprovDependencyToString(0, graph));
+    elog(INFO, "JSON: %s", traceProvDependencyToJson(graph));
 }
 
 // This is not in the header for a reason, nothing outside of this file
