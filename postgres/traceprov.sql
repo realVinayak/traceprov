@@ -32,6 +32,7 @@ DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr_dup_aware(int, int, BIGINT);
 DROP FUNCTION   IF EXISTS reinit_state(INTEGER); -- This is here for historical reasons.
 DROP FUNCTION   IF EXISTS reinit_state();
 DROP FUNCTION   IF EXISTS mark_later(bigint);
+DROP FUNCTION   IF EXISTS mark_later_value(bigint);
 DROP FUNCTION   IF EXISTS test_local_setup(INTEGER, INTEGER);
 DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, bigint);
 DROP FUNCTION   IF EXISTS traceprov_agg_key_sfunc(state internal, int, BIGINT);
@@ -97,6 +98,7 @@ CREATE FUNCTION traceprov_agg_key_deserialize(bytea, internal) RETURNS internal 
 CREATE FUNCTION traceprov_agg_key_combine(internal, internal) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_key_combine' LANGUAGE C;
 
 CREATE FUNCTION mark_later(bigint) RETURNS INTEGER AS '$libdir/__FILE__', 'mark_later' LANGUAGE C PARALLEL SAFE;
+CREATE FUNCTION mark_later_value(bigint, bigint) RETURNS INTEGER AS '$libdir/__FILE__', 'mark_later_value' LANGUAGE C PARALLEL SAFE;
 CREATE FUNCTION traceprov_agg_key_offset_finalfunc(state internal) RETURNS bigint AS '$libdir/__FILE__', 'traceprov_agg_key_offset_finalfunc' LANGUAGE C;
 
 CREATE AGGREGATE traceprov_agg_key(int, BIGINT) (

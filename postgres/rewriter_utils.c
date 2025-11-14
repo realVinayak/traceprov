@@ -149,3 +149,15 @@ List* traceProvAppendTargets(List *traceProvTargets, List *targetList){
     }
     return targetList;
 }
+
+const TraceProvTarget *traceProvFindMatchingSetPointer(List *traceProvTargets, int setNumber){
+    ListCell *traceProvTargetCursor;
+    foreach(traceProvTargetCursor, traceProvTargets){
+        const TraceProvTarget *tpTarget = ((TraceProvTarget *)lfirst(traceProvTargetCursor));
+        if (tpTarget->isSetPointer == true && tpTarget->setNumber == setNumber){
+            return tpTarget;
+        }
+    }
+    elog(ERROR, "No matching candidate found for %d", setNumber);
+    return NULL;
+}

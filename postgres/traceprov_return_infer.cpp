@@ -736,7 +736,6 @@ extern "C" {
       return (Datum) 0;
     }
 
-
     // Performs inference via the graph.
     PG_FUNCTION_INFO_V1(traceprov_json_graph);
 

@@ -4,6 +4,7 @@
 #include "c.h"
 #include "nodes/pg_list.h"
 #include "nodes/parsenodes.h"
+#include "traceprov_parse_context.h"
 
 void traceProvAssertNoResJunk(const List *);
 void traceProvAssertIsSubquery(const RangeTblEntry *);
@@ -18,5 +19,7 @@ List *traceProvDupOid(Oid, int);
 
 List *traceProvFlatten(List *);
 List* traceProvAppendTargets(List *, List *);
+
+const TraceProvTarget *traceProvFindMatchingSetPointer(List *, int);
 
 #endif
