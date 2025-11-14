@@ -31,6 +31,7 @@ PG_MODULE_MAGIC;
 // The function name to use, for aggregation over simple primary keys.
 #define TRACEPROV_AGG_FUNC_NAME "traceprov_agg_key_parallel"
 #define TRACEPROV_MARK_LATER_FUNC_NAME "mark_later"
+#define TRACEPROV_MARK_LATER_VALUE_FUNC_NAME "mark_later_value"
 // in cases where aggregate is nested, we need to get the offsets directly.
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 
@@ -98,6 +99,18 @@ void _PG_init(){
 
 void _PG_fini(){
     planner_hook = NULL;
+}
+
+static Const *makeInt8Const(int64 value){
+    return makeConst(
+        INT8OID,
+        -1,
+        InvalidOid,
+        sizeof(int64),
+        Int64GetDatum(value),
+        false,
+        true
+    );
 }
 
 PlannedStmt *traceprov_rewriter_driver(
@@ -760,15 +773,7 @@ List *adjustUnionSetOps(
         }
         const int setNumber = (tpParseGetUniqueNumber(context));
         tpAddSetPaddingItem(context, setNumber, padding);
-        Expr *subqNumberExpr = (Expr*)makeConst(
-            INT8OID,
-            -1,
-            InvalidOid,
-            sizeof(int64),
-            Int64GetDatum(setNumber),
-            false,
-            true
-        );
+        Expr *subqNumberExpr = (Expr*)makeInt8Const(setNumber);
         TargetEntry *subqNumberTarget = makeTargetEntry(
             subqNumberExpr,
             0,
@@ -1141,7 +1146,12 @@ Query *addNestedQuery(
         const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor));
         if (currentTarget->isPointer){
             // Varno will be 1, because it is the only table.
-            pointerTargets = lappend(pointerTargets, makeVarFromTargetEntry(1, currentTarget->targetEntry));
+            List *pointerArgs = list_make1(makeVarFromTargetEntry(1, currentTarget->targetEntry));
+            if (currentTarget->setNumber > 0){
+                // In the target list, need to, now, find the set pointer.
+                pointerArgs = lappend(pointerArgs, (makeVarFromTargetEntry(1, traceProvFindMatchingSetPointer(targets, currentTarget->setNumber)->targetEntry)));
+            }
+            pointerTargets = lappend(pointerTargets, pointerArgs);
         }
         if (currentTarget->graph){
             traceprovPrintDependency(currentTarget->graph);
@@ -1204,7 +1214,11 @@ Query *addNestedQuery(
     ListCell *pointerTarget;
     foreach(pointerTarget, pointerTargets){
         int i = 0;
-        Node *mark_later_func = getFunctionCallNode(TRACEPROV_MARK_LATER_FUNC_NAME, list_make1(lfirst(pointerTarget)));
+        List *pointerFuncArgs = lfirst(pointerTarget);
+        Node *mark_later_func = getFunctionCallNode(
+            list_length(pointerFuncArgs) == 1 ? TRACEPROV_MARK_LATER_FUNC_NAME : TRACEPROV_MARK_LATER_VALUE_FUNC_NAME,
+            pointerFuncArgs
+        );
         newTargetList = lappend(newTargetList, makeTargetEntry(
             (Expr *)mark_later_func,
             list_length(newTargetList) + 1,

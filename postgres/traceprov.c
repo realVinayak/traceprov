@@ -758,6 +758,12 @@ PG_FUNCTION_INFO_V1(mark_later);
 
 Datum mark_later(PG_FUNCTION_ARGS){
 
+    // Can happen when, say, it was a filler column for the union.
+    // Or, for example, a left join.
+    if (PG_ARGISNULL(0)){
+        PG_RETURN_INT64(0);
+    }
+
     // We'll now simply set the value of this row to be 
     struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
     // if (row->in_result){
@@ -765,6 +771,17 @@ Datum mark_later(PG_FUNCTION_ARGS){
     // }
     row->in_result = 1;
     PG_RETURN_INT64(1);
+}
+
+PG_FUNCTION_INFO_V1(mark_later_value);
+
+Datum mark_later_value(PG_FUNCTION_ARGS){
+    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)){
+        PG_RETURN_INT64(0);
+    }
+    struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
+    row->in_result = PG_GETARG_INT64(1);
+    PG_RETURN_INT64(PG_GETARG_INT64(1));
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_sfunc);
