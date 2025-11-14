@@ -1136,6 +1136,7 @@ Query *addNestedQuery(
 ){
     List *pointerTargets = NIL;
     ListCell *targetEntryCursor;
+    List *graphs = NIL;
     foreach(targetEntryCursor, targets){
         const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor));
         if (currentTarget->isPointer){
@@ -1144,10 +1145,11 @@ Query *addNestedQuery(
         }
         if (currentTarget->graph){
             traceprovPrintDependency(currentTarget->graph);
-            serializeTraceProvDepedency(currentTarget->graph);
-            deserializeTraceProvDependency();
+            graphs = lappend(graphs, currentTarget->graph);
         }
     }
+    serializeTraceProvDepedency(graphs);
+    deserializeTraceProvDependency();
     if (list_length(pointerTargets) == 0){
         // No pointers, no need to call the mark function.
         // Return the original query in this case.
