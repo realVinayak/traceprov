@@ -736,5 +736,14 @@ extern "C" {
       return (Datum) 0;
     }
 
+
+    // Performs inference via the graph.
+    PG_FUNCTION_INFO_V1(traceprov_json_graph);
+
+    Datum traceprov_json_graph(PG_FUNCTION_ARGS){
+        const TraceProvDependency *graph =  deserializeTraceProvDependency();
+        elog(INFO, "%s", traceProvDependencyToJson(graph));        
+        PG_RETURN_INT64(0);
+    }
 };
 
