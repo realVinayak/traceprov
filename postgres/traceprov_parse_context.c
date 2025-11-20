@@ -38,25 +38,11 @@ void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padd
     context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, mapItem);
 }
 
-void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvEntry *entry){
-    // Try, first, finding the set in the current map.
-    ListCell *mapCursor;
-    TraceProvSetGraphMapItem *foundSetGraphMapItem = NULL;
-    foreach(mapCursor, context->properties->setGraphMap){
-        TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem*)lfirst(mapCursor);
-        if (setGraphMapItem->setNumber == setNumber){
-            foundSetGraphMapItem = setGraphMapItem;
-            break;
-        }
-    }
-    // Didn't find the set graph map item.
-    if (foundSetGraphMapItem == NULL){
-        foundSetGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
-        foundSetGraphMapItem->graphs = NIL;
-        foundSetGraphMapItem->setNumber = setNumber;
-        context->properties->setGraphMap = lappend(context->properties->setGraphMap, foundSetGraphMapItem);
-    }
-    foundSetGraphMapItem->graphs = lappend(foundSetGraphMapItem->graphs, entry);
+void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvDependency*graph){
+    TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
+    setGraphMapItem->graph = graph;
+    setGraphMapItem->setNumber = setNumber;
+    context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
 }
 
 TraceProvTarget *makeTraceProvTarget(
@@ -199,8 +185,7 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
         }
         needsSep = true;
         const TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem *)lfirst(setGraphMapItemCursor);
-        const TraceProvDependency *wrapperDependency = makeTraceProvDependency(0, NIL, setGraphMapItem->graphs);
-        appendStringInfo(&buf, "{\"setNumber\": %d, \"graph\": %s}", setGraphMapItem->setNumber, traceProvDependencyToJson(wrapperDependency));
+        appendStringInfo(&buf, "{\"setNumber\": %d, \"graph\": %s}", setGraphMapItem->setNumber, traceProvDependencyToJson(setGraphMapItem->graph));
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, "}");
@@ -399,7 +384,7 @@ void _serializeContext(const TraceProvParseContext* context, FILE* file){
         TraceProvSetGraphMapItem *graphMapItem = (TraceProvSetGraphMapItem *)lfirst(graphMapItemCursor);
         // To make serialization easier, it gets wrapped in one graph.
         // During deserialization, it gets unwrapped.
-        const TraceProvDependency *wrapperDependency = makeTraceProvDependency(0, NIL, graphMapItem->graphs);
+        const TraceProvDependency *wrapperDependency = graphMapItem->graph;
         failSafeWrite(file, graphMapItem, sizeof(TraceProvSetGraphMapItem));
         _serializeTraceProvDepedency(wrapperDependency, file);
     }
@@ -473,7 +458,7 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
         TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
         failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
         const TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
-        setGraphMapItem->graphs = wrapper->entries;
+        setGraphMapItem->graph = wrapper;
         context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
     }
     return context;

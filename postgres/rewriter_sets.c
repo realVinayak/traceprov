@@ -116,6 +116,7 @@ List *adjustUnionSetOps(
         }
         ListCell *targetCursor;
         List *extraTargetsTyped = NIL;
+        List *traceprovEntries = NIL, *childGraphs = NIL;
         foreach(targetCursor, extraTargetsForRte){
             // Here, also need to cast all into INT8s.
             TraceProvTarget *tpTarget = (TraceProvTarget *)(lfirst(targetCursor));
@@ -148,10 +149,14 @@ List *adjustUnionSetOps(
                 extraTargetsTyped,
                 typedTpTarget
             );
-
-            tpAddSetGraphItem(context, setNumber, tpResolveEntry(typedTpTarget, NULL, NULL));
+            traceprovEntries = lappend(traceprovEntries, tpResolveEntry(
+                tpTarget,
+                &childGraphs,
+                NULL
+            ));
         }
         newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
+        tpAddSetGraphItem(context, setNumber, makeTraceProvDependency(0, childGraphs, traceprovEntries));
     }
 
     List *setOpFlattened = traceProvFindUsedRefs((Node*)root, traceProvInclusiveNavigator);

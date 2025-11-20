@@ -62,8 +62,8 @@ typedef struct TraceProvSetPaddingMapItem {
 // the graph. Here, it'll be list of graphs, because a set could be constructed via using multiple graphs.
 typedef struct TraceProvSetGraphMapItem {
     int setNumber;
-    // List of TraceProvEntry.
-    List* graphs;
+    // Each set has an associated graph with it.
+    TraceProvDependency *graph;
 } TraceProvSetGraphMapItem;
 
 // Some properties get stored directly in the context.
@@ -89,7 +89,7 @@ TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *);
 char *tpParseGetUniqueAlias(TraceProvParseContext *);
 int tpParseGetUniqueNumber(TraceProvParseContext *);
 void tpAddSetPaddingItem(TraceProvParseContext *, int, int);
-void tpAddSetGraphItem(TraceProvParseContext *, int, TraceProvEntry *);
+void tpAddSetGraphItem(TraceProvParseContext *, int, TraceProvDependency *);
 
 TraceProvEntry *makeTraceProvEntry();
 
