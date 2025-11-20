@@ -9,16 +9,19 @@ def traceprov_setup(
 ):
     assert suff is not None
 
-    response = os.system(
-        f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
-    )
-    if response != 0:
-        raise Exception("Make failed!")
+    skip_build = os.getenv("tp_skip_build", False)
+    if not skip_build:
+        response = os.system(
+            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
+        )
+        if response != 0:
+            raise Exception("Make failed!")
+    else:
+        print("skipping tp build from scratch")
     traceprov_sql = Path(traceprov_postgres_root) / f"traceprov_{suff}.auto.sql"
     traceprov_infer_set = (
         Path(traceprov_postgres_root) / f"traceprov_return_infer_{suff}.auto.sql"
     )
-    traceprov_ptr_type = Path(traceprov_postgres_root) / f"traceprov_"
     assert traceprov_sql.exists(), f"{traceprov_sql.as_posix()} should exist!"
     assert (
         traceprov_infer_set.exists()
@@ -52,4 +55,19 @@ def traceprov_setup(
         traceprov_path=traceprov_obj,
         traceprov_infer_set_path=traceprv_infer_set_obj,
         traceprov_rewriter_path=rewriter_obj,
+    )
+
+
+# add the special traceprov ticker.
+def traceprov_make_query(query: str):
+    return f"/*(traceprov)*/ {query}"
+
+
+def traceprov_reinit_state(params: ConnectionParams):
+    flat_options = params.get_flat()
+    assert (
+        os.system(
+            f'echo "select reinit_state();" | PGPASSWORD={params.password} psql {flat_options}'
+        )
+        == 0
     )
