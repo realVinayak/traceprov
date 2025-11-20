@@ -25,15 +25,12 @@
 #include "parser/parse_oper.h"
 #include "nodes/nodeFuncs.h"
 #include "rewriter_utils.h"
+#include "parser/parse_type.h"
+#include "parser/analyze.h"
+
+#include "rewriter_sets.h"
 
 PG_MODULE_MAGIC;
-
-// The function name to use, for aggregation over simple primary keys.
-#define TRACEPROV_AGG_FUNC_NAME "traceprov_agg_key_parallel"
-#define TRACEPROV_MARK_LATER_FUNC_NAME "mark_later"
-#define TRACEPROV_MARK_LATER_VALUE_FUNC_NAME "mark_later_value"
-// in cases where aggregate is nested, we need to get the offsets directly.
-#define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 
 PlannedStmt *traceprov_rewriter_driver(
     Query *, 
@@ -77,13 +74,6 @@ static void rteRewrite(
  * Rewrites a query that has aggregation.
  * The input target entries become the entries that we log.
 */
-static void traceprovAggregateRewrite(
-    const List *, List **, TraceProvParseContext *, bool
-);
-
-static Query *cloneQueryForTP(const Query *);
-
-static Node *getFunctionCallNode(const char *, List *);
 
 static Query *addNestedQuery(
     Query *, 
@@ -99,18 +89,6 @@ void _PG_init(){
 
 void _PG_fini(){
     planner_hook = NULL;
-}
-
-static Const *makeInt8Const(int64 value){
-    return makeConst(
-        INT8OID,
-        -1,
-        InvalidOid,
-        sizeof(int64),
-        Int64GetDatum(value),
-        false,
-        true
-    );
 }
 
 PlannedStmt *traceprov_rewriter_driver(
@@ -148,31 +126,13 @@ PlannedStmt *traceprov_rewriter(
     foreach(teCursor, topLevelTargets){
         const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(teCursor));
         if (currentTarget->graph){
-            traceprovPrintDependency(currentTarget->graph);
+            traceprovPrintDependency(currentTarget->graph, &context);
         }
     }
     Query *traceprovTopQuery = addNestedQuery(traceprovParse, topLevelTargets, &context);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
     return standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
-}
-
-static RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContext *context){
-    RangeTblEntry *tblEntry = makeNode(RangeTblEntry);
-    char *aliasName = tpParseGetUniqueAlias(context);
-    tblEntry->alias = makeAlias(aliasName, NIL);
-    List *colNames = NIL;
-    ListCell *targetEntryCursor = NULL;
-    foreach(targetEntryCursor, subQuery->targetList){
-        TargetEntry *te = (TargetEntry *)lfirst(targetEntryCursor);
-        colNames = lappend(colNames, makeString(pstrdup(te->resname)));
-    }
-    tblEntry->eref = makeAlias(pstrdup(aliasName), colNames);
-    // Doesn't seem like this will have any side-effects (at this stage at least)
-    tblEntry->inFromCl = false;
-    tblEntry->rtekind = RTE_SUBQUERY;
-    tblEntry->subquery = subQuery;
-    return tblEntry;
 }
 
 List *addSubqueryToArgs(Query *subquery, TraceProvParseContext *context, const List *rootRTEList, Node **destination){
@@ -290,7 +250,7 @@ Query *traceprov_breakup_sets(
 // It is possible that rtes that are no longer needed appear in the query.
 // To check for that, recursively, go through the set operation tree, find refs that appear, and only choose those refs.
 void traceprov_fixup_references(Query* query){
-    List *usedReferences = traceProvFindUsedRefs(query->setOperations, false);
+    List *usedReferences = traceProvFindUsedRefs(query->setOperations, traceProvLeafNavigator);
     List *newRTEList = NIL;
     ListCell *usedReferenceCursor = NULL;
 
@@ -329,277 +289,6 @@ static void union_to_union_all(Node *node){
     union_to_union_all(stmt->rarg);
 }
 
-Node *
-createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
-{
-	Form_pg_operator operator;
-	DistinctExpr *equal;
-	Expr *notExpr;
-    HeapTuple tup = NULL;
-	Operator operTuple;
-    Oid eqOpOid;
-
-    get_sort_group_operators(leftChild->vartype, false, true, false, NULL, &eqOpOid, NULL, NULL);
-
-    if (OidIsValid(eqOpOid))
-    {
-        tup = SearchSysCache1(OPEROID, ObjectIdGetDatum(eqOpOid));
-        if (HeapTupleIsValid(tup)){
-            operTuple = (Operator)tup;
-        }else{
-            elog(ERROR, "Heap tuple not valid!");
-        }
-    }
-
-	operator = (Form_pg_operator) GETSTRUCT(operTuple);
-
-	equal = makeNode (DistinctExpr);
-	equal->args = list_make2(leftChild, rightChild);
-	equal->opfuncid = operator->oprcode;
-	equal->opno = eqOpOid;
-	equal->opresulttype = operator->oprresult;
-	equal->opretset = false;
-
-	ReleaseSysCache (tup);
-
-	notExpr = makeBoolExpr(NOT_EXPR, list_make1(equal), -1);
-
-	return (Node *) notExpr;
-}
-
-/*
- * Creates a logical AND expression for a list of expressions.
- */
-
-Node *
-createAndFromList (List *exprs)
-{
-	ListCell *lc;
-	Node *node;
-	Node *result;
-
-	if (list_length(exprs) == 0)
-		return NULL;
-	if (list_length(exprs) == 1)
-		return (Node *) linitial(exprs);
-
-	result = (Node *) linitial(exprs);
-
-    for_each_from(lc, exprs, 1){
-		node = (Node *) lfirst(lc);
-		result = (Node *) makeBoolExpr(AND_EXPR, list_make2(node, result), -1);
-    }
-
-	return result;
-}
-
-/*
- * Creates an equality condition expression for two lists of attributes.
- * E.g. A = (a,b,c) and B = (d,e,f) then the following condition would be created:
- * a = d AND b = e AND c = f. If neq is true the whole condition is negated.
- */
-
-static Node *
-createEqualityCondition (List* leftAttrs, List* rightAttrs, Index leftIndex, Index rightIndex, bool neq)
-{
-	ListCell *leftLc;
-	ListCell *rightLc;
-	TargetEntry *curLeft;
-	TargetEntry *curRight;
-	OpExpr *equal;
-	List *equalConds;
-	Var *leftOp;
-	Var *rightOp;
-	Node *curRoot;
-
-	equalConds = NIL;
-
-	Assert (list_length(leftAttrs) == list_length(rightAttrs));
-
-	/* create List of OpExpr nodes for equality conditions */
-	forboth (leftLc, leftAttrs, rightLc, rightAttrs)
-	{
-		curLeft = (TargetEntry *) lfirst(leftLc);
-		curRight = (TargetEntry *) lfirst(rightLc);
-
-		/* create Var for left operand of equality expr */
-		leftOp = makeVar (leftIndex + 1,
-				curLeft->resno,
-				exprType ((Node *) curLeft->expr),
-				exprTypmod ((Node *) curLeft->expr),
-                exprCollation((Node *) curLeft->expr),
-				0);
-
-		/* create Var for right operand of equality expr */
-		rightOp = makeVar (rightIndex + 1,
-				curRight->resno,
-				exprType ((Node *) curRight->expr),
-				exprTypmod ((Node *) curRight->expr),
-                exprCollation ((Node *) curRight->expr),
-				0);
-
-		/* get equality operator for the var's type */
-		equal = (OpExpr *) createNotDistinctConditionForVars (leftOp, rightOp);
-
-		/* append current equality condition to equalConds List */
-		equalConds = lappend (equalConds, equal);
-	}
-
-	curRoot = (Node *) createAndFromList(equalConds);
-
-	/* negation required */
-	if (neq)
-		curRoot = (Node *) makeBoolExpr(NOT_EXPR, list_make1(curRoot), -1);
-
-	return curRoot;
-}
-
-static List *getMatchableAttrs(List *rawList, List *ignoreList, int index){
-    if (ignoreList == NIL) return rawList;
-    if (index >= list_length(ignoreList)){
-        elog(ERROR, "given index is out of bounds!");
-    }
-    List *matchables = NIL;
-    List *ignoreForRTE =  (List*)list_nth(ignoreList, index);
-    ListCell *outerCursor;
-    foreach(outerCursor, rawList){
-        TargetEntry *te = (TargetEntry *)lfirst(outerCursor);
-        ListCell *innerCursor = NULL;
-        bool found = false;
-        foreach(innerCursor, ignoreForRTE){
-            TargetEntry *toIgnore = ((TraceProvTarget *)lfirst(innerCursor))->targetEntry;
-            found = found || (toIgnore->resno == te->resno);
-        }
-        if (!found){
-            matchables = lappend(matchables, te);
-        }
-    }
-    return matchables;
-}
-
-Query *handleIntersect(Query *base, List *ignoreList){
-    // Here, need to replace the intersect with a join.
-    // For each table pair present, need to construct the join, and the join tree.
-    // Basically, all the intersects within this block are consumed into a join.
-    // It doesn't matter what join order is used (optimizer might reorder it anyways)
-    // Simplest order is the one in RTElist, so it is directly used.
-    // However, need to ignore the traceprov attributes in the join condition.
-    // So, the ignoreList, if given, is consulted. If the table index AND column idx is same,
-    // column is ignored from predicates.
-    const List *usedReferences = traceProvFindUsedRefs(base->setOperations, false);
-    if (list_length(usedReferences) != list_length(base->rtable)){
-        elog(ERROR, "Expected the used references to be of the same size as setOperations");
-    }
-    if (list_length(usedReferences) < 2){
-        elog(ERROR, "Expected at least 2 elements for the join!");
-    }
-    RangeTblEntry *firstRTE = (RangeTblEntry*) lfirst(list_head(base->rtable));
-    if (firstRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
-    firstRTE->inFromCl = true;
-    List *addedJoins = NIL;
-    ListCell *rteCursor;
-    RangeTblEntry *lastJoinEntry = NULL;
-    JoinExpr *joinExpr = NULL;
-
-    // Start from the next table.
-    int i = 1;
-    for_each_from(rteCursor, base->rtable, 1){
-        i++;
-        RangeTblEntry *nextRTE = (RangeTblEntry *)lfirst(rteCursor);
-        if (nextRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
-        nextRTE->inFromCl = true;
-        List *colNames = NIL;
-        ListCell *targetVarCursor;
-        if (lastJoinEntry == NULL){
-            lastJoinEntry = makeNode(RangeTblEntry);
-            lastJoinEntry->joinleftcols = NIL;
-            lastJoinEntry->joinrightcols = NIL;
-            // TODO: This should probably be changed when handling traceprov attrs.
-            foreach(targetVarCursor, firstRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
-                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                lastJoinEntry->joinleftcols = lappend_int(lastJoinEntry->joinleftcols, foreach_current_index(targetVarCursor) + 1);
-            }
-
-            targetVarCursor = NULL;
-            foreach(targetVarCursor, nextRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
-                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                lastJoinEntry->joinrightcols = lappend_int(lastJoinEntry->joinrightcols, foreach_current_index(targetVarCursor) + 1);
-            }
-            lastJoinEntry->eref = makeAlias(pstrdup("unnamed join"), colNames);
-            lastJoinEntry->rtekind = RTE_JOIN;
-            joinExpr = makeNode(JoinExpr);
-            RangeTblRef *l_rtr = makeNode(RangeTblRef);
-            RangeTblRef *r_rtr = makeNode(RangeTblRef);
-            l_rtr->rtindex = 1;
-            r_rtr->rtindex = 2;
-            joinExpr->larg = (Node*)l_rtr;
-            joinExpr->rarg = (Node*)r_rtr;
-            joinExpr->isNatural = false;
-            joinExpr->quals = createEqualityCondition(
-                getMatchableAttrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                getMatchableAttrs(nextRTE->subquery->targetList, ignoreList, 1), 
-                1, 
-                2, 
-                false
-            );
-        }else{
-            RangeTblEntry *clonedRTE = copyObject(lastJoinEntry);
-            const int originalLength = list_length(clonedRTE->joinaliasvars);
-            colNames = clonedRTE->eref->colnames;
-            clonedRTE->joinrightcols = NIL;
-            clonedRTE->joinleftcols = NIL;
-            foreach(targetVarCursor, nextRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
-                clonedRTE->joinaliasvars = lappend(clonedRTE->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                clonedRTE->joinrightcols = lappend_int(clonedRTE->joinrightcols, foreach_current_index(targetVarCursor) + 1);
-            }
-            for (int i = 0; i < originalLength; i++){
-                clonedRTE->joinleftcols = lappend_int(clonedRTE->joinleftcols, i+1);
-            }
-            lastJoinEntry = clonedRTE;
-            JoinExpr *nextJoinExpr = makeNode(JoinExpr);
-            nextJoinExpr->larg = (Node*)joinExpr;
-            RangeTblRef *r_rtr = makeNode(RangeTblRef);
-            r_rtr->rtindex = i;
-            nextJoinExpr->rarg = (Node*)r_rtr;
-            nextJoinExpr->isNatural = false;
-            nextJoinExpr->quals = createEqualityCondition(
-                getMatchableAttrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                getMatchableAttrs(nextRTE->subquery->targetList, ignoreList, i-1),
-                1, 
-                i, 
-                false
-            );
-            joinExpr = nextJoinExpr;
-        }
-        addedJoins = lappend(addedJoins, lastJoinEntry);
-        joinExpr->rtindex = list_length(base->rtable) + list_length(addedJoins);
-    }
-    FromExpr *fromExpr = makeFromExpr(list_make1(joinExpr), NULL);
-    base->rtable = list_concat_copy(base->rtable, addedJoins);
-    base->jointree = fromExpr;
-    return base;
-}
-
-
-void zip_target_sortgroupclause(List *group_clauses, List *target_list){
-    int i = 0;
-    ListCell *group_clause_cursor;
-    ListCell *target_list_cursor;
-    forboth(group_clause_cursor, group_clauses, target_list_cursor, target_list){
-        i++;
-        SortGroupClause *group_clause = (SortGroupClause *)lfirst(group_clause_cursor);
-        TargetEntry *target_entry = (TargetEntry *)lfirst(target_list_cursor);
-        group_clause->tleSortGroupRef = i;
-        target_entry->ressortgroupref = i; 
-    }
-}
-
 Query *traceprov_rewrite_sets_to_joins(
     Query *base, 
     TraceProvParseContext *context,
@@ -618,10 +307,10 @@ Query *traceprov_rewrite_sets_to_joins(
     // Nothing to do.
     if (base->setOperations == NULL) return base;
     if (!IsA(base->setOperations, SetOperationStmt)) elog(ERROR, "Expected top level set operation to be SetOperationStmt");
-    
+    SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
+    if (stmt->op != SETOP_UNION && stmt->op != SETOP_INTERSECT) return base;
     List *flattenedAddedTargets = traceProvFlatten(ignoreList);
 
-    SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
     bool wasAll = stmt->all;
 
     Query *modified = NULL;
@@ -630,23 +319,7 @@ Query *traceprov_rewrite_sets_to_joins(
         if (!wasAll){
             // Here, modified needs to, actually, needs to refer to a subquery.
             // For intersect, this is not needed.
-            modified = cloneQueryForTP(base);
-            ListCell *targetEntryCursor;
-            foreach(targetEntryCursor, base->targetList){
-                TargetEntry *baseTargetEntry = (TargetEntry *)lfirst(targetEntryCursor);
-                modified->targetList = lappend(modified->targetList, makeTargetEntry(
-                    (Expr*)makeVarFromTargetEntry(1, baseTargetEntry),
-                    baseTargetEntry->resno,
-                    (baseTargetEntry->resname == NULL ? NULL : pstrdup(baseTargetEntry->resname)),
-                    false
-                ));
-            }
-            RangeTblEntry *rte = rangeTableEntryFromSubquery(base, context);
-            rte->inFromCl = true;
-            modified->rtable = list_make1(rte);
-            RangeTblRef *rtr = makeNode(RangeTblRef);
-            rtr->rtindex = 1;
-            modified->jointree = makeFromExpr(list_make1(rtr), NULL);
+            modified = traceProvMakeNestedQuery(base, context);
         }else{
             modified = base;
         }
@@ -657,17 +330,6 @@ Query *traceprov_rewrite_sets_to_joins(
     }
 
     if (!wasAll){
-        elog(INFO, "Trying to make a distinct in setop!");
-        // Need to add a distinct operation.
-        // Here, actually, group-by is used (rather than distinct), because that's what traceprov will use.
-        if (list_length(stmt->groupClauses) == 0){
-            elog(ERROR, "Expected length of group clauses to defined, when not all!");
-        }
-        if (list_length(modified->groupClause) != 0){
-            elog(INFO, "Expected no aggregates already, in the modified group clause");
-        }
-        modified->groupClause = list_copy_deep(stmt->groupClauses);
-        zip_target_sortgroupclause(modified->groupClause, modified->targetList);
         List *newTargetList = NIL;
         for (int i = 0; i < list_length(modified->targetList); i++){
             if (i < (list_length(modified->targetList) - list_length(flattenedAddedTargets))){
@@ -675,25 +337,8 @@ Query *traceprov_rewrite_sets_to_joins(
                 continue;
             }
         }
-        modified->targetList = newTargetList;
-        List *aggregated = NIL;
-        traceprovAggregateRewrite(
-            flattenedAddedTargets,
-            &aggregated,
-            context,
-            aggregatedInParent 
-        );
-        modified->hasAggs = true;
+        List *aggregated = traceProvAggregateOnSet(stmt, modified, context, aggregatedInParent, newTargetList, flattenedAddedTargets);
         if (createdTargets) *createdTargets = aggregated;
-        modified->targetList = traceProvAppendTargets(aggregated, modified->targetList);
-    }
-
-    ListCell *rteCursor = NULL;
-    foreach(rteCursor, modified->rtable){
-        RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
-        if (rte->rtekind == RTE_SUBQUERY){
-            rte->subquery = traceprov_rewrite_sets_to_joins(rte->subquery, context, ignoreList, NULL, modified->hasAggs);
-        }
     }
     return modified;
 }
@@ -728,153 +373,6 @@ PlannedStmt *traceprov_set_test(
     return standard_planner(newQuery, query_string, cursorOptions, boundParams);
 }
 
-List *adjustUnionSetOps(
-    SetOperationStmt *root, 
-    List *extraTargets,
-    List *queryRteList,
-    TraceProvParseContext *context
-){
-    if (root->op != SETOP_UNION){
-        elog(ERROR, "Expected op to be of union!");
-    }
-    traceProvAssertEqualLength(list_make2(extraTargets, queryRteList));
-
-    // Get the max number of extra targets that were added.
-    unsigned int maxTargetListLength = 0;
-    ListCell *rteCursor = NULL;
-    foreach(rteCursor, queryRteList){
-        RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
-        traceProvAssertIsSubquery(rte);
-        Query *subquery = rte->subquery;
-        traceProvAssertNoResJunk(subquery->targetList);
-        maxTargetListLength = Max(maxTargetListLength, list_length(subquery->targetList));
-    }
-
-    rteCursor = NULL;
-    ListCell *extraTargetCursor;
-    List *newExtraTargets = NIL;
-
-    forboth(rteCursor, queryRteList, extraTargetCursor, extraTargets){
-        RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
-        Query *subquery = rte->subquery;
-        const unsigned int padding = (maxTargetListLength - list_length(subquery->targetList));
-        List *extraTargetsForRte = (List *)lfirst(extraTargetCursor);
-        List *newlyCreatedTargets = NIL;
-        if (padding > 0){
-            elog(INFO, "Needed to perform a padding!");
-            // In this case, need to add padding NULLs.
-            List *nullList = traceProvGetNullList(padding, INT8OID, -1, InvalidOid);
-            ListCell *nullListCursor;
-            foreach(nullListCursor, nullList){
-                Expr *nullExpr = (Expr *)lfirst(nullListCursor);
-                TargetEntry *newTe = makeTargetEntry(nullExpr, 0, pstrdup("tp_null"), false);
-                newlyCreatedTargets = lappend(newlyCreatedTargets, newTe);
-            }
-        }
-        const int setNumber = (tpParseGetUniqueNumber(context));
-        tpAddSetPaddingItem(context, setNumber, padding);
-        Expr *subqNumberExpr = (Expr*)makeInt8Const(setNumber);
-        TargetEntry *subqNumberTarget = makeTargetEntry(
-            subqNumberExpr,
-            0,
-            pstrdup("tp_setop_nummber"),
-            false
-        );
-        newlyCreatedTargets = lappend(newlyCreatedTargets, subqNumberTarget);
-        ListCell *newlyCreatedTargetCursor;
-        foreach(newlyCreatedTargetCursor, newlyCreatedTargets){
-            TargetEntry *newTe = (TargetEntry *)lfirst(newlyCreatedTargetCursor);
-            subquery->targetList = traceProvAppendAtResJunk(subquery->targetList, newTe);
-            rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(newTe->resname)));
-            const Var *newVar = makeVarFromTargetEntry(foreach_current_index(rteCursor) + 1, newTe);
-            TargetEntry *targetInParent = makeTargetEntry(
-                (Expr *)newVar,
-                newTe->resno,
-                newTe->resname,
-                false
-            );
-            bool isSetPointer = foreach_current_index(newlyCreatedTargetCursor) == list_length(newlyCreatedTargets) - 1;
-            extraTargetsForRte = lappend(
-                extraTargetsForRte,
-                makeTraceProvTarget(
-                    false,
-                    targetInParent,
-                    NULL,
-                    setNumber,
-                    isSetPointer
-                )
-            );
-        }
-        ListCell *targetCursor;
-        List *extraTargetsTyped = NIL;
-        foreach(targetCursor, extraTargetsForRte){
-            // Here, also need to cast all into INT8s.
-            TraceProvTarget *tpTarget = (TraceProvTarget *)(lfirst(targetCursor));
-            TargetEntry *copiedTarget = copyObject(tpTarget->targetEntry);
-            Expr *expr = copiedTarget->expr;
-            if (IsA(expr, Const)){
-                const Const *constExpr = (Const*)expr;
-                if (constExpr->consttype != INT8OID || constExpr->constcollid != InvalidOid || constExpr->consttypmod != -1){
-                    elog(ERROR, "Expected the const's types to be already aligned.");
-                }
-            } else if(IsA(expr, Var)){
-                Var *varExpr = (Var *)expr;
-                if (varExpr->vartype != INT8OID){
-                    varExpr->vartype = INT8OID;
-                    varExpr->vartypmod = -1;
-                    varExpr->varcollid = InvalidOid;
-                }
-            } else {
-                elog(ERROR, "Got unexpected expr (the tp should always be var or const!)");
-            }
-            extraTargetsTyped = lappend(
-                extraTargetsTyped,
-                makeTraceProvTarget(
-                    tpTarget->isPointer,
-                    copiedTarget,
-                    tpTarget->graph,
-                    setNumber,
-                    tpTarget->isSetPointer
-            ));
-        }
-        newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
-    }
-
-    List *setOpFlattened = traceProvFindUsedRefs((Node*)root, true);
-    ListCell *opCursor;
-    const unsigned int expectedLength = maxTargetListLength + 1;
-    foreach(opCursor, setOpFlattened){
-        Node *node = (Node*)lfirst(opCursor);
-        if (IsA(node, SetOperationStmt)){
-            SetOperationStmt *setOp = (SetOperationStmt *)node;
-            int currentLength = traceProvAssertEqualLength(
-                list_make3(
-                    setOp->colTypes,
-                    setOp->colCollations,
-                    setOp->colTypmods
-                )
-            );
-            if (currentLength < expectedLength){
-                const int padding = expectedLength - currentLength;
-                setOp->colTypes = list_concat(
-                    setOp->colTypes, 
-                    traceProvDupOid(INT8OID, padding)
-                );
-                setOp->colCollations = list_concat(
-                    setOp->colCollations,
-                    traceProvDupOid(InvalidOid, padding)
-                );
-                setOp->colTypmods = list_concat(
-                    setOp->colTypmods,
-                    traceProvDupInt(-1, padding)
-                );
-            }
-        }
-    }
-
-    // Here, also return only for the first (in the case of union, all have, now, the same schema!)
-    return list_make1(lfirst(list_head(newExtraTargets)));
-}
 
 // Recursively perform the traceprov rewrite.
 Query * performTraceProvRewrite(
@@ -883,11 +381,12 @@ Query * performTraceProvRewrite(
     TraceProvParseContext *tpContext,
     bool parentHasAggs
 ){
-
     bool purePointerInParent = parentHasAggs || parse->hasAggs;
     if (parse->hasAggs && parse->setOperations != NULL){
         elog(ERROR, "Didn't expect aggregation and set operations to both set!");
     }
+    
+    List *rteFilter = NIL;
 
     if (parse->setOperations != NULL){
         // Assert that there are no res junks, if there are set operations.
@@ -906,6 +405,18 @@ Query * performTraceProvRewrite(
             elog(ERROR, "expected top-level call to return no query!");
         }
         traceprov_fixup_references(parse);
+        if (stmt->op == SETOP_EXCEPT){
+            TraceProvUsedRefNavigator leftNavigator = {
+                .goLeft = true,
+                .goRight = false,
+                .includeInternals = false
+            };
+            List *leftMostElement = traceProvFindUsedRefs((Node*)stmt, leftNavigator);
+            // There should always be just one left-most element. assert thatn.
+            traceProvAssertEqualLength(list_make2(leftMostElement, list_make1(NULL)));
+            const RangeTblRef *leftMostRef = (RangeTblRef *)lfirst(list_head(leftMostElement));
+            rteFilter = list_make1_int(leftMostRef->rtindex);
+        }
     }
 
     List *targetsToAdd = NIL;
@@ -915,11 +426,16 @@ Query * performTraceProvRewrite(
     List *targetsPerRTE = NIL;
 
     ListCell *rteCell;
+
     foreach(rteCell, parse->rtable){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
-        // TODO: hasAggs needs to also include distinct?
-        rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, purePointerInParent);
+        if (list_length(rteFilter) == 0 || (traceProvFindIntList(rteFilter, foreach_current_index(rteCell)+1))){
+            // TODO: hasAggs needs to also include distinct?
+            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, purePointerInParent);
+        }else{
+            rteTargets = NIL;
+        }
         targetsToAdd = list_concat(targetsToAdd, rteTargets);
         targetsPerRTE = lappend(targetsPerRTE, rteTargets);
     }
@@ -955,6 +471,15 @@ Query * performTraceProvRewrite(
             );
             targetsToAdd = traceProvFlatten(unionAdjusted);
             targetsPerRTE = unionAdjusted;
+        } else if (setop->op == SETOP_EXCEPT){
+            parse = adjustExceptSetOps(
+                parse,
+                targetsPerRTE,
+                tpContext,
+                parentHasAggs,
+                &targetsToAdd
+            );
+            targetsPerRTE = NIL;
         }
     }else{
         // We don't care about the top-level returned join alias vars.
@@ -1037,101 +562,16 @@ void rteRewrite(
         List *childTargets = NIL;
         // All the next queries aren't the root.
         rte->subquery = performTraceProvRewrite(rte->subquery, &childTargets, tpContext, parentHasAggs);
-        // In this case, need to convert the targets into vars.
-        // Basically, the targets of the child layer become the vars for this layer.
-        // These vars then get converted into new targets.
+        targetsToAdd = traceProvPropagateChildTargets(childTargets, rteIndex);
         ListCell *childTargetCell;
-        foreach(childTargetCell, childTargets){
+        // Add the created child targets to the RTE colnames.
+        foreach(childTargetCell, targetsToAdd){
             TraceProvTarget *tpTarget = (TraceProvTarget *)lfirst(childTargetCell);
             TargetEntry *childTarget = tpTarget->targetEntry;
-            const Var *newVar = makeVarFromTargetEntry(rteIndex, childTarget);
-            TargetEntry *newTarget = makeTargetEntry(
-                (Expr *)newVar, childTarget->resno, childTarget->resname, false
-            );
-            newTarget->resorigcol = childTarget->resorigcol;
-            newTarget->resorigtbl = childTarget->resorigtbl;
-            // Propogate the graph (if there is one)
-            // That can happen, for example, if for example the aggregation is nested inside a subquery.
-            targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph, tpTarget->setNumber, tpTarget->isSetPointer));
             rte->eref->colnames = lappend(rte->eref->colnames, makeString(childTarget->resname));
         }
     }
-
     *addedTargets = targetsToAdd;
-}
-
-void traceprovAggregateRewrite(
-    const List *targetEntriesToLog,
-    List **pCreatedTargets,
-    TraceProvParseContext *tpContext,
-    bool parentHasAggs
-){
-    // Need to add the exprs from the targets.
-    ListCell *targetEntryCursor;
-    TraceProvLayerNumber layerNumber = tpParseGetLayerNumber(tpContext);
-    // Need to also add the layer number (the first argument)
-    Node * layerNumberConst = (Node *) makeConst(
-        INT4OID, 
-        -1, 
-        InvalidOid,
-        sizeof(int32),
-        Int32GetDatum(layerNumber), 
-        false,
-        true
-    );
-    // The layer number is the first argument.
-    List *argVars = list_make1(layerNumberConst);
-    List *entries = NIL;
-    List *childGraphs = NIL;
-    foreach(targetEntryCursor, targetEntriesToLog){
-        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(targetEntryCursor)), &childGraphs, &argVars);
-        entries = lappend(entries, tpEntry);
-    }
-
-    // Need to make the func exprn.
-    // Postgres' parser has all the logic already to determine functions,
-    // and even adding type castes when types can be implicitly converted (like int->bigint)
-    // So, the logic is just reused by making a fake parse state and then just calling Postgres'
-    // parser on that.
-    // TODO: Think about mixed cases (say, first three are pointers, next two are ints.)
-    // In this case, we might be able to reuse the pointers.
-    // TODO: Re-use pointers, rather than relogging them.
-    Node *funcCallNode = getFunctionCallNode( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
-    *pCreatedTargets = list_make1(
-        makeTraceProvTarget(
-            true,
-            makeTargetEntry(
-                (Expr*) funcCallNode,
-                0,
-                pstrdup("mapped_agg"),
-                false
-            ),
-            makeTraceProvDependency(
-                layerNumber,
-                childGraphs,
-                entries
-            ),
-            0,
-            false  
-        )
-    );
-}
-
-Node *getFunctionCallNode(const char *funcName, List *argVars){
-    ParseState *dummyParseState = make_parsestate(NULL);
-    List *funcNameList = list_make1(makeString(pstrdup(funcName)));
-    FuncCall *fc = makeFuncCall(funcNameList, argVars, COERCE_EXPLICIT_CALL, -1);
-    Node *fcNode = ParseFuncOrColumn(
-        dummyParseState,
-        funcNameList,
-        argVars,
-        NULL,
-        fc,
-        false,
-        fc->location
-    );
-    free_parsestate(dummyParseState); 
-    return fcNode;
 }
 
 Query *addNestedQuery(
@@ -1154,18 +594,18 @@ Query *addNestedQuery(
             pointerTargets = lappend(pointerTargets, pointerArgs);
         }
         if (currentTarget->graph){
-            traceprovPrintDependency(currentTarget->graph);
+            traceprovPrintDependency(currentTarget->graph, context);
             graphs = lappend(graphs, currentTarget->graph);
         }
     }
-    serializeTraceProvDepedency(graphs);
-    deserializeTraceProvDependency();
+    serializeTraceProvDepedency(graphs, context);
+    TraceProvParseContext *dupContext = NULL;
+    deserializeTraceProvDependency(&dupContext);
     if (list_length(pointerTargets) == 0){
         // No pointers, no need to call the mark function.
         // Return the original query in this case.
         return base;
     }
-
     // Make the new table.
     RangeTblEntry *newTable = makeNode(RangeTblEntry);
     // we don't alias the table, so this is fine not being set.
@@ -1228,63 +668,6 @@ Query *addNestedQuery(
     }
 
     targetQuery->targetList = newTargetList;
-    return targetQuery;
-}
-
-Query *cloneQueryForTP(const Query *base){
-    Query *targetQuery = makeNode(Query);
-    targetQuery->commandType = base->commandType;
-    targetQuery->querySource = base->querySource;
-    targetQuery->queryId = base->queryId;
-    targetQuery->canSetTag = base->canSetTag;
-    targetQuery->utilityStmt = base->utilityStmt;
-    targetQuery->resultRelation = base->resultRelation;
-    // We're no longer an aggregation!
-    targetQuery->hasAggs = false;
-    targetQuery->hasWindowFuncs = false;
-    // TODO: Look at target srfs, when will we get evaulated in that case?
-    targetQuery->hasTargetSRFs = false;
-    targetQuery->hasSubLinks = false;
-    targetQuery->hasDistinctOn = false;
-    targetQuery->hasRecursive = false;
-    targetQuery->hasModifyingCTE = base->hasModifyingCTE;
-    targetQuery->hasForUpdate = base->hasForUpdate;
-    targetQuery->hasRowSecurity = base->hasRowSecurity;
-    // TODO: Look at this more.
-    targetQuery->isReturn = base->isReturn;
-    // TODO: Think more about CTEs.
-    // Technically, we can nest the entire block...
-    targetQuery->cteList = base->cteList;
-    // TODO: Set this.
-    targetQuery->rtable = NIL;
-    // TODO: Set this.
-    targetQuery->jointree = NULL;
-    // TODO: Set this.
-    targetQuery->targetList = NIL; 
-    // TODO: Investigate.
-    targetQuery->override = base->override;
-    targetQuery->onConflict = base->onConflict;
-    // TODO: Investigate.
-    targetQuery->returningList = base->returningList;
-    // TODO: Investigate.
-    targetQuery->groupClause = NIL;
-    // TODO: Investigate.
-    targetQuery->groupDistinct = false;
-    // TODO: Investigate.
-    targetQuery->groupingSets = NIL;
-    targetQuery->havingQual = NULL;
-    targetQuery->windowClause = NIL;
-    targetQuery->distinctClause = NIL;
-    targetQuery->sortClause = NIL;
-    targetQuery->limitOffset = NULL;
-    targetQuery->limitCount = NULL;
-    targetQuery->limitOption = 0;
-    targetQuery->rowMarks = NIL;
-    targetQuery->setOperations = NULL;
-    targetQuery->constraintDeps = NIL;
-    targetQuery->withCheckOptions = NIL;
-    targetQuery->stmt_location = base->stmt_location;
-    targetQuery->stmt_len = base->stmt_len;
     return targetQuery;
 }
 

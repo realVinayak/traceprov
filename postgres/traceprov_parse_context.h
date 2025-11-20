@@ -58,16 +58,20 @@ typedef struct TraceProvSetPaddingMapItem {
 } TraceProvSetPaddingMapItem;
 
 // In case of unions, each set can have a different depedency. To account for that case.
-// need store the graph for each set separately. During inference, also need to do similar thing
+// need store the graph for each set separately. During inference, need to look at this set to determine
+// the graph. Here, it'll be list of graphs, because a set could be constructed via using multiple graphs.
 typedef struct TraceProvSetGraphMapItem {
     int setNumber;
-    TraceProvDependency *graph;
+    // List of TraceProvEntry.
+    List* graphs;
 } TraceProvSetGraphMapItem;
 
 // Some properties get stored directly in the context.
 // In the graph file, this also gets later stored.
 typedef struct TraceProvParseGraphProperties {
+    // List of TraceProvSetPaddingMapItem.
     List *setPaddingMap;
+    // List of TraceProvSetGraphMapItem.
     List *setGraphMap;
 } TraceProvParseGraphProperties;
 
@@ -85,13 +89,16 @@ TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *);
 char *tpParseGetUniqueAlias(TraceProvParseContext *);
 int tpParseGetUniqueNumber(TraceProvParseContext *);
 void tpAddSetPaddingItem(TraceProvParseContext *, int, int);
+void tpAddSetGraphItem(TraceProvParseContext *, int, TraceProvEntry *);
 
 TraceProvEntry *makeTraceProvEntry();
 
 TraceProvDependency *makeTraceProvDependency(TraceProvLayerNumber, List *, List *);
-void traceprovPrintDependency(const TraceProvDependency *);
-void serializeTraceProvDepedency(List *);
-List *deserializeTraceProvDependency(void);
+void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
+void serializeTraceProvDepedency(List *, TraceProvParseContext *);
+List *deserializeTraceProvDependency(TraceProvParseContext **);
+
+void traceprovPrintContext(const TraceProvParseContext *);
 
 typedef struct TraceProvTarget {
     bool isPointer;
@@ -115,4 +122,5 @@ TraceProvTarget *makeTraceProvTarget(
 TraceProvEntry *tpResolveEntry(const TraceProvTarget *, List **, List**);
 
 char *traceProvDependencyToJson(const TraceProvDependency *);
+char *traceProvParseContextToJson(const TraceProvParseContext *);
 #endif
