@@ -22,10 +22,13 @@ class TestDbSetup(TestCase):
         db_cursor.close()
 
     @classmethod
-    def run_simple_query(cls, query):
+    def run_simple_query(cls, query, check_response=True):
         db_cursor = cls.db_connection.cursor()
         db_cursor.execute(query)
-        result = db_cursor.fetchall()
+        if check_response:
+            result = db_cursor.fetchall()
+        else:
+            result = None
         db_cursor.close()
         return result
 

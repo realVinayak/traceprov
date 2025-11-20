@@ -34,7 +34,7 @@ import time
 import json
 from datetime import date, datetime
 
-from traceprovpy.tools.setup import traceprov_setup
+from traceprovpy.tools.setup import traceprov_reinit_state, traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
 
@@ -170,13 +170,7 @@ class QuerySpec(NamedTuple):
                     break
 
             print("ON INDEX: ", iter_count)
-            flat_options = base_pack.connection_params.get_flat()
-            assert (
-                os.system(
-                    f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
-                )
-                == 0
-            )
+            traceprov_reinit_state(base_pack.connection_params)
             base_context = dict()
             base_pack = base_pack._replace(extras=base_context)
             base_time = _run_with_timeout(base_pack)
