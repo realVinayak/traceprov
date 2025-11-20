@@ -34,6 +34,7 @@ import time
 import json
 from datetime import date, datetime
 
+from traceprovpy.tools.setup import traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
 
@@ -285,13 +286,18 @@ class GenericBenchmark(NamedTuple):
 
     traceprov_path: str = None
     traceprov_infer_set_path: str = None
+    traceprov_rewriter_path: str = None
 
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
-        assert self.traceprov_path is None and self.traceprov_infer_set_path is None
+        assert (
+            self.traceprov_path is None
+            and self.traceprov_infer_set_path is None
+            and self.traceprov_rewriter_path is None
+        )
         if parser is None:
             parser = argparse.ArgumentParser(prog=f"run-{self.name}")
         postgres_connection_from_cmd(parser)
@@ -359,44 +365,11 @@ class GenericBenchmark(NamedTuple):
         connection_params: ConnectionParams,
         suff: str = None,
     ):
-        if suff is None:
-            suff = self.name
-
-        response = os.system(
-            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
-        )
-        if response != 0:
-            raise Exception("Make failed!")
-        traceprov_sql = Path(traceprov_postgres_root) / f"traceprov_{suff}.auto.sql"
-        traceprov_infer_set = (
-            Path(traceprov_postgres_root) / f"traceprov_return_infer_{suff}.auto.sql"
-        )
-        assert traceprov_sql.exists(), f"{traceprov_sql.as_posix()} should exist!"
-        assert (
-            traceprov_infer_set.exists()
-        ), f"{traceprov_infer_set.as_posix()} should exist!"
-
-        assert (
-            os.system(
-                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
-            )
-            == 0
+        setup_response = traceprov_setup(
+            suff or self.name, traceprov_postgres_root, connection_params
         )
 
-        assert (
-            os.system(
-                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()} -v ON_ERROR_STOP=1"
-            )
-            == 0
-        )
-
-        traceprov_obj = f"libtraceprov{suff}"
-        traceprv_infer_set_obj = f"libtraceprov_infer{suff}"
-
-        return self._replace(
-            traceprov_path=traceprov_obj,
-            traceprov_infer_set_path=traceprv_infer_set_obj,
-        )
+        return self._replace(**setup_response)
 
     def run(
         self,

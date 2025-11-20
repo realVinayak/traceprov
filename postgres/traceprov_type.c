@@ -8,8 +8,6 @@
 #include "fmgr.h"
 #include "libpq/pqformat.h"
 
-PG_MODULE_MAGIC;
-
 #define LOG_LOCATION() elog(INFO, "at: %s", __func__);
 
 PG_FUNCTION_INFO_V1(traceprov_ptr_type_in);
