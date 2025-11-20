@@ -9,6 +9,27 @@ class TestDbSetup(TestCase):
     test_db: str = "test_traceprov_db"
 
     @classmethod
+    def run_sql_from_file(cls, root_file_path: str):
+        db_cursor = cls.db_connection.cursor()
+        try:
+            with open(f"{os.getcwd()}/{root_file_path}") as f:
+                sql_stmts = f.read()
+            db_cursor.execute(sql_stmts)
+            db_cursor.execute("COMMIT;")
+        except:
+            db_cursor.execute("ROLLBACK;")
+            raise
+        db_cursor.close()
+
+    @classmethod
+    def run_simple_query(cls, query):
+        db_cursor = cls.db_connection.cursor()
+        db_cursor.execute(query)
+        result = db_cursor.fetchall()
+        db_cursor.close()
+        return result
+
+    @classmethod
     def setUpClass(cls):
         super().setUpClass()
         initial_connection = psycopg2.connect(
@@ -43,16 +64,7 @@ class TestDbSetup(TestCase):
         )
 
         cls.db_connection = db_connection
-        db_cursor = db_connection.cursor()
-        try:
-            with open(f"{os.getcwd()}/tests/setup.sql") as f:
-                sql_stmts = f.read()
-            db_cursor.execute(sql_stmts)
-            db_cursor.execute("COMMIT;")
-        except:
-            db_cursor.execute("ROLLBACK;")
-            raise
-        db_cursor.close()
+        cls.run_sql_from_file("tests/setup.sql")
         cls.connection_params = ConnectionParams(
             host=cls.pg_host,
             port=cls.pg_port,

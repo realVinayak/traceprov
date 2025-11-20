@@ -43,6 +43,6 @@ CREATE OR REPLACE FUNCTION traceprov_infer_graph()
     LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION traceprov_json_graph()
-    RETURNS BIGINT
+    RETURNS text
     AS '$libdir/__FILE__', 'traceprov_json_graph'
     LANGUAGE C STRICT PARALLEL SAFE;

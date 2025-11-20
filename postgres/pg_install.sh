@@ -17,6 +17,5 @@ suffix=$2
 sed 's/__FILE__/libtraceprov'${suffix}'/g' traceprov.sql > traceprov_${suffix}.auto.sql
 sed 's/__FILE__/libtraceprov_infer'${suffix}'/g' traceprov_return_infer.sql > traceprov_return_infer_${suffix}.auto.sql
 sed 's/__FILE__/libtraceprov_infer'${suffix}'/g' traceprov_return_infer_template.sql > traceprov_return_infer_template_${suffix}.auto.sql
-sed 's/__FILE__/libtraceprov_type'${suffix}'/g' traceprov_type.sql > traceprov_type_${suffix}.auto.sql
 set +x
 set +e

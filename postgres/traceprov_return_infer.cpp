@@ -744,12 +744,31 @@ extern "C" {
         TraceProvParseContext *context = NULL;
         const List *graphs = deserializeTraceProvDependency(&context);
         ListCell *graphCursor;
+        StringInfoData buf;
+        initStringInfo(&buf);
+        std::string graphStr = "{";
+        graphStr = graphStr.append("\"graphs\": [");
+        bool needsSep = false;
         foreach(graphCursor, graphs){
+            if (needsSep){
+                graphStr = graphStr.append(",");
+            }
+            needsSep = true;
             const TraceProvDependency *graph =  (TraceProvDependency *)lfirst(graphCursor);
-            elog(INFO, "%s", traceProvDependencyToJson(graph));    
+            const char *graphRepr = traceProvDependencyToJson(graph);
+            elog(INFO, "%s", graphRepr);
+            graphStr = graphStr.append(graphRepr);
         }
-        elog(INFO, "%s", traceProvParseContextToJson(context));     
-        PG_RETURN_INT64(0);
+        // End "graphs" key.
+        graphStr = graphStr.append("]");
+        graphStr = graphStr.append(",");
+        graphStr = graphStr.append("\"context\":");
+        const char *contextRepr = traceProvParseContextToJson(context);
+        elog(INFO, "%s", contextRepr);
+        graphStr = graphStr.append(contextRepr);
+        graphStr = graphStr.append("}");
+        elog(INFO, "%s", graphStr.c_str()); 
+        PG_RETURN_TEXT_P(cstring_to_text(graphStr.c_str()));
     }
 };
 
