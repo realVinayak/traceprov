@@ -225,8 +225,9 @@ extern "C" {
         if (map_traceprov_shared_context(&context)){
             elog(ERROR, "Error mmaping shared context");
         }
+        TraceProvParseContext *parseContext;
 
-        const TraceProvDependency *graph = (TraceProvDependency *)lfirst(list_head(deserializeTraceProvDependency()));
+        const TraceProvDependency *graph = (TraceProvDependency *)lfirst(list_head(deserializeTraceProvDependency(&parseContext)));
         const int group_layer_number = graph->headNumber + 1;
         void *group_layer_ptr = NULL;
         const struct local_context *main_worker_context = &context.local_contexts[context.main_worker_id];
@@ -740,12 +741,14 @@ extern "C" {
     PG_FUNCTION_INFO_V1(traceprov_json_graph);
 
     Datum traceprov_json_graph(PG_FUNCTION_ARGS){
-        const List *graphs = deserializeTraceProvDependency();
+        TraceProvParseContext *context = NULL;
+        const List *graphs = deserializeTraceProvDependency(&context);
         ListCell *graphCursor;
         foreach(graphCursor, graphs){
             const TraceProvDependency *graph =  (TraceProvDependency *)lfirst(graphCursor);
             elog(INFO, "%s", traceProvDependencyToJson(graph));    
-        }    
+        }
+        elog(INFO, "%s", traceProvParseContextToJson(context));     
         PG_RETURN_INT64(0);
     }
 };

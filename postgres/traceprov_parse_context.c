@@ -18,6 +18,7 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     context->simple_incrementor = 0;
     context->properties = palloc0_object(TraceProvParseGraphProperties);
     context->properties->setPaddingMap = NIL;
+    context->properties->setGraphMap = NIL;
 }
 
 char *tpParseGetUniqueAlias(TraceProvParseContext *context){
@@ -37,18 +38,39 @@ void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padd
     context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, mapItem);
 }
 
+void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvEntry *entry){
+    // Try, first, finding the set in the current map.
+    ListCell *mapCursor;
+    TraceProvSetGraphMapItem *foundSetGraphMapItem = NULL;
+    foreach(mapCursor, context->properties->setGraphMap){
+        TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem*)lfirst(mapCursor);
+        if (setGraphMapItem->setNumber == setNumber){
+            foundSetGraphMapItem = setGraphMapItem;
+            break;
+        }
+    }
+    // Didn't find the set graph map item.
+    if (foundSetGraphMapItem == NULL){
+        foundSetGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
+        foundSetGraphMapItem->graphs = NIL;
+        foundSetGraphMapItem->setNumber = setNumber;
+        context->properties->setGraphMap = lappend(context->properties->setGraphMap, foundSetGraphMapItem);
+    }
+    foundSetGraphMapItem->graphs = lappend(foundSetGraphMapItem->graphs, entry);
+}
+
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
     TraceProvDependency *dependency,
-    int isUnionSet,
+    int setNumber,
     bool isSetPointer
 ){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
     tpTarget->targetEntry = targetEntry;
     tpTarget->graph = dependency;
-    tpTarget->setNumber = isUnionSet;
+    tpTarget->setNumber = setNumber;
     tpTarget->isSetPointer = isSetPointer;
     return tpTarget;
 }
@@ -59,14 +81,15 @@ void _assertIsArtificial(const TargetEntry *target){
     }
 }
 
-
 TraceProvEntry *tpResolveEntry(
     const TraceProvTarget * tpTarget, 
     List **childGraphs,
     List **exprs
 ){
     const TargetEntry *target = tpTarget->targetEntry;
-    *exprs = lappend(*exprs, target->expr);
+    if (exprs){
+        *exprs = lappend(*exprs, target->expr);
+    }
     TraceProvEntry *tpEntry = makeTraceProvEntry();
     TraceProvDependency *graph = tpTarget->graph;
     if (tpTarget->isSetPointer){
@@ -90,9 +113,10 @@ TraceProvEntry *tpResolveEntry(
         // Because there can be multiple graphs for the set. so, this makes things nicer.
         if (tpTarget->setNumber > 0) graph = TRACEPROV_SET_GRAPH;
     }
-    *childGraphs = lappend(*childGraphs, graph);
+    if (childGraphs){
+        *childGraphs = lappend(*childGraphs, graph);
+    }
     tpEntry->setNumber = tpTarget->setNumber;
-
     return tpEntry;
 }
 
@@ -143,8 +167,48 @@ void appendIndentAware(StringInfoData *buf, int indentCount){
     }
 }
 
+char *traceProvParseContextToJson(const TraceProvParseContext *context){
+    StringInfoData buf;
+    initStringInfo(&buf);
+    appendStringInfo(&buf, "{");
+    appendStringInfo(&buf, "\"global_layer_number\": %d", context->global_layer_number);
+    appendStringInfo(&buf, ",");
+    appendStringInfo(&buf, "\"unique_idx\": %lld", context->unique_idx);
+    appendStringInfo(&buf, ",");
+    appendStringInfo(&buf, "\"simple_incrementor\": %d", context->simple_incrementor);
+    appendStringInfo(&buf, ",");
+    ListCell *setPaddingMapItemCursor;
+    appendStringInfo(&buf, "\"setPaddingMap\": [");
+    bool needsSep = false;
+    foreach(setPaddingMapItemCursor, context->properties->setPaddingMap){
+        if (needsSep == true){
+            appendStringInfo(&buf, ",");
+        }
+        needsSep = true;
+        const TraceProvSetPaddingMapItem *setPaddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(setPaddingMapItemCursor);
+        appendStringInfo(&buf, "{\"setNumber\": %d, \"padding\": %d}", setPaddingMapItem->setNumber, setPaddingMapItem->padding);
+    }
+    appendStringInfo(&buf, "]");
+    appendStringInfo(&buf, ",");
+    appendStringInfo(&buf, "\"setGraphMap\": [");
+    needsSep = false;
+    ListCell *setGraphMapItemCursor;
+    foreach(setGraphMapItemCursor, context->properties->setGraphMap){
+        if (needsSep == true){
+            appendStringInfo(&buf, ",");
+        }
+        needsSep = true;
+        const TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem *)lfirst(setGraphMapItemCursor);
+        const TraceProvDependency *wrapperDependency = makeTraceProvDependency(0, NIL, setGraphMapItem->graphs);
+        appendStringInfo(&buf, "{\"setNumber\": %d, \"graph\": %s}", setGraphMapItem->setNumber, traceProvDependencyToJson(wrapperDependency));
+    }
+    appendStringInfo(&buf, "]");
+    appendStringInfo(&buf, "}");
+    return buf.data;
+}
+
 // Makes things easier, ngl.
-// The output can then be used on other formats too.
+// The output can then be used on other formats too (like dot graphs)
 char *traceProvDependencyToJson(const TraceProvDependency *graph){
     StringInfoData buf;
     initStringInfo(&buf);
@@ -223,15 +287,23 @@ char * traceprovDependencyToString(int indent, const TraceProvDependency *graph)
     return buf.data;
 }
 
-void traceprovPrintDependency(const TraceProvDependency *graph){
+void traceprovPrintDependency(const TraceProvDependency *graph, const TraceProvParseContext *context){
     elog(INFO, "TraceProvDependency: ");
     elog(INFO, "\n%s", traceprovDependencyToString(0, graph));
     elog(INFO, "JSON: %s", traceProvDependencyToJson(graph));
+    traceprovPrintContext(context);
+}
+
+void traceprovPrintContext(const TraceProvParseContext *context){
+    elog(INFO, "TraceProvDependency Parse Context: ");
+    elog(INFO, "JSON: %s", traceProvParseContextToJson(context));
 }
 
 typedef struct TraceProvDependencyMetaHeader {
     // Number of graphs being stored.
     uint32 numGraphs;
+    uint32 numSetPaddingMapItems;
+    uint32 numSetGraphMapItems;
 } TraceProvDependencyMetaHeader;
 
 // This is not in the header for a reason, nothing outside of this file
@@ -258,11 +330,15 @@ void failSafeRead(FILE *file, void *buff, size_t length){
 }
 
 void _serializeTraceProvDepedency(const TraceProvDependency *, FILE *);
+
+void _serializeContext(const TraceProvParseContext*, FILE *);
 TraceProvDependency *_deserializeTraceProvDependency(FILE *);
+TraceProvParseContext *_deserializeTraceProvParseContext(FILE *, TraceProvDependencyMetaHeader*);
 
 // Serializes multiple graphs in the graph file.
 // This needs to be a list, because we can multiple pointers.
-void serializeTraceProvDepedency(List *graphs){
+// Need to also dump some things from the context. For example, need to dump the set-padding map.
+void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
     ListCell *graphCursor;
     const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
     FILE *fptr = fopen(dumpPath, "wb"); 
@@ -271,11 +347,14 @@ void serializeTraceProvDepedency(List *graphs){
     }
     TraceProvDependencyMetaHeader metaHeader;
     metaHeader.numGraphs = list_length(graphs);
+    metaHeader.numSetPaddingMapItems = list_length(context->properties->setPaddingMap);
+    metaHeader.numSetGraphMapItems = list_length(context->properties->setGraphMap);
     failSafeWrite(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
+    _serializeContext(context, fptr);
     foreach(graphCursor, graphs){
         const TraceProvDependency *graph = (TraceProvDependency *)(lfirst(graphCursor));
         elog(INFO, "Serializing: ");
-        traceprovPrintDependency(graph);
+        traceprovPrintDependency(graph, context);
         _serializeTraceProvDepedency(graph, fptr);
     }
     fclose(fptr);
@@ -307,8 +386,27 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
     }
 }
 
+// Dumps the properties in the file.
+void _serializeContext(const TraceProvParseContext* context, FILE* file){
+    ListCell *paddingMapItemCursor;
+    foreach(paddingMapItemCursor, context->properties->setPaddingMap){
+        TraceProvSetPaddingMapItem *paddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(paddingMapItemCursor);
+        failSafeWrite(file, paddingMapItem, sizeof(TraceProvSetPaddingMapItem));
+    }
+
+    ListCell *graphMapItemCursor;
+    foreach(graphMapItemCursor, context->properties->setGraphMap){
+        TraceProvSetGraphMapItem *graphMapItem = (TraceProvSetGraphMapItem *)lfirst(graphMapItemCursor);
+        // To make serialization easier, it gets wrapped in one graph.
+        // During deserialization, it gets unwrapped.
+        const TraceProvDependency *wrapperDependency = makeTraceProvDependency(0, NIL, graphMapItem->graphs);
+        failSafeWrite(file, graphMapItem, sizeof(TraceProvSetGraphMapItem));
+        _serializeTraceProvDepedency(wrapperDependency, file);
+    }
+}
+
 // Returns list of deserialized graphs.
-List* deserializeTraceProvDependency(){
+List* deserializeTraceProvDependency(TraceProvParseContext **parsedContext){
     const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
     FILE *fptr = fopen(dumpPath, "rb"); 
     if (fptr == NULL) {
@@ -316,14 +414,15 @@ List* deserializeTraceProvDependency(){
     }
     TraceProvDependencyMetaHeader metaHeader;
     failSafeRead(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
-    if (metaHeader.numGraphs <= 0){
+    if (metaHeader.numGraphs < 0){
         elog(ERROR, "Got invalid number of graphs in the file: %d", metaHeader.numGraphs);
     }
+    *parsedContext = _deserializeTraceProvParseContext(fptr, &metaHeader);
     List *graphs = NIL;
     for (int i = 0; i < metaHeader.numGraphs; i++){
         TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
         elog(INFO, "Deserializing: ");
-        traceprovPrintDependency(graph);
+        traceprovPrintDependency(graph, *parsedContext);
         graphs = lappend(graphs, graph);
     }
 
@@ -357,5 +456,25 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
     }else{
         return header.graphPtr;
     }
+}
 
+// Deserialize some of the parse context fields.
+// Doesn't do all the fields, but only the ones necessary (like the set->graph, and set->padding maps)
+TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDependencyMetaHeader* metaHeader){
+    TraceProvParseContext *context = palloc0_object(TraceProvParseContext);
+    tpParseInitializeContext(context);
+    for (int i = 0; i < metaHeader->numSetPaddingMapItems; i++){
+        TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
+        failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
+        context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, setPaddingMapItem);
+    }
+
+    for (int i = 0; i < metaHeader->numSetGraphMapItems; i++){
+        TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
+        failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
+        const TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
+        setGraphMapItem->graphs = wrapper->entries;
+        context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
+    }
+    return context;
 }
