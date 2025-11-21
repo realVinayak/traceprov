@@ -29,6 +29,7 @@
 #include "parser/analyze.h"
 
 #include "rewriter_sets.h"
+#include "access/xact.h"
 
 PG_MODULE_MAGIC;
 
@@ -132,6 +133,8 @@ PlannedStmt *traceprov_rewriter(
     Query *traceprovTopQuery = addNestedQuery(traceprovParse, topLevelTargets, &context);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
+    traceprovParseBackQuery(traceprovTopQuery);
+    traceprovParseBackQuery(parse);
     return standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
 }
 

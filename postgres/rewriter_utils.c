@@ -8,6 +8,15 @@
 #include "utils/syscache.h"
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_func.h"
+#include "catalog/pg_proc.h"
+#include "catalog/pg_authid_d.h"
+#include "catalog/pg_language_d.h"
+#include "utils/fmgroids.h"
+#include "utils/builtins.h"
+#include "pgstat.h"
+#include "commands/defrem.h"
+#include "catalog/pg_namespace_d.h"
+#include "miscadmin.h"
 
 void traceProvAssertNoResJunk(const List *targetList){
     ListCell *targetListCursor;
@@ -548,4 +557,75 @@ List *traceProvPropagateChildTargets(List *childTargets, Index rteIndex){
         targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph, tpTarget->setNumber, tpTarget->isSetPointer));
     }
     return targetsToAdd;
+}
+
+Datum
+dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
+{
+	Oid			funcid = PG_GETARG_OID(0);
+	StringInfoData buf;
+	HeapTuple	proctup;
+	bool		isnull;
+
+	initStringInfo(&buf);
+
+	/* Look up the function */
+	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+	if (!HeapTupleIsValid(proctup))
+		PG_RETURN_NULL();
+
+	(void) SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
+	if (isnull)
+	{
+		ReleaseSysCache(proctup);
+		PG_RETURN_NULL();
+	}
+
+	Datum result = pg_get_function_sqlbody(fcinfo);
+
+	ReleaseSysCache(proctup);
+
+	return result;
+}
+
+
+// Get str representation of the query.
+// This, first, makes a function out of the query.
+// Then, looks at the SQL body of the function.
+// It just, then, calls the existing postgres utility to parse back.
+char *traceprovParseBackQuery(Query *query){
+    ObjectAddress created = ProcedureCreate(
+        pstrdup("traceprovquery"),
+        PG_PUBLIC_NAMESPACE,
+        true,
+        false,
+        INT4OID,
+        GetUserId(),
+        INTERNALlanguageId,
+        InvalidOid,
+        "traceprov_dummy",
+        NULL,
+        (Node*)query,
+        PROKIND_FUNCTION,
+        false,
+        false,
+        false,
+        PROVOLATILE_IMMUTABLE,
+        PROPARALLEL_SAFE,
+        buildoidvector(NULL, 0),
+        PointerGetDatum(NULL), /* allParameterTypes */
+        PointerGetDatum(NULL), /* parameterModes */
+        PointerGetDatum(NULL), /* parameterNames */
+        NIL,	/* parameterDefaults */
+        PointerGetDatum(NULL), /* trftypes */
+        PointerGetDatum(NULL), /* proconfig */
+        InvalidOid,	/* prosupport */
+        1.0,	/* procost */
+        0.0	/* prorows */
+    );
+    CommandCounterIncrement();
+    text *response = (DatumGetTextP(DirectFunctionCall1(dummy_pg_get_function_sqlbody, ObjectIdGetDatum(created.objectId))));
+    char *str = text_to_cstring(response);
+    elog(INFO, "parsed back: %s", str);
+    return str;
 }
