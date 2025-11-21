@@ -77,5 +77,5 @@ Node *getFunctionCallNode(const char *, List *);
 Const *makeInt8Const(int64);
 
 List *traceProvPropagateChildTargets(List *, Index);
-
+char *traceprovParseBackQuery(Query *);
 #endif
