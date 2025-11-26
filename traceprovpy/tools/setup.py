@@ -9,7 +9,7 @@ def traceprov_setup(
 ):
     assert suff is not None
 
-    skip_build = os.getenv("tp_skip_build", False)
+    skip_build = int(os.getenv("tp_skip_build", "0"))
     if not skip_build:
         response = os.system(
             f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
