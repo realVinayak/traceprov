@@ -28,13 +28,17 @@
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
 
+
+#ifndef TRACEPROV_PAGE_SIZE_RAW
+#define TRACEPROV_PAGE_SIZE_RAW 4096
+#endif
+
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
-// The below should also be changed.
 #ifndef TRACEPROV_PAGE_SIZE_RAW
 static_assert(0, "page size not defined!");
 #else
-// The casting is helpful.
+// The casting is helpful since shifts get performed using it.
 #define TRACEPROV_PAGE_SIZE ((long int) TRACEPROV_PAGE_SIZE_RAW)
 #endif
 
@@ -116,9 +120,14 @@ struct traceprov_aggregate_layer {
     // This points to the current_row. 
     // This, will effectively lie in [last_mapping, last_mapping + TRACEPROV_BLOCK_SIZE)
     void *current_row;
-    // This stores the number of groups that this layer has seen.
+    // Layers can either act as base for aggregates, or simple append log, but not both.
     // Since this can exist in a background worker, this is always the LOCAL count of groups (and not global)
-    uint32 num_groups;
+    union {
+        // The number of groups that this layer has seen.
+        uint64 num_groups;
+        // The number of rows.
+        uint64 num_rows;
+    };
     uint32 layer_number;
     // Each record gets this much padding.
     uint32 record_padding;

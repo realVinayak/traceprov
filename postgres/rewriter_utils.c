@@ -17,6 +17,8 @@
 #include "commands/defrem.h"
 #include "catalog/pg_namespace_d.h"
 #include "miscadmin.h"
+#include "access/xact.h"
+#include "rewrite/rewriteManip.h"
 
 void traceProvAssertNoResJunk(const List *targetList){
     ListCell *targetListCursor;
@@ -139,7 +141,7 @@ List *traceProvDupOid(Oid element, int count){
     }
     return begin;
 }
-List *traceProvFlatten(List *inList){
+List *traceprov_flatten(List *inList){
 
     List *newList = NIL;
     
@@ -154,11 +156,11 @@ List *traceProvFlatten(List *inList){
     return newList;
 }
 
-List* traceProvAppendTargets(List *traceProvTargets, List *targetList){
-    ListCell *targetEntryCursor;
-    foreach(targetEntryCursor, traceProvTargets){
+List* traceprov_append_targets(List *traceProvTargets, List *targetList){
+    ListCell *target_entry_cursor;
+    foreach(target_entry_cursor, traceProvTargets){
         // Add target entry to the parse->targetlist.
-        TargetEntry *target = ((TraceProvTarget *)lfirst(targetEntryCursor))->targetEntry;
+        TargetEntry *target = ((TraceProvTarget *)lfirst(target_entry_cursor))->targetEntry;
         // Here is an ugly case.
         // It is possible that the attributes we're grouping over don't appear as resjunk.
         // In that case, we'll need to adjust the references in the sort refs.
@@ -304,7 +306,7 @@ createEqualityCondition (List* leftAttrs, List* rightAttrs, Index leftIndex, Ind
 	return curRoot;
 }
 
-Query *cloneQueryForTP(const Query *base){
+Query *traceprov_clone_query(const Query *base){
     Query *targetQuery = makeNode(Query);
     targetQuery->commandType = base->commandType;
     targetQuery->querySource = base->querySource;
@@ -366,9 +368,9 @@ RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContex
     char *aliasName = tpParseGetUniqueAlias(context);
     tblEntry->alias = makeAlias(aliasName, NIL);
     List *colNames = NIL;
-    ListCell *targetEntryCursor = NULL;
-    foreach(targetEntryCursor, subQuery->targetList){
-        TargetEntry *te = (TargetEntry *)lfirst(targetEntryCursor);
+    ListCell *target_entry_cursor = NULL;
+    foreach(target_entry_cursor, subQuery->targetList){
+        TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
         colNames = lappend(colNames, makeString(pstrdup(te->resname)));
     }
     tblEntry->eref = makeAlias(pstrdup(aliasName), colNames);
@@ -379,15 +381,15 @@ RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContex
     return tblEntry;
 }
 
-Query *traceProvMakeNestedQuery(Query *base, TraceProvParseContext *context){
-    Query *modified = cloneQueryForTP(base);
-    ListCell *targetEntryCursor;
-    foreach(targetEntryCursor, base->targetList){
-        TargetEntry *baseTargetEntry = (TargetEntry *)lfirst(targetEntryCursor);
+Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context){
+    Query *modified = traceprov_clone_query(base);
+    ListCell *target_entry_cursor;
+    foreach(target_entry_cursor, base->targetList){
+        TargetEntry *base_target_entry = (TargetEntry *)lfirst(target_entry_cursor);
         modified->targetList = lappend(modified->targetList, makeTargetEntry(
-            (Expr*)makeVarFromTargetEntry(1, baseTargetEntry),
-            baseTargetEntry->resno,
-            (baseTargetEntry->resname == NULL ? NULL : pstrdup(baseTargetEntry->resname)),
+            (Expr*)makeVarFromTargetEntry(1, base_target_entry),
+            base_target_entry->resno,
+            (base_target_entry->resname == NULL ? NULL : pstrdup(base_target_entry->resname)),
             false
         ));
     }
@@ -397,6 +399,8 @@ Query *traceProvMakeNestedQuery(Query *base, TraceProvParseContext *context){
     RangeTblRef *rtr = makeNode(RangeTblRef);
     rtr->rtindex = 1;
     modified->jointree = makeFromExpr(list_make1(rtr), NULL);
+    // Increment all the nested vars in the original query.
+    IncrementVarSublevelsUp((Node*)base, 1, 1);
     return modified;
 }
 
@@ -413,7 +417,7 @@ void zip_target_sortgroupclause(List *group_clauses, List *target_list){
     }
 }
 
-List *traceProvAggregateOnSet(
+List *traceprov_aggregate_on_set(
     const SetOperationStmt *stmt, 
     Query *query,
     TraceProvParseContext *context,
@@ -434,14 +438,14 @@ List *traceProvAggregateOnSet(
     zip_target_sortgroupclause(query->groupClause, query->targetList);
     query->targetList = newTargetList;
     List *aggregated = NIL;
-    traceprovAggregateRewrite(
+    traceprov_aggregate_rewrite(
         addedTargets,
         &aggregated,
         context,
         aggregatedInParent 
     );
     query->hasAggs = true;
-    query->targetList = traceProvAppendTargets(aggregated, query->targetList);
+    query->targetList = traceprov_append_targets(aggregated, query->targetList);
     return aggregated;
 }
 
@@ -470,14 +474,14 @@ Node *getFunctionCallNode(const char *funcName, List *argVars){
     return fcNode;
 }
 
-void traceprovAggregateRewrite(
+void traceprov_aggregate_rewrite(
     const List *targetEntriesToLog,
     List **pCreatedTargets,
     TraceProvParseContext *tpContext,
     bool parentHasAggs
 ){
     // Need to add the exprs from the targets.
-    ListCell *targetEntryCursor;
+    ListCell *target_entry_cursor;
     TraceProvLayerNumber layerNumber = tpParseGetLayerNumber(tpContext);
     // Need to also add the layer number (the first argument)
     Node * layerNumberConst = (Node *) makeConst(
@@ -493,8 +497,8 @@ void traceprovAggregateRewrite(
     List *argVars = list_make1(layerNumberConst);
     List *entries = NIL;
     List *childGraphs = NIL;
-    foreach(targetEntryCursor, targetEntriesToLog){
-        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(targetEntryCursor)), &childGraphs, &argVars);
+    foreach(target_entry_cursor, targetEntriesToLog){
+        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(target_entry_cursor)), &childGraphs, &argVars);
         entries = lappend(entries, tpEntry);
     }
 

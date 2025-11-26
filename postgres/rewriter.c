@@ -30,6 +30,7 @@
 
 #include "rewriter_sets.h"
 #include "access/xact.h"
+#include "rewrite/rewriteManip.h"
 
 PG_MODULE_MAGIC;
 
@@ -52,13 +53,6 @@ PlannedStmt *traceprov_set_test(
     const char *,
     int,
 	ParamListInfo
-);
-
-static Query* performTraceProvRewrite(
-    Query *, 
-    List **,
-    TraceProvParseContext *,
-    bool
 );
 
 // Performs rewrite on an RTE.
@@ -120,7 +114,7 @@ PlannedStmt *traceprov_rewriter(
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
     List *topLevelTargets = NIL;
-    Query *traceprovParse = performTraceProvRewrite(parse, &topLevelTargets, &context, false);
+    Query *traceprovParse = traceprov_perform_rewrite(parse, &topLevelTargets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
     // Now, need to rewrite the entire query to a subquery.
     ListCell *teCursor;
@@ -184,7 +178,7 @@ Query *traceprov_breakup_sets(
         elog(INFO, "Breaking up the query!");
         // In this case, we'll break the query up.
         // Temporarily, preserve the RTEs (they get adjusted later)
-        Query *set_subquery = cloneQueryForTP(baseQuery);
+        Query *set_subquery = traceprov_clone_query(baseQuery);
         // We don't bother doing a deep copu over rtables here.
         // Since a rtable entry won't exist in more than 1 rtable,
         // we don't need to do a deep copy of rtables.
@@ -228,6 +222,7 @@ Query *traceprov_breakup_sets(
         if(traceprov_breakup_sets(setOp->op, setOp->all, set_subquery->rtable, (Node*)setOp, set_subquery, context)){
             elog(ERROR, "Didn't expect recursive call to breakup sets to ever return a value!");
         }
+        IncrementVarSublevelsUp((Node*)set_subquery, 1, 1);
         return set_subquery;
     }
     // In this case, we'll need to check the left and the right.
@@ -312,7 +307,7 @@ Query *traceprov_rewrite_sets_to_joins(
     if (!IsA(base->setOperations, SetOperationStmt)) elog(ERROR, "Expected top level set operation to be SetOperationStmt");
     SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
     if (stmt->op != SETOP_UNION && stmt->op != SETOP_INTERSECT) return base;
-    List *flattenedAddedTargets = traceProvFlatten(ignoreList);
+    List *flattenedAddedTargets = traceprov_flatten(ignoreList);
 
     bool wasAll = stmt->all;
 
@@ -322,7 +317,7 @@ Query *traceprov_rewrite_sets_to_joins(
         if (!wasAll){
             // Here, modified needs to, actually, needs to refer to a subquery.
             // For intersect, this is not needed.
-            modified = traceProvMakeNestedQuery(base, context);
+            modified = traceprov_make_nested_query(base, context);
         }else{
             modified = base;
         }
@@ -340,7 +335,7 @@ Query *traceprov_rewrite_sets_to_joins(
                 continue;
             }
         }
-        List *aggregated = traceProvAggregateOnSet(stmt, modified, context, aggregatedInParent, newTargetList, flattenedAddedTargets);
+        List *aggregated = traceprov_aggregate_on_set(stmt, modified, context, aggregatedInParent, newTargetList, flattenedAddedTargets);
         if (createdTargets) *createdTargets = aggregated;
     }
     return modified;
@@ -378,7 +373,7 @@ PlannedStmt *traceprov_set_test(
 
 
 // Recursively perform the traceprov rewrite.
-Query * performTraceProvRewrite(
+Query *traceprov_perform_rewrite(
     Query *parse, 
     List **addedTargets,
     TraceProvParseContext *tpContext,
@@ -448,7 +443,7 @@ Query * performTraceProvRewrite(
         // In this case, use all the generated targets, and log them, and generate pointers.
         // We'll also have to nest the entire query in a subquery block (only if we're at the top level)
         // So, it is actually two functions. The nesting occurs at the top level (since that is the only place mark is explicitly needed)
-        traceprovAggregateRewrite(
+        traceprov_aggregate_rewrite(
             targetsToAdd,
             &targetsToAdd,
             tpContext,
@@ -472,7 +467,7 @@ Query * performTraceProvRewrite(
             List *unionAdjusted = adjustUnionSetOps(
                 setop, targetsPerRTE, parse->rtable, tpContext
             );
-            targetsToAdd = traceProvFlatten(unionAdjusted);
+            targetsToAdd = traceprov_flatten(unionAdjusted);
             targetsPerRTE = unionAdjusted;
         } else if (setop->op == SETOP_EXCEPT){
             parse = adjustExceptSetOps(
@@ -491,7 +486,7 @@ Query * performTraceProvRewrite(
     }
 
     // In this case, simply extend the target list.
-    parse->targetList = traceProvAppendTargets(targetsToAdd, parse->targetList);
+    parse->targetList = traceprov_append_targets(targetsToAdd, parse->targetList);
 
     List *addedFromSetOps = NIL;
     parse = traceprov_rewrite_sets_to_joins(parse, tpContext, targetsPerRTE, &addedFromSetOps, parentHasAggs);
@@ -500,6 +495,9 @@ Query * performTraceProvRewrite(
     }
 
     if (addedTargets) *addedTargets = targetsToAdd;
+
+    // if there are sublinks, need to go, also, go over them.
+    // we log all of the matching keys, from the left side.
     return parse;
 }
 
@@ -564,7 +562,7 @@ void rteRewrite(
     } else if (rte->rtekind == RTE_SUBQUERY){
         List *childTargets = NIL;
         // All the next queries aren't the root.
-        rte->subquery = performTraceProvRewrite(rte->subquery, &childTargets, tpContext, parentHasAggs);
+        rte->subquery = traceprov_perform_rewrite(rte->subquery, &childTargets, tpContext, parentHasAggs);
         targetsToAdd = traceProvPropagateChildTargets(childTargets, rteIndex);
         ListCell *childTargetCell;
         // Add the created child targets to the RTE colnames.
@@ -650,7 +648,7 @@ Query *addNestedQuery(
         NULL
     );
 
-    Query *targetQuery = cloneQueryForTP(base);
+    Query *targetQuery = traceprov_clone_query(base);
     targetQuery->rtable = list_make1(newTable);
     targetQuery->jointree = fromExpr;
 
