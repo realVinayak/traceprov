@@ -14,6 +14,14 @@
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 #define TRACEPROV_POINTER_TYPE_NAME "traceprov_ptr_type"
 
+// Space to log entries.
+#define TRACEPROV_LOG_FUNC_NAME "traceprov_log_entry"
+
+// volatile version of traceprov_log_entry.
+// This is used if we're in a sublink (where we'd want the side-effect of logging to be seen)
+// Basically, sublinks create a volatility "barrier" for logs (everything inside of this is always stable, until we hit another sublink)
+#define TRACEPROV_LOG_VOLATILE_FUNC_NAME "traceprov_log_entry_volatile"
+
 typedef struct TraceProvUsedRefNavigator {
     bool includeInternals;
     bool goLeft;
@@ -43,18 +51,18 @@ List *traceProvFindUsedRefs(Node *, TraceProvUsedRefNavigator);
 List *traceProvDupInt(int, int);
 List *traceProvDupOid(Oid, int);
 
-List *traceProvFlatten(List *);
-List* traceProvAppendTargets(List *, List *);
+List *traceprov_flatten(List *);
+List* traceprov_append_targets(List *, List *);
 
 const TraceProvTarget *traceProvFindMatchingSetPointer(List *, int);
 
 Node *createEqualityCondition (List*, List*, Index, Index, bool);
 
-Query *cloneQueryForTP(const Query *);
+Query *traceprov_clone_query(const Query *);
 RangeTblEntry *rangeTableEntryFromSubquery(Query *, TraceProvParseContext *);
-Query *traceProvMakeNestedQuery(Query *, TraceProvParseContext *);
+Query *traceprov_make_nested_query(Query *, TraceProvParseContext *);
 
-List *traceProvAggregateOnSet(
+List *traceprov_aggregate_on_set(
     const SetOperationStmt *, 
     Query *,
     TraceProvParseContext *,
@@ -65,7 +73,7 @@ List *traceProvAggregateOnSet(
 
 bool traceProvFindIntList(List *, int);
 
-void traceprovAggregateRewrite(
+void traceprov_aggregate_rewrite(
     const List *,
     List **,
     TraceProvParseContext *,
@@ -78,4 +86,12 @@ Const *makeInt8Const(int64);
 
 List *traceProvPropagateChildTargets(List *, Index);
 char *traceprovParseBackQuery(Query *);
+
+Query *traceprov_perform_rewrite(
+    Query *, 
+    List **,
+    TraceProvParseContext *,
+    bool
+);
+
 #endif

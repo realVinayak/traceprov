@@ -62,15 +62,6 @@ DROP FUNCTION   IF EXISTS traceprov_agg_key_deserialize(bytea, internal);
 
 -- combine
 DROP FUNCTION   IF EXISTS traceprov_agg_key_combine(internal, internal);
-
--- log subqquery pk.
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT);
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT);
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT);
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-DROP FUNCTION   IF EXISTS traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 -- nops.
 DROP AGGREGATE  IF EXISTS traceprov_nop(int, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_nop_sfunc(state internal, int, BIGINT);
@@ -86,6 +77,20 @@ DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 DROP FUNCTION   IF EXISTS traceprov_make_ptr(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION   IF EXISTS traceprov_log_entry_volatile(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
 
 CREATE FUNCTION reinit_state() RETURNS INTEGER AS '$libdir/__FILE__', 'reinit_state' LANGUAGE C;
 
@@ -355,13 +360,6 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset(int, BIGINT, BIGINT, BIGINT, 
     PARALLEL = SAFE
 );
 
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-CREATE FUNCTION traceprov_log_subquery_pk(INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS boolean as '$libdir/__FILE__', 'traceprov_log_subquery_pk' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_agg_from_ptr_sfunc(state internal, int, int, BIGINT) RETURNS internal AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_sfunc' LANGUAGE C;
 CREATE FUNCTION traceprov_agg_from_ptr_finalfunc(state internal) RETURNS bigint AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_finalfunc' LANGUAGE C;
 CREATE FUNCTION traceprov_agg_from_ptr_serialize(internal) RETURNS bytea AS '$libdir/__FILE__', 'traceprov_agg_from_ptr_serialize' LANGUAGE C;
@@ -378,6 +376,27 @@ CREATE AGGREGATE traceprov_agg_from_ptr(int, int, BIGINT) (
     DESERIALFUNC = traceprov_agg_from_ptr_deserialize,
     PARALLEL = SAFE
 );
+
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_make_ptr(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
+
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+CREATE FUNCTION traceprov_log_entry(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
+CREATE FUNCTION traceprov_log_entry_volatile(INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__', 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
 DROP TYPE IF EXISTS traceprov_ptr_type CASCADE;
 

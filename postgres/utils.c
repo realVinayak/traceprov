@@ -21,7 +21,8 @@ void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "\t->last_mapping: %p", layer->last_mapping);
     elog(INFO, "\t->size: %d", layer->size);
     elog(INFO, "\t->current_row: %p", layer->current_row);
-    elog(INFO, "\t->num_groups: %d", layer->num_groups);
+    elog(INFO, "\t->num_groups: %ld", layer->num_groups);
+    elog(INFO, "\t->num_rows: %ld", layer->num_rows);
     elog(INFO, "\t->layer_number: %d", layer->layer_number);
     elog(INFO, "\t->record_padding: %d", layer->record_padding);
     elog(INFO, "\t->end_of_memory_zone: %p", layer->end_of_memory_zone);

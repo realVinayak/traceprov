@@ -654,38 +654,6 @@ Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
     PG_RETURN_POINTER(context);
 }
 
-PG_FUNCTION_INFO_V1(traceprov_log_subquery_pk);
-
-Datum traceprov_log_subquery_pk(PG_FUNCTION_ARGS){
-    int rc = 0;
-    
-    const int layer_number = PG_GETARG_INT32(0);
-    const int num_key_records = PG_NARGS() - 1; // -1 for the layer number
-    if ((rc = initialize_local_and_layer(layer_number, num_key_records - 1, true))){
-        PRINT_ON_DEBUG("Error setting up the local or layer for log-subquery");
-        return rc;
-    }
-
-    struct traceprov_aggregate_layer *subquery_layer = get_layer(layer_number);
-
-    if (unlikely(subquery_layer->current_row == subquery_layer->end_of_memory_zone)){
-        if (unlikely(rc = grow_layer_file(subquery_layer))){
-            elog(ERROR, "Received an error when growing subquery trace file");
-        }
-    }
-
-    subquery_layer->current_row += subquery_layer->record_padding;
-    // We'd start writing the PKs here.
-    int64 *pk_space = (int64 *)subquery_layer->current_row;
-
-    for (int pk_id = 1; pk_id < PG_NARGS(); pk_id++, pk_space++){
-        *pk_space = PG_GETARG_INT64(pk_id);
-    }
-
-    subquery_layer->current_row = (void *)pk_space;
-    PG_RETURN_BOOL(1);
-}
-
 int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_layer *layer){
 
     // Here, we can be a bit clever.
@@ -876,19 +844,13 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
     PG_RETURN_POINTER(NULL);
 }
 
-// Takes multiple input bigints, logs them, and makes a pointer out of it.
-// In general, we'd want to reuse the pointers, rather than log them, and generate a pointer again.
-// However, this becomes needed in a join, for example, where the pointer can be duplicated.
-// In that case, the pointer is not safely unique, so need to create this structure.
-PG_FUNCTION_INFO_V1(traceprov_make_ptr);
-
-Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
+uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     int rc = 0;
     const int layer_number = PG_GETARG_INT32(1);
-    const int num_records = PG_NARGS() - 1; // 1 for layer number
-
-    // Doing -1 because otherwise we have another space for group number.
-    if ((rc = initialize_local_and_layer(layer_number, num_records, true))){
+    // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
+    // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
+    const int width = return_pointer_version ? PG_NARGS() - 1 : PG_NARGS() - 2;
+    if ((rc = initialize_local_and_layer(layer_number, width, true))){
         PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
         elog(ERROR, "Error setting up local or layer: %d", rc);
     }
@@ -902,18 +864,35 @@ Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
     }
 
     // Pad before.
-    current_layer->current_row += current_layer->record_padding;
-
+    current_layer->current_row += current_layer->record_padding;    
     int64 *pk_space = (int64*)(current_layer->current_row);
     for (int arg_idx = 1; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
         // Don't bother writing, it is 0x0 (from truncate anyways)
         if (PG_ARGISNULL(arg_idx)) continue;
         *pk_space = PG_GETARG_INT64(arg_idx);
     }
+    if (return_pointer_version){
+        current_layer->current_row = (void *)&pk_space[1];
+        PG_RETURN_INT64(pk_space);
+    }
+    current_layer->current_row = pk_space;
+    PG_RETURN_INT64(++current_layer->num_rows);
+}
 
-    // Here, we return pointer to the group space.
-    current_layer->current_row = (void *)&pk_space[1];
-    PG_RETURN_POINTER(pk_space);
+// Takes multiple input bigints, logs them, and makes a pointer out of it.
+// In general, we'd want to reuse the pointers, rather than log them, and generate a pointer again.
+// However, this becomes needed in a join, for example, where the pointer can be duplicated.
+// In that case, the pointer is not safely unique, so need to create this structure.
+PG_FUNCTION_INFO_V1(traceprov_make_ptr);
+
+Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
+    PG_RETURN_POINTER(perform_log(fcinfo, true));
+}
+
+PG_FUNCTION_INFO_V1(traceprov_log_entry);
+
+Datum traceprov_log_entry(PG_FUNCTION_ARGS){
+    PG_RETURN_INT64(perform_log(fcinfo, false));
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_offset_finalfunc);

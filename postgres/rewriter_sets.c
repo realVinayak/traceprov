@@ -250,7 +250,7 @@ Query *adjustExceptSetOps(
     if (!root->all){
         // Need to perform deduplication on the left-most ref.
         // The targets in the base query have not been adjusted yet, so this does simplify some of that.
-        Query *modified = traceProvMakeNestedQuery(rte->subquery, context);
+        Query *modified = traceprov_make_nested_query(rte->subquery, context);
         // the returned aggregated becomes the new set.
         List *newTargetList = NIL;
         for (int i = 0; i < list_length(modified->targetList); i++){
@@ -259,7 +259,7 @@ Query *adjustExceptSetOps(
                 continue;
             }
         }
-        List *aggregated = traceProvAggregateOnSet(
+        List *aggregated = traceprov_aggregate_on_set(
             leftParentSetOp,
             modified,
             context,
@@ -270,15 +270,14 @@ Query *adjustExceptSetOps(
         rte->subquery = modified;
         extraTargetsForRTE = aggregated;
     }else{
-        Query *modified = traceProvMakeNestedQuery(rte->subquery, context);
+        Query *modified = traceprov_make_nested_query(rte->subquery, context);
         rte->subquery = modified;
         const int originalLength = list_length(modified->targetList) - list_length(extraTargetsForRTE);
         for (int i = 0; i < (list_length(extraTargetsForRTE)); i++){
             ((TraceProvTarget *)(list_nth(extraTargetsForRTE, i)))->targetEntry = list_nth(modified->targetList, i + originalLength);
         }
     }
-    RangeTblEntry *leftMostRTE = list_nth(queryRteList, (leftMostRef->rtindex - 1));
-    const int finalLength = list_length(leftMostRTE->subquery->targetList);
+    const int finalLength = list_length(rte->subquery->targetList);
     // Need to cast the extraTargets to be of the new type.
     ListCell *extraTargetCursor;
     foreach(extraTargetCursor, extraTargetsForRTE){
@@ -384,11 +383,11 @@ Query *adjustExceptSetOps(
     }
     // Need to go over the extra targets, and append them to current query block.
     // Then, need to make it a subquery, and in the outer query, add the casts back.
-    inputQuery->targetList = traceProvAppendTargets(extraTargetsForRTE, inputQuery->targetList);
+    inputQuery->targetList = traceprov_append_targets(extraTargetsForRTE, inputQuery->targetList);
     // Now, need to wrap the input query inside a subquery.
     // Get the new child targets.
     List *childTargets = traceProvPropagateChildTargets(extraTargetsForRTE, 1);
-    Query *parent = traceProvMakeNestedQuery(inputQuery, context);
+    Query *parent = traceprov_make_nested_query(inputQuery, context);
     ListCell *childTargetCursor;
     foreach(childTargetCursor, childTargets){
         TraceProvTarget *tpTarget = (TraceProvTarget *)lfirst(childTargetCursor);
