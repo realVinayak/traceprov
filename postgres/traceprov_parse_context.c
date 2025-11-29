@@ -24,6 +24,7 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     context->properties = palloc0_object(TraceProvParseGraphProperties);
     context->properties->setPaddingMap = NIL;
     context->properties->setGraphMap = NIL;
+    context->properties->sublinkMap = NIL;
     context->parent_targets = NIL;
 }
 
@@ -355,6 +356,7 @@ typedef struct TraceProvDependencyMetaHeader {
     uint32 numGraphs;
     uint32 numSetPaddingMapItems;
     uint32 numSetGraphMapItems;
+    uint32 numSublinkItems;
 } TraceProvDependencyMetaHeader;
 
 // This is not in the header for a reason, nothing outside of this file
@@ -400,6 +402,7 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
     metaHeader.numGraphs = list_length(graphs);
     metaHeader.numSetPaddingMapItems = list_length(context->properties->setPaddingMap);
     metaHeader.numSetGraphMapItems = list_length(context->properties->setGraphMap);
+    metaHeader.numSublinkItems = list_length(context->properties->sublinkMap);
     failSafeWrite(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
     _serializeContext(context, fptr);
     foreach(graphCursor, graphs){
@@ -411,7 +414,39 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
     fclose(fptr);
 }
 
-void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *outputFile){
+typedef struct TraceProvEntryMetaHeader {
+    uint32 num_keys;
+} TraceProvEntryMetaHeader;
+
+// Used for serialization, since we also need to serialize the corresponding keys in sublinks.
+static void _serializeTraceProvEntry(const TraceProvEntry *entry, FILE *output_file){
+    TraceProvEntryMetaHeader meta_header;
+    meta_header.num_keys = list_length(entry->sublinks);
+    failSafeWrite(output_file, &meta_header, sizeof(TraceProvEntryMetaHeader));
+    failSafeWrite(output_file, entry, sizeof(TraceProvEntry));
+    ListCell *entry_cursor;
+    foreach(entry_cursor, entry->sublinks){
+        TraceProvTargetSublinkItem *sublink_item = (TraceProvTargetSublinkItem *)lfirst(entry_cursor);
+        failSafeWrite(output_file, sublink_item, sizeof(TraceProvTargetSublinkItem));
+    }
+}
+
+
+static TraceProvEntry *_deserializeTraceProvEntry(FILE *input_file){
+    TraceProvEntry *entry = palloc0_object(TraceProvEntry);
+    TraceProvEntryMetaHeader meta_header;
+    failSafeRead(input_file, &meta_header, sizeof(TraceProvEntryMetaHeader));
+    failSafeRead(input_file, entry, sizeof(TraceProvEntry));
+    entry->sublinks = NIL;
+    for (uint32 i = 0; i < meta_header.num_keys; i++){
+        TraceProvTargetSublinkItem *sublink_item = palloc0_object(TraceProvTargetSublinkItem);
+        failSafeRead(input_file, sublink_item, sizeof(TraceProvTargetSublinkItem));
+        entry->sublinks = lappend(entry->sublinks, sublink_item);
+    }
+    return entry;
+}
+
+void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output_file){
 
     TraceProvDependencyHeader *header = palloc0_object(TraceProvDependencyHeader);
     if (TRACEPROV_GRAPH_IS_VALID(graph)){
@@ -419,20 +454,20 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
         header->numberOfDirectChildren = list_length(graph->children);
     }
     memcpy(&header->graphPtr, &graph, sizeof(TraceProvDependency *));
-    failSafeWrite(outputFile, header, sizeof(TraceProvDependencyHeader));
+    failSafeWrite(output_file, header, sizeof(TraceProvDependencyHeader));
     if (TRACEPROV_GRAPH_IS_VALID(graph)){
-        failSafeWrite(outputFile, &graph->headNumber, sizeof(graph->headNumber));
+        failSafeWrite(output_file, &graph->headNumber, sizeof(graph->headNumber));
         ListCell *entryCursor;
         // Write the entries next.
         foreach(entryCursor, graph->entries){
             const TraceProvEntry *entry = (TraceProvEntry *)lfirst(entryCursor);
-            failSafeWrite(outputFile, entry, sizeof(TraceProvEntry));
+            _serializeTraceProvEntry(entry, output_file);
         }
 
         ListCell *childCursor;
         foreach(childCursor, graph->children){
             const TraceProvDependency *childGraph = (TraceProvDependency *)lfirst(childCursor);
-            _serializeTraceProvDepedency(childGraph, outputFile);
+            _serializeTraceProvDepedency(childGraph, output_file);
         }
     }
 }
@@ -453,6 +488,11 @@ void _serializeContext(const TraceProvParseContext* context, FILE* file){
         const TraceProvDependency *wrapperDependency = graphMapItem->graph;
         failSafeWrite(file, graphMapItem, sizeof(TraceProvSetGraphMapItem));
         _serializeTraceProvDepedency(wrapperDependency, file);
+    }
+    ListCell *sublinkMapItemCursor;
+    foreach(sublinkMapItemCursor, context->properties->sublinkMap){
+        const TraceProvDependency *sublinkGraph = (TraceProvDependency *)lfirst(sublinkMapItemCursor);
+        _serializeTraceProvDepedency(sublinkGraph, file);
     }
 }
 
@@ -490,9 +530,7 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
 
         List *entries = NIL;
         for (uint32 idx = 0; idx < header.numberOfEntries; idx++){
-            TraceProvEntry *entry = palloc0_object(TraceProvEntry);
-            // Here, we should never get an eof.
-            failSafeRead(file, entry, sizeof(TraceProvEntry));
+            TraceProvEntry *entry  = _deserializeTraceProvEntry(file);
             entries = lappend(entries, entry);
         }
 
@@ -514,18 +552,22 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDependencyMetaHeader* metaHeader){
     TraceProvParseContext *context = palloc0_object(TraceProvParseContext);
     tpParseInitializeContext(context);
-    for (int i = 0; i < metaHeader->numSetPaddingMapItems; i++){
+    for (uint32 i = 0; i < metaHeader->numSetPaddingMapItems; i++){
         TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
         failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
         context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, setPaddingMapItem);
     }
 
-    for (int i = 0; i < metaHeader->numSetGraphMapItems; i++){
+    for (uint32 i = 0; i < metaHeader->numSetGraphMapItems; i++){
         TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
         failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
         TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
         setGraphMapItem->graph = wrapper;
         context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
+    }
+    for (uint32 i = 0; i < metaHeader->numSublinkItems; i++){
+        TraceProvDependency *graph = _deserializeTraceProvDependency(file);
+        context->properties->sublinkMap = lappend(context->properties->sublinkMap, graph);
     }
     return context;
 }

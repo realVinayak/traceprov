@@ -2,6 +2,7 @@
 # These tests just check that the rewrite is correct (and that the reverse from representation -> SQL is also valid)
 # to run: export tp_root=../postgres/ && export tp_skip_build=1 && source .env && python3 -m unittest tests.test_rewriter
 
+from typing import List, Literal, NamedTuple, Tuple
 from traceprovpy.tests.utils import TestDbSetup
 from traceprovpy.tools.setup import (
     traceprov_make_query,
@@ -10,6 +11,7 @@ from traceprovpy.tools.setup import (
 )
 import os
 import json
+from enum import Enum, auto
 
 ALL_TABLES_QUERY = "select pg_class.oid, relname from pg_class join pg_namespace on pg_namespace.oid = relnamespace where relkind='r' and  nspname='public';"
 
@@ -75,6 +77,7 @@ class TestRewrite(TestDbSetup):
     def _assert_simple_context(self, context: dict[str, list[dict]]):
         self.assertEqual(context["setPaddingMap"], [])
         self.assertEqual(context["setGraphMap"], [])
+        self.assertEqual(context["sublinks"], [])
 
     def test_simple_aggregation_no_group_by_1_pk(self):
         query = TestRewrite.simple_aggregation_no_group_by(self.table_name_1)
@@ -90,7 +93,7 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                 ],
                 "children": [{"graphType": "NULL"}],
             }
@@ -113,7 +116,7 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                 ],
                 "children": [{"graphType": "NULL"}],
             }
@@ -134,7 +137,7 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                 ],
                 "children": [{"graphType": "NULL"}],
             }
@@ -157,7 +160,7 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                 ],
                 "children": [{"graphType": "NULL"}],
             }
@@ -179,10 +182,10 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0)]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
                 ],
                 "children": [
                     {"graphType": "NULL"},
@@ -228,13 +231,13 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 1,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0)]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0)]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [])]",
                 ],
                 "children": [
                     {"graphType": "NULL"},
@@ -278,17 +281,17 @@ class TestRewrite(TestDbSetup):
                 "graphType": "REGULAR",
                 "headNumber": 13,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0)]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0)]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0)]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
                 ],
                 "children": [
                     {
                         "graphType": "REGULAR",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     },
@@ -296,7 +299,7 @@ class TestRewrite(TestDbSetup):
                         "graphType": "REGULAR",
                         "headNumber": 4,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     },
@@ -304,7 +307,7 @@ class TestRewrite(TestDbSetup):
                         "graphType": "REGULAR",
                         "headNumber": 7,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     },
@@ -312,7 +315,7 @@ class TestRewrite(TestDbSetup):
                         "graphType": "REGULAR",
                         "headNumber": 10,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0)]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     },
