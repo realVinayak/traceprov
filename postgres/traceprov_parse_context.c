@@ -6,6 +6,9 @@
 
 #define GET_ROOT_CONTEXT(context) (context->root_context)
 
+
+#define NEED_SEP(cursor) (foreach_current_index(cursor) > 0)
+
 // to simulate classes.
 TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *context){
     TraceProvLayerNumber current = GET_ROOT_CONTEXT(context)->global_layer_number;
@@ -48,12 +51,50 @@ void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvD
     GET_ROOT_CONTEXT(context)->properties->setGraphMap = lappend(GET_ROOT_CONTEXT(context)->properties->setGraphMap, setGraphMapItem);
 }
 
+TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
+    int layer_number,
+    int offset_in_key
+){
+    TraceProvTargetSublinkItem *item = palloc0_object(TraceProvTargetSublinkItem);
+    item->layer_number = layer_number;
+    item->offset_in_key = offset_in_key;
+    return item;
+}
+
+void tpAddSublinkMapItem(
+    TraceProvParseContext *context,
+    // Need to also store, for each key target, what the corresponding entry is
+    List *key_traceprov_targets,
+    const List *ptr_traceprov_targets,
+    int layer_number
+){
+    ListCell *target_entry_cursor;
+    List *entries = NIL;
+    List *child_graphs = NIL;
+    foreach(target_entry_cursor, ptr_traceprov_targets){
+        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(target_entry_cursor)), &child_graphs, NULL);
+        entries = lappend(entries, tpEntry);
+    }
+    const TraceProvDependency *graph = makeTraceProvDependency(
+        layer_number,
+        child_graphs,
+        entries
+    );
+    GET_ROOT_CONTEXT(context)->properties->sublinkMap = lappend(GET_ROOT_CONTEXT(context)->properties->sublinkMap, (TraceProvDependency*)graph);
+    target_entry_cursor = NULL;
+    foreach(target_entry_cursor, key_traceprov_targets){
+        TraceProvTarget *target = (TraceProvTarget *)(lfirst(target_entry_cursor));
+        target->sublinks = lappend(target->sublinks, makeTraceProvTargetSublinkItem(layer_number, foreach_current_index(target_entry_cursor)));
+    }
+}
+
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
     TraceProvDependency *dependency,
     int setNumber,
-    bool isSetPointer
+    bool isSetPointer,
+    List *sublinks
 ){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
@@ -61,6 +102,7 @@ TraceProvTarget *makeTraceProvTarget(
     tpTarget->graph = dependency;
     tpTarget->setNumber = setNumber;
     tpTarget->isSetPointer = isSetPointer;
+    tpTarget->sublinks = sublinks;
     return tpTarget;
 }
 
@@ -106,6 +148,7 @@ TraceProvEntry *tpResolveEntry(
         *childGraphs = lappend(*childGraphs, graph);
     }
     tpEntry->setNumber = tpTarget->setNumber;
+    tpEntry->sublinks = tpTarget->sublinks;
     return tpEntry;
 }
 
@@ -138,14 +181,28 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
     }else{
         elog(ERROR, "Got invalid kind: %d", entry->kind);
     }
+    
+    StringInfoData sublink_items;
+    initStringInfo(&sublink_items);
+    appendStringInfoChar(&sublink_items, '[');
+    ListCell *sublink_item_cursor;
+    foreach(sublink_item_cursor, entry->sublinks){
+        if (NEED_SEP(sublink_item_cursor)){
+            appendStringInfoChar(&sublink_items, ',');
+        }
+        const TraceProvTargetSublinkItem *sublink_item = (TraceProvTargetSublinkItem *)(lfirst(sublink_item_cursor));
+        appendStringInfo(&sublink_items, "(%d, %d)", sublink_item->layer_number, sublink_item->offset_in_key);
+    }
+    appendStringInfoChar(&sublink_items, ']');
     appendStringInfo(
         &buf, 
-        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d)]",
+        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s)]",
         kindStr,
         entry->relId,
         entry->resNo,
         entry->attrNumber,
-        entry->setNumber
+        entry->setNumber,
+        sublink_items.data
     );
     return buf.data;
 }
@@ -168,27 +225,33 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
     appendStringInfo(&buf, ",");
     ListCell *setPaddingMapItemCursor;
     appendStringInfo(&buf, "\"setPaddingMap\": [");
-    bool needsSep = false;
     foreach(setPaddingMapItemCursor, context->properties->setPaddingMap){
-        if (needsSep == true){
+        if (NEED_SEP(setPaddingMapItemCursor)){
             appendStringInfo(&buf, ",");
         }
-        needsSep = true;
         const TraceProvSetPaddingMapItem *setPaddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(setPaddingMapItemCursor);
         appendStringInfo(&buf, "{\"setNumber\": %d, \"padding\": %d}", setPaddingMapItem->setNumber, setPaddingMapItem->padding);
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"setGraphMap\": [");
-    needsSep = false;
     ListCell *setGraphMapItemCursor;
     foreach(setGraphMapItemCursor, context->properties->setGraphMap){
-        if (needsSep == true){
+        if (NEED_SEP(setGraphMapItemCursor)){
             appendStringInfo(&buf, ",");
         }
-        needsSep = true;
         const TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem *)lfirst(setGraphMapItemCursor);
         appendStringInfo(&buf, "{\"setNumber\": %d, \"graph\": %s}", setGraphMapItem->setNumber, traceProvDependencyToJson(setGraphMapItem->graph));
+    }
+    appendStringInfo(&buf, "]");
+    appendStringInfo(&buf, ",");
+    appendStringInfo(&buf, "\"sublinks\": [");
+    ListCell *sublinkGraphCursor;
+    foreach(sublinkGraphCursor, context->properties->sublinkMap){
+        if(NEED_SEP(sublinkGraphCursor)){
+            appendStringInfo(&buf, ",");
+        }
+        appendStringInfo(&buf, "%s", traceProvDependencyToJson((TraceProvDependency *)lfirst(sublinkGraphCursor)));
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, "}");
@@ -460,7 +523,7 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
     for (int i = 0; i < metaHeader->numSetGraphMapItems; i++){
         TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
         failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
-        const TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
+        TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
         setGraphMapItem->graph = wrapper;
         context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
     }

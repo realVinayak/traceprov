@@ -110,7 +110,9 @@ List *adjustUnionSetOps(
                     targetInParent,
                     NULL,
                     setNumber,
-                    isSetPointer
+                    isSetPointer,
+                    // These have trivially no sublinks.
+                    NIL
                 )
             );
         }
@@ -142,7 +144,8 @@ List *adjustUnionSetOps(
                     copiedTarget,
                     tpTarget->graph,
                     setNumber,
-                    tpTarget->isSetPointer
+                    tpTarget->isSetPointer,
+                    tpTarget->sublinks
                 );
 
             extraTargetsTyped = lappend(

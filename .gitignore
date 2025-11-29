@@ -57,3 +57,4 @@ config.sub
 configure
 postgres/bld/*
 */*.o.dSYM/
+.editorconfig
