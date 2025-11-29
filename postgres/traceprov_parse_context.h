@@ -75,13 +75,17 @@ typedef struct TraceProvParseGraphProperties {
     List *setGraphMap;
 } TraceProvParseGraphProperties;
 
-
 typedef struct TraceProvParseContext {
     TraceProvLayerNumber global_layer_number;
     unsigned long long int unique_idx;
     int simple_incrementor;
     TraceProvParseGraphProperties *properties;
+    // Used in sublinks.
+    List *parent_targets;
+    struct TraceProvParseContext *root_context;
 } TraceProvParseContext;
+
+TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);
 
 void tpParseInitializeContext(TraceProvParseContext *);
 

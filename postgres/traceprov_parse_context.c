@@ -4,10 +4,12 @@
 #include "traceprov.h"
 #include "miscadmin.h"
 
+#define GET_ROOT_CONTEXT(context) (context->root_context)
+
 // to simulate classes.
 TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *context){
-    TraceProvLayerNumber current = context->global_layer_number;
-    context->global_layer_number += TRACEPROV_LAYER_INCREMENT_BOUNDARY;
+    TraceProvLayerNumber current = GET_ROOT_CONTEXT(context)->global_layer_number;
+    GET_ROOT_CONTEXT(context)->global_layer_number += TRACEPROV_LAYER_INCREMENT_BOUNDARY;
     return current;
 }
 
@@ -19,15 +21,16 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     context->properties = palloc0_object(TraceProvParseGraphProperties);
     context->properties->setPaddingMap = NIL;
     context->properties->setGraphMap = NIL;
+    context->parent_targets = NIL;
 }
 
 char *tpParseGetUniqueAlias(TraceProvParseContext *context){
-    unsigned long long int incremented = context->unique_idx++;
+    unsigned long long int incremented = GET_ROOT_CONTEXT(context)->unique_idx++;
     return psprintf("tp_table_%lld", incremented);
 }
 
 int tpParseGetUniqueNumber(TraceProvParseContext *context){
-    return ++(context->simple_incrementor);
+    return ++(GET_ROOT_CONTEXT(context)->simple_incrementor);
 }
 
 // Add the set number (and the performed padding) to the context's properties
@@ -35,14 +38,14 @@ void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padd
     TraceProvSetPaddingMapItem *mapItem = palloc0_object(TraceProvSetPaddingMapItem);
     mapItem->setNumber = setNumber;
     mapItem->padding = padding;
-    context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, mapItem);
+    GET_ROOT_CONTEXT(context)->properties->setPaddingMap = lappend(GET_ROOT_CONTEXT(context)->properties->setPaddingMap, mapItem);
 }
 
 void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvDependency*graph){
     TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
     setGraphMapItem->graph = graph;
     setGraphMapItem->setNumber = setNumber;
-    context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
+    GET_ROOT_CONTEXT(context)->properties->setGraphMap = lappend(GET_ROOT_CONTEXT(context)->properties->setGraphMap, setGraphMapItem);
 }
 
 TraceProvTarget *makeTraceProvTarget(
@@ -462,4 +465,12 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
         context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
     }
     return context;
+}
+
+TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext *context){
+    TraceProvParseContext *copied_context = palloc0_object(TraceProvParseContext);
+    memcpy(copied_context, context, sizeof(TraceProvParseContext));
+    copied_context->parent_targets = list_copy(context->parent_targets);
+    copied_context->root_context = context->root_context;
+    return copied_context;
 }

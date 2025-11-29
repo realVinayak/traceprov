@@ -846,7 +846,7 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
 
 uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     int rc = 0;
-    const int layer_number = PG_GETARG_INT32(1);
+    const int layer_number = PG_GETARG_INT32(0);
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
     const int width = return_pointer_version ? PG_NARGS() - 1 : PG_NARGS() - 2;
