@@ -443,6 +443,12 @@ Query *traceprov_perform_rewrite(
         targetsPerRTE = lappend(targetsPerRTE, rteTargets);
     }
 
+    // if there are sublinks, need to go, also, go over them.
+    // we log all of the matching keys, from the left side.
+    if (parse->hasSubLinks){
+        traceprov_rewrite_sublinks(parse, tpContext, targetsPerRTE);
+    }
+
     if (parse->hasAggs){
         // We're in an aggregation.
         // In this case, use all the generated targets, and log them, and generate pointers.
@@ -501,11 +507,6 @@ Query *traceprov_perform_rewrite(
 
     if (addedTargets) *addedTargets = targetsToAdd;
 
-    // if there are sublinks, need to go, also, go over them.
-    // we log all of the matching keys, from the left side.
-    if (parse->hasSubLinks){
-        traceprov_rewrite_sublinks(parse, tpContext, targetsPerRTE);
-    }
     return parse;
 }
 
@@ -561,7 +562,8 @@ void rteRewrite(
                     newTargetEntry->resorigcol = indexAttrId;
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false));
+                    // Also why there's no sublinks (yet)
+                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL));
                 }
             }
             ReleaseSysCache(indexTuple);

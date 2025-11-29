@@ -38,6 +38,7 @@ typedef struct TraceProvEntry {
     AttrNumber attrNumber;
     // The set number that this entry corresponds to.
     int setNumber;
+    List *sublinks;
 } TraceProvEntry;
 
 // Dependency stores which layers give information about the next ones.
@@ -73,6 +74,8 @@ typedef struct TraceProvParseGraphProperties {
     List *setPaddingMap;
     // List of TraceProvSetGraphMapItem.
     List *setGraphMap;
+    // List of TraceProvParseContext (sublinks).
+    List *sublinkMap;
 } TraceProvParseGraphProperties;
 
 typedef struct TraceProvParseContext {
@@ -94,6 +97,7 @@ char *tpParseGetUniqueAlias(TraceProvParseContext *);
 int tpParseGetUniqueNumber(TraceProvParseContext *);
 void tpAddSetPaddingItem(TraceProvParseContext *, int, int);
 void tpAddSetGraphItem(TraceProvParseContext *, int, TraceProvDependency *);
+void tpAddSublinkMapItem(TraceProvParseContext *, List *, const List*, int);
 
 TraceProvEntry *makeTraceProvEntry();
 
@@ -104,6 +108,16 @@ List *deserializeTraceProvDependency(TraceProvParseContext **);
 
 void traceprovPrintContext(const TraceProvParseContext *);
 
+typedef struct TraceProvTargetSublinkItem {
+    int layer_number;
+    int offset_in_key;
+} TraceProvTargetSublinkItem;
+
+TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
+    int layer_number,
+    int offset_in_key
+);
+
 typedef struct TraceProvTarget {
     bool isPointer;
     TargetEntry *targetEntry;
@@ -111,16 +125,18 @@ typedef struct TraceProvTarget {
     // For each union set, there are going to be pointers that make up that set.
     // Each set has its own dependency graph (in an union)
     int setNumber;
-    // If it is an union set, then 
     bool isSetPointer;
+    // List of TraceProvTargetSublinkItem
+    List *sublinks;
 } TraceProvTarget;
 
 TraceProvTarget *makeTraceProvTarget(
-    bool, 
-    TargetEntry *,
-    TraceProvDependency *,
-    int,
-    bool
+    bool isPointer, 
+    TargetEntry *targetEntry,
+    TraceProvDependency *dependency,
+    int setNumber,
+    bool isSetPointer,
+    List *sublinks
 );
 
 TraceProvEntry *tpResolveEntry(const TraceProvTarget *, List **, List**);

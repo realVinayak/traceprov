@@ -13,14 +13,9 @@ static Node *rewrite_sublinks_mutator(Node *, TraceProvParseContext *);
 // The rewrite is implemented using walkers (over the expressions)
 void traceprov_rewrite_sublinks(Query *query, TraceProvParseContext*context, const List *added_targets_per_rte){
     if (!query->hasSubLinks) return;
-
-    // 1. rewrite any sublinks in target list (no correlation to current level possible)
-    query->targetList = (List*)rewrite_sublinks_mutator((Node*)query->targetList, context);
-
-    // 2. add the new provenance targets to the context
     context->parent_targets = lappend(context->parent_targets, (List*)added_targets_per_rte);
 
-    // 3. rewrite any sublinks in the qual list (correlation to current level is possible)
+    query->targetList = (List*)rewrite_sublinks_mutator((Node*)query->targetList, context);
     query->jointree = (FromExpr*)rewrite_sublinks_mutator((Node*)query->jointree, context);
     query->havingQual = rewrite_sublinks_mutator((Node*)query->havingQual, context);
 }
@@ -53,33 +48,30 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         // We stop once we see find any match.
         List *correlated_arg_vars = NIL;
         ListCell *provenance_queue = NULL;
+        List *correlated_provenance_targets = NIL;
         foreach(provenance_queue, new_context->parent_targets){
             const int var_level_id = foreach_current_index(provenance_queue) + 1;
             const List *provenance_targets_per_rte = (List*)lfirst(provenance_queue);
-            const List *correlated_vars = pull_vars_of_level_ignore_sublinks((Node*)rewritten_subselect, var_level_id);
+            const List *correlated_targets = pull_vars_of_level_ignore_sublinks((Node*)rewritten_subselect, var_level_id);
 
             // no correlated vars case. 
-            if (list_length(correlated_vars) == 0) continue;
+            if (list_length(correlated_targets) == 0) continue;
             ListCell *correlated_var_cursor;
 
-            foreach(correlated_var_cursor, correlated_vars){
+            foreach(correlated_var_cursor, correlated_targets){
                 const Var *correlated_var = (Var *)lfirst(correlated_var_cursor);
-                const List *provenance_targets = list_nth(provenance_targets_per_rte, correlated_var->varno - 1);
+                List *provenance_targets = list_nth(provenance_targets_per_rte, correlated_var->varno - 1);
                 ListCell *provenance_target_to_add;
+                correlated_provenance_targets = provenance_targets;
                 foreach(provenance_target_to_add, provenance_targets){
                     Var *outerVar = NULL;
                     const TraceProvTarget *prov_target = ((TraceProvTarget *)lfirst(provenance_target_to_add));
-                    if (prov_target->isPointer){
-                        outerVar = makeVarFromTargetEntry(
-                            correlated_var->varno, 
-                            prov_target->targetEntry
-                        );
-                    }else{
-                        if (!IsA((prov_target->targetEntry->expr), Var)){
-                            elog(ERROR, "traceprov: Expected the non-pointer to always be a var.");
-                        }
-                        outerVar = (Var*)copyObject(prov_target->targetEntry->expr);
+                    // At this point, regardless of how it is structured, it will always be a var.
+                    // Only case where we have constants are still going to be seen as vars at this level.
+                    if (!IsA((prov_target->targetEntry->expr), Var)){
+                        elog(ERROR, "traceprov: Expected the prov target to always be a var.");
                     }
+                    outerVar = (Var*)copyObject(prov_target->targetEntry->expr);
                     outerVar->varlevelsup = correlated_var->varlevelsup;
                     correlated_arg_vars = lappend(
                         correlated_arg_vars, 
@@ -87,9 +79,13 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                     );
                 }
             }
+            // If we find one correlation, that's all we need.
+            break;
         }
         // Log the traceprov references.
         TraceProvLayerNumber layer_number = tpParseGetLayerNumber(context->root_context);
+        // Add the correlated targets (as keys), and the targets of the base query to the context.
+        tpAddSublinkMapItem(new_context, correlated_provenance_targets, added_targets, layer_number);
         Node * layer_number_const = (Node *) makeConst(
             INT4OID, 
             -1, 

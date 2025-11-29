@@ -28,17 +28,8 @@ typedef struct TraceProvUsedRefNavigator {
     bool goRight;
 } TraceProvUsedRefNavigator;
 
-static TraceProvUsedRefNavigator traceProvInclusiveNavigator = {
-    .includeInternals = true,
-    .goLeft = true,
-    .goRight = true
-};
-
-static TraceProvUsedRefNavigator traceProvLeafNavigator = {
-    .includeInternals = false,
-    .goLeft = true,
-    .goRight = true
-};
+extern TraceProvUsedRefNavigator traceProvInclusiveNavigator;
+extern TraceProvUsedRefNavigator traceProvLeafNavigator;
 
 void traceProvAssertNoResJunk(const List *);
 void traceProvAssertIsSubquery(const RangeTblEntry *);

@@ -109,7 +109,7 @@ extern "C" {
 
     struct infer_result {
         size_t width;
-        std::vector<int64> **ids;
+        std::vector<uint64> **ids;
     };
 
     void store_inference(
@@ -118,7 +118,7 @@ extern "C" {
         const struct infer_result *result
     ){
         const size_t width = result->width;
-        std::vector<int64> ** pk_records = result->ids;
+        std::vector<uint64> ** pk_records = result->ids;
         bool * nulls = (bool *)malloc(sizeof(bool)*width);
         memset(nulls, 0, sizeof(bool)*width);
 
@@ -138,11 +138,11 @@ extern "C" {
         return;
     }
 
-    std::vector<int64> *set_diff(std::vector<int64> *first, std::vector<int64> *second){
+    std::vector<uint64> *set_diff(std::vector<uint64> *first, std::vector<uint64> *second){
       // set diff, assumes sorted.
       unsigned long int iter_first = 0;
       unsigned long int iter_second = 0;
-      std::vector<int64> *set_diff_computed = new std::vector<int64>;
+      std::vector<uint64> *set_diff_computed = new std::vector<uint64>;
       while (iter_first < first->size()){
               bool did_loop = false;
               while((iter_second < second->size()) && (first->at(iter_first) == second->at(iter_second))) {
@@ -161,7 +161,7 @@ extern "C" {
     static void perform_inference_graph_worker(
         struct traceprov_shared_context *sharedContext,
         const TraceProvDependency *graph,
-        std::vector<int64> *reference,
+        std::vector<uint64> *reference,
         uint8 worker_id
     ){
         // We need to get the recorded input in the layer file (given the reference)
@@ -181,9 +181,9 @@ extern "C" {
         const void *ptr_final_row = get_final_ptr(ptr_layer_row, layer);
         const int entryCount = list_length(graph->entries);
 
-        std::vector<std::vector<int64>*> *entriesValues = new std::vector<std::vector<int64>*>;
+        std::vector<std::vector<uint64>*> *entriesValues = new std::vector<std::vector<uint64>*>;
         for (int i = 0; i < entryCount; i++){
-            entriesValues->push_back(new std::vector<int64>);
+            entriesValues->push_back(new std::vector<uint64>);
         }
 
         if ( layer->num_pk_records != list_length(graph->entries)){
@@ -234,13 +234,13 @@ extern "C" {
         const struct traceprov_aggregate_layer *main_trace_layer = &main_worker_context->cached_layers[graph->headNumber - 1];
         const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
 
-        std::vector<int64> *top_level_values = new std::vector<int64>;
+        std::vector<uint64> *top_level_values = new std::vector<uint64>;
         if (map_layer_file(group_layer_number, context.main_worker_id, &group_layer_ptr, group_layer->size)){
             PRINT_ON_DEBUG("Error opening group layer file");
             elog(ERROR, "Error opening group layer file");
         }
 
-        for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
+        for (uint64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
             const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
             if (gr->in_result){
                 top_level_values->push_back(group_idx+1);
@@ -270,9 +270,9 @@ extern "C" {
         const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
         const struct traceprov_aggregate_layer *partial_group_layer = &main_worker_context->cached_layers[partial_group_ln - 1];
 
-        auto present_groups = new std::vector<int64>;
+        auto present_groups = new std::vector<uint64>;
         if (subq_layer_number){
-            std::vector<int64> ** subq_records = NULL;
+            std::vector<uint64> ** subq_records = NULL;
             int subq_width = 0;
             // Here, it is entirely possible that the subquery gets parallelized.
             // So, we'd have to look at all the workers.
@@ -287,9 +287,9 @@ extern "C" {
                 subq_width = bg_trace_layer->num_pk_records + 1;
                 if (subq_records == NULL){
                     // Need to have +1 because of the adjusting that was done during tracing.
-                    subq_records = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(bg_trace_layer->num_pk_records + 1));
+                    subq_records = (std::vector<uint64> **)malloc(sizeof(std::vector<uint64> *)*(bg_trace_layer->num_pk_records + 1));
                     for (int pk_id = 0; pk_id < bg_trace_layer->num_pk_records + 1; pk_id++)
-                        subq_records[pk_id] = new std::vector<int64>;
+                        subq_records[pk_id] = new std::vector<uint64>;
                 }
 
                 void *subq_forward_row = NULL;
@@ -331,7 +331,7 @@ extern "C" {
             elog(ERROR, "Error opening group layer file");
         }
 
-        std::vector<int64> * groups_to_filter = new std::vector<int64>;
+        std::vector<uint64> * groups_to_filter = new std::vector<uint64>;
         
         if (reference_layer){
             const struct traceprov_aggregate_layer *group_reference_layer = &main_worker_context->cached_layers[reference_layer];
@@ -340,7 +340,7 @@ extern "C" {
                 PRINT_ON_DEBUG("Error opening group reference layer");
                 elog(ERROR, "Error opening group reference layer");
             }
-            for (int64 reference_group_idx = 0; reference_group_idx < group_layer->num_groups; reference_group_idx++){
+            for (uint64 reference_group_idx = 0; reference_group_idx < group_layer->num_groups; reference_group_idx++){
                 const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_reference_ptr)[reference_group_idx];
                 if (gr->in_result){
                     groups_to_filter->push_back(reference_group_idx + 1);
@@ -350,7 +350,7 @@ extern "C" {
             std::sort(groups_to_filter->begin(), groups_to_filter->end());
         }
 
-        for (int64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
+        for (uint64 group_idx = 0; group_idx < main_trace_layer->num_groups; group_idx++){
             const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)group_layer_ptr)[group_idx];
             int should_add = false;
             if (reference_layer){
@@ -381,10 +381,10 @@ extern "C" {
 
         std::sort(present_groups->begin(), present_groups->end());
         
-        std::vector<int64> ** groups_per_worker = (std::vector<int64> **)malloc(sizeof(std::vector<int64>*)*(context.worker_count));
-        for (int worker_id = 0; worker_id < context.worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<int64>;
+        std::vector<uint64> ** groups_per_worker = (std::vector<uint64> **)malloc(sizeof(std::vector<uint64>*)*(context.worker_count));
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++) groups_per_worker[worker_id] = new std::vector<uint64>;
 
-        std::vector<int64> *present_groups_found = new std::vector<int64>;
+        std::vector<uint64> *present_groups_found = new std::vector<uint64>;
 
         if (partial_group_row != NULL){
             // Need to, now, find the rows in the partial file.
@@ -406,16 +406,16 @@ extern "C" {
         if (partial_group_row == NULL)
             groups_per_worker[context.main_worker_id] = present_groups;
 
-        std::vector<int64> ** filtered_rows = (std::vector<int64> **)malloc(sizeof(std::vector<int64> *)*(main_trace_layer->num_pk_records));
+        std::vector<uint64> ** filtered_rows = (std::vector<uint64> **)malloc(sizeof(std::vector<uint64> *)*(main_trace_layer->num_pk_records));
 
-        for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<int64>;
+        for (int key_idx = 0; key_idx < main_trace_layer->num_pk_records; key_idx++) filtered_rows[key_idx] = new std::vector<uint64>;
 
         int iters_made = 0;
-        std::vector<int64>* main_worker_set_difference = nullptr;
+        std::vector<uint64>* main_worker_set_difference = nullptr;
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-            std::vector<int64> *local_group_nos = groups_per_worker[worker_id];
+            std::vector<uint64> *local_group_nos = groups_per_worker[worker_id];
             // In case of main worker, we can be in the case where the group was completely within our portion of the table
             // In that case, we'd miss logging it in the local_group_nos.
             if (local_group_nos->size() == 0 && worker_id != context.main_worker_id) continue;

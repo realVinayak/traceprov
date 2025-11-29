@@ -21,6 +21,18 @@
 #include "rewrite/rewriteManip.h"
 #include "nodes/pathnodes.h"
 
+TraceProvUsedRefNavigator traceProvInclusiveNavigator = {
+    .includeInternals = true,
+    .goLeft = true,
+    .goRight = true
+};
+
+TraceProvUsedRefNavigator traceProvLeafNavigator = {
+    .includeInternals = false,
+    .goLeft = true,
+    .goRight = true
+};
+
 void traceProvAssertNoResJunk(const List *targetList){
     ListCell *targetListCursor;
     foreach(targetListCursor, targetList){
@@ -527,7 +539,8 @@ void traceprov_aggregate_rewrite(
                 entries
             ),
             0,
-            false  
+            false,
+            NIL
         )
     );
 }
@@ -559,7 +572,17 @@ List *traceProvPropagateChildTargets(List *childTargets, Index rteIndex){
         newTarget->resorigtbl = childTarget->resorigtbl;
         // Propogate the graph (if there is one)
         // That can happen, for example, if for example the aggregation is nested inside a subquery.
-        targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(tpTarget->isPointer, newTarget, tpTarget->graph, tpTarget->setNumber, tpTarget->isSetPointer));
+        targetsToAdd = lappend(
+            targetsToAdd, 
+            makeTraceProvTarget(
+                tpTarget->isPointer,
+                newTarget,
+                tpTarget->graph,
+                tpTarget->setNumber,
+                tpTarget->isSetPointer,
+                tpTarget->sublinks
+            )
+        );
     }
     return targetsToAdd;
 }
