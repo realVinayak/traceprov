@@ -80,7 +80,7 @@ void traceprov_aggregate_rewrite(
     bool
 );
 
-Node *getFunctionCallNode(const char *, List *);
+Node *traceprov_get_function_call_node(const char *, List *);
 
 Const *makeInt8Const(int64);
 
@@ -93,5 +93,7 @@ Query *traceprov_perform_rewrite(
     TraceProvParseContext *,
     bool
 );
+
+List *pull_vars_of_level_ignore_sublinks(Node *, int );
 
 #endif

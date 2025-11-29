@@ -19,6 +19,7 @@
 #include "miscadmin.h"
 #include "access/xact.h"
 #include "rewrite/rewriteManip.h"
+#include "nodes/pathnodes.h"
 
 void traceProvAssertNoResJunk(const List *targetList){
     ListCell *targetListCursor;
@@ -184,11 +185,11 @@ const TraceProvTarget *traceProvFindMatchingSetPointer(List *traceProvTargets, i
 Node *
 createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
 {
-	Form_pg_operator operator;
-	DistinctExpr *equal;
-	Expr *notExpr;
+    Form_pg_operator operator;
+    DistinctExpr *equal;
+    Expr *notExpr;
     HeapTuple tup = NULL;
-	Operator operTuple;
+    Operator operTuple;
     Oid eqOpOid;
 
     get_sort_group_operators(leftChild->vartype, false, true, false, NULL, &eqOpOid, NULL, NULL);
@@ -203,20 +204,20 @@ createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
         }
     }
 
-	operator = (Form_pg_operator) GETSTRUCT(operTuple);
+    operator = (Form_pg_operator) GETSTRUCT(operTuple);
 
-	equal = makeNode (DistinctExpr);
-	equal->args = list_make2(leftChild, rightChild);
-	equal->opfuncid = operator->oprcode;
-	equal->opno = eqOpOid;
-	equal->opresulttype = operator->oprresult;
-	equal->opretset = false;
+    equal = makeNode (DistinctExpr);
+    equal->args = list_make2(leftChild, rightChild);
+    equal->opfuncid = operator->oprcode;
+    equal->opno = eqOpOid;
+    equal->opresulttype = operator->oprresult;
+    equal->opretset = false;
 
-	ReleaseSysCache (tup);
+    ReleaseSysCache (tup);
 
-	notExpr = makeBoolExpr(NOT_EXPR, list_make1(equal), -1);
+    notExpr = makeBoolExpr(NOT_EXPR, list_make1(equal), -1);
 
-	return (Node *) notExpr;
+    return (Node *) notExpr;
 }
 
 /*
@@ -226,23 +227,23 @@ createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
 Node *
 createAndFromList (List *exprs)
 {
-	ListCell *lc;
-	Node *node;
-	Node *result;
+    ListCell *lc;
+    Node *node;
+    Node *result;
 
-	if (list_length(exprs) == 0)
-		return NULL;
-	if (list_length(exprs) == 1)
-		return (Node *) linitial(exprs);
+    if (list_length(exprs) == 0)
+        return NULL;
+    if (list_length(exprs) == 1)
+        return (Node *) linitial(exprs);
 
-	result = (Node *) linitial(exprs);
+    result = (Node *) linitial(exprs);
 
     for_each_from(lc, exprs, 1){
-		node = (Node *) lfirst(lc);
-		result = (Node *) makeBoolExpr(AND_EXPR, list_make2(node, result), -1);
+        node = (Node *) lfirst(lc);
+        result = (Node *) makeBoolExpr(AND_EXPR, list_make2(node, result), -1);
     }
 
-	return result;
+    return result;
 }
 
 /*
@@ -254,56 +255,56 @@ createAndFromList (List *exprs)
 Node *
 createEqualityCondition (List* leftAttrs, List* rightAttrs, Index leftIndex, Index rightIndex, bool neq)
 {
-	ListCell *leftLc;
-	ListCell *rightLc;
-	TargetEntry *curLeft;
-	TargetEntry *curRight;
-	OpExpr *equal;
-	List *equalConds;
-	Var *leftOp;
-	Var *rightOp;
-	Node *curRoot;
+    ListCell *leftLc;
+    ListCell *rightLc;
+    TargetEntry *curLeft;
+    TargetEntry *curRight;
+    OpExpr *equal;
+    List *equalConds;
+    Var *leftOp;
+    Var *rightOp;
+    Node *curRoot;
 
-	equalConds = NIL;
+    equalConds = NIL;
 
-	Assert (list_length(leftAttrs) == list_length(rightAttrs));
+    Assert (list_length(leftAttrs) == list_length(rightAttrs));
 
-	/* create List of OpExpr nodes for equality conditions */
-	forboth (leftLc, leftAttrs, rightLc, rightAttrs)
-	{
-		curLeft = (TargetEntry *) lfirst(leftLc);
-		curRight = (TargetEntry *) lfirst(rightLc);
+    /* create List of OpExpr nodes for equality conditions */
+    forboth (leftLc, leftAttrs, rightLc, rightAttrs)
+    {
+        curLeft = (TargetEntry *) lfirst(leftLc);
+        curRight = (TargetEntry *) lfirst(rightLc);
 
-		/* create Var for left operand of equality expr */
-		leftOp = makeVar (leftIndex + 1,
-				curLeft->resno,
-				exprType ((Node *) curLeft->expr),
-				exprTypmod ((Node *) curLeft->expr),
+        /* create Var for left operand of equality expr */
+        leftOp = makeVar (leftIndex + 1,
+                curLeft->resno,
+                exprType ((Node *) curLeft->expr),
+                exprTypmod ((Node *) curLeft->expr),
                 exprCollation((Node *) curLeft->expr),
-				0);
+                0);
 
-		/* create Var for right operand of equality expr */
-		rightOp = makeVar (rightIndex + 1,
-				curRight->resno,
-				exprType ((Node *) curRight->expr),
-				exprTypmod ((Node *) curRight->expr),
+        /* create Var for right operand of equality expr */
+        rightOp = makeVar (rightIndex + 1,
+                curRight->resno,
+                exprType ((Node *) curRight->expr),
+                exprTypmod ((Node *) curRight->expr),
                 exprCollation ((Node *) curRight->expr),
-				0);
+                0);
 
-		/* get equality operator for the var's type */
-		equal = (OpExpr *) createNotDistinctConditionForVars (leftOp, rightOp);
+        /* get equality operator for the var's type */
+        equal = (OpExpr *) createNotDistinctConditionForVars (leftOp, rightOp);
 
-		/* append current equality condition to equalConds List */
-		equalConds = lappend (equalConds, equal);
-	}
+        /* append current equality condition to equalConds List */
+        equalConds = lappend (equalConds, equal);
+    }
 
-	curRoot = (Node *) createAndFromList(equalConds);
+    curRoot = (Node *) createAndFromList(equalConds);
 
-	/* negation required */
-	if (neq)
-		curRoot = (Node *) makeBoolExpr(NOT_EXPR, list_make1(curRoot), -1);
+    /* negation required */
+    if (neq)
+        curRoot = (Node *) makeBoolExpr(NOT_EXPR, list_make1(curRoot), -1);
 
-	return curRoot;
+    return curRoot;
 }
 
 Query *traceprov_clone_query(const Query *base){
@@ -457,7 +458,7 @@ bool traceProvFindIntList(List *inList, int toFind){
     return false;
 }
 
-Node *getFunctionCallNode(const char *funcName, List *argVars){
+Node *traceprov_get_function_call_node(const char *funcName, List *argVars){
     ParseState *dummyParseState = make_parsestate(NULL);
     List *funcNameList = list_make1(makeString(pstrdup(funcName)));
     FuncCall *fc = makeFuncCall(funcNameList, argVars, COERCE_EXPLICIT_CALL, -1);
@@ -510,7 +511,7 @@ void traceprov_aggregate_rewrite(
     // TODO: Think about mixed cases (say, first three are pointers, next two are ints.)
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
-    Node *funcCallNode = getFunctionCallNode( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
+    Node *funcCallNode = traceprov_get_function_call_node( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,
@@ -566,30 +567,30 @@ List *traceProvPropagateChildTargets(List *childTargets, Index rteIndex){
 Datum
 dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 {
-	Oid			funcid = PG_GETARG_OID(0);
-	StringInfoData buf;
-	HeapTuple	proctup;
-	bool		isnull;
+    Oid            funcid = PG_GETARG_OID(0);
+    StringInfoData buf;
+    HeapTuple    proctup;
+    bool        isnull;
 
-	initStringInfo(&buf);
+    initStringInfo(&buf);
 
-	/* Look up the function */
-	proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
-	if (!HeapTupleIsValid(proctup))
-		PG_RETURN_NULL();
+    /* Look up the function */
+    proctup = SearchSysCache1(PROCOID, ObjectIdGetDatum(funcid));
+    if (!HeapTupleIsValid(proctup))
+        PG_RETURN_NULL();
 
-	(void) SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
-	if (isnull)
-	{
-		ReleaseSysCache(proctup);
-		PG_RETURN_NULL();
-	}
+    (void) SysCacheGetAttr(PROCOID, proctup, Anum_pg_proc_prosqlbody, &isnull);
+    if (isnull)
+    {
+        ReleaseSysCache(proctup);
+        PG_RETURN_NULL();
+    }
 
-	Datum result = pg_get_function_sqlbody(fcinfo);
+    Datum result = pg_get_function_sqlbody(fcinfo);
 
-	ReleaseSysCache(proctup);
+    ReleaseSysCache(proctup);
 
-	return result;
+    return result;
 }
 
 
@@ -620,16 +621,89 @@ char *traceprovParseBackQuery(Query *query){
         PointerGetDatum(NULL), /* allParameterTypes */
         PointerGetDatum(NULL), /* parameterModes */
         PointerGetDatum(NULL), /* parameterNames */
-        NIL,	/* parameterDefaults */
+        NIL,    /* parameterDefaults */
         PointerGetDatum(NULL), /* trftypes */
         PointerGetDatum(NULL), /* proconfig */
-        InvalidOid,	/* prosupport */
-        1.0,	/* procost */
-        0.0	/* prorows */
+        InvalidOid,    /* prosupport */
+        1.0,    /* procost */
+        0.0    /* prorows */
     );
     CommandCounterIncrement();
     text *response = (DatumGetTextP(DirectFunctionCall1(dummy_pg_get_function_sqlbody, ObjectIdGetDatum(created.objectId))));
     char *str = text_to_cstring(response);
     elog(INFO, "parsed back: %s", str);
     return str;
+}
+
+typedef struct
+{
+    List *vars;
+    int sublevels_up;
+} pull_vars_context;
+
+static bool
+pull_vars_of_level_ignore_sublinks_walker(Node *, pull_vars_context *);
+
+// Like postgres' default pull_vars_of_level, but ignores sublinks.
+List *
+pull_vars_of_level_ignore_sublinks(Node *node, int levelsup)
+{
+    pull_vars_context context;
+
+    context.vars = NIL;
+    context.sublevels_up = levelsup;
+
+    /*
+     * Must be prepared to start with a Query or a bare expression tree; if
+     * it's a Query, we don't want to increment sublevels_up.
+     */
+    query_or_expression_tree_walker(node,
+                                    pull_vars_of_level_ignore_sublinks_walker,
+                                    (void *) &context,
+                                    0);
+
+    return context.vars;
+}
+
+
+static bool
+pull_vars_of_level_ignore_sublinks_walker(Node *node, pull_vars_context *context)
+{
+    if (node == NULL)
+        return false;
+
+    // Don't do anything if node is a sublink.    
+    if (IsA(node, SubLink))
+        return false;
+
+    if (IsA(node, Var))
+    {
+        Var           *var = (Var *) node;
+
+        if (var->varlevelsup == context->sublevels_up)
+            context->vars = lappend(context->vars, var);
+        return false;
+    }
+    if (IsA(node, PlaceHolderVar))
+    {
+        PlaceHolderVar *phv = (PlaceHolderVar *) node;
+
+        if (phv->phlevelsup == context->sublevels_up)
+            context->vars = lappend(context->vars, phv);
+        /* we don't want to look into the contained expression */
+        return false;
+    }
+    if (IsA(node, Query))
+    {
+        /* Recurse into RTE subquery or not-yet-planned sublink subquery */
+        bool        result;
+
+        context->sublevels_up++;
+        result = query_tree_walker((Query *) node, pull_vars_of_level_ignore_sublinks_walker,
+                                   (void *) context, 0);
+        context->sublevels_up--;
+        return result;
+    }
+    return expression_tree_walker(node, pull_vars_of_level_ignore_sublinks_walker,
+                                  (void *) context);
 }

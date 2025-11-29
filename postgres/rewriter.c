@@ -29,6 +29,8 @@
 #include "parser/analyze.h"
 
 #include "rewriter_sets.h"
+#include "rewriter_sublinks.h"
+
 #include "access/xact.h"
 #include "rewrite/rewriteManip.h"
 
@@ -113,6 +115,9 @@ PlannedStmt *traceprov_rewriter(
 ){
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
+    // Set the root context to the parent context.
+    // This simplifies some operations (since, otherwise, layer numbers can be same across branches, during sublink)
+    context.root_context = &context;
     List *topLevelTargets = NIL;
     Query *traceprovParse = traceprov_perform_rewrite(parse, &topLevelTargets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
@@ -498,6 +503,9 @@ Query *traceprov_perform_rewrite(
 
     // if there are sublinks, need to go, also, go over them.
     // we log all of the matching keys, from the left side.
+    if (parse->hasSubLinks){
+        traceprov_rewrite_sublinks(parse, tpContext, targetsPerRTE);
+    }
     return parse;
 }
 
@@ -656,7 +664,7 @@ Query *addNestedQuery(
     foreach(pointerTarget, pointerTargets){
         int i = 0;
         List *pointerFuncArgs = lfirst(pointerTarget);
-        Node *mark_later_func = getFunctionCallNode(
+        Node *mark_later_func = traceprov_get_function_call_node(
             list_length(pointerFuncArgs) == 1 ? TRACEPROV_MARK_LATER_FUNC_NAME : TRACEPROV_MARK_LATER_VALUE_FUNC_NAME,
             pointerFuncArgs
         );
