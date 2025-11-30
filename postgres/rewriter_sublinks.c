@@ -24,6 +24,12 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
     // base case.
     if (node == NULL) return NULL;
 
+    if (IsA(node, BoolExpr)){
+        BoolExpr *bool_expr = (BoolExpr*)node;
+        // Don't do anything it is a not.
+        if (bool_expr->boolop == NOT_EXPR) return node;
+    }
+
     if (IsA(node, SubLink)){
         SubLink *originalSublink = (SubLink *)node;
         SubLink *sublink = copyObject(originalSublink);
@@ -129,34 +135,36 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tpParseGetUniqueAlias(context->root_context), false);
         rewritten_subselect->targetList = traceProvAppendAtResJunk(original_without_targets, log_target_entry);
 
-        // It is possible that appending shifted the targets (especially if there were some resjunk columns.)
-        // So, only makeVar is used, to properly resolve vars that'll be the target list of the next query.
-        Query *subselect_wrapper = traceprov_clone_query(rewritten_subselect);
-        subselect_wrapper->targetList = NIL;
+        if (sublink->subLinkType != EXISTS_SUBLINK || true){
+            Query *subselect_wrapper = traceprov_clone_query(rewritten_subselect);
+            subselect_wrapper->targetList = NIL;
 
-        foreach(target_entry_cursor, original_without_targets){
-            TargetEntry *base_target_entry = (TargetEntry *)lfirst(target_entry_cursor);
-            // Don't add the log entry (since that'll violate the query semantics.)
-            subselect_wrapper->targetList = lappend(
-                subselect_wrapper->targetList, 
-                makeTargetEntry(
-                    (Expr*)makeVarFromTargetEntry(1, base_target_entry),
-                    base_target_entry->resno,
-                    (base_target_entry->resname == NULL ? NULL : pstrdup(base_target_entry->resname)),
-                    false
-                )
-            );
+            foreach(target_entry_cursor, original_without_targets){
+                TargetEntry *base_target_entry = (TargetEntry *)lfirst(target_entry_cursor);
+                // Don't add the log entry (since that'll violate the query semantics.)
+                subselect_wrapper->targetList = lappend(
+                    subselect_wrapper->targetList, 
+                    makeTargetEntry(
+                        (Expr*)makeVarFromTargetEntry(1, base_target_entry),
+                        base_target_entry->resno,
+                        (base_target_entry->resname == NULL ? NULL : pstrdup(base_target_entry->resname)),
+                        false
+                    )
+                );
+            }
+            RangeTblEntry *rte = rangeTableEntryFromSubquery(rewritten_subselect, context);
+            rte->inFromCl = true;
+            subselect_wrapper->rtable = list_make1(rte);
+            RangeTblRef *rtr = makeNode(RangeTblRef);
+            rtr->rtindex = 1;
+            subselect_wrapper->jointree = makeFromExpr(list_make1(rtr), NULL);
+            // Move all the vars one level down.
+            // This will also, automatically (and correctly), move the references of the variables in the log entry function calls too.
+            IncrementVarSublevelsUp((Node*)rewritten_subselect, 1, 1);
+            sublink->subselect = (Node*)subselect_wrapper;
+        }else{
+            sublink->subselect = (Node*)rewritten_subselect;
         }
-        RangeTblEntry *rte = rangeTableEntryFromSubquery(rewritten_subselect, context);
-        rte->inFromCl = true;
-        subselect_wrapper->rtable = list_make1(rte);
-        RangeTblRef *rtr = makeNode(RangeTblRef);
-        rtr->rtindex = 1;
-        subselect_wrapper->jointree = makeFromExpr(list_make1(rtr), NULL);
-        // Move all the vars one level down.
-        // This will also, automatically (and correctly), move the references of the variables in the log entry function calls too.
-        IncrementVarSublevelsUp((Node*)rewritten_subselect, 1, 1);
-        sublink->subselect = (Node*)subselect_wrapper;
         return (Node*)sublink;
     }
 
