@@ -70,12 +70,11 @@ static int initialize_local_context(){
 
     const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
 
-    char *shared_context_filename = malloc(size_shared_context_filename);
+    char *shared_context_filename = palloc0(size_shared_context_filename);
     if (shared_context_filename == NULL){
         elog(ERROR, "Couldn't allocate memory to hold shared context file");
         return 1;
     }
-    memset(shared_context_filename, 0, size_shared_context_filename);
     sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
     PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_filename);
 
@@ -165,7 +164,6 @@ static int initialize_local_context(){
     }
 
 exit_initialize_local_context:
-    if (shared_context_filename) free(shared_context_filename);
     int previous_error = rc;
     if (is_locked){
         if ((rc = flock(shared_context_fd, LOCK_UN))){
@@ -204,7 +202,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
             layer = traceprov_current.local_context->layers;
         }else{
             // Now, need to do dynamic memory allocation
-            char *layer_file_name = get_injected_str(TRACEPROV_PER_WORKER_FILE,  DataDir, traceprov_current.my_worker_id, NULL);
+            char *layer_file_name = psprintf(TRACEPROV_PER_WORKER_FILE,  DataDir, traceprov_current.my_worker_id);
             if (layer_file_name == NULL){
                 return 1;
             }
@@ -213,7 +211,6 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
                 // Need to initialize the worker's layer file
                 layer_fd = remove_and_create(layer_file_name, TRACEPROV_PAGE_SIZE);
                 if (layer_fd < 0){
-                    free(layer_file_name);
                     return 1;
                 }
 
@@ -229,7 +226,6 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
 
                 if (layer == MAP_FAILED){
                     close(layer_fd);
-                    free(layer_file_name);
                     return 1;
                 }
 
@@ -286,7 +282,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
 
     // Map the actual trace file for this layer.
     // Each worker gets its own trace file.
-    char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, traceprov_current.my_worker_id, NULL);
+    char *file_name = psprintf(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, traceprov_current.my_worker_id);
 
     if (file_name == NULL){
         return 1;
@@ -375,7 +371,7 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     if (traceprov_data_dir == NULL){
         // Here, we create the str that we use everywhere else.
         const size_t dir_str_size = strlen(TRACE_PROV_DIR) + strlen(DataDir) + 2;
-        traceprov_data_dir = malloc(dir_str_size);
+        traceprov_data_dir = palloc0(dir_str_size);
         if (traceprov_data_dir == NULL){
             elog(ERROR, "Couldn't allocate memory to hold dir.");
         }
@@ -414,6 +410,9 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     const int num_pk = PG_NARGS() - 2; // 1 for layer number, 1 for internal state.
 
     struct traceprov_agg_context *agg_context;
+    MemoryContext agg_mem_context;
+    if (!AggCheckCallContext(fcinfo, &agg_mem_context))
+        elog(ERROR, "aggregate function called in non-aggregate context");
 
     if ((rc = initialize_local_and_layer(layer_number, num_pk, true))){
         PRINT_ON_DEBUG("Error setting up local or layer");
@@ -424,7 +423,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     struct traceprov_aggregate_layer *current_layer = get_layer(layer_number);
 
     if (PG_ARGISNULL(0)){
-        agg_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_context = (struct traceprov_agg_context *)MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
         agg_context->group_cnt = ++current_layer->num_groups;
         agg_context->worker_id = traceprov_current.my_worker_id;
         agg_context->is_combined = 0;
@@ -517,7 +516,6 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
         PG_RETURN_POINTER(((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]);
     }
     void *new_ptr = (((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG));
-    free(agg_context);
     PG_RETURN_POINTER(new_ptr); 
 }
 
@@ -568,12 +566,23 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
      * Doing inference, we won't ve able to differentiate the last row. BUT, it'd always be "skipped"
      * Because the group number will be seen as zero, and won't be matched to anything.
      * We can, totally, handle this by checking it later. However, this way, we can combine 2 truncates into 1.
+     * 
+     * During logging the reference, there needs to be slight care, dependening on where it came from.
+     * Specifically, if the reference is not combined, we only need to log it if didn't came from the main worker.
+     * This is because, if it really did come from the main worker, it is already in its local file. And we need to look at the entirety of the
+     * main worker anyways (because there can be groups that appear just locally, and don't exist in other workers)
+     * This is mostly an optimization (we can always log the reference struct again), but we'd be logging unnecessary information in that case. 
      */
 
+    const bool needs_logging_reference = (
+        !reference_struct->is_combined
+        && (reference_struct->worker_id != traceprov_current.shared_context->main_worker_id)
+    );
+
     if (unlikely(
-        (current_layer->current_row == current_layer->end_of_memory_zone) 
-        || ((current_layer->current_row == current_layer->end_of_memory_zone - 1) 
-            && (!reference_struct->is_combined) // This means reference is not combined (so, we'll have to log it)
+        (current_layer->current_row == current_layer->end_of_memory_zone)
+        || ((current_layer->current_row == current_layer->end_of_memory_zone - TRACEPROV_PARTIAL_ROW_SIZE) 
+            && (needs_logging_reference) // need to log the reference.
             && other != NULL // Other is not null, so we'd have to log it too.
         )
         
@@ -584,7 +593,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
 
     int group_no = 0;
-    if (reference_struct->is_combined){
+    if (!needs_logging_reference){
         group_no = reference_struct->group_cnt;
     }else{
         current_layer->current_row += current_layer->record_padding;
@@ -592,11 +601,11 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = reference_struct->group_cnt;
         ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = reference_struct->worker_id;
         ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
-        reference_struct->is_combined = 1;
         reference_struct->group_cnt = group_no;
         current_layer->current_row += sizeof(struct trace_file_partial_row);
     }
-
+    // This needs to here otherwise it is possible that we came from the main worker first (so not logging it, but still need to treat it as combined)
+    if (!reference_struct->is_combined) reference_struct->is_combined = 1;
 
     if (other != NULL){
        current_layer->current_row += current_layer->record_padding;
@@ -604,7 +613,6 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
        ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = other->worker_id;
        ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
        current_layer->current_row += sizeof(struct trace_file_partial_row);
-       free(other);
     }
 
     PG_RETURN_POINTER(reference_struct);
@@ -635,6 +643,7 @@ Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
 
     struct traceprov_agg_context *context;
     StringInfoData buf;
+    MemoryContext agg_mem_context;
 
     if (PG_ARGISNULL(0)) PG_RETURN_POINTER(NULL);
     
@@ -644,8 +653,10 @@ Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
     buf.data = VARDATA(s);
     buf.len = VARSIZE(s) - VARHDRSZ;
     buf.cursor = 0;
+    if (!AggCheckCallContext(fcinfo, &agg_mem_context))
+        elog(ERROR, "aggregate function called in non-aggregate context");
 
-    context = malloc(sizeof(struct traceprov_agg_context));
+    context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
     context->is_combined = pq_getmsgbyte(&buf);
     context->group_cnt = pq_getmsgint64(&buf);
     context->worker_id = pq_getmsgbyte(&buf);
@@ -759,13 +770,17 @@ Datum traceprov_agg_from_ptr_sfunc(PG_FUNCTION_ARGS){
     // IMPORTANT: this is the layer number of the LAST layer.
     int32 layer_number = PG_GETARG_INT32(1);
     int32 new_layer_number = PG_GETARG_INT32(2);
-    
+
+    MemoryContext agg_mem_context;
+    if (!AggCheckCallContext(fcinfo, &agg_mem_context))
+        elog(ERROR, "aggregate function called in non-aggregate context");
+
     const int32 group_layer_result = layer_number + 1;
 
     struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_result);
     struct traceprov_agg_context *agg_context;
     if (PG_ARGISNULL(0)){
-        agg_context = (struct traceprov_agg_context *)malloc(sizeof(struct traceprov_agg_context));
+        agg_context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));;
         agg_context->group_cnt = ++current_layer->num_groups;
         agg_context->layer_number = new_layer_number;
     }else{
