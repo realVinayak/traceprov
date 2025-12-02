@@ -103,7 +103,7 @@ struct trace_file_partial_row {
 };
 
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
-
+#define TRACEPROV_PARTIAL_ROW_SIZE 32
 
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
