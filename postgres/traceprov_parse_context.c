@@ -77,6 +77,7 @@ void tpAddSublinkMapItem(
         entries = lappend(entries, tpEntry);
     }
     const TraceProvDependency *graph = makeTraceProvDependency(
+        TP_LOG,
         layer_number,
         child_graphs,
         entries
@@ -158,6 +159,7 @@ TraceProvEntry *makeTraceProvEntry(){
 }
 
 TraceProvDependency *makeTraceProvDependency(
+    TraceProvGraphKind kind,
     TraceProvLayerNumber headNumber,
     List *children,
     List *entries

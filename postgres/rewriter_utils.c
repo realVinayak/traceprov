@@ -534,6 +534,7 @@ void traceprov_aggregate_rewrite(
                 false
             ),
             makeTraceProvDependency(
+                TP_AGGREGATE,
                 layerNumber,
                 childGraphs,
                 entries

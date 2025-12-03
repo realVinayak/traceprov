@@ -25,8 +25,10 @@
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
 #define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
+#define TRACEPROV_WORKER_LAYER_MAP      DEFINE_TRACE_PROV_FILE("/worker_%d_layers.tp")
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
+#define TRACEPROV_SIZE_OF_ALLOCATION(last_alloc) (last_alloc == 1 ? 1 : TRACEPROV_INCREMENT_TRACE_BY_PG)
 
 
 #ifndef TRACEPROV_PAGE_SIZE_RAW
@@ -42,9 +44,8 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_PAGE_SIZE ((long int) TRACEPROV_PAGE_SIZE_RAW)
 #endif
 
-// #define TRACEPROV_PAGE_SIZE             (1L << 12)
 // Defines the maximum number of workers currently supported.
-#define TRACEPROV_MAX_WORKERS           256
+#define TRACEPROV_MAX_WORKERS           255
 // Defines the maximum number of layers per worker, before it begins
 // doing dynamic memory allocation.
 // Essentially, if the number of layer increases more than this, it then spills
@@ -53,10 +54,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 8
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 1
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -82,7 +83,6 @@ int get_error_no();
         elog(INFO, __VA_ARGS__);\
         elog(INFO, "Error no: %d", get_error_no()); \
     } } while(0) \
-
 
 struct trace_file_forward_row {
     int64   group_count;
@@ -112,6 +112,7 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 struct traceprov_aggregate_layer {
     // Defines number of PKs being logged.
     // This is NOT number of records
+    // This is the "width" of records logged.
     int32 num_pk_records;
     // We only store the last mapping that it uses.
     void *last_mapping;
@@ -125,7 +126,7 @@ struct traceprov_aggregate_layer {
     union {
         // The number of groups that this layer has seen.
         uint64 num_groups;
-        // The number of rows.
+        // The number of rows (logged)
         uint64 num_rows;
     };
     uint32 layer_number;
@@ -136,28 +137,20 @@ struct traceprov_aggregate_layer {
     void *end_of_memory_zone;
     // Stores the fd that corresponds to this layer.
     int32 layer_fd;
-    // Padding for this struct.
-    uint32 _padding[1];
+    // Whether this belongs to the leader.
+    // For aggregation, this is important, since combines happens on this layer.
+    bool is_leader_layer;
 };
-
-static_assert(sizeof(struct traceprov_aggregate_layer) == 64, "Size mismatch.");
 
 #define TRACRPROV_NUM_LAYER_PER_PAGE (TRACEPROV_PAGE_SIZE / sizeof(struct traceprov_aggregate_layer))
 
 static_assert(((TRACEPROV_PAGE_SIZE) % sizeof(struct traceprov_aggregate_layer)) == 0, "Expected complete layers per page");
 
-// TODO: Investigate is this is better off being page-aligned.
+// Local context that each worker has.
+// This stores the layers.
 struct local_context {
     int32   worker_pid;
     uint8   worker_id;
-
-    // Stores the partial row (partial aggregates)
-    struct  trace_file_partial_row *initial_partial_row;
-    struct  trace_file_partial_row *current_partial_row;
-
-    int64   *init_subquery_row;
-    int64   *end_subquery_row;
-
     // This stores the aggregate layers.
     // Each aggregate consists of multiple mappings (see struct traceprov_aggregate_layer)
     struct  traceprov_aggregate_layer cached_layers[TRACEPROV_MAX_LAYER_PER_WORKER];
@@ -166,6 +159,7 @@ struct local_context {
     // We don't bother looking at this if we fit in cached layers,
     // So that is why this is "dynamic".
     uint32  dynamic_layer_count;
+    // Stores the dynamic layers (outside of TRACEPROV_MAX_LAYER_PER_WORKER.)
     int32   layer_fd;
 };
 
@@ -174,19 +168,6 @@ struct traceprov_shared_context {
     uint8   main_worker_id;
     // Counts the number of workers.
     uint8   worker_count;
-    // This stores the local contexts for all workers.
-    // Given the worker id, the context can be accessed as local_contexts[worker_id]
-    // It is, currently, a bit complicated to dynamically resize this.
-    // So, this is statically defined to have a size of 256.
-    // That is, at most, there can be 256 parallel workers.
-    // That seems like a reasonable limit anyways.
-    // It is complicated because ALL the workers need to see the same pointer.
-    // We go to town on dynamic resizing in other cases (like aggregate layers)
-    // However, dynamic sizing here would mean that we'll have to either
-    //     1. Use MAP_FIXED for traceprov_shared_context (bad, and complicated)
-    //     2. Map arbitrarily AND do pointer arithematic (not too bad)
-    //     3. Store the local_contexts as a logical pointer, like page 0, 1. (most practical)
-    struct local_context local_contexts[TRACEPROV_MAX_WORKERS];
 };
 
 struct current_context {
@@ -204,7 +185,7 @@ struct traceprov_agg_context {
     // Group count for this group.
     int64 group_cnt;
     // Worker on which this group was processed.
-    int8 worker_id;
+    uint8 worker_id;
     // Layer number for this group.
     int32 layer_number;
 };
@@ -212,7 +193,7 @@ struct traceprov_agg_context {
 // Whenever this condition fails, also need to update the function definition.
 static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
-#define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)
+#define TRACEPROV_SHARED_CONTEXT_SIZE (sizeof(struct traceprov_shared_context))
 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 

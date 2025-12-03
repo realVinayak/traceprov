@@ -31,6 +31,12 @@ typedef enum TraceProvEntryKind {
     TP_ENTRY_SET_POINTER = 2,
 } TraceProvEntryKind;
 
+// Specifies what kind of graph is this
+typedef enum TraceProvGraphKind {
+    TP_AGGREGATE = 0,
+    TP_LOG = 1
+} TraceProvGraphKind;
+
 typedef struct TraceProvEntry {
     TraceProvEntryKind kind; // What kind of entry is being logged?
     Oid relId; // Postgres catalog object id. If it is invalid, it means it's an aggregate result (so, need to infer back more)
@@ -45,6 +51,7 @@ typedef struct TraceProvEntry {
 // This is used during inference time.
 // Dependency is always acyclic (since layer cannot depend on itself)
 typedef struct TraceProvDependency {
+    TraceProvGraphKind graph_type;
     TraceProvLayerNumber headNumber;
     List *children; // List of TraceProvDependency (so it is a graph)
     List *entries; // List of TraceProvEntry
@@ -101,7 +108,7 @@ void tpAddSublinkMapItem(TraceProvParseContext *, List *, const List*, int);
 
 TraceProvEntry *makeTraceProvEntry();
 
-TraceProvDependency *makeTraceProvDependency(TraceProvLayerNumber, List *, List *);
+TraceProvDependency *makeTraceProvDependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
 void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
 void serializeTraceProvDepedency(List *, TraceProvParseContext *);
 List *deserializeTraceProvDependency(TraceProvParseContext **);
