@@ -23,62 +23,75 @@ int grow_layer_file(struct traceprov_aggregate_layer *);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
 
-static char *traceprov_data_dir = NULL;
-
 static struct current_context traceprov_current = {
-    .my_worker_id =                 255,
+    .my_worker_id =                 0,
     .traceprov_shared_context_fd =  -1,
     .shared_context =               NULL,
     .local_context =                NULL
 };
 
-static int round_up(const int number){
+static inline int round_up(const int number){
     return number == 1 ? 1 : (1 << (64 - __builtin_clzl(number - 1)));
 }
 
-static int initialize_shared_context(int shared_context_fd){
+static int initialize_file(int fd, const int32 *magic_word, size_t size){
     int rc = 0;
     // First, truncate the file to 0.
-    if ((rc = ftruncate(shared_context_fd, 0))){
-        PRINT_ON_DEBUG("Error truncating shared context file to 0.");
-        return rc;
+    if ((rc = ftruncate(fd, 0))){
+        elog(INFO, "Error truncating file to 0.");
+        goto out;
     }
-    // Truncate to shared context size.
-    if ((rc = ftruncate(shared_context_fd, TRACEPROV_SHARED_CONTEXT_SIZE))){
-        PRINT_ON_DEBUG("Error truncating shared context file to shared context size..");
-        return rc;
+    // Truncate to size.
+    if ((rc = ftruncate(fd, size))){
+        elog(INFO, "Error truncating shared context file to shared context size..");
+        goto out;
     }
 
-    off_t moved = lseek(shared_context_fd, 0, SEEK_SET);
+    off_t moved = lseek(fd, 0, SEEK_SET);
     if (moved == -1){
-        PRINT_ON_DEBUG("Error doing lseek to beginning on shared context file");
-        return 1;
+        rc = 1;
+        elog(INFO, "Error doing lseek to beginning on shared context file");
+        goto out;
     }
     // Write the magic word.
-    if(write(shared_context_fd, &traceprov_shared_context_magic, sizeof(int32)) != sizeof(int32)){
-        PRINT_ON_DEBUG("Error writing required amount;");
+    if (magic_word != NULL){
+        if(write(fd, magic_word, sizeof(int32)) != sizeof(int32)){
+            rc = 1;
+            elog(INFO, "Error writing required amount;");
+            goto out;
+        }
+    }
+out:
+    return rc;
+}
+
+static int fail_safe_mmap(int fd, size_t size, void **pptr){
+    void *ptr = mmap(
+        NULL,
+        size,
+        PROT_WRITE,
+        MAP_SHARED,
+        fd,
+        0
+    );
+    if (ptr == MAP_FAILED){
+        elog(INFO, "Error mmaping the file, initially");
         return 1;
     }
+    *pptr = ptr;
     return 0;
 }
 
 static int initialize_local_context(){
     
-    if (traceprov_current.my_worker_id != 255) return 0;
+    if (traceprov_current.my_worker_id != 0) return 0;
 
-    int rc = 0, is_locked = 0;
+    int rc = 0, is_locked = 0, shared_context_fd = 0, worker_layer_map_fd = 0;
+    char *shared_context_file_name = psprintf(TRACEPROV_SHARED_CONTEXT, DataDir);
 
-    const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
+    PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_file_name);
 
-    char *shared_context_filename = palloc0(size_shared_context_filename);
-    if (shared_context_filename == NULL){
-        elog(ERROR, "Couldn't allocate memory to hold shared context file");
-        return 1;
-    }
-    sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
-    PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_filename);
-
-    int shared_context_fd = open(shared_context_filename, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
+    shared_context_fd = open(shared_context_file_name, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
 
     if (shared_context_fd < 0){
         PRINT_ON_DEBUG("Error opening shared context file.");
@@ -106,42 +119,41 @@ static int initialize_local_context(){
 
     if (magic_word != traceprov_shared_context_magic){
         // The magic word didn't match. Need to initialize the file.
-        if ((rc = initialize_shared_context(shared_context_fd))){
+        if ((rc = initialize_file(shared_context_fd, &traceprov_shared_context_magic, TRACEPROV_SHARED_CONTEXT_SIZE))){
             goto exit_initialize_local_context;
         }
     }
 
     PRINT_ON_DEBUG("Mmaping the shared context file.");
 
-    struct traceprov_shared_context *shared_context = (struct traceprov_shared_context *) mmap(
-        NULL,
-        TRACEPROV_SHARED_CONTEXT_SIZE,
-        PROT_WRITE,
-        MAP_SHARED,
-        shared_context_fd,
-        0
-    );
-
-    if (shared_context == MAP_FAILED){
-        PRINT_ON_DEBUG("Error doing mmap for shared context.");
-        rc = 1;
+    struct traceprov_shared_context *shared_context = NULL;
+    
+    if ((rc = fail_safe_mmap(shared_context_fd, TRACEPROV_SHARED_CONTEXT_SIZE, (void*)&shared_context))){
         goto exit_initialize_local_context;
-    }else{
-        PRINT_ON_DEBUG("Mmap for shared context correctly.");
     }
 
-    // There is now an exclusive lock on the shared context file
-    // Futher, it is mmaped.
-
-    traceprov_current.my_worker_id = (shared_context->worker_count++);
+    // There is now an exclusive lock on the shared context file (so we can increment easily.)
+    traceprov_current.my_worker_id = (++shared_context->worker_count);
     if (traceprov_current.my_worker_id >= TRACEPROV_MAX_WORKERS){
         elog(ERROR, "Maximum worker count reached.");
         rc = 1;
         goto exit_initialize_local_context;
     }
 
+    worker_layer_map_fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, traceprov_current.my_worker_id), O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
+    if (worker_layer_map_fd < 0){
+        elog(INFO, "Error maping worker layer fd");
+        goto exit_initialize_local_context;
+    }
+    if ((rc = initialize_file(worker_layer_map_fd, NULL, sizeof(struct local_context)))){
+        goto exit_initialize_local_context;
+    }
+    // Set up the local context in a file.
+    // This makes everything guaranteed to be on a different page.
+    if ((rc = fail_safe_mmap(worker_layer_map_fd, sizeof(struct local_context), (void*)&traceprov_current.local_context))){
+        goto exit_initialize_local_context;
+    }
     // Set up the current context. All this is local (so, not visible to other processes.)
-    traceprov_current.local_context = &shared_context->local_contexts[traceprov_current.my_worker_id];
     traceprov_current.traceprov_shared_context_fd = shared_context_fd;
     traceprov_current.shared_context = shared_context;
 
@@ -171,6 +183,10 @@ exit_initialize_local_context:
             return previous_error;
         }
     }
+    // Don't need to keep the shared context in-memory too.
+    if (shared_context_fd > 0) close(shared_context_fd);
+    // Don't also need to keep the worker layer map file open.
+    if (worker_layer_map_fd > 0) close(worker_layer_map_fd);
     return rc;
 }
 
@@ -181,7 +197,6 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
      * 1. Make space in local_context's layers for the current layer (or reuse previous space)
      * 2. Create the trace file for this layer
      */
-
 
     int rc = 0;
 
@@ -363,20 +378,11 @@ Datum test_local_setup(PG_FUNCTION_ARGS){
 PG_FUNCTION_INFO_V1(reinit_state);
 
 Datum reinit_state(PG_FUNCTION_ARGS){
-    traceprov_current.my_worker_id = 255;
+    traceprov_current.my_worker_id = 0;
     traceprov_current.traceprov_shared_context_fd  = -1;
     traceprov_current.shared_context = NULL;
     traceprov_current.local_context = NULL;
-
-    if (traceprov_data_dir == NULL){
-        // Here, we create the str that we use everywhere else.
-        const size_t dir_str_size = strlen(TRACE_PROV_DIR) + strlen(DataDir) + 2;
-        traceprov_data_dir = palloc0(dir_str_size);
-        if (traceprov_data_dir == NULL){
-            elog(ERROR, "Couldn't allocate memory to hold dir.");
-        }
-        sprintf(traceprov_data_dir, TRACE_PROV_DIR, DataDir);
-    }
+    char *traceprov_data_dir = psprintf(TRACE_PROV_DIR, DataDir);
     PRINT_ON_DEBUG("TRACEPROV_DIR: %s", traceprov_data_dir);
 
     int rc = create_dir_if_not_exists(traceprov_data_dir, pg_dir_create_mode);
@@ -557,6 +563,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     struct traceprov_aggregate_layer *current_layer = get_layer(layer_number + 2);
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+    main_layer->is_leader_layer = true;
 
     /**
      * This is slightly tricky. We need to grow in two cases
@@ -576,7 +583,9 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     const bool needs_logging_reference = (
         !reference_struct->is_combined
-        && (reference_struct->worker_id != traceprov_current.shared_context->main_worker_id)
+        // Here, we're guaranteed to be the main worker, for this aggregation, at least.
+        // This is because the combine is being executed on this worker.
+        && (reference_struct->worker_id != traceprov_current.my_worker_id)
     );
 
     if (unlikely(

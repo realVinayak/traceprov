@@ -167,7 +167,7 @@ extern "C" {
         // We need to get the recorded input in the layer file (given the reference)
         // It is possible that we used parallel (omitted for now.)
         const TraceProvLayerNumber layerNumber = graph->headNumber;
-        const struct local_context *context = &sharedContext->local_contexts[worker_id];
+        const struct local_context *context = NULL;
         const struct traceprov_aggregate_layer *layer = &context->cached_layers[graph->headNumber - 1];
 
         std::sort(reference->begin(), reference->end());
@@ -230,7 +230,7 @@ extern "C" {
         const TraceProvDependency *graph = (TraceProvDependency *)lfirst(list_head(deserializeTraceProvDependency(&parseContext)));
         const int group_layer_number = graph->headNumber + 1;
         void *group_layer_ptr = NULL;
-        const struct local_context *main_worker_context = &context.local_contexts[context.main_worker_id];
+        const struct local_context *main_worker_context = NULL;
         const struct traceprov_aggregate_layer *main_trace_layer = &main_worker_context->cached_layers[graph->headNumber - 1];
         const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
 
@@ -265,7 +265,7 @@ extern "C" {
         const int group_layer_number = layer_number + 1;
         const int partial_group_ln = layer_number + 2;
 
-        const struct local_context *main_worker_context = &context.local_contexts[context.main_worker_id];
+        const struct local_context *main_worker_context = NULL;
         const struct traceprov_aggregate_layer *main_trace_layer = &main_worker_context->cached_layers[layer_number - 1];
         const struct traceprov_aggregate_layer *group_layer = &main_worker_context->cached_layers[group_layer_number - 1];
         const struct traceprov_aggregate_layer *partial_group_layer = &main_worker_context->cached_layers[partial_group_ln - 1];
@@ -279,7 +279,7 @@ extern "C" {
             const int subq_index = subq_layer_number - 1;
             for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-                const struct local_context *bg_context = &context.local_contexts[worker_id];
+                const struct local_context *bg_context = NULL;
                 const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[subq_index];
 
                 if (bg_trace_layer->layer_number != subq_layer_number) continue;
@@ -422,7 +422,7 @@ extern "C" {
 
             std::sort(local_group_nos->begin(), local_group_nos->end());
 
-            const struct local_context *bg_context = &context.local_contexts[worker_id];
+            const struct local_context *bg_context = NULL;
             const struct traceprov_aggregate_layer *bg_trace_layer = &bg_context->cached_layers[layer_number - 1];
 
             void *current_forward_row = NULL;
@@ -562,7 +562,7 @@ extern "C" {
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-            struct local_context *worker_local_context = &context.local_contexts[worker_id];
+            struct local_context *worker_local_context = NULL;
 
             for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
 
@@ -661,7 +661,7 @@ extern "C" {
 
       for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-        struct local_context *worker_local_context = &context.local_contexts[worker_id];
+        struct local_context *worker_local_context = NULL;
 
         for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
           
@@ -684,7 +684,7 @@ extern "C" {
 	  	// In this case, it is group number. We don't define number of records precisely here.
 		// It is actually just whatever the main layer reports as the number of groups.
 		// Need -2 because layer numbers are 1-indexed
-		record_count = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
+		record_count = 0;
 	  } else {
         const bool is_pure_layer = layer.layer_number % 3 == 1;
         is_sorted_by_group_no = 1;

@@ -159,7 +159,7 @@ List *adjustUnionSetOps(
             ));
         }
         newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
-        tpAddSetGraphItem(context, setNumber, makeTraceProvDependency(0, childGraphs, traceprovEntries));
+        tpAddSetGraphItem(context, setNumber, makeTraceProvDependency(TP_LOG, 0, childGraphs, traceprovEntries));
     }
 
     List *setOpFlattened = traceProvFindUsedRefs((Node*)root, traceProvInclusiveNavigator);
