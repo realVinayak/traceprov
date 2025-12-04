@@ -54,10 +54,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 8
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 1
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -105,6 +105,7 @@ struct trace_file_partial_row {
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
+#define TRACEPROV_BUCKET_SIZE 16
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -140,11 +141,18 @@ struct traceprov_aggregate_layer {
     // Whether this belongs to the leader.
     // For aggregation, this is important, since combines happens on this layer.
     bool is_leader_layer;
+    // If this is aggregate layer, then what strategy is used for this.
+    int aggregate_strategy;
+    // The buckets. It is total - 1 because this layer acts the bucket for bucket == 0.
+    uint8 hash_buckets[TRACEPROV_BUCKET_SIZE - 1];
+    // If it is being combined, then this stores the layer number of the combined layer.
+    // This is used during inference, to correctly determine which layer file to consult.
+    uint32 combined_aggregate_layer_number;
 };
 
-#define TRACRPROV_NUM_LAYER_PER_PAGE (TRACEPROV_PAGE_SIZE / sizeof(struct traceprov_aggregate_layer))
+static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
 
-static_assert(((TRACEPROV_PAGE_SIZE) % sizeof(struct traceprov_aggregate_layer)) == 0, "Expected complete layers per page");
+#define TRACRPROV_NUM_LAYER_PER_PAGE (TRACEPROV_PAGE_SIZE / sizeof(struct traceprov_aggregate_layer))
 
 // Local context that each worker has.
 // This stores the layers.
@@ -163,11 +171,17 @@ struct local_context {
     int32   layer_fd;
 };
 
+// At least the local context should be fittable in a page.
+static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
+
 struct traceprov_shared_context {
     int32   magic_word;
     uint8   main_worker_id;
     // Counts the number of workers.
     uint8   worker_count;
+    // This gets stored in the shared context because it is otherwise hard to determine what's
+    // the appropriate layer to use for combine.
+    uint32  maximum_layer_number_used;
 };
 
 struct current_context {
@@ -177,6 +191,8 @@ struct current_context {
     // This value gets cached from shared_context.
     // This is done to avoid doing the stupid array indexing on every access.
     struct local_context *local_context;
+    // This is used during the logging of groups (to determine where the combiner layer goes.)
+    uint32  maximum_local_layer_used;
 };
 
 struct traceprov_agg_context {
@@ -187,7 +203,7 @@ struct traceprov_agg_context {
     // Worker on which this group was processed.
     uint8 worker_id;
     // Layer number for this group.
-    int32 layer_number;
+    uint32 layer_number;
 };
 
 // Whenever this condition fails, also need to update the function definition.
