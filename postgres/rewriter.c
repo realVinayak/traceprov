@@ -75,7 +75,13 @@ static void rteRewrite(
  * The input target entries become the entries that we log.
 */
 
-static Query *addNestedQuery(
+Query *traceprov_add_nested_query(
+    Query *, 
+    List *,
+    TraceProvParseContext *
+);
+
+Query *traceprov_add_nested_query_log(
     Query *, 
     List *,
     TraceProvParseContext *
@@ -122,28 +128,29 @@ PlannedStmt *traceprov_rewriter(
     // Set the root context to the parent context.
     // This simplifies some operations (since, otherwise, layer numbers can be same across branches, during sublink)
     context.root_context = &context;
-    List *topLevelTargets = NIL;
-    Query *traceprovParse = traceprov_perform_rewrite(parse, &topLevelTargets, &context, false);
+    List *top_level_targets = NIL;
+    Query *traceprov_parse = traceprov_perform_rewrite(parse, &top_level_targets, &context, false);
     // TODO: Is it possible that the same node may go to different places?
     // Now, need to rewrite the entire query to a subquery.
-    ListCell *teCursor;
-    foreach(teCursor, topLevelTargets){
-        const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(teCursor));
+    ListCell *te_cursor;
+    foreach(te_cursor, top_level_targets){
+        const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(te_cursor));
         if (currentTarget->graph){
             traceprovPrintDependency(currentTarget->graph, &context);
         }
     }
-    Query *traceprovTopQuery = addNestedQuery(traceprovParse, topLevelTargets, &context);
+    // Query *traceprovTopQuery = add_nested_query(traceprovParse, topLevelTargets, &context);
+    Query *traceprov_top_query = traceprov_add_nested_query_log(traceprov_parse, top_level_targets, &context);
     if (Debug_print_parse)
-        elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
-    traceprovParseBackQuery(traceprovTopQuery);
-    PlannedStmt *stmt = standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
+        elog_node_display(LOG, "traceprov parse tree", traceprov_top_query, Debug_pretty_print);
+    tracprov_parse_back_query(traceprov_top_query);
+    PlannedStmt *stmt = standard_planner(traceprov_top_query, query_string, cursorOptions, boundParams);
     traceprov_plan_analyzer(stmt, NULL, &context);
     return stmt;
 }
 
 List *addSubqueryToArgs(Query *subquery, TraceProvParseContext *context, const List *rootRTEList, Node **destination){
-    RangeTblEntry *rte = rangeTableEntryFromSubquery(subquery, context);
+    RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context);
     List *clonedRTEList = list_copy(rootRTEList);
     clonedRTEList = lappend(clonedRTEList, rte);
     RangeTblRef  *rtr = makeNode(RangeTblRef);
@@ -258,7 +265,7 @@ Query *traceprov_breakup_sets(
 // It is possible that rtes that are no longer needed appear in the query.
 // To check for that, recursively, go through the set operation tree, find refs that appear, and only choose those refs.
 void traceprov_fixup_references(Query* query){
-    List *usedReferences = traceProvFindUsedRefs(query->setOperations, traceProvLeafNavigator);
+    List *usedReferences = traceprov_find_used_refs(query->setOperations, traceProvLeafNavigator);
     List *newRTEList = NIL;
     ListCell *usedReferenceCursor = NULL;
 
@@ -398,7 +405,7 @@ Query *traceprov_perform_rewrite(
 
     if (parse->setOperations != NULL){
         // Assert that there are no res junks, if there are set operations.
-        traceProvAssertNoResJunk(parse->rtable);
+        traceprov_assert_no_resjunk(parse->rtable);
         // Normalize the query here.
         SetOperationStmt *stmt = (SetOperationStmt *)parse->setOperations;
         purePointerInParent |= !stmt->all;
@@ -419,9 +426,9 @@ Query *traceprov_perform_rewrite(
                 .goRight = false,
                 .includeInternals = false
             };
-            List *leftMostElement = traceProvFindUsedRefs((Node*)stmt, leftNavigator);
+            List *leftMostElement = traceprov_find_used_refs((Node*)stmt, leftNavigator);
             // There should always be just one left-most element. assert thatn.
-            traceProvAssertEqualLength(list_make2(leftMostElement, list_make1(NULL)));
+            traceprov_assert_equal_length(list_make2(leftMostElement, list_make1(NULL)));
             const RangeTblRef *leftMostRef = (RangeTblRef *)lfirst(list_head(leftMostElement));
             rteFilter = list_make1_int(leftMostRef->rtindex);
         }
@@ -578,7 +585,7 @@ void rteRewrite(
         List *childTargets = NIL;
         // All the next queries aren't the root.
         rte->subquery = traceprov_perform_rewrite(rte->subquery, &childTargets, tpContext, parentHasAggs);
-        targetsToAdd = traceProvPropagateChildTargets(childTargets, rteIndex);
+        targetsToAdd = traceprov_propagate_child_targets(childTargets, rteIndex);
         ListCell *childTargetCell;
         // Add the created child targets to the RTE colnames.
         foreach(childTargetCell, targetsToAdd){
@@ -590,34 +597,85 @@ void rteRewrite(
     *addedTargets = targetsToAdd;
 }
 
-Query *addNestedQuery(
+Query *traceprov_add_nested_query_log(
+    Query *base,
+    List *targets,
+    TraceProvParseContext *context
+){
+    if (list_length(targets) == 0)
+        elog(ERROR, "Expected some traceprov targets!");
+
+    const TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
+    ListCell *target_entry_cursor;
+    List *child_graphs = NIL;
+    List *entries = NIL;
+    List *arg_vars = list_make1((Node *) makeConst(
+        INT4OID, 
+        -1, 
+        InvalidOid,
+        sizeof(int32),
+        Int32GetDatum(layer_number), 
+        false,
+        true
+    ));
+    foreach(target_entry_cursor, targets){
+        const TraceProvTarget *tp_target = (TraceProvTarget *)lfirst(target_entry_cursor);
+        TraceProvEntry *tp_entry = traceprov_resolve_entry(
+            tp_target,
+            &child_graphs,
+            NULL
+        );
+        entries = lappend(entries, tp_entry);
+        arg_vars = lappend(arg_vars, makeVarFromTargetEntry(1, tp_target->targetEntry));
+    }
+    TraceProvDependency *graph = make_traceprov_dependency(
+        TP_LOG,
+        layer_number,
+        child_graphs,
+        entries
+    );
+
+    serializeTraceProvDepedency(list_make1(graph), context);
+    TraceProvParseContext *dupContext = NULL;
+    deserializeTraceProvDependency(&dupContext);
+
+    Query *nested = traceprov_make_nested_query(base, context);
+    Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars);
+    nested->targetList = traceprov_append_at_resjunk(
+        nested->targetList,
+        makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false)
+    );
+    return nested;
+}
+
+Query *traceprov_add_nested_query(
     Query *base, 
     List *targets,
     TraceProvParseContext *context
 ){
-    List *pointerTargets = NIL;
-    ListCell *targetEntryCursor;
+    List *pointer_targets = NIL;
+    ListCell *target_entry_cursor;
     List *graphs = NIL;
-    foreach(targetEntryCursor, targets){
-        const TraceProvTarget *currentTarget = ((TraceProvTarget *)lfirst(targetEntryCursor));
-        if (currentTarget->isPointer){
+    foreach(target_entry_cursor, targets){
+        const TraceProvTarget *current_target = ((TraceProvTarget *)lfirst(target_entry_cursor));
+        if (current_target->isPointer){
             // Varno will be 1, because it is the only table.
-            List *pointerArgs = list_make1(makeVarFromTargetEntry(1, currentTarget->targetEntry));
-            if (currentTarget->setNumber > 0){
+            List *pointer_args = list_make1(makeVarFromTargetEntry(1, current_target->targetEntry));
+            if (current_target->setNumber > 0){
                 // In the target list, need to, now, find the set pointer.
-                pointerArgs = lappend(pointerArgs, (makeVarFromTargetEntry(1, traceProvFindMatchingSetPointer(targets, currentTarget->setNumber)->targetEntry)));
+                pointer_args = lappend(pointer_args, (makeVarFromTargetEntry(1, traceprov_find_matching_set_pointer(targets, current_target->setNumber)->targetEntry)));
             }
-            pointerTargets = lappend(pointerTargets, pointerArgs);
+            pointer_targets = lappend(pointer_targets, pointer_args);
         }
-        if (currentTarget->graph){
-            traceprovPrintDependency(currentTarget->graph, context);
-            graphs = lappend(graphs, currentTarget->graph);
+        if (current_target->graph){
+            traceprovPrintDependency(current_target->graph, context);
+            graphs = lappend(graphs, current_target->graph);
         }
     }
     serializeTraceProvDepedency(graphs, context);
     TraceProvParseContext *dupContext = NULL;
     deserializeTraceProvDependency(&dupContext);
-    if (list_length(pointerTargets) == 0){
+    if (list_length(pointer_targets) == 0){
         // No pointers, no need to call the mark function.
         // Return the original query in this case.
         return base;
@@ -628,18 +686,18 @@ Query *addNestedQuery(
     char *aliasName = tp_parse_get_unique_alias(context);
     newTable->alias = makeAlias(aliasName, NIL);
     List *newTargetList = NIL;
-    targetEntryCursor = NULL;
+    target_entry_cursor = NULL;
     List *colNames = NIL;
-    foreach(targetEntryCursor, base->targetList){
-        TargetEntry *te = (TargetEntry *)lfirst(targetEntryCursor);
+    foreach(target_entry_cursor, base->targetList){
+        TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
         Var *newVar = makeVarFromTargetEntry(1, te);
         if (!te->resjunk){
-            newTargetList = traceProvAppendAtResJunk(
+            newTargetList = traceprov_append_at_resjunk(
                 newTargetList, 
                 makeTargetEntry(
                     (Expr *)newVar,
                     // Because they are 1-indexed.
-                    foreach_current_index(targetEntryCursor) + 1,
+                    foreach_current_index(target_entry_cursor) + 1,
                     te->resname,
                     false
                 )
@@ -668,7 +726,7 @@ Query *addNestedQuery(
     targetQuery->jointree = fromExpr;
 
     ListCell *pointerTarget;
-    foreach(pointerTarget, pointerTargets){
+    foreach(pointerTarget, pointer_targets){
         int i = 0;
         List *pointerFuncArgs = lfirst(pointerTarget);
         Node *mark_later_func = traceprov_get_function_call_node(

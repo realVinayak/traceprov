@@ -31,26 +31,26 @@ typedef struct TraceProvUsedRefNavigator {
 extern TraceProvUsedRefNavigator traceProvInclusiveNavigator;
 extern TraceProvUsedRefNavigator traceProvLeafNavigator;
 
-void traceProvAssertNoResJunk(const List *);
-void traceProvAssertIsSubquery(const RangeTblEntry *);
-int traceProvAssertEqualLength(List *);
+void traceprov_assert_no_resjunk(const List *);
+void traceprov_assert_is_subquery(const RangeTblEntry *);
+int traceprov_assert_equal_length(List *);
 
-List *traceProvAppendAtResJunk(List *, TargetEntry *);
-List *traceProvGetNullList(unsigned, Oid, int32, Oid);
-List *traceProvFindUsedRefs(Node *, TraceProvUsedRefNavigator);
+List *traceprov_append_at_resjunk(List *, TargetEntry *);
+List *traceprov_get_null_list(unsigned, Oid, int32, Oid);
+List *traceprov_find_used_refs(Node *, TraceProvUsedRefNavigator);
 
-List *traceProvDupInt(int, int);
-List *traceProvDupOid(Oid, int);
+List *traceprov_dup_int(int, int);
+List *traceprov_dup_oid(Oid, int);
 
 List *traceprov_flatten(List *);
 List* traceprov_append_targets(List *, List *);
 
-const TraceProvTarget *traceProvFindMatchingSetPointer(List *, int);
+const TraceProvTarget *traceprov_find_matching_set_pointer(List *, int);
 
 Node *createEqualityCondition (List*, List*, Index, Index, bool);
 
 Query *traceprov_clone_query(const Query *);
-RangeTblEntry *rangeTableEntryFromSubquery(Query *, TraceProvParseContext *);
+RangeTblEntry *range_table_entry_from_subquery(Query *, TraceProvParseContext *);
 Query *traceprov_make_nested_query(Query *, TraceProvParseContext *);
 
 List *traceprov_aggregate_on_set(
@@ -76,8 +76,8 @@ Node *traceprov_get_function_call_node(const char *, List *);
 
 Const *makeInt8Const(int64);
 
-List *traceProvPropagateChildTargets(List *, Index);
-char *traceprovParseBackQuery(Query *);
+List *traceprov_propagate_child_targets(List *, Index);
+char *tracprov_parse_back_query(Query *);
 
 Query *traceprov_perform_rewrite(
     Query *, 

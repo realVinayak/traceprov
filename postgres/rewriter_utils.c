@@ -33,7 +33,7 @@ TraceProvUsedRefNavigator traceProvLeafNavigator = {
     .goRight = true
 };
 
-void traceProvAssertNoResJunk(const List *targetList){
+void traceprov_assert_no_resjunk(const List *targetList){
     ListCell *targetlist_cursor;
     foreach(targetlist_cursor, targetList){
         const TargetEntry *entry = (TargetEntry *)lfirst(targetlist_cursor);
@@ -43,7 +43,7 @@ void traceProvAssertNoResJunk(const List *targetList){
     }
 }
 
-void traceProvAssertIsSubquery(const RangeTblEntry *rte){
+void traceprov_assert_is_subquery(const RangeTblEntry *rte){
     if (rte->rtekind != RTE_SUBQUERY){
         elog(ERROR, "Expected rte to be of subquery, got: %d", rte->rtekind);
     }
@@ -59,7 +59,7 @@ List *_appendAndAdjustResno(List *in_list, TargetEntry *toAdd){
     return newList;
 }
 
-List *traceProvAppendAtResJunk(List *old, TargetEntry *newTe){
+List *traceprov_append_at_resjunk(List *old, TargetEntry *newTe){
     if (list_length(old) == 0 || newTe->resjunk){
         // Append it to the very end.
         return lappend(old, newTe);
@@ -84,7 +84,7 @@ List *traceProvAppendAtResJunk(List *old, TargetEntry *newTe){
     return newList;
 }
 
-List *traceProvGetNullList(unsigned count, Oid consttype, int32 consttypmod, Oid constcollid){
+List *traceprov_get_null_list(unsigned count, Oid consttype, int32 consttypmod, Oid constcollid){
     // This might be too strict, but should never get raised. We can still have defined behavior (return NIL)
     if (count == 0) elog(ERROR, "expected to get atleast 1!");
     List *nullList = NIL;
@@ -96,7 +96,7 @@ List *traceProvGetNullList(unsigned count, Oid consttype, int32 consttypmod, Oid
 
 // Checks that the length of the input lists are same.
 // The input is a list of lists (to avoid functions for different number of args)
-int traceProvAssertEqualLength(List *in_lists){
+int traceprov_assert_equal_length(List *in_lists){
     if (list_length(in_lists) < 2){
         elog(ERROR, "expected at least 2 lists to be compared.");
     }
@@ -115,7 +115,7 @@ int traceProvAssertEqualLength(List *in_lists){
 // Takes in the head and gets all the leaf refs.
 // This is useful when some action needs to be performed on the flattened structure.
 // If includeInternals is true, also includes the internal node (rather than just the leaf refs.)
-List *traceProvFindUsedRefs(Node *head, TraceProvUsedRefNavigator navigator){
+List *traceprov_find_used_refs(Node *head, TraceProvUsedRefNavigator navigator){
     if (head == NULL){
         // Nothing to do.
         return NIL;
@@ -129,17 +129,17 @@ List *traceProvFindUsedRefs(Node *head, TraceProvUsedRefNavigator navigator){
 
     List *refs = NIL;
     if (navigator.goLeft){
-        refs = list_concat_copy(refs, traceProvFindUsedRefs(setOp->larg, navigator));
+        refs = list_concat_copy(refs, traceprov_find_used_refs(setOp->larg, navigator));
     }
     if (navigator.goRight){
-        refs = list_concat_copy(refs, traceProvFindUsedRefs(setOp->rarg, navigator));
+        refs = list_concat_copy(refs, traceprov_find_used_refs(setOp->rarg, navigator));
     }
 
     if (navigator.includeInternals) refs = lappend(refs, head);
     return refs;
 }
 
-List *traceProvDupInt(int element, int count){
+List *traceprov_dup_int(int element, int count){
     List *begin = NIL;
     for (int i = 0; i < count; i++){
         begin = lappend_int(begin, element);
@@ -147,7 +147,7 @@ List *traceProvDupInt(int element, int count){
     return begin;
 }
 
-List *traceProvDupOid(Oid element, int count){
+List *traceprov_dup_oid(Oid element, int count){
     List *begin = NIL;
     for (int i = 0; i < count; i++){
         begin = lappend_oid(begin, element);
@@ -177,12 +177,12 @@ List* traceprov_append_targets(List *traceProvTargets, List *targetList){
         // Here is an ugly case.
         // It is possible that the attributes we're grouping over don't appear as resjunk.
         // In that case, we'll need to adjust the references in the sort refs.
-        targetList = traceProvAppendAtResJunk(targetList, target);
+        targetList = traceprov_append_at_resjunk(targetList, target);
     }
     return targetList;
 }
 
-const TraceProvTarget *traceProvFindMatchingSetPointer(List *traceProvTargets, int setNumber){
+const TraceProvTarget *traceprov_find_matching_set_pointer(List *traceProvTargets, int setNumber){
     ListCell *traceProvTargetCursor;
     foreach(traceProvTargetCursor, traceProvTargets){
         const TraceProvTarget *tpTarget = ((TraceProvTarget *)lfirst(traceProvTargetCursor));
@@ -376,21 +376,22 @@ Query *traceprov_clone_query(const Query *base){
     return targetQuery;
 }
 
-RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContext *context){
+RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseContext *context){
     RangeTblEntry *tblEntry = makeNode(RangeTblEntry);
     char *aliasName = tp_parse_get_unique_alias(context);
     tblEntry->alias = makeAlias(aliasName, NIL);
     List *colNames = NIL;
     ListCell *target_entry_cursor = NULL;
-    foreach(target_entry_cursor, subQuery->targetList){
+    foreach(target_entry_cursor, sub_query->targetList){
         TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
-        colNames = lappend(colNames, makeString(pstrdup(te->resname)));
+        if (te->resjunk) continue;
+        colNames = lappend(colNames, makeString(te->resname == NULL ? (tp_parse_get_unique_alias(context)) : pstrdup(te->resname)));
     }
     tblEntry->eref = makeAlias(pstrdup(aliasName), colNames);
     // Doesn't seem like this will have any side-effects (at this stage at least)
     tblEntry->inFromCl = false;
     tblEntry->rtekind = RTE_SUBQUERY;
-    tblEntry->subquery = subQuery;
+    tblEntry->subquery = sub_query;
     return tblEntry;
 }
 
@@ -399,6 +400,7 @@ Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context){
     ListCell *target_entry_cursor;
     foreach(target_entry_cursor, base->targetList){
         TargetEntry *base_target_entry = (TargetEntry *)lfirst(target_entry_cursor);
+        if (base_target_entry->resjunk) continue;
         modified->targetList = lappend(modified->targetList, makeTargetEntry(
             (Expr*)makeVarFromTargetEntry(1, base_target_entry),
             base_target_entry->resno,
@@ -406,7 +408,7 @@ Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context){
             false
         ));
     }
-    RangeTblEntry *rte = rangeTableEntryFromSubquery(base, context);
+    RangeTblEntry *rte = range_table_entry_from_subquery(base, context);
     rte->inFromCl = true;
     modified->rtable = list_make1(rte);
     RangeTblRef *rtr = makeNode(RangeTblRef);
@@ -522,7 +524,7 @@ void traceprov_aggregate_rewrite(
     List *entries = NIL;
     List *childGraphs = NIL;
     foreach(target_entry_cursor, targetEntriesToLog){
-        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(target_entry_cursor)), &childGraphs, &argVars);
+        TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &childGraphs, &argVars);
         entries = lappend(entries, tpEntry);
     }
 
@@ -534,7 +536,8 @@ void traceprov_aggregate_rewrite(
     // TODO: Think about mixed cases (say, first three are pointers, next two are ints.)
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
-    Node *funcCallNode = traceprov_get_function_call_node( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
+    // Always use the offset version no matter what.
+    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars);
     if (!IsA(funcCallNode, Aggref)){
         elog(ERROR, "Expected the function call node to be an aggref!");
     }
@@ -547,7 +550,7 @@ void traceprov_aggregate_rewrite(
                 pstrdup("mapped_agg"),
                 false
             ),
-            makeTraceProvDependency(
+            make_traceprov_dependency(
                 TP_AGGREGATE,
                 layerNumber,
                 childGraphs,
@@ -574,7 +577,7 @@ Const *makeInt8Const(int64 value){
 }
 
 // Makes new traceprov targets to be used in the parent.
-List *traceProvPropagateChildTargets(List *childTargets, Index rteIndex){
+List *traceprov_propagate_child_targets(List *childTargets, Index rteIndex){
     List *targetsToAdd = NIL;
     ListCell *childTargetCell;
     foreach(childTargetCell, childTargets){
@@ -637,7 +640,7 @@ dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 // This, first, makes a function out of the query.
 // Then, looks at the SQL body of the function.
 // It just, then, calls the existing postgres utility to parse back.
-char *traceprovParseBackQuery(Query *query){
+char *tracprov_parse_back_query(Query *query){
     ObjectAddress created = ProcedureCreate(
         pstrdup("traceprovquery"),
         PG_PUBLIC_NAMESPACE,

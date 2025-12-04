@@ -46,16 +46,16 @@ List *adjustUnionSetOps(
     if (root->op != SETOP_UNION){
         elog(ERROR, "Expected op to be of union!");
     }
-    traceProvAssertEqualLength(list_make2(extraTargets, queryRteList));
+    traceprov_assert_equal_length(list_make2(extraTargets, queryRteList));
 
     // Get the max number of extra targets that were added.
     unsigned int maxTargetListLength = 0;
     ListCell *rteCursor = NULL;
     foreach(rteCursor, queryRteList){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
-        traceProvAssertIsSubquery(rte);
+        traceprov_assert_is_subquery(rte);
         Query *subquery = rte->subquery;
-        traceProvAssertNoResJunk(subquery->targetList);
+        traceprov_assert_no_resjunk(subquery->targetList);
         maxTargetListLength = Max(maxTargetListLength, list_length(subquery->targetList));
     }
 
@@ -72,7 +72,7 @@ List *adjustUnionSetOps(
         if (padding > 0){
             elog(INFO, "Needed to perform a padding!");
             // In this case, need to add padding NULLs.
-            List *nullList = traceProvGetNullList(padding, INT8OID, -1, InvalidOid);
+            List *nullList = traceprov_get_null_list(padding, INT8OID, -1, InvalidOid);
             ListCell *nullListCursor;
             foreach(nullListCursor, nullList){
                 Expr *nullExpr = (Expr *)lfirst(nullListCursor);
@@ -93,7 +93,7 @@ List *adjustUnionSetOps(
         ListCell *newlyCreatedTargetCursor;
         foreach(newlyCreatedTargetCursor, newlyCreatedTargets){
             TargetEntry *newTe = (TargetEntry *)lfirst(newlyCreatedTargetCursor);
-            subquery->targetList = traceProvAppendAtResJunk(subquery->targetList, newTe);
+            subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, newTe);
             rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(newTe->resname)));
             const Var *newVar = makeVarFromTargetEntry(foreach_current_index(rteCursor) + 1, newTe);
             TargetEntry *targetInParent = makeTargetEntry(
@@ -152,24 +152,24 @@ List *adjustUnionSetOps(
                 extraTargetsTyped,
                 typedTpTarget
             );
-            traceprovEntries = lappend(traceprovEntries, tpResolveEntry(
+            traceprovEntries = lappend(traceprovEntries, traceprov_resolve_entry(
                 tpTarget,
                 &childGraphs,
                 NULL
             ));
         }
         newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
-        tp_add_set_graph_item(context, setNumber, makeTraceProvDependency(TP_LOG, 0, childGraphs, traceprovEntries));
+        tp_add_set_graph_item(context, setNumber, make_traceprov_dependency(TP_LOG, 0, childGraphs, traceprovEntries));
     }
 
-    List *setOpFlattened = traceProvFindUsedRefs((Node*)root, traceProvInclusiveNavigator);
+    List *setOpFlattened = traceprov_find_used_refs((Node*)root, traceProvInclusiveNavigator);
     ListCell *opCursor;
     const unsigned int expectedLength = maxTargetListLength + 1;
     foreach(opCursor, setOpFlattened){
         Node *node = (Node*)lfirst(opCursor);
         if (IsA(node, SetOperationStmt)){
             SetOperationStmt *setOp = (SetOperationStmt *)node;
-            int currentLength = traceProvAssertEqualLength(
+            int currentLength = traceprov_assert_equal_length(
                 list_make3(
                     setOp->colTypes,
                     setOp->colCollations,
@@ -180,15 +180,15 @@ List *adjustUnionSetOps(
                 const int padding = expectedLength - currentLength;
                 setOp->colTypes = list_concat(
                     setOp->colTypes, 
-                    traceProvDupOid(INT8OID, padding)
+                    traceprov_dup_oid(INT8OID, padding)
                 );
                 setOp->colCollations = list_concat(
                     setOp->colCollations,
-                    traceProvDupOid(InvalidOid, padding)
+                    traceprov_dup_oid(InvalidOid, padding)
                 );
                 setOp->colTypmods = list_concat(
                     setOp->colTypmods,
-                    traceProvDupInt(-1, padding)
+                    traceprov_dup_int(-1, padding)
                 );
             }
         }
@@ -232,12 +232,12 @@ Query *adjustExceptSetOps(
         .goRight = false,
         .includeInternals = false
     };
-    traceProvAssertEqualLength(list_make2(extraTargets, queryRteList));
-    List *leftMostElement = traceProvFindUsedRefs((Node*)root, leftNavigator);
+    traceprov_assert_equal_length(list_make2(extraTargets, queryRteList));
+    List *leftMostElement = traceprov_find_used_refs((Node*)root, leftNavigator);
     // There should always be just one left-most element. assert thatn.
-    traceProvAssertEqualLength(list_make2(leftMostElement, list_make1(NULL)));
+    traceprov_assert_equal_length(list_make2(leftMostElement, list_make1(NULL)));
     const RangeTblRef *leftMostRef = (RangeTblRef *)lfirst(list_head(leftMostElement));
-    List *allSetElements = traceProvFindUsedRefs((Node*)root, traceProvInclusiveNavigator);
+    List *allSetElements = traceprov_find_used_refs((Node*)root, traceProvInclusiveNavigator);
     
     ListCell *setElementCursor = NULL;
     foreach(setElementCursor, allSetElements){
@@ -334,7 +334,7 @@ Query *adjustExceptSetOps(
             // In this case, also need to expand out with constants.
             // And, then, need to expand out the subqueries with that constant too.
             RangeTblEntry *rte = list_nth(queryRteList, (extraTargetsCursor));
-            traceProvAssertIsSubquery(rte);
+            traceprov_assert_is_subquery(rte);
             const int currentLength = list_length(rte->subquery->targetList);
             if (currentLength >= finalLength){
                 elog(ERROR, "expected the initial excepts to always be underfiled!");
@@ -350,7 +350,7 @@ Query *adjustExceptSetOps(
                     pstrdup("tp_except_proxy"),
                     false
                 );
-                rte->subquery->targetList = traceProvAppendAtResJunk(rte->subquery->targetList, targetEntry);
+                rte->subquery->targetList = traceprov_append_at_resjunk(rte->subquery->targetList, targetEntry);
                 rte->eref->colnames = lappend(rte->eref->colnames, makeString(pstrdup(targetEntry->resname)));
             }
         }
@@ -366,15 +366,15 @@ Query *adjustExceptSetOps(
             }
             internalSetOp->colCollations = list_concat(
                 internalSetOp->colCollations,
-                traceProvDupOid(InvalidOid, padding)
+                traceprov_dup_oid(InvalidOid, padding)
             );
             internalSetOp->colTypmods = list_concat(
                 internalSetOp->colTypmods,
-                traceProvDupInt(-1, padding)
+                traceprov_dup_int(-1, padding)
             );
             internalSetOp->colTypes = list_concat(
                 internalSetOp->colTypes,
-                traceProvDupOid(tpPointerTypId, padding)
+                traceprov_dup_oid(tpPointerTypId, padding)
             );
             for (int i = 0; i < padding; i++){
                 internalSetOp->groupClauses = lappend(
@@ -389,7 +389,7 @@ Query *adjustExceptSetOps(
     inputQuery->targetList = traceprov_append_targets(extraTargetsForRTE, inputQuery->targetList);
     // Now, need to wrap the input query inside a subquery.
     // Get the new child targets.
-    List *childTargets = traceProvPropagateChildTargets(extraTargetsForRTE, 1);
+    List *childTargets = traceprov_propagate_child_targets(extraTargetsForRTE, 1);
     Query *parent = traceprov_make_nested_query(inputQuery, context);
     ListCell *childTargetCursor;
     foreach(childTargetCursor, childTargets){
@@ -433,7 +433,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
     // However, need to ignore the traceprov attributes in the join condition.
     // So, the ignoreList, if given, is consulted. If the table index AND column idx is same,
     // column is ignored from predicates.
-    const List *usedReferences = traceProvFindUsedRefs(base->setOperations, traceProvLeafNavigator);
+    const List *usedReferences = traceprov_find_used_refs(base->setOperations, traceProvLeafNavigator);
     if (list_length(usedReferences) != list_length(base->rtable)){
         elog(ERROR, "Expected the used references to be of the same size as setOperations");
     }

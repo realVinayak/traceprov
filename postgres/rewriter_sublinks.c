@@ -89,7 +89,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             break;
         }
         // Log the traceprov references.
-        TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context->root_context);
+        TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
         // Add the correlated targets (as keys), and the targets of the base query to the context.
         tp_add_sublink_map_item(new_context, correlated_provenance_targets, added_targets, layer_number);
         Node * layer_number_const = (Node *) makeConst(
@@ -132,8 +132,8 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             elog(ERROR, "Got mismatching original target lengths!");
         }
         // Now, append the newly created function call node, to the target list.
-        TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context->root_context), false);
-        rewritten_subselect->targetList = traceProvAppendAtResJunk(original_without_targets, log_target_entry);
+        TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false);
+        rewritten_subselect->targetList = traceprov_append_at_resjunk(original_without_targets, log_target_entry);
 
         if (sublink->subLinkType != EXISTS_SUBLINK || true){
             Query *subselect_wrapper = traceprov_clone_query(rewritten_subselect);
@@ -152,7 +152,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                     )
                 );
             }
-            RangeTblEntry *rte = rangeTableEntryFromSubquery(rewritten_subselect, context);
+            RangeTblEntry *rte = range_table_entry_from_subquery(rewritten_subselect, context);
             rte->inFromCl = true;
             subselect_wrapper->rtable = list_make1(rte);
             RangeTblRef *rtr = makeNode(RangeTblRef);

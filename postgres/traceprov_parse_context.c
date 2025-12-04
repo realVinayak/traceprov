@@ -73,10 +73,10 @@ void tp_add_sublink_map_item(
     List *entries = NIL;
     List *child_graphs = NIL;
     foreach(target_entry_cursor, ptr_traceprov_targets){
-        TraceProvEntry *tpEntry = tpResolveEntry(((TraceProvTarget *)lfirst(target_entry_cursor)), &child_graphs, NULL);
+        TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &child_graphs, NULL);
         entries = lappend(entries, tpEntry);
     }
-    const TraceProvDependency *graph = makeTraceProvDependency(
+    const TraceProvDependency *graph = make_traceprov_dependency(
         TP_LOG,
         layer_number,
         child_graphs,
@@ -114,7 +114,7 @@ void _assertIsArtificial(const TargetEntry *target){
     }
 }
 
-TraceProvEntry *tpResolveEntry(
+TraceProvEntry *traceprov_resolve_entry(
     const TraceProvTarget * tpTarget, 
     List **childGraphs,
     List **exprs
@@ -158,7 +158,7 @@ TraceProvEntry *makeTraceProvEntry(){
     return palloc0_object(TraceProvEntry);
 }
 
-TraceProvDependency *makeTraceProvDependency(
+TraceProvDependency *make_traceprov_dependency(
     TraceProvGraphKind kind,
     TraceProvLayerNumber headNumber,
     List *children,

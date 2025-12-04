@@ -5,8 +5,10 @@
 #include "c.h"
 #include "errno.h"
 #include "utils/elog.h"
+#include "nodes/nodes.h"
 
 #include <assert.h>
+
 
 // Force using C's sprintf, yukkky.
 // Otherwise, Postgres' sprintf will be taken.
@@ -54,10 +56,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 1024
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 1024
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -105,7 +107,7 @@ struct trace_file_partial_row {
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
-#define TRACEPROV_BUCKET_SIZE 16
+#define TRACEPROV_BUCKET_COUNT 2
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -143,8 +145,12 @@ struct traceprov_aggregate_layer {
     bool is_leader_layer;
     // If this is aggregate layer, then what strategy is used for this.
     int aggregate_strategy;
-    // The buckets. It is total - 1 because this layer acts the bucket for bucket == 0.
-    uint8 hash_buckets[TRACEPROV_BUCKET_SIZE - 1];
+    // The index at which the buckets start.
+    // This is the index where the 2nd lives.
+    // We don't need to store it for 1st, because that's always self.
+    uint32 hash_buckets_start_idx;
+    // The index at which the buckets end.
+    uint32 hash_buckets_end_idx;
     // If it is being combined, then this stores the layer number of the combined layer.
     // This is used during inference, to correctly determine which layer file to consult.
     uint32 combined_aggregate_layer_number;
@@ -206,6 +212,8 @@ struct traceprov_agg_context {
     uint32 layer_number;
 };
 
+uint32 traceprov_hashint8(int64);
+
 // Whenever this condition fails, also need to update the function definition.
 static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
@@ -213,5 +221,9 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
+#define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
+
+#define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
+#define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)
 
 #endif
