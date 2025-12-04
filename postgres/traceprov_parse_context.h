@@ -125,7 +125,7 @@ void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, Trace
 
 TraceProvEntry *makeTraceProvEntry();
 
-TraceProvDependency *makeTraceProvDependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
+TraceProvDependency *make_traceprov_dependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
 void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
 void serializeTraceProvDepedency(List *, TraceProvParseContext *);
 List *deserializeTraceProvDependency(TraceProvParseContext **);
@@ -163,7 +163,7 @@ TraceProvTarget *makeTraceProvTarget(
     List *sublinks
 );
 
-TraceProvEntry *tpResolveEntry(const TraceProvTarget *, List **, List**);
+TraceProvEntry *traceprov_resolve_entry(const TraceProvTarget *, List **, List**);
 
 char *traceProvDependencyToJson(const TraceProvDependency *);
 char *traceProvParseContextToJson(const TraceProvParseContext *);

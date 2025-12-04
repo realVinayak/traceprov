@@ -12,6 +12,8 @@
 #include "libpq/pqformat.h"
 #include "common/file_perm.h"
 
+#include "nodes/execnodes.h"
+
 #if (PG_MAJORVERSION_NUM >= 16)
 #include "varatt.h"
 #endif
@@ -210,7 +212,12 @@ exit_initialize_local_context:
     return rc;
 }
 
-static int initialize_layer_file(const uint32 layer_number, const uint32 num_pk_records, const bool set_current_row){
+static int initialize_layer_file(
+    const uint32 layer_number, 
+    const uint32 num_pk_records, 
+    const bool set_current_row, 
+    const Node *state
+){
 
     /**
      * Here are the sequence of operations this function needs to perform.
@@ -362,16 +369,39 @@ static int initialize_layer_file(const uint32 layer_number, const uint32 num_pk_
     layer->layer_fd = trace_file_fd;
     layer->size = 1;
 
+    if (state != NULL){
+        // If the entries in this file will be hashed, need to also make the hash buckets for them.
+        // This effectively makes a recursive call (but the state of the next is always null)
+        // Technically, the recursive call can be used to implement a multi-level partitioning...
+        if (TRACEPROV_SHOULD_HASH(state)){
+            
+            // Need to make the new levels
+            // Note that we only need to construct buckets after the current layer.
+            // because the current layer acts as the buckets for the other ones..
+            layer->hash_buckets_start_idx = traceprov_current.maximum_local_layer_used + 1;
+            for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
+                if (initialize_layer_file(++traceprov_current.maximum_local_layer_used, num_pk_records, true, NULL)){
+                    elog(ERROR, "Error initializing the hash buckets");
+                }
+            }
+            layer->hash_buckets_end_idx = traceprov_current.maximum_local_layer_used;
+        }
+    }
     return 0;
 }
 
-static int initialize_local_and_layer(const uint32 layer_number, const int num_pk_records, const bool set_current_row){
+static int initialize_local_and_layer(
+    const uint32 layer_number,
+    const int num_pk_records,
+    const bool set_current_row,
+    const Node *state
+){
     int rc = 0;
     if ((rc = initialize_local_context())){
         PRINT_ON_DEBUG("Error initializing local context.");
         return rc;
     }
-    if ((rc = initialize_layer_file(layer_number, num_pk_records, set_current_row))){
+    if ((rc = initialize_layer_file(layer_number, num_pk_records, set_current_row, state))){
         PRINT_ON_DEBUG("Error initializing layer file");
     }
     return rc;
@@ -390,7 +420,7 @@ PG_FUNCTION_INFO_V1(test_local_setup);
 Datum test_local_setup(PG_FUNCTION_ARGS){
     int rc = initialize_local_context();
     if (rc) PG_RETURN_INT32(rc);
-    rc = initialize_layer_file(PG_GETARG_INT32(0), PG_GETARG_INT32(1), true);
+    rc = initialize_layer_file(PG_GETARG_INT32(0), PG_GETARG_INT32(1), true, NULL);
     print_layer(get_layer(PG_GETARG_INT32(0)));
     PG_RETURN_INT32(rc);
 }
@@ -433,22 +463,43 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     if (!AggCheckCallContext(fcinfo, &agg_mem_context))
         elog(ERROR, "aggregate function called in non-aggregate context");
 
-    if ((rc = initialize_local_and_layer(layer_number, num_pk, true))){
+    if ((rc = initialize_local_and_layer(layer_number, num_pk, true, (Node *)fcinfo->context))){
         PRINT_ON_DEBUG("Error setting up local or layer");
         elog(ERROR, "Error setting up local or layer");
         return 1;
     }
 
-    struct traceprov_aggregate_layer *current_layer = get_layer(layer_number);
+    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+
+    // The bucket zero just means the current layer.
+    uint8 bucket = 0;
 
     if (PG_ARGISNULL(0)){
+        const uint64 absolute_group_number =  ++main_layer->num_groups;
         agg_context = (struct traceprov_agg_context *)MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
-        agg_context->group_cnt = ++current_layer->num_groups;
+        // If we determine that we're going to hash this, we store the hash bucket in the second byte of group count field.
+        // This helps speeding things up during inference, and we don't have to worry about hashing it the next time this gets
+        // called. Also, during inference, the value is not hashed again.
+        if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
+            bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
+        }
+        agg_context->group_cnt = TRACEPROV_SET_BUCKET(absolute_group_number, bucket);
         agg_context->worker_id = traceprov_current.my_worker_id;
         agg_context->is_combined = 0;
         agg_context->layer_number = layer_number;
     }else{
         agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
+            bucket = TRACEPROV_GET_BUCKET(agg_context->group_cnt);
+        }
+    }
+
+    struct traceprov_aggregate_layer *current_layer = NULL;
+    if (bucket == 0){
+        current_layer = main_layer;
+    }else{
+        // bucket always > 0 at this point.
+        current_layer = get_layer((bucket - 1) + main_layer->hash_buckets_start_idx);
     }
 
     // This is where it gets _interesting_ (and complicated)
@@ -468,7 +519,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     // This, essentially, just adds the padding to the beginning.
     // For optimization purposes, we don't actually write to this space (because it is empty)
     current_layer->current_row += current_layer->record_padding;
-	
+
     // During benchmarking, this was a bottlenck (using struct computations)
     *((int64*)current_layer->current_row) = agg_context->group_cnt;
     
@@ -499,7 +550,7 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     const int32 group_layer_number = agg_context->layer_number + 1;
     int rc = 0;
 
-    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 0, false))){
+    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 0, false, (Node *)fcinfo->context))){
         PRINT_ON_DEBUG("Error setting up local or layer for group.");
         elog(ERROR, "Error setting up local or layer for group.");
         return 1;
@@ -554,11 +605,10 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     } else{
         reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
         other = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
-        struct traceprov_agg_context *tmp;
-        // If ther other happened to be 
+        // If ther other happened to be combined, swap.
         if (other->is_combined){
             assert(!reference_struct->is_combined);
-            tmp = other;
+            struct traceprov_agg_context *tmp = other;
             other = reference_struct;
             reference_struct = tmp;
         }
@@ -574,7 +624,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
     // Here, we don't care about any layer file (it is not this function's responsibility)
     // So, we do the bare minimum, just setting up the local context (vars)
-    if ((rc = initialize_local_and_layer(combined_layer_number, 2, true))){
+    if ((rc = initialize_local_and_layer(combined_layer_number, 2, true, (Node *)fcinfo->context))){
         PRINT_ON_DEBUG("Error setting up local or layer for combine");
         return rc;
     }
@@ -891,7 +941,7 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
     const int width = return_pointer_version ? PG_NARGS() - 1 : PG_NARGS() - 2;
-    if ((rc = initialize_local_and_layer(layer_number, width, true))){
+    if ((rc = initialize_local_and_layer(layer_number, width, true, NULL))){
         PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
         elog(ERROR, "Error setting up local or layer: %d", rc);
     }
