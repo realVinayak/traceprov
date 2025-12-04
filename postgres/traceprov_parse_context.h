@@ -6,8 +6,9 @@
 #include "nodes/pg_list.h"
 #include "access/attnum.h"
 #include "nodes/primnodes.h"
+#include "nodes/plannodes.h"
 
-#define TRACEPROV_LAYER_INCREMENT_BOUNDARY 3
+#define TRACEPROV_LAYER_INCREMENT_BOUNDARY 1
 #define TRACEPROV_TICKER "/*(traceprov)*/"
 #define TRACEPROV_SET_TICKER "/*(traceprov-set)*/"
 
@@ -74,6 +75,17 @@ typedef struct TraceProvSetGraphMapItem {
     TraceProvDependency *graph;
 } TraceProvSetGraphMapItem;
 
+typedef struct TraceProvAggregateProperty {
+    TraceProvLayerNumber layer_number;
+    // The strategy used for base writes.
+    // These get set to AggStrategy, but need to distinguish -1 case, so
+    // they are int.
+    int initial_strategy;
+    // The strategy used for combining
+    // (can be different than strategy for base writes)
+    int combine_strategy;
+} TraceProvAggregateProperty;
+
 // Some properties get stored directly in the context.
 // In the graph file, this also gets later stored.
 typedef struct TraceProvParseGraphProperties {
@@ -83,6 +95,10 @@ typedef struct TraceProvParseGraphProperties {
     List *setGraphMap;
     // List of TraceProvParseContext (sublinks).
     List *sublinkMap;
+    // Used to identify which functions are traceprov ones, during plan analysis.
+    List *traceprov_funcs;
+    // The strategy inferred from the plan. List of TraceProvAggregateProperty.
+    List *aggregate_properties;
 } TraceProvParseGraphProperties;
 
 typedef struct TraceProvParseContext {
@@ -99,12 +115,13 @@ TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContex
 
 void tpParseInitializeContext(TraceProvParseContext *);
 
-TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *);
-char *tpParseGetUniqueAlias(TraceProvParseContext *);
-int tpParseGetUniqueNumber(TraceProvParseContext *);
-void tpAddSetPaddingItem(TraceProvParseContext *, int, int);
-void tpAddSetGraphItem(TraceProvParseContext *, int, TraceProvDependency *);
-void tpAddSublinkMapItem(TraceProvParseContext *, List *, const List*, int);
+TraceProvLayerNumber tp_parse_get_layer_number(TraceProvParseContext *);
+char *tp_parse_get_unique_alias(TraceProvParseContext *);
+int tp_parse_get_unique_number(TraceProvParseContext *);
+void tp_add_set_padding_item(TraceProvParseContext *, int, int);
+void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
+void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
+void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, TraceProvLayerNumber);
 
 TraceProvEntry *makeTraceProvEntry();
 

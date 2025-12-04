@@ -62,7 +62,8 @@ List *traceprov_aggregate_on_set(
     List *
 );
 
-bool traceProvFindIntList(List *, int);
+bool traceprov_find_int_list(List *, int);
+bool traceprov_find_oid_list(List *, Oid);
 
 void traceprov_aggregate_rewrite(
     const List *,

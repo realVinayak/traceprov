@@ -89,9 +89,9 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             break;
         }
         // Log the traceprov references.
-        TraceProvLayerNumber layer_number = tpParseGetLayerNumber(context->root_context);
+        TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context->root_context);
         // Add the correlated targets (as keys), and the targets of the base query to the context.
-        tpAddSublinkMapItem(new_context, correlated_provenance_targets, added_targets, layer_number);
+        tp_add_sublink_map_item(new_context, correlated_provenance_targets, added_targets, layer_number);
         Node * layer_number_const = (Node *) makeConst(
             INT4OID, 
             -1, 
@@ -132,7 +132,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             elog(ERROR, "Got mismatching original target lengths!");
         }
         // Now, append the newly created function call node, to the target list.
-        TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tpParseGetUniqueAlias(context->root_context), false);
+        TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context->root_context), false);
         rewritten_subselect->targetList = traceProvAppendAtResJunk(original_without_targets, log_target_entry);
 
         if (sublink->subLinkType != EXISTS_SUBLINK || true){

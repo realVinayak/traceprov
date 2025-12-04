@@ -34,9 +34,9 @@ TraceProvUsedRefNavigator traceProvLeafNavigator = {
 };
 
 void traceProvAssertNoResJunk(const List *targetList){
-    ListCell *targetListCursor;
-    foreach(targetListCursor, targetList){
-        const TargetEntry *entry = (TargetEntry *)lfirst(targetListCursor);
+    ListCell *targetlist_cursor;
+    foreach(targetlist_cursor, targetList){
+        const TargetEntry *entry = (TargetEntry *)lfirst(targetlist_cursor);
         if (entry->resjunk){
             elog(ERROR, "Expected no resjunk columns!");
         }  
@@ -53,8 +53,8 @@ void traceProvAssertIsSubquery(const RangeTblEntry *rte){
 }
 
 // Helper that also sets the resno of target entry appropriately.
-List *_appendAndAdjustResno(List *inList, TargetEntry *toAdd){
-    List *newList = lappend(inList, toAdd);
+List *_appendAndAdjustResno(List *in_list, TargetEntry *toAdd){
+    List *newList = lappend(in_list, toAdd);
     toAdd->resno = list_length(newList);
     return newList;
 }
@@ -96,16 +96,16 @@ List *traceProvGetNullList(unsigned count, Oid consttype, int32 consttypmod, Oid
 
 // Checks that the length of the input lists are same.
 // The input is a list of lists (to avoid functions for different number of args)
-int traceProvAssertEqualLength(List *inLists){
-    if (list_length(inLists) < 2){
+int traceProvAssertEqualLength(List *in_lists){
+    if (list_length(in_lists) < 2){
         elog(ERROR, "expected at least 2 lists to be compared.");
     }
 
-    const int firstLength = list_length((List *)(lfirst(list_head(inLists))));
+    const int firstLength = list_length((List *)(lfirst(list_head(in_lists))));
     ListCell *cursor;
-    for_each_from(cursor, inLists, 1){
-        const List *inList = (List *)lfirst(cursor);
-        if (list_length(inList) != firstLength){
+    for_each_from(cursor, in_lists, 1){
+        const List *in_list = (List *)lfirst(cursor);
+        if (list_length(in_list) != firstLength){
             elog(ERROR, "got list length to be different!");
         }
     }
@@ -154,12 +154,12 @@ List *traceProvDupOid(Oid element, int count){
     }
     return begin;
 }
-List *traceprov_flatten(List *inList){
+List *traceprov_flatten(List *in_list){
 
     List *newList = NIL;
     
     ListCell *outerCursor;
-    foreach(outerCursor, inList){
+    foreach(outerCursor, in_list){
         List *innerList = lfirst(outerCursor);
         ListCell *innerCursor;
         foreach(innerCursor, innerList){
@@ -378,7 +378,7 @@ Query *traceprov_clone_query(const Query *base){
 
 RangeTblEntry *rangeTableEntryFromSubquery(Query *subQuery, TraceProvParseContext *context){
     RangeTblEntry *tblEntry = makeNode(RangeTblEntry);
-    char *aliasName = tpParseGetUniqueAlias(context);
+    char *aliasName = tp_parse_get_unique_alias(context);
     tblEntry->alias = makeAlias(aliasName, NIL);
     List *colNames = NIL;
     ListCell *target_entry_cursor = NULL;
@@ -462,21 +462,32 @@ List *traceprov_aggregate_on_set(
     return aggregated;
 }
 
-bool traceProvFindIntList(List *inList, int toFind){
-    ListCell *listCursor;
-    foreach(listCursor, inList){
-        if(lfirst_int(listCursor) == toFind) return true;
+bool traceprov_find_int_list(List *in_list, int to_find){
+    ListCell *list_cursor;
+    foreach(list_cursor, in_list){
+        if(lfirst_int(list_cursor) == to_find) return true;
     }
     return false;
 }
 
-Node *traceprov_get_function_call_node(const char *funcName, List *argVars){
+bool traceprov_find_oid_list(List *in_list, Oid to_find){
+    ListCell *list_cursor;
+    foreach(list_cursor, in_list){
+        if(lfirst_oid(list_cursor) == to_find) return true;
+    }
+    return false;
+}
+
+Node *traceprov_get_function_call_node(
+    const char *func_name, 
+    List *argVars
+){
     ParseState *dummyParseState = make_parsestate(NULL);
-    List *funcNameList = list_make1(makeString(pstrdup(funcName)));
-    FuncCall *fc = makeFuncCall(funcNameList, argVars, COERCE_EXPLICIT_CALL, -1);
+    List *func_name_list = list_make1(makeString(pstrdup(func_name)));
+    FuncCall *fc = makeFuncCall(func_name_list, argVars, COERCE_EXPLICIT_CALL, -1);
     Node *fcNode =  ParseFuncOrColumn(
         dummyParseState,
-        funcNameList,
+        func_name_list,
         argVars,
         NULL,
         fc,
@@ -495,7 +506,7 @@ void traceprov_aggregate_rewrite(
 ){
     // Need to add the exprs from the targets.
     ListCell *target_entry_cursor;
-    TraceProvLayerNumber layerNumber = tpParseGetLayerNumber(tpContext);
+    TraceProvLayerNumber layerNumber = tp_parse_get_layer_number(tpContext);
     // Need to also add the layer number (the first argument)
     Node * layerNumberConst = (Node *) makeConst(
         INT4OID, 
@@ -524,6 +535,9 @@ void traceprov_aggregate_rewrite(
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
     Node *funcCallNode = traceprov_get_function_call_node( parentHasAggs ? TRACEPROV_AGG_OFFSETS_FUNC_NAME : TRACEPROV_AGG_FUNC_NAME, argVars);
+    if (!IsA(funcCallNode, Aggref)){
+        elog(ERROR, "Expected the function call node to be an aggref!");
+    }
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,
@@ -544,6 +558,7 @@ void traceprov_aggregate_rewrite(
             NIL
         )
     );
+    tpContext->properties->traceprov_funcs = lappend_oid(tpContext->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
 }
 
 Const *makeInt8Const(int64 value){
@@ -731,3 +746,4 @@ pull_vars_of_level_ignore_sublinks_walker(Node *node, pull_vars_context *context
     return expression_tree_walker(node, pull_vars_of_level_ignore_sublinks_walker,
                                   (void *) context);
 }
+

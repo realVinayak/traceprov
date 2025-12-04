@@ -33,6 +33,9 @@
 
 #include "access/xact.h"
 #include "rewrite/rewriteManip.h"
+#include "executor/executor.h"
+
+#include "plan_analyzer.h"
 
 PG_MODULE_MAGIC;
 
@@ -86,6 +89,7 @@ void _PG_init(){
 
 void _PG_fini(){
     planner_hook = NULL;
+    ExecutorStart_hook = NULL;
 }
 
 PlannedStmt *traceprov_rewriter_driver(
@@ -133,8 +137,9 @@ PlannedStmt *traceprov_rewriter(
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprovTopQuery, Debug_pretty_print);
     traceprovParseBackQuery(traceprovTopQuery);
-    traceprovParseBackQuery(parse);
-    return standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
+    PlannedStmt *stmt = standard_planner(traceprovTopQuery, query_string, cursorOptions, boundParams);
+    traceprov_plan_analyzer(stmt, NULL, &context);
+    return stmt;
 }
 
 List *addSubqueryToArgs(Query *subquery, TraceProvParseContext *context, const List *rootRTEList, Node **destination){
@@ -216,7 +221,7 @@ Query *traceprov_breakup_sets(
             TargetEntry *target = makeTargetEntry(
                 (Expr*)var,
                 idx,
-                tpParseGetUniqueAlias(context),
+                tp_parse_get_unique_alias(context),
                 false
             );
             set_subquery_targetlist = lappend(set_subquery_targetlist, target);
@@ -433,7 +438,7 @@ Query *traceprov_perform_rewrite(
     foreach(rteCell, parse->rtable){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
-        if (list_length(rteFilter) == 0 || (traceProvFindIntList(rteFilter, foreach_current_index(rteCell)+1))){
+        if (list_length(rteFilter) == 0 || (traceprov_find_int_list(rteFilter, foreach_current_index(rteCell)+1))){
             // TODO: hasAggs needs to also include distinct?
             rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, purePointerInParent);
         }else{
@@ -620,7 +625,7 @@ Query *addNestedQuery(
     // Make the new table.
     RangeTblEntry *newTable = makeNode(RangeTblEntry);
     // we don't alias the table, so this is fine not being set.
-    char *aliasName = tpParseGetUniqueAlias(context);
+    char *aliasName = tp_parse_get_unique_alias(context);
     newTable->alias = makeAlias(aliasName, NIL);
     List *newTargetList = NIL;
     targetEntryCursor = NULL;
