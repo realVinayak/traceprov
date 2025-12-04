@@ -386,6 +386,9 @@ static int initialize_layer_file(
             }
             layer->hash_buckets_end_idx = traceprov_current.maximum_local_layer_used;
         }
+        if (IsA(state, AggState)){
+            layer->aggregate_strategy = ((AggState *)state)->aggstrategy;
+        }
     }
     return 0;
 }
@@ -992,7 +995,9 @@ Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
     if (unlikely(PG_ARGISNULL(0))){
         PG_RETURN_NULL();
     }
-
     struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    if (agg_context->is_combined){
+        PG_RETURN_INT64(TRACEPROV_SET_IS_COMBINED(agg_context->group_cnt));
+    }
     PG_RETURN_INT64(agg_context->group_cnt);
 }
