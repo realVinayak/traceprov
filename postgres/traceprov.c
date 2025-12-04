@@ -111,6 +111,7 @@ static int initialize_local_context(){
     is_locked = 1;
 
     int32 magic_word = 0;
+    uint32 maximum_layer_used = 0;
 
     if(read(shared_context_fd, &magic_word, sizeof(int32)) == -1){
         PRINT_ON_DEBUG("Had error reading in magic word.");
@@ -122,6 +123,14 @@ static int initialize_local_context(){
         if ((rc = initialize_file(shared_context_fd, &traceprov_shared_context_magic, TRACEPROV_SHARED_CONTEXT_SIZE))){
             goto exit_initialize_local_context;
         }
+        int graph_file_fd = open(psprintf(TRACEPROV_GRAPH_FILE, DataDir), O_RDWR);
+        if (graph_file_fd < 0){
+            elog(ERROR, "Error opening the graph file!");
+        }
+        if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32))) == -1){
+            elog(ERROR, "Read from graph file failed!");
+        }
+        if(close(graph_file_fd)) elog(ERROR, "Error closing graph file");
     }
 
     PRINT_ON_DEBUG("Mmaping the shared context file.");
@@ -134,10 +143,21 @@ static int initialize_local_context(){
 
     // There is now an exclusive lock on the shared context file (so we can increment easily.)
     traceprov_current.my_worker_id = (++shared_context->worker_count);
+    if (maximum_layer_used > 0){
+        shared_context->maximum_layer_number_used = maximum_layer_used;
+        traceprov_current.maximum_local_layer_used = maximum_layer_used;
+    }else{
+        traceprov_current.maximum_local_layer_used = shared_context->maximum_layer_number_used;
+    }
+
     if (traceprov_current.my_worker_id >= TRACEPROV_MAX_WORKERS){
         elog(ERROR, "Maximum worker count reached.");
         rc = 1;
         goto exit_initialize_local_context;
+    }
+
+    if (traceprov_current.maximum_local_layer_used == 0){
+        elog(ERROR, "Expected the traceprov local layer to be filled!");
     }
 
     worker_layer_map_fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, traceprov_current.my_worker_id), O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
@@ -190,7 +210,7 @@ exit_initialize_local_context:
     return rc;
 }
 
-static int initialize_layer_file(const int layer_number, const int num_pk_records, const bool set_current_row){
+static int initialize_layer_file(const uint32 layer_number, const uint32 num_pk_records, const bool set_current_row){
 
     /**
      * Here are the sequence of operations this function needs to perform.
@@ -345,7 +365,7 @@ static int initialize_layer_file(const int layer_number, const int num_pk_record
     return 0;
 }
 
-static int initialize_local_and_layer(const int layer_number, const int num_pk_records, const bool set_current_row){
+static int initialize_local_and_layer(const uint32 layer_number, const int num_pk_records, const bool set_current_row){
     int rc = 0;
     if ((rc = initialize_local_context())){
         PRINT_ON_DEBUG("Error initializing local context.");
@@ -358,7 +378,7 @@ static int initialize_local_and_layer(const int layer_number, const int num_pk_r
 }
 
 // Assumes layer has already been created.
-static inline struct traceprov_aggregate_layer *get_layer(const int layer_number){
+static inline struct traceprov_aggregate_layer *get_layer(const uint32 layer_number){
     if (layer_number < TRACEPROV_MAX_LAYER_PER_WORKER){
         return &traceprov_current.local_context->cached_layers[layer_number - 1];
     }
@@ -382,6 +402,7 @@ Datum reinit_state(PG_FUNCTION_ARGS){
     traceprov_current.traceprov_shared_context_fd  = -1;
     traceprov_current.shared_context = NULL;
     traceprov_current.local_context = NULL;
+    traceprov_current.maximum_local_layer_used = 0;
     char *traceprov_data_dir = psprintf(TRACE_PROV_DIR, DataDir);
     PRINT_ON_DEBUG("TRACEPROV_DIR: %s", traceprov_data_dir);
 
@@ -400,20 +421,12 @@ Datum reinit_state(PG_FUNCTION_ARGS){
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_sfunc);
 
-// int should_sleep = 1;
-
 Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
-    // if (should_sleep){
-    //     PRINT_ON_DEBUG("Sleeping for debug.");
-    //     sleep(60);
-    //     PRINT_ON_DEBUG("Woken up");
-    //     should_sleep = 0;
-    // }
 
     int rc = 0;
     // Argument 0 is the internal state.
-    const int layer_number = PG_GETARG_INT32(1);
-    const int num_pk = PG_NARGS() - 2; // 1 for layer number, 1 for internal state.
+    const uint32 layer_number = PG_GETARG_UINT32(1);
+    const uint32 num_pk = PG_NARGS() - 2; // 1 for layer number, 1 for internal state.
 
     struct traceprov_agg_context *agg_context;
     MemoryContext agg_mem_context;
@@ -552,17 +565,21 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
 
     assert(reference_struct != NULL);
-    const int layer_number = reference_struct->layer_number;
-
+    const uint32 layer_number = reference_struct->layer_number;
+    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+    uint32 combined_layer_number = 0;
+    if ((combined_layer_number = main_layer->combined_aggregate_layer_number) == 0){
+        combined_layer_number = ++traceprov_current.maximum_local_layer_used;
+        main_layer->combined_aggregate_layer_number = combined_layer_number;
+    }
     // Here, we don't care about any layer file (it is not this function's responsibility)
     // So, we do the bare minimum, just setting up the local context (vars)
-    if ((rc = initialize_local_and_layer(layer_number + 2, 2, true))){
+    if ((rc = initialize_local_and_layer(combined_layer_number, 2, true))){
         PRINT_ON_DEBUG("Error setting up local or layer for combine");
         return rc;
     }
 
-    struct traceprov_aggregate_layer *current_layer = get_layer(layer_number + 2);
-    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+    struct traceprov_aggregate_layer *current_layer = get_layer(combined_layer_number);
     main_layer->is_leader_layer = true;
 
     /**
@@ -789,7 +806,7 @@ Datum traceprov_agg_from_ptr_sfunc(PG_FUNCTION_ARGS){
     struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_result);
     struct traceprov_agg_context *agg_context;
     if (PG_ARGISNULL(0)){
-        agg_context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));;
+        agg_context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
         agg_context->group_cnt = ++current_layer->num_groups;
         agg_context->layer_number = new_layer_number;
     }else{
@@ -870,7 +887,7 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
 
 uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     int rc = 0;
-    const int layer_number = PG_GETARG_INT32(0);
+    const uint32 layer_number = PG_GETARG_INT32(0);
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
     const int width = return_pointer_version ? PG_NARGS() - 1 : PG_NARGS() - 2;
