@@ -80,8 +80,8 @@ List *adjustUnionSetOps(
                 newlyCreatedTargets = lappend(newlyCreatedTargets, newTe);
             }
         }
-        const int setNumber = (tpParseGetUniqueNumber(context));
-        tpAddSetPaddingItem(context, setNumber, padding);
+        const int setNumber = (tp_parse_get_unique_number(context));
+        tp_add_set_padding_item(context, setNumber, padding);
         Expr *subqNumberExpr = (Expr*)makeInt8Const(setNumber);
         TargetEntry *subqNumberTarget = makeTargetEntry(
             subqNumberExpr,
@@ -159,7 +159,7 @@ List *adjustUnionSetOps(
             ));
         }
         newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
-        tpAddSetGraphItem(context, setNumber, makeTraceProvDependency(TP_LOG, 0, childGraphs, traceprovEntries));
+        tp_add_set_graph_item(context, setNumber, makeTraceProvDependency(TP_LOG, 0, childGraphs, traceprovEntries));
     }
 
     List *setOpFlattened = traceProvFindUsedRefs((Node*)root, traceProvInclusiveNavigator);

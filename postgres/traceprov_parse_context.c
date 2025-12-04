@@ -10,7 +10,7 @@
 #define NEED_SEP(cursor) (foreach_current_index(cursor) > 0)
 
 // to simulate classes.
-TraceProvLayerNumber tpParseGetLayerNumber(TraceProvParseContext *context){
+TraceProvLayerNumber tp_parse_get_layer_number(TraceProvParseContext *context){
     TraceProvLayerNumber current = GET_ROOT_CONTEXT(context)->global_layer_number;
     GET_ROOT_CONTEXT(context)->global_layer_number += TRACEPROV_LAYER_INCREMENT_BOUNDARY;
     return current;
@@ -28,24 +28,24 @@ void tpParseInitializeContext(TraceProvParseContext *context){
     context->parent_targets = NIL;
 }
 
-char *tpParseGetUniqueAlias(TraceProvParseContext *context){
+char *tp_parse_get_unique_alias(TraceProvParseContext *context){
     unsigned long long int incremented = GET_ROOT_CONTEXT(context)->unique_idx++;
     return psprintf("tp_table_%lld", incremented);
 }
 
-int tpParseGetUniqueNumber(TraceProvParseContext *context){
+int tp_parse_get_unique_number(TraceProvParseContext *context){
     return ++(GET_ROOT_CONTEXT(context)->simple_incrementor);
 }
 
 // Add the set number (and the performed padding) to the context's properties
-void tpAddSetPaddingItem(TraceProvParseContext *context, int setNumber, int padding){
+void tp_add_set_padding_item(TraceProvParseContext *context, int setNumber, int padding){
     TraceProvSetPaddingMapItem *mapItem = palloc0_object(TraceProvSetPaddingMapItem);
     mapItem->setNumber = setNumber;
     mapItem->padding = padding;
     GET_ROOT_CONTEXT(context)->properties->setPaddingMap = lappend(GET_ROOT_CONTEXT(context)->properties->setPaddingMap, mapItem);
 }
 
-void tpAddSetGraphItem(TraceProvParseContext *context, int setNumber, TraceProvDependency*graph){
+void tp_add_set_graph_item(TraceProvParseContext *context, int setNumber, TraceProvDependency*graph){
     TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
     setGraphMapItem->graph = graph;
     setGraphMapItem->setNumber = setNumber;
@@ -62,7 +62,7 @@ TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
     return item;
 }
 
-void tpAddSublinkMapItem(
+void tp_add_sublink_map_item(
     TraceProvParseContext *context,
     // Need to also store, for each key target, what the corresponding entry is
     List *key_traceprov_targets,
@@ -354,12 +354,15 @@ void traceprovPrintContext(const TraceProvParseContext *context){
 }
 
 typedef struct TraceProvDependencyMetaHeader {
+    TraceProvLayerNumber max_layer_number;
     // Number of graphs being stored.
-    uint32 numGraphs;
-    uint32 numSetPaddingMapItems;
-    uint32 numSetGraphMapItems;
-    uint32 numSublinkItems;
+    uint32 num_graphs;
+    uint32 num_set_padding_map_items;
+    uint32 num_set_graph_map_items;
+    uint32 num_sublink_items;
 } TraceProvDependencyMetaHeader;
+
+static_assert(sizeof(TraceProvDependencyMetaHeader) == 20);
 
 // This is not in the header for a reason, nothing outside of this file
 // should know that this even exists.
@@ -400,12 +403,13 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
     if (fptr == NULL) {
         elog(ERROR, "Error opening file for dumping graph!");
     }
-    TraceProvDependencyMetaHeader metaHeader;
-    metaHeader.numGraphs = list_length(graphs);
-    metaHeader.numSetPaddingMapItems = list_length(context->properties->setPaddingMap);
-    metaHeader.numSetGraphMapItems = list_length(context->properties->setGraphMap);
-    metaHeader.numSublinkItems = list_length(context->properties->sublinkMap);
-    failSafeWrite(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
+    TraceProvDependencyMetaHeader meta_header;
+    meta_header.max_layer_number = context->global_layer_number;
+    meta_header.num_graphs = list_length(graphs);
+    meta_header.num_set_padding_map_items = list_length(context->properties->setPaddingMap);
+    meta_header.num_set_graph_map_items = list_length(context->properties->setGraphMap);
+    meta_header.num_sublink_items = list_length(context->properties->sublinkMap);
+    failSafeWrite(fptr, &meta_header, sizeof(TraceProvDependencyMetaHeader));
     _serializeContext(context, fptr);
     foreach(graphCursor, graphs){
         const TraceProvDependency *graph = (TraceProvDependency *)(lfirst(graphCursor));
@@ -507,12 +511,12 @@ List* deserializeTraceProvDependency(TraceProvParseContext **parsedContext){
     }
     TraceProvDependencyMetaHeader metaHeader;
     failSafeRead(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
-    if (metaHeader.numGraphs < 0){
-        elog(ERROR, "Got invalid number of graphs in the file: %d", metaHeader.numGraphs);
+    if (metaHeader.num_graphs < 0){
+        elog(ERROR, "Got invalid number of graphs in the file: %d", metaHeader.num_graphs);
     }
     *parsedContext = _deserializeTraceProvParseContext(fptr, &metaHeader);
     List *graphs = NIL;
-    for (int i = 0; i < metaHeader.numGraphs; i++){
+    for (int i = 0; i < metaHeader.num_graphs; i++){
         TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
         elog(INFO, "Deserializing: ");
         traceprovPrintDependency(graph, *parsedContext);
@@ -554,20 +558,20 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDependencyMetaHeader* metaHeader){
     TraceProvParseContext *context = palloc0_object(TraceProvParseContext);
     tpParseInitializeContext(context);
-    for (uint32 i = 0; i < metaHeader->numSetPaddingMapItems; i++){
+    for (uint32 i = 0; i < metaHeader->num_set_padding_map_items; i++){
         TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
         failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
         context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, setPaddingMapItem);
     }
 
-    for (uint32 i = 0; i < metaHeader->numSetGraphMapItems; i++){
+    for (uint32 i = 0; i < metaHeader->num_set_graph_map_items; i++){
         TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
         failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
         TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
         setGraphMapItem->graph = wrapper;
         context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
     }
-    for (uint32 i = 0; i < metaHeader->numSublinkItems; i++){
+    for (uint32 i = 0; i < metaHeader->num_sublink_items; i++){
         TraceProvDependency *graph = _deserializeTraceProvDependency(file);
         context->properties->sublinkMap = lappend(context->properties->sublinkMap, graph);
     }
@@ -580,4 +584,41 @@ TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContex
     copied_context->parent_targets = list_copy(context->parent_targets);
     copied_context->root_context = context->root_context;
     return copied_context;
+}
+
+void tp_add_aggregate_property(const TraceProvParseContext *context, const Agg *agg, TraceProvLayerNumber layer_number){
+    TraceProvParseContext *root_context = GET_ROOT_CONTEXT(context);
+    ListCell *cursor;
+    TraceProvAggregateProperty *agg_property = NULL;
+    // Try finding an existing aggregate property (will happen when this is split)
+    foreach(cursor, root_context->properties->aggregate_properties){
+        TraceProvAggregateProperty *candidate = (TraceProvAggregateProperty *)(lfirst(cursor));
+        if (candidate->layer_number == layer_number){
+            agg_property = candidate;
+            break;
+        }
+    }
+    if (agg_property != NULL && agg->aggsplit == AGGSPLIT_SIMPLE){
+        elog(ERROR, "Didn't expect to find the aggregate again (since it is not split)");
+    }
+    if (agg_property == NULL){
+        agg_property = palloc0_object(TraceProvAggregateProperty);
+        agg_property->initial_strategy = -1;
+        agg_property->combine_strategy = -1;
+        // Add this here, so that we don't remember that this was new property.
+        root_context->properties->aggregate_properties = lappend(root_context->properties->aggregate_properties, agg_property);
+    }
+    if (agg->aggsplit == AGGSPLIT_SIMPLE || agg->aggsplit == AGGSPLIT_INITIAL_SERIAL){
+        if (agg_property->initial_strategy != -1){
+            elog(ERROR, "Trying to overwrite intial strategy field!");
+        }
+        agg_property->initial_strategy = agg->aggstrategy;
+    } else if (agg->aggsplit == AGGSPLIT_FINAL_DESERIAL){
+        if (agg_property->combine_strategy != -1){
+            elog(ERROR, "Trying to overwrite combine strategy field!");
+        }
+        agg_property->combine_strategy = agg->aggstrategy;
+    }else{
+        elog(ERROR, "Unrecognized agg split field!");
+    }
 }
