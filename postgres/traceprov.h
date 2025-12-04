@@ -226,4 +226,7 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)
 
+#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
+#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
+
 #endif

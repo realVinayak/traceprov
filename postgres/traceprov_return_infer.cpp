@@ -604,137 +604,123 @@ extern "C" {
     PG_FUNCTION_INFO_V1(traceprov_layer_stat);
 
     enum TRACEPROV_LAYER_STAT {
-      is_main_worker,
-      worker_id,
-      layer_id,
-      num_pk_records,
-      layer_size,
-      num_groups,
-      layer_number,
-      record_padding,
-      layer_fd,
-      logged_record_count,
-      is_sorted_by_group_num,
+        is_leader_layer,
+        worker_id,
+        layer_id,
+        num_pk_records,
+        layer_size,
+        num_groups,
+        layer_number,
+        record_padding,
+        layer_fd,
+        logged_record_count,
+        is_sorted_by_group_num,
+        aggregate_strategy,
+        hash_buckets_start_idx,
+        hash_buckets_end_idx,
+        combined_aggregate_layer_number,
+
 
       NUM_COLUMNS
     };
 
     Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
         
-      ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
-      TupleDesc	tupdesc;
-      Tuplestorestate *tupstore;
-      MemoryContext per_query_ctx;
-      MemoryContext oldcontext;
+        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+        TupleDesc	tupdesc;
+        Tuplestorestate *tupstore;
+        MemoryContext per_query_ctx;
+        MemoryContext oldcontext;
 
-      if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
-          ereport(ERROR,
-                  (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
-                  errmsg("set-valued function called in context that cannot accept a set")));
-      if (!(rsinfo->allowedModes & SFRM_Materialize))
-          ereport(ERROR,
-                  (errcode(ERRCODE_SYNTAX_ERROR),
-                  errmsg("materialize mode required, but it is not allowed in this context")));
+        if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                    errmsg("set-valued function called in context that cannot accept a set")));
+        if (!(rsinfo->allowedModes & SFRM_Materialize))
+            ereport(ERROR,
+                    (errcode(ERRCODE_SYNTAX_ERROR),
+                    errmsg("materialize mode required, but it is not allowed in this context")));
         
-      per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
-      oldcontext = MemoryContextSwitchTo(per_query_ctx);
+        per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+        oldcontext = MemoryContextSwitchTo(per_query_ctx);
 
-      if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
-          elog(ERROR, "return type must be a row type");
-      
-      tupstore = tuplestore_begin_heap(true, false, work_mem);
-      rsinfo->returnMode = SFRM_Materialize;
-      rsinfo->setResult = tupstore;
-      rsinfo->setDesc = tupdesc;
+        if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
+            elog(ERROR, "return type must be a row type");
+        
+        tupstore = tuplestore_begin_heap(true, false, work_mem);
+        rsinfo->returnMode = SFRM_Materialize;
+        rsinfo->setResult = tupstore;
+        rsinfo->setDesc = tupdesc;
 
-      MemoryContextSwitchTo(oldcontext);
+        MemoryContextSwitchTo(oldcontext);
 
-      struct traceprov_shared_context context;
+        struct traceprov_shared_context context;
 
-      if (map_traceprov_shared_context(&context)){
+        if (map_traceprov_shared_context(&context)){
         elog(ERROR, "Error mmaping the shared context");
-      }
-
-      Datum record[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
-      bool nulls[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
-      memset(nulls, 0, sizeof(bool)*TRACEPROV_LAYER_STAT::NUM_COLUMNS);
-
-      for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
-
-        struct local_context *worker_local_context = NULL;
-
-        for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
-          
-          struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
-
-          if (layer.layer_number == 0) continue;
-
-          const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
-
-          const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
-
-          if (final_ptr_offset % record_size){
-            elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
-          }
-          
-	  int64 record_count = 0;
-      // In some cases it is not defined (like for the group layer files.)
-      int32 is_sorted_by_group_no = -1;
-	  if (layer.layer_number % 3 == 2) {
-	  	// In this case, it is group number. We don't define number of records precisely here.
-		// It is actually just whatever the main layer reports as the number of groups.
-		// Need -2 because layer numbers are 1-indexed
-		record_count = 0;
-	  } else {
-        const bool is_pure_layer = layer.layer_number % 3 == 1;
-        is_sorted_by_group_no = 1;
-	  	record_count = final_ptr_offset / record_size;
-        // Need to scan over the layer file to determine if it is sorted by group.
-        char *layer_mapped_ptr = NULL;
-        if (map_layer_file(layer.layer_number, worker_id, (void**)&layer_mapped_ptr, layer.size)){
-            elog(ERROR, "Encountered error when mapping the layer for stats");
         }
-        const void *layer_final_ptr = get_final_ptr(layer_mapped_ptr, &layer);
-        uint64 last_group_number = 0;
-        
-        while (layer_mapped_ptr < layer_final_ptr){
-            layer_mapped_ptr += layer.record_padding;
-            const uint64 *typed_ptr = (uint64 *)layer_mapped_ptr;
-            uint64 current_group_number = 0;
-            if (is_pure_layer){
-                current_group_number = typed_ptr[0];
-            }else{
-                current_group_number = typed_ptr[layer.num_pk_records];
-            }
-            if (last_group_number == 0){
-                last_group_number = current_group_number;
-            }
-            if (current_group_number != 0 && current_group_number < last_group_number){
-                is_sorted_by_group_no = 0;
-            }
-            layer_mapped_ptr += sizeof(uint64)*(layer.num_pk_records + 1);
-            last_group_number = current_group_number;
-        }
-	  }
-          record[TRACEPROV_LAYER_STAT::is_main_worker] = Int32GetDatum(worker_id == context.main_worker_id);
-          record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
-          record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
-          record[TRACEPROV_LAYER_STAT::num_pk_records] = Int32GetDatum(layer.num_pk_records);
-          record[TRACEPROV_LAYER_STAT::layer_size] = Int32GetDatum(layer.size);
-          record[TRACEPROV_LAYER_STAT::num_groups] = Int32GetDatum(layer.num_groups);
-          record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
-          record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
-          record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
-          record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
-          record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
 
-          tuplestore_putvalues(tupstore, tupdesc, record, nulls);
+        Datum record[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
+        bool nulls[TRACEPROV_LAYER_STAT::NUM_COLUMNS];
+        memset(nulls, 0, sizeof(bool)*TRACEPROV_LAYER_STAT::NUM_COLUMNS);
+
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+
+            int fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1), O_RDONLY);
+            if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
+            void *ptr = mmap(
+                NULL,
+                sizeof(struct local_context),
+                PROT_READ,
+                MAP_SHARED,
+                fd,
+                0
+            );
+            if (ptr == MAP_FAILED){
+                elog(ERROR, "Error mmaping the layer file!");
+            }
+            struct local_context *worker_local_context = (struct local_context *)ptr;
+
+            for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+                
+                struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
+
+                if (layer.layer_number == 0) continue;
+
+                const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
+
+                const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
+
+                if (final_ptr_offset % record_size){
+                elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
+                }
+            
+                int64 record_count = 0;
+                int32 is_sorted_by_group_no = -1;
+                record_count = final_ptr_offset / record_size;
+                record[TRACEPROV_LAYER_STAT::is_leader_layer] = Int32GetDatum(layer.is_leader_layer);
+                record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id);
+                record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
+                record[TRACEPROV_LAYER_STAT::num_pk_records] = Int32GetDatum(layer.num_pk_records);
+                record[TRACEPROV_LAYER_STAT::layer_size] = Int32GetDatum(layer.size);
+                record[TRACEPROV_LAYER_STAT::num_groups] = Int32GetDatum(layer.num_groups);
+                record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
+                record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
+                record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
+                record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
+                record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
+                record[TRACEPROV_LAYER_STAT::aggregate_strategy] = Int32GetDatum(layer.aggregate_strategy);
+                record[TRACEPROV_LAYER_STAT::hash_buckets_start_idx] = Int32GetDatum(layer.hash_buckets_start_idx);
+                record[TRACEPROV_LAYER_STAT::hash_buckets_end_idx] = Int32GetDatum(layer.hash_buckets_end_idx);
+                record[TRACEPROV_LAYER_STAT::combined_aggregate_layer_number] = Int32GetDatum(layer.combined_aggregate_layer_number);
+
+                tuplestore_putvalues(tupstore, tupdesc, record, nulls);
+                }
         }
-      }
-      #if (PG_MAJORVERSION_NUM != 18)
-      tuplestore_donestoring(tupstore);
-      #endif
-      return (Datum) 0;
+        #if (PG_MAJORVERSION_NUM != 18)
+        tuplestore_donestoring(tupstore);
+        #endif
+        return (Datum) 0;
     }
 
     // Performs inference via the graph.
