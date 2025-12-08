@@ -40,9 +40,9 @@ OR REPLACE FUNCTION traceprov_layer_stat (
     OUT logged_record_count BIGINT,
     OUT sorted_by_group INT,
     OUT aggregate_strategy INT,
-    OUT hash_buckets_start_idx INT,
-    OUT hash_buckets_end_idx INT,
-    OUT combined_aggregate_layer_number INT
+    OUT hash_buckets text,
+    OUT combined_aggregate_layer_number INT,
+    OUT rows_layer_number INT
 ) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_layer_stat' LANGUAGE C STRICT PARALLEL SAFE;
 
