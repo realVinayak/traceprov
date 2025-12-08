@@ -710,8 +710,8 @@ extern "C" {
                 record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
                 record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
                 record[TRACEPROV_LAYER_STAT::aggregate_strategy] = Int32GetDatum(layer.aggregate_strategy);
-                record[TRACEPROV_LAYER_STAT::hash_buckets_start_idx] = Int32GetDatum(layer.hash_buckets_start_idx);
-                record[TRACEPROV_LAYER_STAT::hash_buckets_end_idx] = Int32GetDatum(layer.hash_buckets_end_idx);
+                // record[TRACEPROV_LAYER_STAT::hash_buckets_start_idx] = Int32GetDatum(layer.hash_buckets_start_idx);
+                // record[TRACEPROV_LAYER_STAT::hash_buckets_end_idx] = Int32GetDatum(layer.hash_buckets_end_idx);
                 record[TRACEPROV_LAYER_STAT::combined_aggregate_layer_number] = Int32GetDatum(layer.combined_aggregate_layer_number);
 
                 tuplestore_putvalues(tupstore, tupdesc, record, nulls);

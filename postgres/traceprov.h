@@ -86,6 +86,7 @@ int get_error_no();
         elog(INFO, "Error no: %d", get_error_no()); \
     } } while(0) \
 
+
 struct trace_file_forward_row {
     int64   group_count;
 };
@@ -107,7 +108,9 @@ struct trace_file_partial_row {
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
+// Bucket count (for hashing.)
 #define TRACEPROV_BUCKET_COUNT 2
+
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -145,15 +148,13 @@ struct traceprov_aggregate_layer {
     bool is_leader_layer;
     // If this is aggregate layer, then what strategy is used for this.
     int aggregate_strategy;
-    // The index at which the buckets start.
-    // This is the index where the 2nd lives.
-    // We don't need to store it for 1st, because that's always self.
-    uint32 hash_buckets_start_idx;
-    // The index at which the buckets end.
-    uint32 hash_buckets_end_idx;
+    uint32 buckets[TRACEPROV_BUCKET_COUNT - 1];
     // If it is being combined, then this stores the layer number of the combined layer.
     // This is used during inference, to correctly determine which layer file to consult.
     uint32 combined_aggregate_layer_number;
+    // All layers are stored in a columnar fashion.
+    // This points to the rows (because we always index the columns directly)
+    uint32 rows_layer_number;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -222,11 +223,17 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
 #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
+#define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
+
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)
 
 #define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
 #define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
+
+#define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
+
+#define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64)*layer->num_pk_records))
 
 #endif
