@@ -56,10 +56,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 1024
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 5000
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 1024
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 5000
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -109,7 +109,7 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
 // Bucket count (for hashing.)
-#define TRACEPROV_BUCKET_COUNT 2
+#define TRACEPROV_BUCKET_COUNT 4
 
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.

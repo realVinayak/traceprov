@@ -143,7 +143,7 @@ PlannedStmt *traceprov_rewriter(
     Query *traceprov_top_query = traceprov_add_nested_query_log(traceprov_parse, top_level_targets, &context);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprov_top_query, Debug_pretty_print);
-    tracprov_parse_back_query(traceprov_top_query);
+    //tracprov_parse_back_query(traceprov_top_query);
     PlannedStmt *stmt = standard_planner(traceprov_top_query, query_string, cursorOptions, boundParams);
     traceprov_plan_analyzer(stmt, NULL, &context);
     return stmt;
