@@ -616,10 +616,9 @@ extern "C" {
         logged_record_count,
         is_sorted_by_group_num,
         aggregate_strategy,
-        hash_buckets_start_idx,
-        hash_buckets_end_idx,
+        buckets,
         combined_aggregate_layer_number,
-
+        rows_layer_number,
 
       NUM_COLUMNS
     };
@@ -687,7 +686,7 @@ extern "C" {
 
                 if (layer.layer_number == 0) continue;
 
-                const uint32 record_size = layer.record_padding + ( 1 + layer.num_pk_records)*sizeof(int64);
+                const uint32 record_size = layer.record_padding + (layer.num_pk_records)*sizeof(int64);
 
                 const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
 
@@ -710,10 +709,13 @@ extern "C" {
                 record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
                 record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
                 record[TRACEPROV_LAYER_STAT::aggregate_strategy] = Int32GetDatum(layer.aggregate_strategy);
-                // record[TRACEPROV_LAYER_STAT::hash_buckets_start_idx] = Int32GetDatum(layer.hash_buckets_start_idx);
-                // record[TRACEPROV_LAYER_STAT::hash_buckets_end_idx] = Int32GetDatum(layer.hash_buckets_end_idx);
+                std::string graphStr = "[";
+                for (int i = 0; i < TRACEPROV_BUCKET_COUNT - 1; i++){
+                    graphStr = graphStr.append(psprintf("%d", layer.buckets[i]));
+                }
+                record[TRACEPROV_LAYER_STAT::buckets] = PointerGetDatum(cstring_to_text(graphStr.c_str()));
                 record[TRACEPROV_LAYER_STAT::combined_aggregate_layer_number] = Int32GetDatum(layer.combined_aggregate_layer_number);
-
+                record[TRACEPROV_LAYER_STAT::rows_layer_number] = Int32GetDatum(layer.rows_layer_number);
                 tuplestore_putvalues(tupstore, tupdesc, record, nulls);
                 }
         }

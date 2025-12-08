@@ -243,7 +243,8 @@ static int get_or_create_layer(
     uint32 layer_number,
     struct traceprov_aggregate_layer **p_layer,
     uint32 record_width,
-    bool set_current_row
+    bool set_current_row,
+    bool *is_already_present
 ){
     struct traceprov_aggregate_layer *layer = NULL;
     int rc = 0;
@@ -338,7 +339,10 @@ static int get_or_create_layer(
 
     // Finally, we check if the layer number has been set.
     // This helps us determine if we've to actually do the work of mmaping the file.
-    if (layer->layer_number != 0) return 0;
+    if (layer->layer_number != 0){
+        *is_already_present = true;
+        return 0;
+    }
 
     // Map the actual trace file for this layer.
     // Each worker gets its own trace file.
@@ -374,8 +378,7 @@ static int get_or_create_layer(
     // layer->num_groups = 0;
     layer->layer_number = layer_number;
     
-    const int total_record_size = ((record_width + 1) * sizeof(int64));
-    
+    const int total_record_size = ((record_width) * sizeof(int64));
     layer->record_padding = round_up(total_record_size) - total_record_size;
     if (layer->record_padding < 0){
         elog(ERROR, "Found invalid padding");
@@ -384,7 +387,7 @@ static int get_or_create_layer(
     layer->end_of_memory_zone = TRACEPROV_PAGE_SIZE + trace_ptr;
     layer->layer_fd = trace_file_fd;
     layer->size = 1;
-    *p_layer = layer;
+    if (p_layer) *p_layer = layer;
     return rc;
 }
 
@@ -406,16 +409,19 @@ static int initialize_layer_file(
 
     struct traceprov_aggregate_layer *layer = NULL;
     int rc = 0;
+    bool is_already_present = false;
 
-    if ((rc = get_or_create_layer(layer_number, &layer, key_length, set_current_row))){
+    if ((rc = get_or_create_layer(layer_number, &layer, key_length, set_current_row, &is_already_present))){
         elog(ERROR, "Error creating the layer file (column)");
         return rc;
     }
 
+    if (is_already_present) return 0;
+
     uint32 record_layer_number = 0;
     if (record_length > 0){
         record_layer_number = ++traceprov_current.maximum_local_layer_used;
-        if ((rc = get_or_create_layer(record_layer_number, &layer, record_length, set_current_row))){
+        if ((rc = get_or_create_layer(record_layer_number, NULL, record_length, set_current_row, &is_already_present))){
             elog(ERROR, "Error creating the layer file (key)");
             return rc;
         }
@@ -1064,7 +1070,7 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     const uint32 layer_number = PG_GETARG_INT32(0);
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
-    const int width = return_pointer_version ? PG_NARGS() - 1 : PG_NARGS() - 2;
+    const int width = return_pointer_version ? PG_NARGS() : PG_NARGS() - 1;
     if ((rc = initialize_local_and_layer(layer_number, width, 0, true, NULL))){
         PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
         elog(ERROR, "Error setting up local or layer: %d", rc);
