@@ -41,7 +41,12 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
     const long int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
     if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
-        elog(ERROR, "Error increasing the page size layer: %d", rc);
+      #undef DEBUG_MODE
+      #define DEBUG_MODE 1
+      PRINT_ON_DEBUG("Error increasing the page size layer: %d", rc);
+      #undef DEBUG_MODE
+      #define DEBUG_MODE 0
+      elog(ERROR, "Error increasing the page size layer: %d", rc);
     }
     // Now, need to create the new mapping.
     void *ptr = mmap(

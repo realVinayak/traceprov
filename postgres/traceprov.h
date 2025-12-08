@@ -56,10 +56,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 1024
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 5000
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 1024
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 5000
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -107,7 +107,7 @@ struct trace_file_partial_row {
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
-#define TRACEPROV_BUCKET_COUNT 2
+#define TRACEPROV_BUCKET_COUNT 4 
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -222,6 +222,7 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
 #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
+//#define TRACEPROV_SHOULD_HASH(state) (false)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)

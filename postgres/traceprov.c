@@ -485,6 +485,8 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
         // called. Also, during inference, the value is not hashed again.
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
+            // bucket = (absolute_group_number >= 800) ? 1 : 0;
+            // bucket = 0;
         }
         agg_context->group_cnt = TRACEPROV_SET_BUCKET(absolute_group_number, bucket);
         agg_context->worker_id = traceprov_current.my_worker_id;
@@ -503,6 +505,8 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     }else{
         // bucket always > 0 at this point.
         current_layer = get_layer((bucket - 1) + main_layer->hash_buckets_start_idx);
+        // Increment the count for debugging.
+        if (PG_ARGISNULL(0)) current_layer->num_groups++;
     }
 
     // This is where it gets _interesting_ (and complicated)
