@@ -589,8 +589,8 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }else{
         current_layer->current_row += current_layer->record_padding;
         group_no = ++main_layer->num_groups;
-        ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = reference_struct->group_cnt;
         ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = reference_struct->worker_id;
+        ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = reference_struct->group_cnt;
         ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
         reference_struct->is_combined = 1;
         reference_struct->group_cnt = group_no;
@@ -600,8 +600,8 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     if (other != NULL){
        current_layer->current_row += current_layer->record_padding;
-       ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = other->group_cnt;
        ((struct trace_file_partial_row *)current_layer->current_row)->worker_id = other->worker_id;
+       ((struct trace_file_partial_row *)current_layer->current_row)->local_group_number = other->group_cnt;
        ((struct trace_file_partial_row *)current_layer->current_row)->global_group_number = group_no;
        current_layer->current_row += sizeof(struct trace_file_partial_row);
        free(other);

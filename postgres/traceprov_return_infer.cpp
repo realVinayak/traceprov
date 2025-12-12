@@ -11,6 +11,7 @@
 #include <chrono>
 #include <algorithm>
 #include <unistd.h>
+#include <fstream>
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
 extern "C" {
@@ -631,6 +632,73 @@ extern "C" {
       tuplestore_donestoring(tupstore);
       #endif
       return (Datum) 0;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_layer_to_csv);
+
+    Datum traceprov_layer_to_csv(FunctionCallInfo fcinfo){
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping the shared context for sync!");
+        }
+        for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
+            struct local_context *worker_local_context = &context.local_contexts[worker_id];
+            for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+                const struct traceprov_aggregate_layer layer = worker_local_context->cached_layers[layer_id];
+                const uint32 layer_number = layer.layer_number;
+                if (layer_number == 0) continue;
+                void *ptr = NULL;
+                map_layer_file(
+                    layer_number,
+                    worker_id,
+                    &ptr,
+                    layer.size
+                );
+                char *worker_layer_csv_filename = psprintf(TRACE_PROV_DIR "/worker_%d_layer_%d.csv", DataDir, worker_id, layer_id);
+                const uint32 width = layer.num_pk_records+1;
+                std::vector<uint64> **row_contents = (std::vector<uint64> **)palloc0(sizeof(std::vector<uint64> *)*(width));
+                for (uint32 i = 0; i < width; i++){
+                    row_contents[i] = new std::vector<uint64>;
+                }
+                if (layer.layer_number % 3 == 2){
+                    // Need to go over all the contents, to see which ones are marked.
+                    const uint64 num_groups = context.local_contexts[context.main_worker_id].cached_layers[layer.layer_number - 2].num_groups;
+                    for (uint64 i = 0; i < num_groups; i++){
+                        const struct trace_file_grouped_row *gr = &((struct trace_file_grouped_row *)ptr)[i];
+                        if (gr->in_result){
+                            row_contents[0]->push_back(i + 1);
+                        }
+                    }
+                }else{
+                    // In this case, this is a normal file.
+                    const void *current_final_row = get_final_ptr(ptr, &layer);
+                    while (ptr < current_final_row){
+                        ptr = &((uint8 *)ptr)[layer.record_padding];
+                        uint64 *int_payload = (uint64 *)ptr;
+                        for (uint32 i = 0; i < width; i++, int_payload++){
+                            row_contents[i]->push_back(*int_payload);
+                        }
+                        ptr = int_payload;
+                    }
+                }
+                std::string csv_contents = "";
+                for (uint32 i = 0; i < width; i++){
+                    if (i != 0) csv_contents = csv_contents.append(",");
+                    csv_contents = csv_contents.append(psprintf("column_%d", i));
+                }
+                for (uint64 i = 0; i < row_contents[0]->size(); i++){
+                    csv_contents = csv_contents.append("\n");
+                    for (uint32 j = 0; j < width; j++){
+                        if (j != 0) csv_contents = csv_contents.append(",");
+                        csv_contents = csv_contents.append(std::to_string(row_contents[j]->at(i)));
+                    }
+                }
+                std::ofstream worker_file(worker_layer_csv_filename);
+                worker_file << csv_contents;
+                worker_file.close();
+            }
+        }
+        PG_RETURN_UINT64(0);
     }
 
 };
