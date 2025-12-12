@@ -17,6 +17,7 @@
 #       -- Q02
 
 from typing import Any, Callable, NamedTuple, Tuple
+from traceprovpy.tools import perform_duckdb_inference
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
@@ -235,6 +236,33 @@ class QuerySpec(NamedTuple):
 
     def get_as_dict(self):
         return {**self._asdict(), "extras": [extra._asdict() for extra in self.extras]}
+
+
+class DuckDbInferenceQuerySpec(QuerySpec):
+
+    def run_packs(self, top_dir, get_run_options):
+        print("[duckdb_inference]: ", self.base, self.materialize)
+        results = []
+        for _ in range(10):
+            result_mode_temp_table = perform_duckdb_inference.perform_duckdb_inference(
+                mode=0
+            )
+            result_mode_table = perform_duckdb_inference.perform_duckdb_inference(
+                mode=1
+            )
+            result_mode_select = perform_duckdb_inference.perform_duckdb_inference(
+                mode=2
+            )
+            result_mode_cpp = perform_duckdb_inference.perform_duckdb_inference(mode=3)
+            results.append(
+                dict(
+                    result_mode_temp_table=result_mode_temp_table,
+                    result_mode_table=result_mode_table,
+                    result_mode_select=result_mode_select,
+                    result_mode_cpp=result_mode_cpp,
+                )
+            )
+        return results
 
 
 class ValidationQuerySpec(QuerySpec):

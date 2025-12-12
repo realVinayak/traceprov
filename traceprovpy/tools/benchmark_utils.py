@@ -48,3 +48,11 @@ GPROM_LINEAGE_COUNT = lambda: ExtraQuery(
     strict_run=True,
     skip_validation=True,
 )
+
+TRACEPROV_DUMP_CSV = lambda: ExtraQuery(
+    label="traceprov_dump_csv",
+    query=f"$INLINE-select * from traceprov_layer_to_csv();",
+    runs_after_base=True,
+    strict_run=True,
+    skip_validation=True,
+)
