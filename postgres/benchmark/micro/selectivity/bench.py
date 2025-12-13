@@ -8,6 +8,7 @@ from traceprovpy.tools.benchmark import (
     QuerySpec,
 )
 from traceprovpy.tools.benchmark_utils import TRACEPROV_DUMP_CSV
+from traceprovpy.tools.perform_duckdb_inference import LayerSpec
 from traceprovpy.tools.run_with_timeout import (
     ReplaceFILE,
     ReplaceSelectivity,
@@ -19,6 +20,12 @@ def get_filter_group(num_groups, selectivity, mode):
     multiplier = -1 if mode == "pre" else 1
     print(num_groups * selectivity, "num_gs")
     return int(selectivity * num_groups / 100) * multiplier
+
+
+def get_context():
+    layer_to_num_pk_map = {}
+    layer_to_num_pk_map["0"] = 1
+    return [LayerSpec(layer_to_num_pk=layer_to_num_pk_map)]
 
 
 def make_directory(dir_name, mode, num_groups, selectivity):
@@ -186,7 +193,9 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                 Query(
                     query_name=f"predicate_{mode}",
                     spec=DuckDbInferenceQuerySpec(
-                        base="DUCKDB_BASE", key=f"DUCKDB_INFERENCE_{selectivity}"
+                        base="DUCKDB_BASE",
+                        key=f"DUCKDB_INFERENCE_{selectivity}",
+                        context=get_context(),
                     ),
                 ),
             ],

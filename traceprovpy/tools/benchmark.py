@@ -16,7 +16,7 @@
 #       -- Q01
 #       -- Q02
 
-from typing import Any, Callable, NamedTuple, Tuple
+from typing import Any, Callable, Dict, List, NamedTuple, Tuple
 from traceprovpy.tools import perform_duckdb_inference
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
@@ -88,6 +88,7 @@ class QuerySpec(NamedTuple):
     materialize: str | None = None
     extras: list[ExtraQuery] = []
     preprocess: list[Preprocessor] = []
+    context: List[Any] = []
 
     @staticmethod
     def get_pack(
@@ -245,15 +246,17 @@ class DuckDbInferenceQuerySpec(QuerySpec):
         results = []
         for _ in range(10):
             result_mode_temp_table = perform_duckdb_inference.perform_duckdb_inference(
-                mode=0
+                self.context[0], mode=0
             )
             result_mode_table = perform_duckdb_inference.perform_duckdb_inference(
-                mode=1
+                self.context[0], mode=1
             )
             result_mode_select = perform_duckdb_inference.perform_duckdb_inference(
-                mode=2
+                self.context[0], mode=2
             )
-            result_mode_cpp = perform_duckdb_inference.perform_duckdb_inference(mode=3)
+            result_mode_cpp = perform_duckdb_inference.perform_duckdb_inference(
+                self.context[0], mode=3
+            )
             results.append(
                 dict(
                     result_mode_temp_table=result_mode_temp_table,

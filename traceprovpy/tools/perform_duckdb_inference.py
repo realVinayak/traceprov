@@ -1,5 +1,5 @@
 import os
-from typing import NamedTuple, Set
+from typing import Dict, NamedTuple, Set
 import time
 import json
 
@@ -21,6 +21,11 @@ SET profile_output = '/tmp/duckdb_profile.json';
 """
 
 
+class LayerSpec(NamedTuple):
+    # Maps layer number to pk
+    layer_to_num_pk: Dict[int, int]
+
+
 class ParquetRepr(NamedTuple):
     table_name: str
     alias: str
@@ -38,32 +43,48 @@ class ParquetRepr(NamedTuple):
 MAKE_PARQUET = lambda table: ParquetRepr(f"'{table}.parquet'", table)
 
 
-def get_combine_join(main_worker, worker):
+def make_base_layer_columns(base_layer: ParquetRepr, layer_spec: LayerSpec):
+    return ",".join(
+        [
+            f"{base_layer}.column_{idx + 1}"
+            for idx in range(layer_spec.layer_to_num_pk["0"])
+        ]
+    )
+
+
+def get_combine_join(main_worker, worker, layer_spec: LayerSpec):
     final_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_1")
     combine_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_2")
     base_layer = MAKE_PARQUET(f"worker_{worker}_layer_0")
+    base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
-        f"select {base_layer}.column_1 "
+        f"select {base_layer_columns} "
         f"from {final_layer.repr()} join {combine_layer.repr()} on {combine_layer}.{GLOBAL_GROUP_NUMBER} = {final_layer}.column_0 "
         f"join {base_layer.repr()} on {base_layer}.column_0 = {combine_layer}.{LOCAL_GROUP_NUMBER} and {combine_layer}.{WORKER_ID} = {worker}"
     )
     return sql
 
 
-def make_combines(main_worker_id: int, workers: Set[int]):
+def make_combines(main_worker_id: int, workers: Set[int], layer_spec: LayerSpec):
     sql_stmts = [
-        f"({get_combine_join(main_worker_id, worker_id)})" for worker_id in workers
+        f"({get_combine_join(main_worker_id, worker_id, layer_spec)})"
+        for worker_id in workers
     ]
     return sql_stmts
 
 
-def make_sql(main_worker_id: int | None, workers: Set[int]):
-    sql_stmts = [] if main_worker_id is None else make_combines(main_worker_id, workers)
+def make_sql(main_worker_id: int | None, workers: Set[int], layer_spec: LayerSpec):
+    sql_stmts = (
+        []
+        if main_worker_id is None
+        else make_combines(main_worker_id, workers, layer_spec)
+    )
     main_worker_id = main_worker_id if main_worker_id is not None else list(workers)[0]
     base_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_0")
     final_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_1")
+    base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
-        f"select {base_layer}.column_1 "
+        f"select {base_layer_columns} "
         f"from {base_layer.repr()} join {final_layer.repr()} on {base_layer}.column_0 = {final_layer}.column_0"
     )
     sql_stmts = [*sql_stmts, sql]
@@ -72,7 +93,7 @@ def make_sql(main_worker_id: int | None, workers: Set[int]):
     return f"select * from ({sql_stmts_unioned}) AS G;"
 
 
-def perform_duckdb_inference(mode=0):
+def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
     use_temporary = mode == 0
     use_table = mode <= 1
 
@@ -112,7 +133,7 @@ def perform_duckdb_inference(mode=0):
 
     print(worker_set)
     print(main_worker_id)
-    sql = make_sql(main_worker_id, worker_set)
+    sql = make_sql(main_worker_id, worker_set, layer_spec)
     if use_table:
         sql = f"create or replace {'temp' if use_temporary else ''} table test_table as {sql}"
     print("###############################SQL###########################")
