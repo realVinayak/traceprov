@@ -1,7 +1,17 @@
 import os
-from typing import Dict, NamedTuple, Set
+from typing import Dict, Literal, NamedTuple, Set
 import time
 import json
+
+DUCKDB_COMPRESSION_SCHEMES = (
+    Literal["uncompressed"]
+    | Literal["snappy"]
+    | Literal["gzip"]
+    | Literal["zstd"]
+    | Literal["brotli"]
+    | Literal["lz4"]
+    | Literal["lz4_raw"]
+)
 
 WORKER_ID = "column_0"
 LOCAL_GROUP_NUMBER = "column_1"
@@ -24,6 +34,8 @@ SET profile_output = '/tmp/duckdb_profile.json';
 class LayerSpec(NamedTuple):
     # Maps layer number to pk
     layer_to_num_pk: Dict[int, int]
+    # compression schemes:  (uncompressed, snappy, gzip, zstd, brotli, lz4, lz4_raw).
+    compression_scheme: DUCKDB_COMPRESSION_SCHEMES
 
 
 class ParquetRepr(NamedTuple):
@@ -47,15 +59,15 @@ def make_base_layer_columns(base_layer: ParquetRepr, layer_spec: LayerSpec):
     return ",".join(
         [
             f"{base_layer}.column_{idx + 1}"
-            for idx in range(layer_spec.layer_to_num_pk["0"])
+            for idx in range(layer_spec.layer_to_num_pk["1"])
         ]
     )
 
 
 def get_combine_join(main_worker, worker, layer_spec: LayerSpec):
-    final_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_1")
-    combine_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_2")
-    base_layer = MAKE_PARQUET(f"worker_{worker}_layer_0")
+    final_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_2")
+    combine_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_3")
+    base_layer = MAKE_PARQUET(f"worker_{worker}_layer_1")
     base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
         f"select {base_layer_columns} "
@@ -80,8 +92,8 @@ def make_sql(main_worker_id: int | None, workers: Set[int], layer_spec: LayerSpe
         else make_combines(main_worker_id, workers, layer_spec)
     )
     main_worker_id = main_worker_id if main_worker_id is not None else list(workers)[0]
-    base_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_0")
-    final_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_1")
+    base_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_1")
+    final_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_2")
     base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
         f"select {base_layer_columns} "
@@ -115,6 +127,7 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
 
     main_worker_id = None
     worker_set = set()
+    file_sizes = dict()
     for file in file_list:
 
         file_prefix = file.split(".")[0]
@@ -127,9 +140,15 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
             main_worker_id = worker
 
         worker_set.add(worker)
-        os.system(
-            f"duckdb -c \"COPY (SELECT * FROM read_csv('{db_inference_dir}/{file}')) TO '{db_inference_dir}/{file_prefix}.parquet' (FORMAT PARQUET, COMPRESSION UNCOMPRESSED);\""
+        parquet_file_path = f"{db_inference_dir}/{file_prefix}.parquet"
+        assert (
+            os.system(
+                f"duckdb -c \"COPY (SELECT * FROM read_csv('{db_inference_dir}/{file}')) TO '{parquet_file_path}' (FORMAT PARQUET, COMPRESSION {layer_spec.compression_scheme});\""
+            )
+            == 0
         )
+        assert parquet_file_path not in file_sizes
+        file_sizes[parquet_file_path] = os.path.getsize(parquet_file_path)
 
     print(worker_set)
     print(main_worker_id)
@@ -140,6 +159,7 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
     print(sql)
     print("###############################SQL###########################")
     count = None
+    column_count = -1
     if mode < 3:
         sql_file = f"{BENCH_DUCKDB}\n{sql}"
         with open("/tmp/duckdb_script.sql", "w") as f:
@@ -169,7 +189,13 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
         with open("/tmp/duckdb_cpp_inference_size.txt") as f:
             count = int(f.read().strip())
 
-    result = dict(time=time_taken, count=count)
+        with open("/tmp/duckdb_cpp_column_count.txt") as f:
+            column_count = int(f.read().strip())
+            assert column_count == layer_spec.layer_to_num_pk["1"]
+
+    result = dict(
+        time=time_taken, count=count, column_count=column_count, file_sizes=file_sizes
+    )
 
     return result
 

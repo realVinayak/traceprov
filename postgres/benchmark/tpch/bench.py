@@ -1,4 +1,5 @@
 from traceprovpy.tools.benchmark import (
+    DuckDbInferenceQuerySpec,
     ExtraQuery,
     GenericBenchmark,
     Query,
@@ -6,6 +7,8 @@ from traceprovpy.tools.benchmark import (
     QuerySpec,
     ValidationQuerySpec,
 )
+from traceprovpy.tools.benchmark_utils import TRACEPROV_DUMP_CSV
+from traceprovpy.tools.perform_duckdb_inference import LayerSpec
 from traceprovpy.tools.run_with_timeout import ReplaceFILE, RunParams
 import json
 import argparse
@@ -52,10 +55,14 @@ def main():
                     )
 
             with open(f"{parsed.layers}/{query_name}.config.json") as f:
-                _config = json.loads(f.read())
-                number_layers = len(_config)
+                layer_config = json.loads(f.read())
+                number_layers = len(layer_config)
 
             if not config.get("addTraceProv", True):
+                continue
+
+            # TODO: Renable this.
+            if number_layers > 1:
                 continue
 
             extra_sync = [
@@ -161,6 +168,7 @@ def main():
                 *extra_infer_time,
                 *extra_measure_count,
                 *(extra_drop_tables_later if not is_validate else []),
+                TRACEPROV_DUMP_CSV(),
             ]
 
             extra_labels = [e.label for e in extras]
@@ -189,10 +197,31 @@ def main():
                     ),
                 )
 
+            layer_to_num_pk_map = {
+                str(_layer_config["layer_number"]): len(_layer_config["pk_order"])
+                for _layer_config in layer_config
+            }
+            layer_context = [
+                LayerSpec(
+                    layer_to_num_pk=layer_to_num_pk_map,
+                    compression_scheme="zstd",
+                )
+            ]
+            subdir_queries.append(
+                Query(
+                    query_name=query_name,
+                    spec=DuckDbInferenceQuerySpec(
+                        base="DUCKDB_BASE",
+                        key=f"DUCKDB_INFERENCE_{query_name}",
+                        context=layer_context,
+                    ),
+                ),
+            )
+
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 
     result = benchmark.run_from_argparse(
-        dir_queries, RunParams(**config.get("runTimeOptions", {}))
+        dir_queries, RunParams(**config["runTimeOptions"])
     )
     if "extras" in result:
         raise Exception('Expected "extras" to be a reserved keyword.')

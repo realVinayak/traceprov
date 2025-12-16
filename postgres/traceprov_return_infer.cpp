@@ -654,7 +654,7 @@ extern "C" {
                     &ptr,
                     layer.size
                 );
-                char *worker_layer_csv_filename = psprintf(TRACE_PROV_DIR "/worker_%d_layer_%d.csv", DataDir, worker_id, layer_id);
+                char *worker_layer_csv_filename = psprintf(TRACE_PROV_DIR "/worker_%d_layer_%d.csv", DataDir, worker_id, layer_number);
                 const uint32 width = layer.num_pk_records+1;
                 std::vector<uint64> **row_contents = (std::vector<uint64> **)palloc0(sizeof(std::vector<uint64> *)*(width));
                 for (uint32 i = 0; i < width; i++){

@@ -8,7 +8,10 @@ from traceprovpy.tools.benchmark import (
     QuerySpec,
 )
 from traceprovpy.tools.benchmark_utils import TRACEPROV_DUMP_CSV
-from traceprovpy.tools.perform_duckdb_inference import LayerSpec
+from traceprovpy.tools.perform_duckdb_inference import (
+    DUCKDB_COMPRESSION_SCHEMES,
+    LayerSpec,
+)
 from traceprovpy.tools.run_with_timeout import (
     ReplaceFILE,
     ReplaceSelectivity,
@@ -22,10 +25,15 @@ def get_filter_group(num_groups, selectivity, mode):
     return int(selectivity * num_groups / 100) * multiplier
 
 
-def get_context():
+def get_context(compression_scheme: DUCKDB_COMPRESSION_SCHEMES):
     layer_to_num_pk_map = {}
-    layer_to_num_pk_map["0"] = 1
-    return [LayerSpec(layer_to_num_pk=layer_to_num_pk_map)]
+    layer_to_num_pk_map["1"] = 1
+    return [
+        LayerSpec(
+            layer_to_num_pk=layer_to_num_pk_map,
+            compression_scheme=compression_scheme,
+        )
+    ]
 
 
 def make_directory(dir_name, mode, num_groups, selectivity):
@@ -195,7 +203,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                     spec=DuckDbInferenceQuerySpec(
                         base="DUCKDB_BASE",
                         key=f"DUCKDB_INFERENCE_{selectivity}",
-                        context=get_context(),
+                        context=get_context("lz4_raw"),
                     ),
                 ),
             ],
@@ -219,7 +227,7 @@ def main():
 
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
     dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
-    # dir_names = ["1_000_000"]
+    # dir_names = ["1_000_000", "5_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
