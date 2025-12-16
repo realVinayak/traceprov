@@ -72,7 +72,7 @@ void traceprov_aggregate_rewrite(
     bool
 );
 
-Node *traceprov_get_function_call_node(const char *, List *);
+Node *traceprov_get_function_call_node(const char *, List *, WindowDef *);
 
 Const *makeInt8Const(int64);
 

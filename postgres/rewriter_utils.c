@@ -482,11 +482,13 @@ bool traceprov_find_oid_list(List *in_list, Oid to_find){
 
 Node *traceprov_get_function_call_node(
     const char *func_name, 
-    List *argVars
+    List *argVars,
+    WindowDef *over
 ){
     ParseState *dummyParseState = make_parsestate(NULL);
     List *func_name_list = list_make1(makeString(pstrdup(func_name)));
     FuncCall *fc = makeFuncCall(func_name_list, argVars, COERCE_EXPLICIT_CALL, -1);
+    fc->over = over;
     Node *fcNode =  ParseFuncOrColumn(
         dummyParseState,
         func_name_list,
@@ -537,7 +539,7 @@ void traceprov_aggregate_rewrite(
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
     // Always use the offset version no matter what.
-    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars);
+    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars, NULL);
     if (!IsA(funcCallNode, Aggref)){
         elog(ERROR, "Expected the function call node to be an aggref!");
     }

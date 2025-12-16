@@ -323,6 +323,7 @@ Query *traceprov_rewrite_sets_to_joins(
     if (base->setOperations == NULL) return base;
     if (!IsA(base->setOperations, SetOperationStmt)) elog(ERROR, "Expected top level set operation to be SetOperationStmt");
     SetOperationStmt *stmt = (SetOperationStmt*)base->setOperations;
+    // Ignore except set op.
     if (stmt->op != SETOP_UNION && stmt->op != SETOP_INTERSECT) return base;
     List *flattenedAddedTargets = traceprov_flatten(ignoreList);
 
@@ -640,7 +641,7 @@ Query *traceprov_add_nested_query_log(
     deserializeTraceProvDependency(&dupContext);
 
     Query *nested = traceprov_make_nested_query(base, context);
-    Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars);
+    Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
     nested->targetList = traceprov_append_at_resjunk(
         nested->targetList,
         makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false)
@@ -731,7 +732,8 @@ Query *traceprov_add_nested_query(
         List *pointerFuncArgs = lfirst(pointerTarget);
         Node *mark_later_func = traceprov_get_function_call_node(
             list_length(pointerFuncArgs) == 1 ? TRACEPROV_MARK_LATER_FUNC_NAME : TRACEPROV_MARK_LATER_VALUE_FUNC_NAME,
-            pointerFuncArgs
+            pointerFuncArgs,
+            NULL
         );
         newTargetList = lappend(newTargetList, makeTargetEntry(
             (Expr *)mark_later_func,
