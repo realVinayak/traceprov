@@ -14,7 +14,7 @@
 // oid is needed.
 static const Oid int8OidConst = INT8OID;
 
-static List *getMatchableAttrs(List *rawList, List *ignoreList, int index){
+static List *get_matchable_attrs(List *rawList, List *ignoreList, int index){
     if (ignoreList == NIL) return rawList;
     if (index >= list_length(ignoreList)){
         elog(ERROR, "given index is out of bounds!");
@@ -24,6 +24,8 @@ static List *getMatchableAttrs(List *rawList, List *ignoreList, int index){
     ListCell *outerCursor;
     foreach(outerCursor, rawList){
         TargetEntry *te = (TargetEntry *)lfirst(outerCursor);
+        // Don't include resjunk columns for matching.
+        if (te->resjunk) continue;
         ListCell *innerCursor = NULL;
         bool found = false;
         foreach(innerCursor, ignoreForRTE){
@@ -433,20 +435,52 @@ Query *handleIntersect(Query *base, List *ignoreList){
     // However, need to ignore the traceprov attributes in the join condition.
     // So, the ignoreList, if given, is consulted. If the table index AND column idx is same,
     // column is ignored from predicates.
-    const List *usedReferences = traceprov_find_used_refs(base->setOperations, traceProvLeafNavigator);
-    if (list_length(usedReferences) != list_length(base->rtable)){
+    const List *used_references = traceprov_find_used_refs(base->setOperations, traceProvLeafNavigator);
+    if (list_length(used_references) != list_length(base->rtable)){
         elog(ERROR, "Expected the used references to be of the same size as setOperations");
     }
-    if (list_length(usedReferences) < 2){
+    if (list_length(used_references) < 2){
         elog(ERROR, "Expected at least 2 elements for the join!");
     }
+    // If we're an ALL, in that case, need to use window function formulation to only
+    // get the minimum from both side.
+    const Node *base_setop_node = base->setOperations;
+    if (!IsA(base_setop_node, SetOperationStmt)){
+        elog(ERROR, "Expected base to be a setop node!");
+    }else{
+        const SetOperationStmt *base_setop = (SetOperationStmt *)base_setop_node;
+        // Need to use window function formulation.
+        if (base_setop->all){
+            ListCell *rte_cursor;
+            foreach(rte_cursor, rte_cursor->rtable){
+                traceprov_assert_is_subquery((RangeTblEntry *)lfirst(rte_cursor));
+                Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
+                List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
+                // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
+                WindowDef *window_def = makeNode(WindowDef);
+                window_def->partitionClause = NIL;
+                ListCell *target_entry_cursor = NULL;
+                foreach(target_entry_cursor, target_entries){
+                    TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
+                    SortGroupClause *sort_group_clause = makeSortGroupClauseForSetOp(exprType(te->expr), false);
+                    sort_group_clause->tleSortGroupRef = te->resno;
+                    window_def->partitionClause = lappend(window_def->partitionClause, sort_group_clause);
+                }
+                Node *fc_node = traceprov_get_function_call_node("row_number", NIL, window_def);
+                if (!IsA(fc_node, WindowFunc)){
+                    elog(ERROR, "Expected the row_number call to be function call!");
+                }
+            }
+        }
+    }
+
     RangeTblEntry *firstRTE = (RangeTblEntry*) lfirst(list_head(base->rtable));
     if (firstRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
     firstRTE->inFromCl = true;
     List *addedJoins = NIL;
     ListCell *rteCursor;
-    RangeTblEntry *lastJoinEntry = NULL;
-    JoinExpr *joinExpr = NULL;
+    RangeTblEntry *last_join_entry = NULL;
+    JoinExpr *join_expr = NULL;
 
     // Start from the next table.
     int i = 1;
@@ -455,79 +489,79 @@ Query *handleIntersect(Query *base, List *ignoreList){
         RangeTblEntry *nextRTE = (RangeTblEntry *)lfirst(rteCursor);
         if (nextRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
         nextRTE->inFromCl = true;
-        List *colNames = NIL;
-        ListCell *targetVarCursor;
-        if (lastJoinEntry == NULL){
-            lastJoinEntry = makeNode(RangeTblEntry);
-            lastJoinEntry->joinleftcols = NIL;
-            lastJoinEntry->joinrightcols = NIL;
+        List *col_names = NIL;
+        ListCell *target_var_cursor;
+        if (last_join_entry == NULL){
+            last_join_entry = makeNode(RangeTblEntry);
+            last_join_entry->joinleftcols = NIL;
+            last_join_entry->joinrightcols = NIL;
             // TODO: This should probably be changed when handling traceprov attrs.
-            foreach(targetVarCursor, firstRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
-                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                lastJoinEntry->joinleftcols = lappend_int(lastJoinEntry->joinleftcols, foreach_current_index(targetVarCursor) + 1);
+            foreach(target_var_cursor, firstRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
+                last_join_entry->joinaliasvars = lappend(last_join_entry->joinaliasvars, makeVarFromTargetEntry(1, te));
+                col_names = lappend(col_names, makeString(te->resname));
+                last_join_entry->joinleftcols = lappend_int(last_join_entry->joinleftcols, foreach_current_index(target_var_cursor) + 1);
             }
 
-            targetVarCursor = NULL;
-            foreach(targetVarCursor, nextRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
-                lastJoinEntry->joinaliasvars = lappend(lastJoinEntry->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                lastJoinEntry->joinrightcols = lappend_int(lastJoinEntry->joinrightcols, foreach_current_index(targetVarCursor) + 1);
+            target_var_cursor = NULL;
+            foreach(target_var_cursor, nextRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
+                last_join_entry->joinaliasvars = lappend(last_join_entry->joinaliasvars, makeVarFromTargetEntry(1, te));
+                col_names = lappend(col_names, makeString(te->resname));
+                last_join_entry->joinrightcols = lappend_int(last_join_entry->joinrightcols, foreach_current_index(target_var_cursor) + 1);
             }
-            lastJoinEntry->eref = makeAlias(pstrdup("unnamed join"), colNames);
-            lastJoinEntry->rtekind = RTE_JOIN;
-            joinExpr = makeNode(JoinExpr);
+            last_join_entry->eref = makeAlias(pstrdup("unnamed join"), col_names);
+            last_join_entry->rtekind = RTE_JOIN;
+            join_expr = makeNode(JoinExpr);
             RangeTblRef *l_rtr = makeNode(RangeTblRef);
             RangeTblRef *r_rtr = makeNode(RangeTblRef);
             l_rtr->rtindex = 1;
             r_rtr->rtindex = 2;
-            joinExpr->larg = (Node*)l_rtr;
-            joinExpr->rarg = (Node*)r_rtr;
-            joinExpr->isNatural = false;
-            joinExpr->quals = createEqualityCondition(
-                getMatchableAttrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                getMatchableAttrs(nextRTE->subquery->targetList, ignoreList, 1), 
+            join_expr->larg = (Node*)l_rtr;
+            join_expr->rarg = (Node*)r_rtr;
+            join_expr->isNatural = false;
+            join_expr->quals = createEqualityCondition(
+                get_matchable_attrs(firstRTE->subquery->targetList, ignoreList, 0), 
+                get_matchable_attrs(nextRTE->subquery->targetList, ignoreList, 1), 
                 1, 
                 2, 
                 false
             );
         }else{
-            RangeTblEntry *clonedRTE = copyObject(lastJoinEntry);
+            RangeTblEntry *clonedRTE = copyObject(last_join_entry);
             const int originalLength = list_length(clonedRTE->joinaliasvars);
-            colNames = clonedRTE->eref->colnames;
+            col_names = clonedRTE->eref->colnames;
             clonedRTE->joinrightcols = NIL;
             clonedRTE->joinleftcols = NIL;
-            foreach(targetVarCursor, nextRTE->subquery->targetList){
-                TargetEntry *te = (TargetEntry *)(lfirst(targetVarCursor));
+            foreach(target_var_cursor, nextRTE->subquery->targetList){
+                TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
                 clonedRTE->joinaliasvars = lappend(clonedRTE->joinaliasvars, makeVarFromTargetEntry(1, te));
-                colNames = lappend(colNames, makeString(te->resname));
-                clonedRTE->joinrightcols = lappend_int(clonedRTE->joinrightcols, foreach_current_index(targetVarCursor) + 1);
+                col_names = lappend(col_names, makeString(te->resname));
+                clonedRTE->joinrightcols = lappend_int(clonedRTE->joinrightcols, foreach_current_index(target_var_cursor) + 1);
             }
             for (int i = 0; i < originalLength; i++){
                 clonedRTE->joinleftcols = lappend_int(clonedRTE->joinleftcols, i+1);
             }
-            lastJoinEntry = clonedRTE;
-            JoinExpr *nextJoinExpr = makeNode(JoinExpr);
-            nextJoinExpr->larg = (Node*)joinExpr;
+            last_join_entry = clonedRTE;
+            JoinExpr *next_join_expr = makeNode(JoinExpr);
+            next_join_expr->larg = (Node*)join_expr;
             RangeTblRef *r_rtr = makeNode(RangeTblRef);
             r_rtr->rtindex = i;
-            nextJoinExpr->rarg = (Node*)r_rtr;
-            nextJoinExpr->isNatural = false;
-            nextJoinExpr->quals = createEqualityCondition(
-                getMatchableAttrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                getMatchableAttrs(nextRTE->subquery->targetList, ignoreList, i-1),
+            next_join_expr->rarg = (Node*)r_rtr;
+            next_join_expr->isNatural = false;
+            next_join_expr->quals = createEqualityCondition(
+                get_matchable_attrs(firstRTE->subquery->targetList, ignoreList, 0), 
+                get_matchable_attrs(nextRTE->subquery->targetList, ignoreList, i-1),
                 1, 
                 i, 
                 false
             );
-            joinExpr = nextJoinExpr;
+            join_expr = next_join_expr;
         }
-        addedJoins = lappend(addedJoins, lastJoinEntry);
-        joinExpr->rtindex = list_length(base->rtable) + list_length(addedJoins);
+        addedJoins = lappend(addedJoins, last_join_entry);
+        join_expr->rtindex = list_length(base->rtable) + list_length(addedJoins);
     }
-    FromExpr *fromExpr = makeFromExpr(list_make1(joinExpr), NULL);
+    FromExpr *fromExpr = makeFromExpr(list_make1(join_expr), NULL);
     base->rtable = list_concat_copy(base->rtable, addedJoins);
     base->jointree = fromExpr;
     return base;

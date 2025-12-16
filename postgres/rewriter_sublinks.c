@@ -111,7 +111,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             arg_vars = lappend(arg_vars, base_target->expr);
         }
         arg_vars = list_concat(arg_vars, correlated_arg_vars);
-        Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_VOLATILE_FUNC_NAME, arg_vars);
+        Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_VOLATILE_FUNC_NAME, arg_vars, NULL);
         // Replace all the extra added traceprov targets with this newer func node.
         target_entry_cursor = NULL;
         List *original_without_targets = NIL;
