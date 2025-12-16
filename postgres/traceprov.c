@@ -154,12 +154,13 @@ static int initialize_local_context(){
         }
         int graph_file_fd = open(psprintf(TRACEPROV_GRAPH_FILE, DataDir), O_RDWR);
         if (graph_file_fd < 0){
-            elog(ERROR, "Error opening the graph file!");
+            elog(INFO, "Error opening the graph file!");   
+        }else{
+            if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32))) == -1){
+                elog(ERROR, "Read from graph file failed!");
+            }
+            if(close(graph_file_fd)) elog(ERROR, "Error closing graph file");   
         }
-        if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32))) == -1){
-            elog(ERROR, "Read from graph file failed!");
-        }
-        if(close(graph_file_fd)) elog(ERROR, "Error closing graph file");
     }
 
     PRINT_ON_DEBUG("Mmaping the shared context file.");
@@ -183,10 +184,6 @@ static int initialize_local_context(){
         elog(ERROR, "Maximum worker count reached.");
         rc = 1;
         goto exit_initialize_local_context;
-    }
-
-    if (traceprov_current.maximum_local_layer_used == 0){
-        elog(ERROR, "Expected the traceprov local layer to be filled!");
     }
 
     worker_layer_map_fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, traceprov_current.my_worker_id), O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
@@ -1065,12 +1062,12 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
     PG_RETURN_POINTER(NULL);
 }
 
-uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
+uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
     int rc = 0;
-    const uint32 layer_number = PG_GETARG_INT32(0);
+    const uint32 layer_number = PG_GETARG_INT32(offset + 1);
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
-    const int width = return_pointer_version ? PG_NARGS() : PG_NARGS() - 1;
+    const int width = return_pointer_version ? PG_NARGS() - offset: PG_NARGS() - 1 - offset;
     if ((rc = initialize_local_and_layer(layer_number, width, 0, true, NULL))){
         PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
         elog(ERROR, "Error setting up local or layer: %d", rc);
@@ -1087,7 +1084,7 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
     // Pad before.
     current_layer->current_row += current_layer->record_padding;    
     int64 *pk_space = (int64*)(current_layer->current_row);
-    for (int arg_idx = 1; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
+    for (int arg_idx = 1 + offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
         // Don't bother writing, it is 0x0 (from truncate anyways)
         if (PG_ARGISNULL(arg_idx)) continue;
         *pk_space = PG_GETARG_INT64(arg_idx);
@@ -1107,13 +1104,23 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version){
 PG_FUNCTION_INFO_V1(traceprov_make_ptr);
 
 Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
-    PG_RETURN_POINTER(perform_log(fcinfo, true));
+    PG_RETURN_POINTER(perform_log(fcinfo, true, 0));
 }
 
 PG_FUNCTION_INFO_V1(traceprov_log_entry);
 
 Datum traceprov_log_entry(PG_FUNCTION_ARGS){
-    PG_RETURN_INT64(perform_log(fcinfo, false));
+    PG_RETURN_INT64(perform_log(fcinfo, false, 0));
+}
+
+PG_FUNCTION_INFO_V1(traceprov_log_entry_n);
+
+Datum traceprov_log_entry_n(PG_FUNCTION_ARGS){
+    const uint64 loop_count = PG_GETARG_INT64(0);
+    for (uint64 counter = 0; counter < loop_count; counter++){
+        perform_log(fcinfo, false, 1);
+    }
+    PG_RETURN_UINT64(1);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_offset_finalfunc);
