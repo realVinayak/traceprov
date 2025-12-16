@@ -452,7 +452,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
         // Need to use window function formulation.
         if (base_setop->all){
             ListCell *rte_cursor;
-            foreach(rte_cursor, rte_cursor->rtable){
+            foreach(rte_cursor, base->rtable){
                 traceprov_assert_is_subquery((RangeTblEntry *)lfirst(rte_cursor));
                 Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
                 List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
@@ -462,7 +462,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
                 ListCell *target_entry_cursor = NULL;
                 foreach(target_entry_cursor, target_entries){
                     TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
-                    SortGroupClause *sort_group_clause = makeSortGroupClauseForSetOp(exprType(te->expr), false);
+                    SortGroupClause *sort_group_clause = makeSortGroupClauseForSetOp(exprType((Node*)te->expr), false);
                     sort_group_clause->tleSortGroupRef = te->resno;
                     window_def->partitionClause = lappend(window_def->partitionClause, sort_group_clause);
                 }
