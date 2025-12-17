@@ -457,7 +457,6 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
         // Also, the traceprov aggregates aren't removed. Actually, during optimization time, they'll be removed, since
         // they aren't needed at any place. This simplifies the rewriting, since the added attributes don't have to be removed lol.
         // HOWEVER, the added aggregation should not be joined (since it could be different)
-        // Moreover, only the new log entry should be considered for the traceprov attributes, going upwards.
         if (base_setop->all){
             ListCell *rte_cursor;
             List *extra_targets_per_rte_all = NIL;
@@ -545,37 +544,6 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
             if (list_length(extra_targets_per_rte_all) != list_length(base->rtable)){
                 elog(ERROR, "Got mismatching traceprov window function count!");
             }
-            // TraceProvLayerNumber layer_number;
-            // List *arg_vars = traceprov_prepare_arg_vars(context, &layer_number);
-            // List *child_graphs = NIL;
-            // ListCell *target_entry_cursor = NULL;
-            // List *child_entries = NIL;
-            // foreach(target_entry_cursor, extra_targets_per_rte_all){
-            //     TraceProvTarget *tp_target = (TraceProvTarget*)lfirst(target_entry_cursor);
-            //     TraceProvEntry *tp_entry = traceprov_resolve_entry(tp_target, &child_graphs, &arg_vars);
-            //     child_entries = lappend(child_entries, tp_entry);
-            // }
-            // // Need to, now, make the log entry, and that'll be the final extra targets added.
-            // Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
-            // TraceProvTarget *log_tp_target = makeTraceProvTarget(
-            //     true, 
-            //     makeTargetEntry(
-            //         (Expr *)log_fc_node,
-            //         0,
-            //         pstrdup("intersect_log"),
-            //         false  
-            //     ),
-            //     make_traceprov_dependency(
-            //         TP_LOG,
-            //         layer_number,
-            //         child_graphs,
-            //         child_entries
-            //     ),
-            //     0,
-            //     false,
-            //     NIL
-            // );
-            // Here, only one log entry remains.
             extra_targets_per_rte = extra_targets_per_rte_all;
         }
     }
