@@ -457,8 +457,9 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
             ListCell *rte_cursor;
             List *extra_targets_per_rte_all = NIL;
             foreach(rte_cursor, base->rtable){
-                traceprov_assert_is_subquery((RangeTblEntry *)lfirst(rte_cursor));
-                Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
+                RangeTblEntry *rte = (RangeTblEntry *)lfirst(rte_cursor);
+		traceprov_assert_is_subquery(rte);
+                Query *subquery = rte->subquery;
                 extra_targets_per_rte_all = lappend(
                     extra_targets_per_rte_all,
                     traceprov_propagate_child_targets(
@@ -467,8 +468,8 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
                     )
                 );
                 Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
-                ((RangeTblEntry *)lfirst(rte_cursor))->subquery = cloned_subquery;
-                List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
+               	rte->subquery = cloned_subquery;
+                List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
                 // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
                 WindowDef *window_def = makeNode(WindowDef);
                 window_def->partitionClause = NIL;
@@ -504,10 +505,13 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
                 WindowFunc *window_fc_node = (WindowFunc *)fc_node;
                 window_fc_node->winref = window_clause->winref;
                 cloned_subquery->hasWindowFuncs = true;
-                cloned_subquery->targetList = traceprov_append_at_resjunk(
+                char *window_target_name = tp_parse_get_unique_alias(context);
+		rte->eref->colnames = lappend(rte->eref->colnames, makeString(window_target_name));
+		cloned_subquery->targetList = traceprov_append_at_resjunk(
                     cloned_subquery->targetList,
-                    makeTargetEntry((Expr *)window_fc_node, 0, tp_parse_get_unique_alias(context), false)
+                    makeTargetEntry((Expr *)window_fc_node, 0, window_target_name, false)
                 );
+
             }
             extra_targets_per_rte = extra_targets_per_rte_all;
         }
