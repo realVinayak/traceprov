@@ -521,7 +521,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     true,
                     window_def
                 );
-		TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
+                TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
                 Node *traceprov_log_node = (Node*)traceprov_log_te->expr;
                 if (!IsA(traceprov_log_node, WindowFunc)){
                     elog(ERROR, "Expected the traceprov log here to be a window function!");
@@ -534,49 +534,49 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                 list_nth_cell(ignore_list, foreach_current_index(rte_cursor))->ptr_value = current_traceprov_targets;
                 // Add the aggregated window to the subquery's target list.
                 cloned_subquery->targetList = traceprov_append_targets(traceprov_aggregated_window, cloned_subquery->targetList);
-		rte->eref->colnames = lappend(rte->eref->colnames, makeString(traceprov_log_te->resname));
+                rte->eref->colnames = lappend(rte->eref->colnames, makeString(traceprov_log_te->resname));
                 // At this point, the target list is consistent.
                 // Moreover, the added window function will also be skipped during the 
-                extra_targets_per_rte_all = list_concat_copy(
+                extra_targets_per_rte_all = lappend(
                     extra_targets_per_rte_all,
                     traceprov_propagate_child_targets(traceprov_aggregated_window, foreach_current_index(rte_cursor) + 1)
                 );
             }
-            if (list_length(extra_targets_per_rte) != list_length(base->rtable)){
+            if (list_length(extra_targets_per_rte_all) != list_length(base->rtable)){
                 elog(ERROR, "Got mismatching traceprov window function count!");
             }
-            TraceProvLayerNumber layer_number;
-            List *arg_vars = traceprov_prepare_arg_vars(context, &layer_number);
-            List *child_graphs = NIL;
-            ListCell *target_entry_cursor = NULL;
-            List *child_entries = NIL;
-            foreach(target_entry_cursor, extra_targets_per_rte_all){
-                TraceProvTarget *tp_target = (TraceProvTarget*)lfirst(target_entry_cursor);
-                TraceProvEntry *tp_entry = traceprov_resolve_entry(tp_target, &child_graphs, &arg_vars);
-                child_entries = lappend(child_entries, tp_entry);
-            }
-            // Need to, now, make the log entry, and that'll be the final extra targets added.
-            Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
-            TraceProvTarget *log_tp_target = makeTraceProvTarget(
-                true, 
-                makeTargetEntry(
-                    (Expr *)log_fc_node,
-                    0,
-                    pstrdup("intersect_log"),
-                    false  
-                ),
-                make_traceprov_dependency(
-                    TP_LOG,
-                    layer_number,
-                    child_graphs,
-                    child_entries
-                ),
-		0,
-		false,
-		NIL
-            );
+            // TraceProvLayerNumber layer_number;
+            // List *arg_vars = traceprov_prepare_arg_vars(context, &layer_number);
+            // List *child_graphs = NIL;
+            // ListCell *target_entry_cursor = NULL;
+            // List *child_entries = NIL;
+            // foreach(target_entry_cursor, extra_targets_per_rte_all){
+            //     TraceProvTarget *tp_target = (TraceProvTarget*)lfirst(target_entry_cursor);
+            //     TraceProvEntry *tp_entry = traceprov_resolve_entry(tp_target, &child_graphs, &arg_vars);
+            //     child_entries = lappend(child_entries, tp_entry);
+            // }
+            // // Need to, now, make the log entry, and that'll be the final extra targets added.
+            // Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
+            // TraceProvTarget *log_tp_target = makeTraceProvTarget(
+            //     true, 
+            //     makeTargetEntry(
+            //         (Expr *)log_fc_node,
+            //         0,
+            //         pstrdup("intersect_log"),
+            //         false  
+            //     ),
+            //     make_traceprov_dependency(
+            //         TP_LOG,
+            //         layer_number,
+            //         child_graphs,
+            //         child_entries
+            //     ),
+            //     0,
+            //     false,
+            //     NIL
+            // );
             // Here, only one log entry remains.
-            extra_targets_per_rte = list_make1(list_make1(log_tp_target));
+            extra_targets_per_rte = extra_targets_per_rte_all;
         }
     }
 
