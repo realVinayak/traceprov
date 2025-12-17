@@ -340,7 +340,7 @@ Query *traceprov_rewrite_sets_to_joins(
             modified = base;
         }
     } else if (stmt->op == SETOP_INTERSECT){
-        modified = handleIntersect(base, ignoreList, context);
+        // modified = handleIntersect(base, ignoreList, context);
         // Remove the set ops (but only if it is intersect)
         modified->setOperations = NULL;
     }
@@ -488,13 +488,13 @@ Query *traceprov_perform_rewrite(
             // 1. Make the width same (can be different, now). trivally, when pks are of different length.
             // 2. Add some counter for setop.
             // Don't need do anything in the case of intersect.
-            List *unionAdjusted = adjustUnionSetOps(
+            List *unionAdjusted = traceprov_adjust_union(
                 setop, targetsPerRTE, parse->rtable, tpContext
             );
             targetsToAdd = traceprov_flatten(unionAdjusted);
             targetsPerRTE = unionAdjusted;
         } else if (setop->op == SETOP_EXCEPT){
-            parse = adjustExceptSetOps(
+            parse = traceprov_adjust_except(
                 parse,
                 targetsPerRTE,
                 tpContext,
@@ -502,6 +502,9 @@ Query *traceprov_perform_rewrite(
                 &targetsToAdd
             );
             targetsPerRTE = NIL;
+        } else if (setop->op == SETOP_INTERSECT){
+            targetsPerRTE = traceprov_adjust_intersect(parse, targetsPerRTE, tpContext);
+            targetsToAdd = traceprov_flatten(targetsPerRTE);
         }
     }else{
         // We don't care about the top-level returned join alias vars.
