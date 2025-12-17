@@ -426,7 +426,7 @@ Query *traceprov_adjust_except(
     return parent;
 }
 
-List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseContext *context){
+List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseContext *context){
     // Here, need to replace the intersect with a join.
     // For each table pair present, need to construct the join, and the join tree.
     // Basically, all the intersects within this block are consumed into a join.
@@ -445,7 +445,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
     // If we're an ALL, in that case, need to use window function formulation to only
     // get the minimum from both side.
     const Node *base_setop_node = base->setOperations;
-    List *extra_targets_per_rte = ignoreList;
+    List *extra_targets_per_rte = ignore_list;
     if (!IsA(base_setop_node, SetOperationStmt)){
         elog(ERROR, "Expected base to be a setop node!");
     }else{
@@ -453,23 +453,21 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
         // Need to use window function formulation.
         // Here, need to also level-down the current subqueries.
         // We don't need to touch the set operations itself, since it'll be removed.
+        // Here, need to also add the aggregation over the traceprov attributes (window function)
+        // Also, the traceprov aggregates aren't removed. Actually, during optimization time, they'll be removed, since
+        // they aren't needed at any place. This simplifies the rewriting, since the added attributes don't have to be removed lol.
+        // HOWEVER, the added aggregation should not be joined (since it could be different)
+        // Moreover, only the new log entry should be considered for the traceprov attributes, going upwards.
         if (base_setop->all){
             ListCell *rte_cursor;
             List *extra_targets_per_rte_all = NIL;
             foreach(rte_cursor, base->rtable){
                 RangeTblEntry *rte = (RangeTblEntry *)lfirst(rte_cursor);
-		traceprov_assert_is_subquery(rte);
+		        traceprov_assert_is_subquery(rte);
                 Query *subquery = rte->subquery;
-                extra_targets_per_rte_all = lappend(
-                    extra_targets_per_rte_all,
-                    traceprov_propagate_child_targets(
-                        list_nth(ignoreList, foreach_current_index(rte_cursor)),
-                        foreach_current_index(rte_cursor) + 1
-                    )
-                );
                 Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
                	rte->subquery = cloned_subquery;
-                List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
+                List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignore_list, foreach_current_index(rte_cursor));
                 // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
                 WindowDef *window_def = makeNode(WindowDef);
                 window_def->partitionClause = NIL;
@@ -506,14 +504,75 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
                 window_fc_node->winref = window_clause->winref;
                 cloned_subquery->hasWindowFuncs = true;
                 char *window_target_name = tp_parse_get_unique_alias(context);
-		rte->eref->colnames = lappend(rte->eref->colnames, makeString(window_target_name));
-		cloned_subquery->targetList = traceprov_append_at_resjunk(
+		        rte->eref->colnames = lappend(rte->eref->colnames, makeString(window_target_name));
+		        cloned_subquery->targetList = traceprov_append_at_resjunk(
                     cloned_subquery->targetList,
                     makeTargetEntry((Expr *)window_fc_node, 0, window_target_name, false)
                 );
+                List *traceprov_aggregated_window = NIL;
+                List *traceprov_subquery_targets = traceprov_propagate_child_targets(
+                    list_nth(ignore_list, foreach_current_index(rte_cursor)),
+                    foreach_current_index(rte_cursor) + 1
+                );
+                traceprov_aggregate_rewrite(
+                    traceprov_subquery_targets,
+                    &traceprov_aggregated_window,
+                    context,
+                    true,
+                    window_def
+                );
+                Node *traceprov_log_node = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
+                if (!IsA(traceprov_log_node, WindowFunc)){
+                    elog(ERROR, "Expected the traceprov log here to be a window function!");
+                }
+                WindowFunc *window_traceprov_log_node = ((WindowFunc *)traceprov_log_node);
+                window_traceprov_log_node->winref = window_clause->winref;
+                List *current_traceprov_targets = (List *)list_nth(ignore_list, foreach_current_index(rte_cursor));
+                current_traceprov_targets = traceprov_append_targets(traceprov_aggregated_window, current_traceprov_targets);
+                // Add the newly added traceprov window function to the ignore list (it should be ignored during joining)
+                list_nth_cell(ignore_list, foreach_current_index(rte_cursor))->ptr_value = current_traceprov_targets;
+                // Add the aggregated window to the subquery's target list.
+                cloned_subquery->targetList = traceprov_append_targets(traceprov_aggregated_window, cloned_subquery->targetList);
 
+                // At this point, the target list is consistent.
+                // Moreover, the added window function will also be skipped during the 
+                extra_targets_per_rte_all = list_concat_copy(
+                    extra_targets_per_rte_all,
+                    traceprov_propagate_child_targets(traceprov_aggregated_window, foreach_current_index(rte_cursor) + 1)
+                );
             }
-            extra_targets_per_rte = extra_targets_per_rte_all;
+            if (list_length(extra_targets_per_rte) != list_length(base->rtable)){
+                elog(ERROR, "Got mismatching traceprov window function count!");
+            }
+            TraceProvLayerNumber layer_number;
+            List *arg_vars = traceprov_prepare_arg_vars(context, &layer_number);
+            List *child_graphs = NIL;
+            ListCell *target_entry_cursor = NULL;
+            List *child_entries = NIL;
+            foreach(target_entry_cursor, extra_targets_per_rte_all){
+                TraceProvTarget *tp_target = (TraceProvTarget*)lfirst(target_entry_cursor);
+                TraceProvEntry *tp_entry = traceprov_resolve_entry(tp_target, &child_graphs, &arg_vars);
+                child_entries = lappend(child_entries, tp_entry);
+            }
+            // Need to, now, make the log entry, and that'll be the final extra targets added.
+            Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
+            TraceProvTarget *log_tp_target = makeTraceProvTarget(
+                true, 
+                makeTargetEntry(
+                    (Expr *)log_fc_node,
+                    0,
+                    pstrdup("intersect_log"),
+                    false  
+                ),
+                make_traceprov_dependency(
+                    TP_LOG,
+                    layer_number,
+                    child_graphs,
+                    child_entries
+                )
+            );
+            // Here, only one log entry remains.
+            extra_targets_per_rte = list_make1(list_make1(log_tp_target));
         }
     }
 
@@ -564,8 +623,8 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
             join_expr->rarg = (Node*)r_rtr;
             join_expr->isNatural = false;
             join_expr->quals = createEqualityCondition(
-                get_matchable_attrs(first_rte->subquery->targetList, ignoreList, 0), 
-                get_matchable_attrs(next_rte->subquery->targetList, ignoreList, 1), 
+                get_matchable_attrs(first_rte->subquery->targetList, ignore_list, 0), 
+                get_matchable_attrs(next_rte->subquery->targetList, ignore_list, 1), 
                 1, 
                 2, 
                 false
@@ -593,8 +652,8 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
             next_join_expr->rarg = (Node*)r_rtr;
             next_join_expr->isNatural = false;
             next_join_expr->quals = createEqualityCondition(
-                get_matchable_attrs(first_rte->subquery->targetList, ignoreList, 0), 
-                get_matchable_attrs(next_rte->subquery->targetList, ignoreList, i-1),
+                get_matchable_attrs(first_rte->subquery->targetList, ignore_list, 0), 
+                get_matchable_attrs(next_rte->subquery->targetList, ignore_list, i-1),
                 1, 
                 i, 
                 false
