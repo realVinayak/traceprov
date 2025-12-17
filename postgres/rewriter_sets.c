@@ -39,7 +39,7 @@ static List *get_matchable_attrs(List *rawList, List *ignoreList, int index){
     return matchables;
 }
 
-List *adjustUnionSetOps(
+List *traceprov_adjust_union(
     SetOperationStmt *root, 
     List *extraTargets,
     List *queryRteList,
@@ -210,7 +210,7 @@ List *adjustUnionSetOps(
 // 1. Iterate through the RTE list, add the typecasts (and addition of null terms)
 // 2. Convert the query into a subquery, and get rid of typecasts.
 // TODO: See if it is possible to fold the typecasts into 1 step.
-Query *adjustExceptSetOps(
+Query *traceprov_adjust_except(
     // The input query
     Query *inputQuery,
     List *extraTargets,
@@ -426,7 +426,7 @@ Query *adjustExceptSetOps(
     return parent;
 }
 
-Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *context){
+List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseContext *context){
     // Here, need to replace the intersect with a join.
     // For each table pair present, need to construct the join, and the join tree.
     // Basically, all the intersects within this block are consumed into a join.
@@ -445,6 +445,7 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
     // If we're an ALL, in that case, need to use window function formulation to only
     // get the minimum from both side.
     const Node *base_setop_node = base->setOperations;
+    List *extra_targets_per_rte = ignoreList;
     if (!IsA(base_setop_node, SetOperationStmt)){
         elog(ERROR, "Expected base to be a setop node!");
     }else{
@@ -454,9 +455,17 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
         // We don't need to touch the set operations itself, since it'll be removed.
         if (base_setop->all){
             ListCell *rte_cursor;
+            List *extra_targets_per_rte_all = NIL;
             foreach(rte_cursor, base->rtable){
                 traceprov_assert_is_subquery((RangeTblEntry *)lfirst(rte_cursor));
                 Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
+                extra_targets_per_rte_all = lappend(
+                    extra_targets_per_rte_all,
+                    traceprov_propagate_child_targets(
+                        list_nth(ignoreList, foreach_current_index(rte_cursor)),
+                        foreach_current_index(rte_cursor) + 1
+                    )
+                );
                 Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
                 ((RangeTblEntry *)lfirst(rte_cursor))->subquery = cloned_subquery;
                 List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
@@ -497,6 +506,7 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
                     makeTargetEntry((Expr *)window_fc_node, 0, tp_parse_get_unique_alias(context), false)
                 );
             }
+            extra_targets_per_rte = extra_targets_per_rte_all;
         }
     }
 
@@ -590,5 +600,5 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
     FromExpr *fromExpr = makeFromExpr(list_make1(join_expr), NULL);
     base->rtable = list_concat_copy(base->rtable, addedJoins);
     base->jointree = fromExpr;
-    return base;
+    return extra_targets_per_rte;
 }

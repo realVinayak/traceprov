@@ -6,14 +6,14 @@
 #include "rewriter_utils.h"
 #include "nodes/makefuncs.h"
 
-List *adjustUnionSetOps(
+List *traceprov_adjust_union(
     SetOperationStmt *, 
     List *,
     List *,
     TraceProvParseContext *
 );
 
-Query *adjustExceptSetOps(
+Query *traceprov_adjust_except(
     Query *,
     List *,
     TraceProvParseContext *,
@@ -22,4 +22,4 @@ Query *adjustExceptSetOps(
     List **
 );
 
-Query *handleIntersect(Query *, List *, TraceProvParseContext *);
+List *traceprov_adjust_intersect(Query *, List *, TraceProvParseContext *);
