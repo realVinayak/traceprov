@@ -1116,7 +1116,7 @@ Datum traceprov_log_entry(PG_FUNCTION_ARGS){
 PG_FUNCTION_INFO_V1(traceprov_log_entry_n);
 
 Datum traceprov_log_entry_n(PG_FUNCTION_ARGS){
-    const uint64 loop_count = PG_GETARG_INT64(0);
+    const uint64 loop_count = PG_GETARG_INT64(1);
     for (uint64 counter = 0; counter < loop_count; counter++){
         perform_log(fcinfo, false, 1);
     }
