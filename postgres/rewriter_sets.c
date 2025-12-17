@@ -512,7 +512,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                 List *traceprov_aggregated_window = NIL;
                 List *traceprov_subquery_targets = traceprov_propagate_child_targets(
                     list_nth(ignore_list, foreach_current_index(rte_cursor)),
-                    foreach_current_index(rte_cursor) + 1
+                    1
                 );
                 traceprov_aggregate_rewrite(
                     traceprov_subquery_targets,
@@ -521,7 +521,8 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     true,
                     window_def
                 );
-                Node *traceprov_log_node = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
+		TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
+                Node *traceprov_log_node = (Node*)traceprov_log_te->expr;
                 if (!IsA(traceprov_log_node, WindowFunc)){
                     elog(ERROR, "Expected the traceprov log here to be a window function!");
                 }
@@ -533,7 +534,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                 list_nth_cell(ignore_list, foreach_current_index(rte_cursor))->ptr_value = current_traceprov_targets;
                 // Add the aggregated window to the subquery's target list.
                 cloned_subquery->targetList = traceprov_append_targets(traceprov_aggregated_window, cloned_subquery->targetList);
-
+		rte->eref->colnames = lappend(rte->eref->colnames, makeString(traceprov_log_te->resname));
                 // At this point, the target list is consistent.
                 // Moreover, the added window function will also be skipped during the 
                 extra_targets_per_rte_all = list_concat_copy(
@@ -569,7 +570,10 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     layer_number,
                     child_graphs,
                     child_entries
-                )
+                ),
+		0,
+		false,
+		NIL
             );
             // Here, only one log entry remains.
             extra_targets_per_rte = list_make1(list_make1(log_tp_target));
