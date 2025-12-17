@@ -426,7 +426,7 @@ Query *adjustExceptSetOps(
     return parent;
 }
 
-Query *handleIntersect(Query *base, List *ignoreList){
+Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *context){
     // Here, need to replace the intersect with a join.
     // For each table pair present, need to construct the join, and the join tree.
     // Basically, all the intersects within this block are consumed into a join.
@@ -450,12 +450,16 @@ Query *handleIntersect(Query *base, List *ignoreList){
     }else{
         const SetOperationStmt *base_setop = (SetOperationStmt *)base_setop_node;
         // Need to use window function formulation.
+        // Here, need to also level-down the current subqueries.
+        // We don't need to touch the set operations itself, since it'll be removed.
         if (base_setop->all){
             ListCell *rte_cursor;
             foreach(rte_cursor, base->rtable){
                 traceprov_assert_is_subquery((RangeTblEntry *)lfirst(rte_cursor));
                 Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
-                List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
+                Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
+                ((RangeTblEntry *)lfirst(rte_cursor))->subquery = cloned_subquery;
+                List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
                 // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
                 WindowDef *window_def = makeNode(WindowDef);
                 window_def->partitionClause = NIL;
@@ -470,13 +474,35 @@ Query *handleIntersect(Query *base, List *ignoreList){
                 if (!IsA(fc_node, WindowFunc)){
                     elog(ERROR, "Expected the row_number call to be function call!");
                 }
+                // Here, it is actually impossible to share the ref with anyone else, since the added window ref
+                // sits on top of it (so, no possibility of sharing any windeo defs)
+                WindowClause *window_clause = makeNode(WindowClause);
+
+                if (window_def->partitionClause == NIL)
+                    elog(ERROR, "Got the partition clause corrupted!");
+
+                window_clause->partitionClause = window_def->partitionClause;
+                window_clause->frameOptions = FRAMEOPTION_DEFAULTS;
+
+                if (cloned_subquery->windowClause != NIL)
+                    elog(ERROR, "Expected the clone subquery to have no window clauses!");
+
+                cloned_subquery->windowClause = lappend(cloned_subquery->windowClause, window_clause);
+                window_clause->winref = list_length(cloned_subquery->windowClause);
+                WindowFunc *window_fc_node = (WindowFunc *)fc_node;
+                window_fc_node->winref = window_clause->winref;
+                cloned_subquery->hasWindowFuncs = true;
+                cloned_subquery->targetList = traceprov_append_at_resjunk(
+                    cloned_subquery->targetList,
+                    makeTargetEntry((Expr *)window_fc_node, 0, tp_parse_get_unique_alias(context), false);
+                )
             }
         }
     }
 
-    RangeTblEntry *firstRTE = (RangeTblEntry*) lfirst(list_head(base->rtable));
-    if (firstRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
-    firstRTE->inFromCl = true;
+    RangeTblEntry *first_rte = (RangeTblEntry*) lfirst(list_head(base->rtable));
+    traceprov_assert_is_subquery(first_rte);
+    first_rte->inFromCl = true;
     List *addedJoins = NIL;
     ListCell *rteCursor;
     RangeTblEntry *last_join_entry = NULL;
@@ -486,9 +512,9 @@ Query *handleIntersect(Query *base, List *ignoreList){
     int i = 1;
     for_each_from(rteCursor, base->rtable, 1){
         i++;
-        RangeTblEntry *nextRTE = (RangeTblEntry *)lfirst(rteCursor);
-        if (nextRTE->rtekind != RTE_SUBQUERY) elog(ERROR, "Expected to be a subquery!");
-        nextRTE->inFromCl = true;
+        RangeTblEntry *next_rte = (RangeTblEntry *)lfirst(rteCursor);
+        traceprov_assert_is_subquery(next_rte);
+        next_rte->inFromCl = true;
         List *col_names = NIL;
         ListCell *target_var_cursor;
         if (last_join_entry == NULL){
@@ -496,7 +522,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
             last_join_entry->joinleftcols = NIL;
             last_join_entry->joinrightcols = NIL;
             // TODO: This should probably be changed when handling traceprov attrs.
-            foreach(target_var_cursor, firstRTE->subquery->targetList){
+            foreach(target_var_cursor, first_rte->subquery->targetList){
                 TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
                 last_join_entry->joinaliasvars = lappend(last_join_entry->joinaliasvars, makeVarFromTargetEntry(1, te));
                 col_names = lappend(col_names, makeString(te->resname));
@@ -504,7 +530,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
             }
 
             target_var_cursor = NULL;
-            foreach(target_var_cursor, nextRTE->subquery->targetList){
+            foreach(target_var_cursor, next_rte->subquery->targetList){
                 TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
                 last_join_entry->joinaliasvars = lappend(last_join_entry->joinaliasvars, makeVarFromTargetEntry(1, te));
                 col_names = lappend(col_names, makeString(te->resname));
@@ -521,8 +547,8 @@ Query *handleIntersect(Query *base, List *ignoreList){
             join_expr->rarg = (Node*)r_rtr;
             join_expr->isNatural = false;
             join_expr->quals = createEqualityCondition(
-                get_matchable_attrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                get_matchable_attrs(nextRTE->subquery->targetList, ignoreList, 1), 
+                get_matchable_attrs(first_rte->subquery->targetList, ignoreList, 0), 
+                get_matchable_attrs(next_rte->subquery->targetList, ignoreList, 1), 
                 1, 
                 2, 
                 false
@@ -533,7 +559,7 @@ Query *handleIntersect(Query *base, List *ignoreList){
             col_names = clonedRTE->eref->colnames;
             clonedRTE->joinrightcols = NIL;
             clonedRTE->joinleftcols = NIL;
-            foreach(target_var_cursor, nextRTE->subquery->targetList){
+            foreach(target_var_cursor, next_rte->subquery->targetList){
                 TargetEntry *te = (TargetEntry *)(lfirst(target_var_cursor));
                 clonedRTE->joinaliasvars = lappend(clonedRTE->joinaliasvars, makeVarFromTargetEntry(1, te));
                 col_names = lappend(col_names, makeString(te->resname));
@@ -550,8 +576,8 @@ Query *handleIntersect(Query *base, List *ignoreList){
             next_join_expr->rarg = (Node*)r_rtr;
             next_join_expr->isNatural = false;
             next_join_expr->quals = createEqualityCondition(
-                get_matchable_attrs(firstRTE->subquery->targetList, ignoreList, 0), 
-                get_matchable_attrs(nextRTE->subquery->targetList, ignoreList, i-1),
+                get_matchable_attrs(first_rte->subquery->targetList, ignoreList, 0), 
+                get_matchable_attrs(next_rte->subquery->targetList, ignoreList, i-1),
                 1, 
                 i, 
                 false
