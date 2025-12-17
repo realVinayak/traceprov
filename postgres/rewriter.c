@@ -340,7 +340,7 @@ Query *traceprov_rewrite_sets_to_joins(
             modified = base;
         }
     } else if (stmt->op == SETOP_INTERSECT){
-        modified = handleIntersect(base, ignoreList);
+        modified = handleIntersect(base, ignoreList, context);
         // Remove the set ops (but only if it is intersect)
         modified->setOperations = NULL;
     }
