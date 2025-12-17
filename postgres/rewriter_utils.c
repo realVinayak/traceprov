@@ -457,7 +457,8 @@ List *traceprov_aggregate_on_set(
         addedTargets,
         &aggregated,
         context,
-        aggregatedInParent 
+        aggregatedInParent,
+        NULL
     );
     query->hasAggs = true;
     query->targetList = traceprov_append_targets(aggregated, query->targetList);
@@ -502,27 +503,36 @@ Node *traceprov_get_function_call_node(
     return fcNode;
 }
 
-void traceprov_aggregate_rewrite(
-    const List *targetEntriesToLog,
-    List **pCreatedTargets,
-    TraceProvParseContext *tpContext,
-    bool parentHasAggs
-){
-    // Need to add the exprs from the targets.
-    ListCell *target_entry_cursor;
-    TraceProvLayerNumber layerNumber = tp_parse_get_layer_number(tpContext);
+
+List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerNumber *out_layer_number){
+    TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
     // Need to also add the layer number (the first argument)
     Node * layerNumberConst = (Node *) makeConst(
         INT4OID, 
         -1, 
         InvalidOid,
         sizeof(int32),
-        Int32GetDatum(layerNumber), 
+        Int32GetDatum(layer_number), 
         false,
         true
     );
     // The layer number is the first argument.
     List *argVars = list_make1(layerNumberConst);
+    *out_layer_number = layer_number;
+    return argVars;
+}
+
+void traceprov_aggregate_rewrite(
+    const List *targetEntriesToLog,
+    List **pCreatedTargets,
+    TraceProvParseContext *tpContext,
+    bool parentHasAggs,
+    WindowDef *over
+){
+    // Need to add the exprs from the targets.
+    ListCell *target_entry_cursor;
+    TraceProvLayerNumber layer_number;
+    List *argVars = traceprov_prepare_arg_vars(tpContext, &layer_number);
     List *entries = NIL;
     List *childGraphs = NIL;
     foreach(target_entry_cursor, targetEntriesToLog){
@@ -539,8 +549,8 @@ void traceprov_aggregate_rewrite(
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
     // Always use the offset version no matter what.
-    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars, NULL);
-    if (!IsA(funcCallNode, Aggref)){
+    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars, over);
+    if ((over == NULL && !IsA(funcCallNode, Aggref)) || (over != NULL && !IsA(funcCallNode, WindowFunc))){
         elog(ERROR, "Expected the function call node to be an aggref!");
     }
     *pCreatedTargets = list_make1(
@@ -554,7 +564,7 @@ void traceprov_aggregate_rewrite(
             ),
             make_traceprov_dependency(
                 TP_AGGREGATE,
-                layerNumber,
+                layer_number,
                 childGraphs,
                 entries
             ),
@@ -563,7 +573,7 @@ void traceprov_aggregate_rewrite(
             NIL
         )
     );
-    tpContext->properties->traceprov_funcs = lappend_oid(tpContext->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
+    GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs = lappend_oid(GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
 }
 
 Const *makeInt8Const(int64 value){

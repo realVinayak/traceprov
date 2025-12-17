@@ -16,6 +16,8 @@
 
 #define TRACEPROV_GRAPH_IS_VALID(x) (x != NULL && x != TRACEPROV_SET_GRAPH)
 
+#define GET_ROOT_CONTEXT(context) (context->root_context)
+
 typedef uint32 TraceProvLayerNumber;
 
 typedef enum TraceProvEntryKind {

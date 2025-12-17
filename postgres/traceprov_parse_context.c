@@ -4,8 +4,6 @@
 #include "traceprov.h"
 #include "miscadmin.h"
 
-#define GET_ROOT_CONTEXT(context) (context->root_context)
-
 
 #define NEED_SEP(cursor) (foreach_current_index(cursor) > 0)
 

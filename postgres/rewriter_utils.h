@@ -69,7 +69,8 @@ void traceprov_aggregate_rewrite(
     const List *,
     List **,
     TraceProvParseContext *,
-    bool
+    bool,
+    WindowDef *
 );
 
 Node *traceprov_get_function_call_node(const char *, List *, WindowDef *);
@@ -87,5 +88,6 @@ Query *traceprov_perform_rewrite(
 );
 
 List *pull_vars_of_level_ignore_sublinks(Node *, int );
+List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerNumber *out_layer_number);
 
 #endif

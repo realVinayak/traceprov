@@ -472,7 +472,8 @@ Query *traceprov_perform_rewrite(
             targetsToAdd,
             &targetsToAdd,
             tpContext,
-            parentHasAggs
+            parentHasAggs,
+            NULL
         );
     }
 
