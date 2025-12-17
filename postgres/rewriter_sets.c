@@ -476,8 +476,11 @@ List *traceprov_adjust_intersect(Query *base, List *ignoreList, TraceProvParseCo
                 foreach(target_entry_cursor, target_entries){
                     TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
                     SortGroupClause *sort_group_clause = makeSortGroupClauseForSetOp(exprType((Node*)te->expr), false);
-                    sort_group_clause->tleSortGroupRef = te->resno;
                     window_def->partitionClause = lappend(window_def->partitionClause, sort_group_clause);
+                    sort_group_clause->tleSortGroupRef = list_length(window_def->partitionClause);
+                    if (te->ressortgroupref != 0)
+                        elog(ERROR, "Attempting to overwrite ressortgroupref!");
+                    te->ressortgroupref = sort_group_clause->tleSortGroupRef;
                 }
                 Node *fc_node = traceprov_get_function_call_node("row_number", NIL, window_def);
                 if (!IsA(fc_node, WindowFunc)){
