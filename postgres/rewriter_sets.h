@@ -22,4 +22,4 @@ Query *adjustExceptSetOps(
     List **
 );
 
-Query *handleIntersect(Query *, List *);
+Query *handleIntersect(Query *, List *, TraceProvParseContext *);

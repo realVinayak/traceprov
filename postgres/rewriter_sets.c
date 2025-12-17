@@ -459,7 +459,7 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
                 Query *subquery = ((RangeTblEntry *)lfirst(rte_cursor))->subquery;
                 Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
                 ((RangeTblEntry *)lfirst(rte_cursor))->subquery = cloned_subquery;
-                List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
+                List *target_entries = get_matchable_attrs(subquery->targetList, ignoreList, foreach_current_index(rte_cursor));
                 // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
                 WindowDef *window_def = makeNode(WindowDef);
                 window_def->partitionClause = NIL;
@@ -494,8 +494,8 @@ Query *handleIntersect(Query *base, List *ignoreList, TraceProvParseContext *con
                 cloned_subquery->hasWindowFuncs = true;
                 cloned_subquery->targetList = traceprov_append_at_resjunk(
                     cloned_subquery->targetList,
-                    makeTargetEntry((Expr *)window_fc_node, 0, tp_parse_get_unique_alias(context), false);
-                )
+                    makeTargetEntry((Expr *)window_fc_node, 0, tp_parse_get_unique_alias(context), false)
+                );
             }
         }
     }
