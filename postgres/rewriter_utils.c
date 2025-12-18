@@ -376,7 +376,7 @@ Query *traceprov_clone_query(const Query *base){
     return targetQuery;
 }
 
-RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseContext *context){
+RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseContext *context, bool copy_resjunk){
     RangeTblEntry *tblEntry = makeNode(RangeTblEntry);
     char *aliasName = tp_parse_get_unique_alias(context);
     tblEntry->alias = makeAlias(aliasName, NIL);
@@ -384,7 +384,7 @@ RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseC
     ListCell *target_entry_cursor = NULL;
     foreach(target_entry_cursor, sub_query->targetList){
         TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
-        if (te->resjunk) continue;
+        if (te->resjunk && !copy_resjunk) continue;
         colNames = lappend(colNames, makeString(te->resname == NULL ? (tp_parse_get_unique_alias(context)) : pstrdup(te->resname)));
     }
     tblEntry->eref = makeAlias(pstrdup(aliasName), colNames);
@@ -410,7 +410,7 @@ Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context, 
         if (copy_sorted_order) new_te->ressortgroupref = base_target_entry->ressortgroupref;
         modified->targetList = lappend(modified->targetList, new_te);
     }
-    RangeTblEntry *rte = range_table_entry_from_subquery(base, context);
+    RangeTblEntry *rte = range_table_entry_from_subquery(base, context, copy_resjunk);
     rte->inFromCl = true;
     modified->rtable = list_make1(rte);
     RangeTblRef *rtr = makeNode(RangeTblRef);

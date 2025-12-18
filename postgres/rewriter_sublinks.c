@@ -152,7 +152,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                     )
                 );
             }
-            RangeTblEntry *rte = range_table_entry_from_subquery(rewritten_subselect, context);
+            RangeTblEntry *rte = range_table_entry_from_subquery(rewritten_subselect, context, false);
             rte->inFromCl = true;
             subselect_wrapper->rtable = list_make1(rte);
             RangeTblRef *rtr = makeNode(RangeTblRef);
