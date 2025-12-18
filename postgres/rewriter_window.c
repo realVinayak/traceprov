@@ -30,10 +30,18 @@ Query *traceprov_perform_window_rewrite(
     // const List *original_sort_clause = list_copy_deep(base->sortClause);
     Query *top_query = NULL;
     Query *last_query = NULL;
-    ListCell *clause_cursor = NULL;
     // Need to make a copy of the original window clause since we'll mutate it.
-    foreach(clause_cursor, list_copy(base->windowClause)){
-        WindowClause *wc = (WindowClause *)lfirst(clause_cursor);
+    int max_ref_seen = -1;
+    List *window_clauses_to_remove = list_copy(base->windowClause);
+    for (int idx = list_length(window_clauses_to_remove) - 1; idx >= 0; idx--){
+        WindowClause *wc = (WindowClause *)list_nth(window_clauses_to_remove, idx);
+        if (max_ref_seen == -1){
+            max_ref_seen = wc->winref;
+        }else{
+            if (max_ref_seen <= wc->winref){
+                elog(ERROR, "Trying to remove ref: %d again!", wc->winref);
+            }
+        }
         // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
         Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
         if (top_query == NULL){
@@ -74,6 +82,9 @@ static Query *perform_window_clause_rewrite(
     WindowClause *window_clause = makeNode(WindowClause);
     window_clause->orderClause = window_def->orderClause;
     // TODO: Try implementing checking if the window clause is used before.
+    // Need to remove the current window clause from the base too.
+    List *original_window_clauses = list_copy_deep(base->windowClause);
+    base->windowClause = remove_window_clause(base->windowClause, input_window_clause);
     base->windowClause = lappend(base->windowClause, window_clause);
     window_clause->winref = list_length(base->windowClause);
     WindowFunc *window_fc_node = (WindowFunc *) fc_node;
@@ -110,10 +121,6 @@ static Query *perform_window_clause_rewrite(
             }
         }
     }
-
-    // Need to remove the current window clause from the base too.
-    List *original_window_clauses = list_copy_deep(base->windowClause);
-    base->windowClause = remove_window_clause(base->windowClause, input_window_clause);
 
     Query *nested = traceprov_make_nested_query(base, context, true, true);
 
