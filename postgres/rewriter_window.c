@@ -185,7 +185,9 @@ static Query *perform_window_clause_rewrite_inline(
     }
 
     // Finally nest the inner query.
-    query->rtable = list_make1(range_table_entry_from_subquery(subquery, context, true));
+    RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context, true);
+    query->rtable = list_make1(rte);
+    query->jointree = traceprov_make_from_expr(rte);
     return query;
 }
 
