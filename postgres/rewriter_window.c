@@ -30,32 +30,6 @@ Query *traceprov_perform_window_rewrite(
 ){
     if (!base->hasWindowFuncs)
         elog(ERROR, "Expected window functions to be present for rewriting traceprov!");
-
-    // // const List *original_sort_clause = list_copy_deep(base->sortClause);
-    // Query *top_query = NULL;
-    // Query *last_query = NULL;
-    // // Need to make a copy of the original window clause since we'll mutate it.
-    // int max_ref_seen = -1;
-    // List *window_clauses_to_remove = list_copy(base->windowClause);
-    // for (int idx = list_length(window_clauses_to_remove) - 1; idx >= 0; idx--){
-    //     WindowClause *wc = (WindowClause *)list_nth(window_clauses_to_remove, idx);
-    //     if (max_ref_seen == -1){
-    //         max_ref_seen = wc->winref;
-    //     }else{
-    //         if (max_ref_seen <= wc->winref){
-    //             elog(ERROR, "Trying to remove ref: %d again!", wc->winref);
-    //         }
-    //     }
-    //     // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
-    //     Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
-    //     if (top_query == NULL){
-    //         // first iteration.
-    //         top_query = created;
-    //     }else if (last_query != NULL){
-    //         ((RangeTblEntry *)lfirst(list_head(last_query->rtable)))->subquery = created;
-    //     }
-    //     last_query = created;
-    // }
     Query *top_query = perform_window_clause_rewrite_inline(base, base->windowClause, context);
     return top_query;
 }
@@ -140,11 +114,14 @@ static Query *perform_window_clause_rewrite_inline(
         set_winref(fc_node, list_length(subquery->windowClause));
         TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
         subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
+        // This ends up being used in both rows and range/groups case.
+        Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
+        Node *frame_start_fc_node, *frame_end_fc_node;
         
         if (wc->frameOptions & FRAMEOPTION_ROWS){
             // Extend the order clause.
             // The inner target entry doesn't need to be made a var otherwise.
-            TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)makeVarFromTargetEntry(1, ordered_row_number_te), 0, pstrdup("projection_ordered_row_number"), false);
+            TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
             query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
             SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
             ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
@@ -152,24 +129,21 @@ static Query *perform_window_clause_rewrite_inline(
 
             WindowDef *rows_window_def = makeNode(WindowDef);
 
-            Node *first_value_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
-            if (!IsA(first_value_fc_node, WindowFunc))
-                elog(ERROR, "Expected the row_number call to be function call!");
-
-            Node *last_value_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
-            if (!IsA(last_value_fc_node, WindowFunc))
-                elog(ERROR, "Expected the row_number call to be function call!");
-            
-            // It'll be always be 1
-            set_winref(first_value_fc_node, window_clause->winref);
-            set_winref(last_value_fc_node, window_clause->winref);
-
-            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
-            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
+            frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+            frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
         }else {
-            // TODO: Handle group and range case.
-            elog(ERROR, "Only support groups and range for now.");
+            // This is range or groups.
+            WindowDef *rows_window_def = makeNode(WindowDef);
+
+            frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_MIN_VALUE, list_make1(ordered_row_number_var), rows_window_def);
+            frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_MAX_VALUE, list_make1(ordered_row_number_var), rows_window_def);
         }
+
+        set_winref(frame_start_fc_node, window_clause->winref);
+        set_winref(frame_end_fc_node, window_clause->winref);
+
+        query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_start_fc_node, 0, pstrdup("frame_start"), false));
+        query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_end_fc_node, 0, pstrdup("frame_end"), false));
     }
 
     // Finally nest the inner query.

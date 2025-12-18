@@ -18,6 +18,8 @@
 #define TRACEPROV_ROW_NUMBER "row_number"
 #define TRACEPROV_FIRST_VALUE "first_value"
 #define TRACEPROV_LAST_VALUE "last_value"
+#define TRACEPROV_MIN_VALUE "min"
+#define TRACEPROV_MAX_VALUE "max"
 
 // Space to log entries.
 #define TRACEPROV_LOG_FUNC_NAME "traceprov_log_entry"
