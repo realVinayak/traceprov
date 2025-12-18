@@ -528,7 +528,7 @@ Query *traceprov_perform_rewrite(
         parse = traceprov_perform_window_rewrite(
             parse,
             NULL,
-            tpContext
+            tpContext, NULL
         );
     }
     return parse;
