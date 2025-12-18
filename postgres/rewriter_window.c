@@ -5,14 +5,6 @@
 #include "parser/analyze.h"
 #include "optimizer/optimizer.h"
 
-static Query *perform_window_clause_rewrite(Query *base, WindowClause *window_clause, List **extra_targets, TraceProvParseContext *context);
-static List *remove_window_clause(List *original_clauses, const WindowClause *window_clause);
-static Query *perform_window_clause_rewrite_recursive(
-    Query *query,
-    List *window_clauses,
-    TraceProvParseContext *context
-);
-
 static Query *perform_window_clause_rewrite_inline(
     Query *query,
     List *window_clauses,
