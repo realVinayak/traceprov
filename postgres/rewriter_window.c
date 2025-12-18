@@ -6,6 +6,11 @@
 
 static Query *perform_window_clause_rewrite(Query *base, WindowClause *window_clause, List **extra_targets, TraceProvParseContext *context);
 static List *remove_window_clause(List *original_clauses, const WindowClause *window_clause);
+static Query *perform_window_clause_rewrite_recursive(
+    Query *query,
+    List *window_clauses,
+    TraceProvParseContext *context
+);
 
 // main entrypoint for window rewriting.
 // Postgres already sets up important things for us
@@ -153,15 +158,15 @@ static Query *perform_window_clause_rewrite_recursive(
     final_query->hasWindowFuncs = true;
     window_clause_to_remove->winref = 1;
     if (list_length(final_query->windowClause) > 0) elog(ERROR, "Expected the query to not have any window clauses!");
-    final_query->windowClause = lappend(final_query->windowClause, window_clause_to_remove);
+    final_query->windowClause = list_make1(window_clause_to_remove);
 
     TargetEntry *outer_ordered_row_number_te = list_nth(final_query->targetList, ordered_row_number_te->resno - 1);
     outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, final_query->targetList);
     SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
     ordered_row_number_sgc->tleSortGroupRef = outer_ordered_row_number_te->ressortgroupref;
 
-    if (window_clause->frameOptions & FRAMEOPTION_ROWS){
-        window_clause->orderClause = lappend(input_window_clause->orderClause, ordered_row_number_sgc);
+    if (window_clause_to_remove->frameOptions & FRAMEOPTION_ROWS){
+        window_clause_to_remove->orderClause = lappend(window_clause_to_remove->orderClause, ordered_row_number_sgc);
         WindowDef *rows_window_def = makeNode(WindowDef);
 
         Node *first_value_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
@@ -180,7 +185,7 @@ static Query *perform_window_clause_rewrite_recursive(
         final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
     }else {
         // TODO: Handle group and range case.
-        elog(ERROR, "Only support groups and range for now.") 
+        elog(ERROR, "Only support groups and range for now.");
     }
 
     // Need to go over the vars beloning to this window clause ref and make them actual window funcs.
