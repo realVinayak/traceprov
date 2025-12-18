@@ -27,14 +27,14 @@ Query *traceprov_perform_window_rewrite(
     if (!base->hasWindowFuncs)
         elog(ERROR, "Expected window functions to be present for rewriting traceprov!");
 
-    const List *original_sort_clause = list_copy_deep(base->sortClause);
+    // const List *original_sort_clause = list_copy_deep(base->sortClause);
     Query *top_query = NULL;
     Query *last_query = NULL;
     ListCell *clause_cursor = NULL;
     foreach(clause_cursor, base->windowClause){
         WindowClause *wc = (WindowClause *)lfirst(clause_cursor);
         // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
-        Query *created = perform_window_clause_rewrite(base, wc, NIL, context);
+        Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
         if (top_query == NULL){
             // first iteration.
             top_query = created;
@@ -43,6 +43,7 @@ Query *traceprov_perform_window_rewrite(
         }
         last_query = created;
     }
+    return top_query;
 }
 
 static Query *perform_window_clause_rewrite(
@@ -100,10 +101,10 @@ static Query *perform_window_clause_rewrite(
                 te->resjunk = false;
                 // Make this a null constant (of the same type as the previous te.)
                 // This is done like this so that ordering doesn't get messed up.
-                te->expr = makeNullConst(
-                    exprType(old_te->expr),
-                    exprTypmod(old_te->expr),
-                    exprCollation(old_te->expr)
+                te->expr = (Expr*)makeNullConst(
+                    exprType((Node *)old_te->expr),
+                    exprTypmod((Node *)old_te->expr),
+                    exprCollation((Node *)old_te->expr)
                 );
             }
         }

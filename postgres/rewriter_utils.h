@@ -96,9 +96,10 @@ List *pull_vars_of_level_ignore_sublinks(Node *, int );
 List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerNumber *out_layer_number);
 
 Query *traceprov_perform_window_rewrite(
-    Query *,
-    List **,
-    TraceProvParseContext *
+    Query *base,
+    List **extra_targets,
+    TraceProvParseContext *context,
+    List **traceprov_targets_per_rte
 );
 
 #endif
