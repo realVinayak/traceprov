@@ -150,7 +150,7 @@ PlannedStmt *traceprov_rewriter(
 }
 
 List *addSubqueryToArgs(Query *subquery, TraceProvParseContext *context, const List *rootRTEList, Node **destination){
-    RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context);
+    RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context, false);
     List *clonedRTEList = list_copy(rootRTEList);
     clonedRTEList = lappend(clonedRTEList, rte);
     RangeTblRef  *rtr = makeNode(RangeTblRef);

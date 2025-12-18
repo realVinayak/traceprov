@@ -55,7 +55,7 @@ const TraceProvTarget *traceprov_find_matching_set_pointer(List *, int);
 Node *createEqualityCondition (List*, List*, Index, Index, bool);
 
 Query *traceprov_clone_query(const Query *);
-RangeTblEntry *range_table_entry_from_subquery(Query *, TraceProvParseContext *);
+RangeTblEntry *range_table_entry_from_subquery(Query *, TraceProvParseContext *, bool copy_resjunk);
 Query *traceprov_make_nested_query(Query *, TraceProvParseContext *, bool copy_resjunk, bool copy_sort_ref);
 
 List *traceprov_aggregate_on_set(
