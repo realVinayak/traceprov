@@ -27,32 +27,188 @@ Query *traceprov_perform_window_rewrite(
     if (!base->hasWindowFuncs)
         elog(ERROR, "Expected window functions to be present for rewriting traceprov!");
 
-    // const List *original_sort_clause = list_copy_deep(base->sortClause);
-    Query *top_query = NULL;
-    Query *last_query = NULL;
-    // Need to make a copy of the original window clause since we'll mutate it.
-    int max_ref_seen = -1;
-    List *window_clauses_to_remove = list_copy(base->windowClause);
-    for (int idx = list_length(window_clauses_to_remove) - 1; idx >= 0; idx--){
-        WindowClause *wc = (WindowClause *)list_nth(window_clauses_to_remove, idx);
-        if (max_ref_seen == -1){
-            max_ref_seen = wc->winref;
-        }else{
-            if (max_ref_seen <= wc->winref){
-                elog(ERROR, "Trying to remove ref: %d again!", wc->winref);
+    // // const List *original_sort_clause = list_copy_deep(base->sortClause);
+    // Query *top_query = NULL;
+    // Query *last_query = NULL;
+    // // Need to make a copy of the original window clause since we'll mutate it.
+    // int max_ref_seen = -1;
+    // List *window_clauses_to_remove = list_copy(base->windowClause);
+    // for (int idx = list_length(window_clauses_to_remove) - 1; idx >= 0; idx--){
+    //     WindowClause *wc = (WindowClause *)list_nth(window_clauses_to_remove, idx);
+    //     if (max_ref_seen == -1){
+    //         max_ref_seen = wc->winref;
+    //     }else{
+    //         if (max_ref_seen <= wc->winref){
+    //             elog(ERROR, "Trying to remove ref: %d again!", wc->winref);
+    //         }
+    //     }
+    //     // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
+    //     Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
+    //     if (top_query == NULL){
+    //         // first iteration.
+    //         top_query = created;
+    //     }else if (last_query != NULL){
+    //         ((RangeTblEntry *)lfirst(list_head(last_query->rtable)))->subquery = created;
+    //     }
+    //     last_query = created;
+    // }
+    Query *top_query = perform_window_clause_rewrite_recursive(base, base->windowClause, context);
+    return top_query;
+}
+
+static void set_winref(Node *func, Index winref){
+    if (!IsA(func, WindowFunc)) elog(ERROR, "Expected to be always called for window functions");
+
+    WindowFunc *win_func = (WindowFunc *)func;
+    win_func->winref = winref;
+}
+
+// Performs a recursive rewrite of the window functions.
+// This is done 
+static Query *perform_window_clause_rewrite_recursive(
+    Query *query,
+    List *window_clauses,
+    TraceProvParseContext *context
+){
+    // This is the base case (no window clauses found.)
+    if (list_length(window_clauses) == 0) return query;
+
+    // We remove from the tail. It actually doesn't matter, but removing from the tail is cheaper.
+    WindowClause *window_clause_to_remove = (WindowClause *)lfirst(list_tail(window_clauses));
+    List *remaining_window_clauses = list_delete_last(window_clauses);
+
+    // The window functions that corresponding to this window clause.
+    List *window_funcs_target_list = NIL;
+    List *window_funcs_position = NIL;
+    ListCell *target_entry_cursor = NULL;
+
+    
+    foreach(target_entry_cursor, query->targetList){
+        TargetEntry *te = lfirst(target_entry_cursor);
+        if (IsA(te->expr, WindowFunc)){
+            WindowFunc *window_func = (WindowFunc *)(te->expr);
+            if (window_func->winref == window_clause_to_remove->winref){
+                // Setting it to 1 here makes handling things later on simpler,
+                // since they don't have to be altered later.
+                window_func->winref = 1;
+                TargetEntry *old_te = copyObject(te);
+                window_funcs_target_list = lappend(window_funcs_target_list, old_te);
+                window_funcs_position = lappend_int(window_funcs_position, foreach_current_index(target_entry_cursor));
+                te->expr = (Expr*)makeNullConst(
+                    exprType((Node *)old_te->expr),
+                    exprTypmod((Node *)old_te->expr),
+                    exprCollation((Node *)old_te->expr)
+                );
             }
         }
-        // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
-        Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
-        if (top_query == NULL){
-            // first iteration.
-            top_query = created;
-        }else if (last_query != NULL){
-            ((RangeTblEntry *)lfirst(list_head(last_query->rtable)))->subquery = created;
-        }
-        last_query = created;
+        // So that the columns that refer to are still valid (in the top level queries.)
+        te->resjunk = false;
     }
-    return top_query;
+
+    // Rewrite the next window clause. This _could_ return the same query back (and that is fine.)
+    Query *child_rewritten = perform_window_clause_rewrite_recursive(
+        query,
+        remaining_window_clauses,
+        context
+    );
+
+    // Nest the child query.
+    Query *nested = traceprov_make_nested_query(child_rewritten, context, true, true);
+
+    // Add the row_number() to the nested. This way, there's only one window clause per query block.
+    List *sort_clause = list_concat_copy(
+        list_copy_deep(window_clause_to_remove->partitionClause),
+        list_copy_deep(window_clause_to_remove->orderClause)
+    );
+
+    WindowDef *window_def = makeNode(WindowDef);
+    window_def->orderClause = sort_clause;
+
+    Node *fc_node = traceprov_get_function_call_node(TRACEPROV_ROW_NUMBER, NIL, window_def);
+    if (!IsA(fc_node, WindowFunc))
+        elog(ERROR, "Expected the row_number call to be function call!");
+
+    if (window_def->orderClause == NIL)
+        elog(ERROR, "Got the order clause corrupted!");
+
+    WindowClause *window_clause = makeNode(WindowClause);
+    window_clause->orderClause = window_def->orderClause;
+    window_clause->winref = 1;
+    WindowFunc *window_fc_node = (WindowFunc *) fc_node;
+    window_fc_node->winref = window_clause->winref;
+    // Note that the nested won't have any window clause (so, need to also set that up)
+    nested->hasWindowFuncs = true;
+    // Each query block has just 1 window clause. Basically, this is poor man's loop unrolling.
+    nested->windowClause = list_make1(window_clause);
+    // Shouldn't see any resjunk in the nested's target list.
+    traceprov_assert_no_resjunk(nested->targetList);
+    TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)window_fc_node, 0, pstrdup("ordered_row_number"), false);
+    nested->targetList = traceprov_append_at_resjunk(
+        nested->targetList,
+        ordered_row_number_te
+    );
+    // Need to nest the query yet again.
+    // This is the query where we'll add the current window clause.
+    Query *final_query = traceprov_make_nested_query(nested, context, true, true);
+    final_query->hasWindowFuncs = true;
+    window_clause_to_remove->winref = 1;
+    if (list_length(final_query->windowClause) > 0) elog(ERROR, "Expected the query to not have any window clauses!");
+    final_query->windowClause = lappend(final_query->windowClause, window_clause_to_remove);
+
+    TargetEntry *outer_ordered_row_number_te = list_nth(final_query->targetList, ordered_row_number_te->resno - 1);
+    outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, final_query->targetList);
+    SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
+    ordered_row_number_sgc->tleSortGroupRef = outer_ordered_row_number_te->ressortgroupref;
+
+    if (window_clause->frameOptions & FRAMEOPTION_ROWS){
+        window_clause->orderClause = lappend(input_window_clause->orderClause, ordered_row_number_sgc);
+        WindowDef *rows_window_def = makeNode(WindowDef);
+
+        Node *first_value_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+        if (!IsA(first_value_fc_node, WindowFunc))
+            elog(ERROR, "Expected the row_number call to be function call!");
+
+        Node *last_value_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+        if (!IsA(last_value_fc_node, WindowFunc))
+            elog(ERROR, "Expected the row_number call to be function call!");
+        
+        // It'll be always be 1
+        set_winref(first_value_fc_node, 1);
+        set_winref(last_value_fc_node, 1);
+
+        final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
+        final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
+    }else {
+        // TODO: Handle group and range case.
+        elog(ERROR, "Only support groups and range for now.") 
+    }
+
+    // Need to go over the vars beloning to this window clause ref and make them actual window funcs.
+    target_entry_cursor = NULL;
+    ListCell *idx_cursor = NULL;
+    ListCell *window_func_cursor = NULL;
+
+    traceprov_assert_equal_length(list_make2(window_funcs_position, window_funcs_target_list));
+
+    // The target list can be longer (or equal in length) than the window funcs, but never shorter.
+    if (list_length(final_query->targetList) < list_length(window_funcs_position))
+        elog(ERROR, "Expected the target list to be at least as big as the window funcs position.");
+    
+    for (int idx = 0; idx < list_length(window_funcs_position); idx++){
+        int window_func_position = list_nth_int(window_funcs_position, idx);
+        TargetEntry *old_te = list_nth_node(TargetEntry, window_funcs_target_list, idx);
+        TargetEntry *new_te = list_nth_node(TargetEntry, final_query->targetList, window_func_position);
+        // Below invariants shouldn't have changed.
+        if (old_te->resno != window_func_position + 1) elog(ERROR, "Expected old te's resno to be window func position + 1");
+        if (new_te->resno != window_func_position + 1) elog(ERROR, "Expected new te's resno to be window func position + 1");
+        if (!IsA(new_te->expr, Var)){
+            elog(ERROR, "Expected the new te's expr to be a var reference!");
+        }
+        // the winref will automatically have been adjusted so this is fine.
+        new_te->expr = old_te->expr;
+    }
+
+    return final_query;
 }
 
 static Query *perform_window_clause_rewrite(
