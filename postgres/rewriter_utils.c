@@ -396,6 +396,13 @@ RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseC
     return tblEntry;
 }
 
+FromExpr *traceprov_make_from_expr(RangeTblEntry *rte){
+    rte->inFromCl = true;
+    RangeTblRef *rtr = makeNode(RangeTblRef);
+    rtr->rtindex = 1;
+    return makeFromExpr(list_make1(rtr), NULL);
+}
+
 Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context, bool copy_resjunk, bool copy_sorted_order){
     Query *modified = traceprov_clone_query(base);
     ListCell *target_entry_cursor;
@@ -412,11 +419,8 @@ Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context, 
         modified->targetList = lappend(modified->targetList, new_te);
     }
     RangeTblEntry *rte = range_table_entry_from_subquery(base, context, copy_resjunk);
-    rte->inFromCl = true;
+    modified->jointree = traceprov_make_from_expr(rte);
     modified->rtable = list_make1(rte);
-    RangeTblRef *rtr = makeNode(RangeTblRef);
-    rtr->rtindex = 1;
-    modified->jointree = makeFromExpr(list_make1(rtr), NULL);
     // Increment all the nested vars in the original query.
     IncrementVarSublevelsUp((Node*)base, 1, 1);
     return modified;
