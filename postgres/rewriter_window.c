@@ -83,7 +83,7 @@ static Query *perform_window_clause_rewrite(
     window_clause->orderClause = window_def->orderClause;
     // TODO: Try implementing checking if the window clause is used before.
     // Need to remove the current window clause from the base too.
-    List *original_window_clauses = list_copy_deep(base->windowClause);
+    List *original_window_clauses = list_copy(base->windowClause);
     base->windowClause = remove_window_clause(base->windowClause, input_window_clause);
     base->windowClause = lappend(base->windowClause, window_clause);
     window_clause->winref = list_length(base->windowClause);
@@ -102,7 +102,7 @@ static Query *perform_window_clause_rewrite(
         TargetEntry *te = lfirst(target_entry_cursor);
         if (IsA(te->expr, WindowFunc)){
             WindowFunc *window_func = (WindowFunc *)(te->expr);
-            if (window_func->winref == input_window_clause->winref){
+            if (window_func->winref == input_window_clause->winref && ((Node*)te->expr != fc_node)){
                 // If this is one of the window functions belonging to the current clause,
                 // replace the current expr with a null.
                 // But, remember this target entry.
