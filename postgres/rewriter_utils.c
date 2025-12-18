@@ -799,7 +799,7 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec){
     }
     cloned->targetList = new_targets;
     // Because this query will be nested.
-    IncrementVarSublevelsUp(cloned, 1, 1);
+    IncrementVarSublevelsUp((Node*)cloned, 1, 1);
     *shift_spec = shifted_refs;
     return cloned;
 }
