@@ -335,7 +335,7 @@ Query *traceprov_rewrite_sets_to_joins(
         if (!wasAll){
             // Here, modified needs to, actually, needs to refer to a subquery.
             // For intersect, this is not needed.
-            modified = traceprov_make_nested_query(base, context);
+            modified = traceprov_make_nested_query(base, context, false, false);
         }else{
             modified = base;
         }
@@ -524,7 +524,13 @@ Query *traceprov_perform_rewrite(
     }
 
     if (addedTargets) *addedTargets = targetsToAdd;
-
+    if (parse->hasWindowFuncs){
+        parse = traceprov_perform_window_rewrite(
+            parse,
+            NULL,
+            tpContext
+        );
+    }
     return parse;
 }
 
@@ -645,7 +651,7 @@ Query *traceprov_add_nested_query_log(
     TraceProvParseContext *dupContext = NULL;
     deserializeTraceProvDependency(&dupContext);
 
-    Query *nested = traceprov_make_nested_query(base, context);
+    Query *nested = traceprov_make_nested_query(base, context, false, false);
     Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
     nested->targetList = traceprov_append_at_resjunk(
         nested->targetList,

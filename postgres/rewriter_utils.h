@@ -14,6 +14,11 @@
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
 #define TRACEPROV_POINTER_TYPE_NAME "traceprov_ptr_type"
 
+// These are all the same as postgres' implementation.
+#define TRACEPROV_ROW_NUMBER "row_number"
+#define TRACEPROV_FIRST_VALUE "first_value"
+#define TRACEPROV_LAST_VALUE "last_value"
+
 // Space to log entries.
 #define TRACEPROV_LOG_FUNC_NAME "traceprov_log_entry"
 
@@ -51,7 +56,7 @@ Node *createEqualityCondition (List*, List*, Index, Index, bool);
 
 Query *traceprov_clone_query(const Query *);
 RangeTblEntry *range_table_entry_from_subquery(Query *, TraceProvParseContext *);
-Query *traceprov_make_nested_query(Query *, TraceProvParseContext *);
+Query *traceprov_make_nested_query(Query *, TraceProvParseContext *, bool copy_resjunk, bool copy_sort_ref);
 
 List *traceprov_aggregate_on_set(
     const SetOperationStmt *, 
@@ -89,5 +94,11 @@ Query *traceprov_perform_rewrite(
 
 List *pull_vars_of_level_ignore_sublinks(Node *, int );
 List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerNumber *out_layer_number);
+
+Query *traceprov_perform_window_rewrite(
+    Query *,
+    List **,
+    TraceProvParseContext *
+);
 
 #endif
