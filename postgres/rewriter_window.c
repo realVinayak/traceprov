@@ -31,7 +31,8 @@ Query *traceprov_perform_window_rewrite(
     Query *top_query = NULL;
     Query *last_query = NULL;
     ListCell *clause_cursor = NULL;
-    foreach(clause_cursor, base->windowClause){
+    // Need to make a copy of the original window clause since we'll mutate it.
+    foreach(clause_cursor, list_copy(base->windowClause)){
         WindowClause *wc = (WindowClause *)lfirst(clause_cursor);
         // We always modify the base query (it keeps on getting nested till there are no window clauses are present.)
         Query *created = perform_window_clause_rewrite(base, wc, NULL, context);
@@ -90,7 +91,7 @@ static Query *perform_window_clause_rewrite(
         TargetEntry *te = lfirst(target_entry_cursor);
         if (IsA(te->expr, WindowFunc)){
             WindowFunc *window_func = (WindowFunc *)(te->expr);
-            if (window_func->winref == window_clause->winref){
+            if (window_func->winref == input_window_clause->winref){
                 // If this is one of the window functions belonging to the current clause,
                 // replace the current expr with a null.
                 // But, remember this target entry.
@@ -142,6 +143,7 @@ static Query *perform_window_clause_rewrite(
         nested->targetList = traceprov_append_at_resjunk(nested->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
         nested->targetList = traceprov_append_at_resjunk(nested->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
     }
+    nested->hasWindowFuncs = true;
 
     return nested;
 }
