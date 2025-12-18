@@ -3,7 +3,7 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_clause.h"
 #include "parser/analyze.h"
-#include "optimizer.h"
+#include "optimizer/optimizer.h"
 
 static Query *perform_window_clause_rewrite(Query *base, WindowClause *window_clause, List **extra_targets, TraceProvParseContext *context);
 static List *remove_window_clause(List *original_clauses, const WindowClause *window_clause);
@@ -125,9 +125,12 @@ static Query *perform_window_clause_rewrite_inline(
             );
             // It is possible that the same target expr appears multiple times.
             // Postgres only adds it once, which is fine, but we need to detect such cases.
-            if (bms_is_member(te->ressortgroupref, added_refs)) continue;
-            added_refs = bms_add_member(added_refs, te->ressortgroupref);
-            subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
+            if (!bms_is_member(te->ressortgroupref, added_refs)){
+	    	added_refs = bms_add_member(added_refs, te->ressortgroupref);
+		subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
+	    }
+            // added_refs = bms_add_member(added_refs, te->ressortgroupref);
+            // subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
         }
         subquery->hasWindowFuncs = true;
 
@@ -144,20 +147,20 @@ static Query *perform_window_clause_rewrite_inline(
 
         WindowClause *window_clause = makeNode(WindowClause);
         window_clause->orderClause = window_def->orderClause;
-        subquery->windowClause = lappend(subquery->windowClause);
+        subquery->windowClause = lappend(subquery->windowClause, window_clause);
         window_clause->winref = list_length(subquery->windowClause);
         set_winref(fc_node, list_length(subquery->windowClause));
         TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
         subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
         
-        if (window_clause->frameOptions & FRAMEOPTION_ROWS){
+        if (wc->frameOptions & FRAMEOPTION_ROWS){
             // Extend the order clause.
             // The inner target entry doesn't need to be made a var otherwise.
-            Var *outer_ordered_row_number_te = makeVarFromTargetEntry(1, ordered_row_number_te);
+            TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)makeVarFromTargetEntry(1, ordered_row_number_te), 0, pstrdup("projection_ordered_row_number"), false);
             query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
             SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
-            outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, final_query->targetList);
-            window_clause->orderClause = lappend(window_clause->orderClause, ordered_row_number_sgc);
+            outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
+            wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
 
             WindowDef *rows_window_def = makeNode(WindowDef);
 
@@ -173,8 +176,8 @@ static Query *perform_window_clause_rewrite_inline(
             set_winref(first_value_fc_node, window_clause->winref);
             set_winref(last_value_fc_node, window_clause->winref);
 
-            final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
-            final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
+            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
+            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
         }else {
             // TODO: Handle group and range case.
             elog(ERROR, "Only support groups and range for now.");
