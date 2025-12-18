@@ -159,7 +159,7 @@ static Query *perform_window_clause_rewrite_inline(
             TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)makeVarFromTargetEntry(1, ordered_row_number_te), 0, pstrdup("projection_ordered_row_number"), false);
             query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
             SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
-            outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
+            ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
             wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
 
             WindowDef *rows_window_def = makeNode(WindowDef);

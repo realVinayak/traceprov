@@ -771,7 +771,10 @@ pull_vars_of_level_ignore_sublinks_walker(Node *node, pull_vars_context *context
 Query *traceprov_push_down_query(Query *query, List **shift_spec){
     // Make a fresh query, since we'll be doing custom things.
     Query *cloned = makeNode(Query);
+    cloned->commandType = CMD_SELECT;
     cloned->rtable = copyObject(query->rtable);
+    cloned->jointree = copyObject(query->jointree);
+    cloned->canSetTag = true;
     cloned->hasWindowFuncs = false;
     cloned->targetList = NIL;
     List *new_targets = NIL;
@@ -794,5 +797,5 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec){
     // Because this query will be nested.
     IncrementVarSublevelsUp(cloned, 1, 1);
     *shift_spec = shifted_refs;
-    return query;
+    return cloned;
 }
