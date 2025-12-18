@@ -20,6 +20,7 @@
 #include "access/xact.h"
 #include "rewrite/rewriteManip.h"
 #include "nodes/pathnodes.h"
+#include "parser/parse_relation.h"
 
 TraceProvUsedRefNavigator traceProvInclusiveNavigator = {
     .includeInternals = true,
@@ -764,3 +765,34 @@ pull_vars_of_level_ignore_sublinks_walker(Node *node, pull_vars_context *context
                                   (void *) context);
 }
 
+// Pushes down a query.
+// Basically, clones the original query and flattens all the vars from the range tbl.
+// Also maintains the offset at which an attr got shifted.
+Query *traceprov_push_down_query(Query *query, List **shift_spec){
+    // Make a fresh query, since we'll be doing custom things.
+    Query *cloned = makeNode(Query);
+    cloned->rtable = copyObject(query->rtable);
+    cloned->hasWindowFuncs = false;
+    cloned->targetList = NIL;
+    List *new_targets = NIL;
+    List *shifted_refs = NIL;
+    ListCell *cursor = NULL;
+    foreach(cursor, cloned->rtable){
+        RangeTblEntry *rte = lfirst_node(RangeTblEntry, cursor);
+        shifted_refs = lappend_int(shifted_refs, list_length(new_targets));
+        List *col_names = NIL;
+        List *col_vars = NIL;
+        expandRTE(rte, foreach_current_index(cursor) + 1, 0, -1, true, &col_names, &col_vars);
+        ListCell *col_var_cursor = NULL;
+        foreach(col_var_cursor, col_vars){
+            const int idx = foreach_current_index(col_var_cursor);
+            TargetEntry *te = makeTargetEntry((Expr *)lfirst_node(Var, col_var_cursor), 0, pstrdup(strVal(list_nth_node(Value, col_names, idx))), false);
+            new_targets = traceprov_append_at_resjunk(new_targets, te);
+        }
+    }
+    cloned->targetList = new_targets;
+    // Because this query will be nested.
+    IncrementVarSublevelsUp(cloned, 1, 1);
+    *shift_spec = shifted_refs;
+    return query;
+}
