@@ -255,7 +255,7 @@ Query *traceprov_adjust_except(
     if (!root->all){
         // Need to perform deduplication on the left-most ref.
         // The targets in the base query have not been adjusted yet, so this does simplify some of that.
-        Query *modified = traceprov_make_nested_query(rte->subquery, context);
+        Query *modified = traceprov_make_nested_query(rte->subquery, context, false, false);
         // the returned aggregated becomes the new set.
         List *newTargetList = NIL;
         for (int i = 0; i < list_length(modified->targetList); i++){
@@ -275,7 +275,7 @@ Query *traceprov_adjust_except(
         rte->subquery = modified;
         extraTargetsForRTE = aggregated;
     }else{
-        Query *modified = traceprov_make_nested_query(rte->subquery, context);
+        Query *modified = traceprov_make_nested_query(rte->subquery, context, false, false);
         rte->subquery = modified;
         const int originalLength = list_length(modified->targetList) - list_length(extraTargetsForRTE);
         for (int i = 0; i < (list_length(extraTargetsForRTE)); i++){
@@ -392,7 +392,7 @@ Query *traceprov_adjust_except(
     // Now, need to wrap the input query inside a subquery.
     // Get the new child targets.
     List *childTargets = traceprov_propagate_child_targets(extraTargetsForRTE, 1);
-    Query *parent = traceprov_make_nested_query(inputQuery, context);
+    Query *parent = traceprov_make_nested_query(inputQuery, context, false, false);
     ListCell *childTargetCursor;
     foreach(childTargetCursor, childTargets){
         TraceProvTarget *tpTarget = (TraceProvTarget *)lfirst(childTargetCursor);
@@ -464,7 +464,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                 RangeTblEntry *rte = (RangeTblEntry *)lfirst(rte_cursor);
 		        traceprov_assert_is_subquery(rte);
                 Query *subquery = rte->subquery;
-                Query *cloned_subquery = traceprov_make_nested_query(subquery, context);
+                Query *cloned_subquery = traceprov_make_nested_query(subquery, context, false, false);
                	rte->subquery = cloned_subquery;
                 List *target_entries = get_matchable_attrs(cloned_subquery->targetList, ignore_list, foreach_current_index(rte_cursor));
                 // Make the WindowDef. This is done so that logic in ParseFuncOrColumn can be reused.
@@ -480,7 +480,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                         elog(ERROR, "Attempting to overwrite ressortgroupref!");
                     te->ressortgroupref = sort_group_clause->tleSortGroupRef;
                 }
-                Node *fc_node = traceprov_get_function_call_node("row_number", NIL, window_def);
+                Node *fc_node = traceprov_get_function_call_node(TRACEPROV_ROW_NUMBER, NIL, window_def);
                 if (!IsA(fc_node, WindowFunc)){
                     elog(ERROR, "Expected the row_number call to be function call!");
                 }

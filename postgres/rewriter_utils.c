@@ -395,18 +395,20 @@ RangeTblEntry *range_table_entry_from_subquery(Query *sub_query, TraceProvParseC
     return tblEntry;
 }
 
-Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context){
+Query *traceprov_make_nested_query(Query *base, TraceProvParseContext *context, bool copy_resjunk, bool copy_sorted_order){
     Query *modified = traceprov_clone_query(base);
     ListCell *target_entry_cursor;
     foreach(target_entry_cursor, base->targetList){
         TargetEntry *base_target_entry = (TargetEntry *)lfirst(target_entry_cursor);
-        if (base_target_entry->resjunk) continue;
-        modified->targetList = lappend(modified->targetList, makeTargetEntry(
+        if (base_target_entry->resjunk && !copy_resjunk) continue;
+        TargetEntry *new_te = makeTargetEntry(
             (Expr*)makeVarFromTargetEntry(1, base_target_entry),
             base_target_entry->resno,
             (base_target_entry->resname == NULL ? NULL : pstrdup(base_target_entry->resname)),
             false
-        ));
+        );
+        if (copy_sorted_order) new_te->ressortgroupref = base_target_entry->ressortgroupref;
+        modified->targetList = lappend(modified->targetList, new_te);
     }
     RangeTblEntry *rte = range_table_entry_from_subquery(base, context);
     rte->inFromCl = true;
