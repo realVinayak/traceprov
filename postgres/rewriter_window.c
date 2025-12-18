@@ -3,10 +3,17 @@
 #include "nodes/nodeFuncs.h"
 #include "parser/parse_clause.h"
 #include "parser/analyze.h"
+#include "optimizer.h"
 
 static Query *perform_window_clause_rewrite(Query *base, WindowClause *window_clause, List **extra_targets, TraceProvParseContext *context);
 static List *remove_window_clause(List *original_clauses, const WindowClause *window_clause);
 static Query *perform_window_clause_rewrite_recursive(
+    Query *query,
+    List *window_clauses,
+    TraceProvParseContext *context
+);
+
+static Query *perform_window_clause_rewrite_inline(
     Query *query,
     List *window_clauses,
     TraceProvParseContext *context
@@ -57,7 +64,7 @@ Query *traceprov_perform_window_rewrite(
     //     }
     //     last_query = created;
     // }
-    Query *top_query = perform_window_clause_rewrite_recursive(base, base->windowClause, context);
+    Query *top_query = perform_window_clause_rewrite_inline(base, base->windowClause, context);
     return top_query;
 }
 
@@ -68,8 +75,117 @@ static void set_winref(Node *func, Index winref){
     win_func->winref = winref;
 }
 
-// Performs a recursive rewrite of the window functions.
-// This is done 
+// Rewrites window functions.
+static Query *perform_window_clause_rewrite_inline(
+    Query *query,
+    List *window_clauses,
+    TraceProvParseContext *context
+){
+    // Push down the current query.
+    // This is needed because, oth
+    List *shift_spec = NIL;
+    Query *subquery = traceprov_push_down_query(query, &shift_spec);
+
+    // Adjust the current level vars to point to RTE 1.
+    // This is done before we append new targets.
+    List *current_vars = pull_vars_of_level(query, 0);
+    ListCell *var_cursor = NULL;
+    foreach(var_cursor, current_vars){
+        Var *var = lfirst_node(Var, var_cursor);
+        var->varattno += list_nth_int(shift_spec, var->varno - 1);
+        var->varno = 1;
+    }
+
+    // Need to push down all the targets that are referenced in the window clauses.
+    List *new_window_clauses = NIL;
+    List *new_window_funcs = NIL;
+    ListCell *window_clause_cursor = NULL;
+    int last_win_ref = -1;
+    Bitmapset *added_refs = NULL;
+
+    foreach(window_clause_cursor, query->windowClause){
+        WindowClause *wc = (WindowClause *)lfirst(window_clause_cursor);
+        if ((int)wc->winref <= last_win_ref){
+            elog(ERROR, "Trying to handle a previous winref!");
+        }
+        last_win_ref = wc->winref;
+
+        List *sort_clause = list_concat_copy(
+            list_copy_deep(wc->partitionClause),
+            list_copy_deep(wc->orderClause)
+        );
+
+        ListCell *sort_clause_cursor = NULL;
+        // Iteratre over the sort clause, and figure out the targets that
+        // need to be pushed down.
+        foreach(sort_clause_cursor, sort_clause){
+            TargetEntry *te = get_sortgroupclause_tle(
+                lfirst_node(SortGroupClause, sort_clause_cursor),
+                query->targetList
+            );
+            // It is possible that the same target expr appears multiple times.
+            // Postgres only adds it once, which is fine, but we need to detect such cases.
+            if (bms_is_member(te->ressortgroupref, added_refs)) continue;
+            added_refs = bms_add_member(added_refs, te->ressortgroupref);
+            subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
+        }
+        subquery->hasWindowFuncs = true;
+
+        WindowDef *window_def = makeNode(WindowDef);
+        window_def->orderClause = sort_clause;
+
+        Node *fc_node = traceprov_get_function_call_node(TRACEPROV_ROW_NUMBER, NIL, window_def);
+        if (!IsA(fc_node, WindowFunc))
+            elog(ERROR, "Expected the row_number call to be function call!");
+
+        if (window_def->orderClause == NIL)
+            elog(ERROR, "Got the order clause corrupted!");
+
+
+        WindowClause *window_clause = makeNode(WindowClause);
+        window_clause->orderClause = window_def->orderClause;
+        subquery->windowClause = lappend(subquery->windowClause);
+        window_clause->winref = list_length(subquery->windowClause);
+        set_winref(fc_node, list_length(subquery->windowClause));
+        TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
+        subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
+        
+        if (window_clause->frameOptions & FRAMEOPTION_ROWS){
+            // Extend the order clause.
+            // The inner target entry doesn't need to be made a var otherwise.
+            Var *outer_ordered_row_number_te = makeVarFromTargetEntry(1, ordered_row_number_te);
+            query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
+            SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
+            outer_ordered_row_number_te->ressortgroupref = assignSortGroupRef(outer_ordered_row_number_te, final_query->targetList);
+            window_clause->orderClause = lappend(window_clause->orderClause, ordered_row_number_sgc);
+
+            WindowDef *rows_window_def = makeNode(WindowDef);
+
+            Node *first_value_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+            if (!IsA(first_value_fc_node, WindowFunc))
+                elog(ERROR, "Expected the row_number call to be function call!");
+
+            Node *last_value_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+            if (!IsA(last_value_fc_node, WindowFunc))
+                elog(ERROR, "Expected the row_number call to be function call!");
+            
+            // It'll be always be 1
+            set_winref(first_value_fc_node, window_clause->winref);
+            set_winref(last_value_fc_node, window_clause->winref);
+
+            final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)first_value_fc_node, 0, pstrdup("frame_start"), false));
+            final_query->targetList = traceprov_append_at_resjunk(final_query->targetList, makeTargetEntry((Expr *)last_value_fc_node, 0, pstrdup("frame_end"), false));
+        }else {
+            // TODO: Handle group and range case.
+            elog(ERROR, "Only support groups and range for now.");
+        }
+    }
+
+    // Finally nest the inner query.
+    query->rtable = list_make1(range_table_entry_from_subquery(subquery, context, true));
+    return query;
+}
+
 static Query *perform_window_clause_rewrite_recursive(
     Query *query,
     List *window_clauses,

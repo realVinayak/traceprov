@@ -102,4 +102,6 @@ Query *traceprov_perform_window_rewrite(
     List **traceprov_targets_per_rte
 );
 
+Query *traceprov_push_down_query(Query *query, List **shift_spec);
+
 #endif
