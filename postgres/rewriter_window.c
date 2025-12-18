@@ -76,7 +76,11 @@ static Query *perform_window_clause_rewrite_recursive(
     TraceProvParseContext *context
 ){
     // This is the base case (no window clauses found.)
-    if (list_length(window_clauses) == 0) return query;
+    if (list_length(window_clauses) == 0){
+        query->hasWindowFuncs = false;
+        query->windowClause = NIL;
+        return query;
+    }
 
     // We remove from the tail. It actually doesn't matter, but removing from the tail is cheaper.
     WindowClause *window_clause_to_remove = (WindowClause *)lfirst(list_tail(window_clauses));
