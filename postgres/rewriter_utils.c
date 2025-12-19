@@ -803,3 +803,14 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec){
     *shift_spec = shifted_refs;
     return cloned;
 }
+
+List* traceprov_assert_all_vars(List *target_list){
+    ListCell *cursor;
+    List *vars = NIL;
+    foreach(cursor, target_list){
+        TargetEntry *te = lfirst_node(TargetEntry, cursor);
+        if (!IsA(te->expr, Var)) elog(ERROR, "Expected all vars!");
+        vars = lappend(vars, te->expr);
+    }
+    return vars;
+}

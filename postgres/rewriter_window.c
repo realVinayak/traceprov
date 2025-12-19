@@ -11,6 +11,8 @@ static Query *perform_window_clause_rewrite_inline(
     TraceProvParseContext *context
 );
 
+static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause);
+
 // main entrypoint for window rewriting.
 // Postgres already sets up important things for us
 // (like copying window defs, sort group clauses, setting up winrefs.)
@@ -41,10 +43,12 @@ static void set_winref(Node *func, Index winref){
     win_func->winref = winref;
 }
 
+
 // Rewrites window functions.
 static Query *perform_window_clause_rewrite_inline(
     Query *query,
     List *window_clauses,
+    List *traceprov_provenance_attrs,
     TraceProvParseContext *context
 ){
     // Push down the current query.
@@ -55,6 +59,11 @@ static Query *perform_window_clause_rewrite_inline(
     // Adjust the current level vars to point to RTE 1.
     // This is done before we append new targets.
     List *current_vars = pull_vars_of_level((Node*)query, 0);
+
+    // Also adjust all the var refs in traceprov targets.
+    List *traceprov_exprns_flattened = traceprov_append_targets(NIL, traceprov_flatten(traceprov_provenance_attrs));
+    List *traceprov_vars = traceprov_assert_all_vars(traceprov_exprns_flattened);
+    current_vars = list_concat_copy(current_vars, traceprov_vars);
     ListCell *var_cursor = NULL;
     foreach(var_cursor, current_vars){
         Var *var = lfirst_node(Var, var_cursor);
@@ -64,86 +73,74 @@ static Query *perform_window_clause_rewrite_inline(
 
     // Need to push down all the targets that are referenced in the window clauses.
     ListCell *window_clause_cursor = NULL;
-    int last_win_ref = -1;
+
     Bitmapset *added_refs = NULL;
 
-    foreach(window_clause_cursor, query->windowClause){
-        WindowClause *wc = (WindowClause *)lfirst(window_clause_cursor);
-        if ((int)wc->winref <= last_win_ref){
-            elog(ERROR, "Trying to handle a previous winref!");
-        }
-        last_win_ref = wc->winref;
+    // First, we try figuring out just 1 window clause that an sorted order.
+    // We process that window clause first, and then proceed the rest. The process order doesn't otherwise matter.
+    // This is done so that we don't have to do explicit logging for all the empty () clauses. They get "stickied"
+    // to the first over(non-empty clause). This is because all the logging is the same. Any total logging is fine.
+
+    foreach(window_clause_cursor, window_clauses){
+        WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
+        if (list_length(wc->orderClause) > 0 || list_length(wc->partitionClause) > 0) break;
+    }
+
+    if (window_clause_cursor != NULL){
+        WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
+        // Move the found clause to the first of the list.
+        window_clauses = list_delete_nth_cell(window_clauses, foreach_current_index(window_clause_cursor));
+        window_clauses = lcons(wc, window_clauses);
+    }
+
+    TraceProvLayerNumber first_log = 0;
+
+    foreach(window_clause_cursor, window_clauses){
+        WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
 
         List *sort_clause = list_concat_copy(
             list_copy_deep(wc->partitionClause),
             list_copy_deep(wc->orderClause)
         );
 
-        ListCell *sort_clause_cursor = NULL;
-        // Iteratre over the sort clause, and figure out the targets that
-        // need to be pushed down.
-        foreach(sort_clause_cursor, sort_clause){
-            TargetEntry *te = get_sortgroupclause_tle(
-                lfirst_node(SortGroupClause, sort_clause_cursor),
-                query->targetList
-            );
-            // It is possible that the same target expr appears multiple times.
-            // Postgres only adds it once, which is fine, but we need to detect such cases.
-            if (!bms_is_member(te->ressortgroupref, added_refs)){
-                added_refs = bms_add_member(added_refs, te->ressortgroupref);
-                subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
+        if (list_length(sort_clause) > 0){
+
+            TargetEntry *ordered_row_number_te = append_ordered_row_number(subquery, sort_clause, &added_refs);
+            // This ends up being used in both rows and range/groups case.
+            Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
+            Node *frame_start_fc_node, *frame_end_fc_node;
+            
+            if (wc->frameOptions & FRAMEOPTION_ROWS){
+                // Extend the order clause.
+                // The inner target entry doesn't need to be made a var otherwise.
+                TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
+                query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
+                SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
+                ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
+                wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
+
+                WindowDef *rows_window_def = makeNode(WindowDef);
+
+                frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+                frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
+            }else {
+                // This is range or groups.
+                WindowDef *rows_window_def = makeNode(WindowDef);
+
+                frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_MIN_VALUE, list_make1(ordered_row_number_var), rows_window_def);
+                frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_MAX_VALUE, list_make1(ordered_row_number_var), rows_window_def);
             }
-        }
-        subquery->hasWindowFuncs = true;
 
-        WindowDef *window_def = makeNode(WindowDef);
-        window_def->orderClause = sort_clause;
+            set_winref(frame_start_fc_node, window_clause->winref);
+            set_winref(frame_end_fc_node, window_clause->winref);
 
-        Node *fc_node = traceprov_get_function_call_node(TRACEPROV_ROW_NUMBER, NIL, window_def);
-        if (!IsA(fc_node, WindowFunc))
-            elog(ERROR, "Expected the row_number call to be function call!");
-
-        if (window_def->orderClause == NIL)
-            elog(ERROR, "Got the order clause corrupted!");
-
-
-        WindowClause *window_clause = makeNode(WindowClause);
-        window_clause->orderClause = window_def->orderClause;
-        subquery->windowClause = lappend(subquery->windowClause, window_clause);
-        window_clause->winref = list_length(subquery->windowClause);
-        set_winref(fc_node, list_length(subquery->windowClause));
-        TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
-        subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
-        // This ends up being used in both rows and range/groups case.
-        Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
-        Node *frame_start_fc_node, *frame_end_fc_node;
-        
-        if (wc->frameOptions & FRAMEOPTION_ROWS){
-            // Extend the order clause.
-            // The inner target entry doesn't need to be made a var otherwise.
-            TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
-            query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
-            SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
-            ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
-            wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
+            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_start_fc_node, 0, pstrdup("frame_start"), false));
+            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_end_fc_node, 0, pstrdup("frame_end"), false));
 
             WindowDef *rows_window_def = makeNode(WindowDef);
-
-            frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_FIRST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
-            frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_LAST_VALUE, list_make1(outer_ordered_row_number_te->expr), rows_window_def);
-        }else {
-            // This is range or groups.
-            WindowDef *rows_window_def = makeNode(WindowDef);
-
-            frame_start_fc_node = traceprov_get_function_call_node(TRACEPROV_MIN_VALUE, list_make1(ordered_row_number_var), rows_window_def);
-            frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_MAX_VALUE, list_make1(ordered_row_number_var), rows_window_def);
+            TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
+            Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, )
         }
-
-        set_winref(frame_start_fc_node, window_clause->winref);
-        set_winref(frame_end_fc_node, window_clause->winref);
-
-        query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_start_fc_node, 0, pstrdup("frame_start"), false));
-        query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_end_fc_node, 0, pstrdup("frame_end"), false));
     }
 
     // Finally nest the inner query.
@@ -151,4 +148,38 @@ static Query *perform_window_clause_rewrite_inline(
     query->rtable = list_make1(rte);
     query->jointree = traceprov_make_from_expr(rte);
     return query;
+}
+
+static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause, Bitmapset **added_refs){
+    ListCell *sort_clause_cursor = NULL;
+    // Iteratre over the sort clause, and figure out the targets that
+    // need to be pushed down.
+    foreach(sort_clause_cursor, sort_clause){
+        TargetEntry *te = get_sortgroupclause_tle(
+            lfirst_node(SortGroupClause, sort_clause_cursor),
+            query->targetList
+        );
+        // It is possible that the same target expr appears multiple times.
+        // Postgres only adds it once, which is fine, but we need to detect such cases.
+        if (!bms_is_member(te->ressortgroupref, *added_refs)){
+            *added_refs = bms_add_member(*added_refs, te->ressortgroupref);
+            subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, copyObject(te));
+        }
+    }
+
+    WindowDef *window_def = makeNode(WindowDef);
+    window_def->orderClause = sort_clause;
+
+    Node *fc_node = traceprov_get_function_call_node(TRACEPROV_ROW_NUMBER, NIL, window_def);
+    if (window_def->orderClause == NIL)
+        elog(ERROR, "Got the order clause corrupted!");
+
+    WindowClause *window_clause = makeNode(WindowClause);
+    window_clause->orderClause = window_def->orderClause;
+    subquery->windowClause = lappend(subquery->windowClause, window_clause);
+    window_clause->winref = list_length(subquery->windowClause);
+    set_winref(fc_node, list_length(subquery->windowClause));
+    TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
+    subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
+    return ordered_row_number_te;
 }
