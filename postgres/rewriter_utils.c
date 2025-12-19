@@ -465,6 +465,7 @@ List *traceprov_aggregate_on_set(
         &aggregated,
         context,
         aggregatedInParent,
+        NULL,
         NULL
     );
     query->hasAggs = true;
@@ -529,12 +530,15 @@ List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerN
     return argVars;
 }
 
-void traceprov_aggregate_rewrite(
+TraceProvLayerNumber traceprov_aggregate_rewrite(
     const List *targetEntriesToLog,
     List **pCreatedTargets,
     TraceProvParseContext *tpContext,
     bool parentHasAggs,
-    WindowDef *over
+    WindowDef *over,
+    // Useful because in some places (window rewrites)
+    // we need to have a reference to the function node.
+    Node **fc_node
 ){
     // Need to add the exprs from the targets.
     ListCell *target_entry_cursor;
@@ -560,6 +564,7 @@ void traceprov_aggregate_rewrite(
     if ((over == NULL && !IsA(funcCallNode, Aggref)) || (over != NULL && !IsA(funcCallNode, WindowFunc))){
         elog(ERROR, "Expected the function call node to be an aggref!");
     }
+    if (fc_node) *fc_node = funcCallNode;
     *pCreatedTargets = list_make1(
         makeTraceProvTarget(
             true,
@@ -577,10 +582,12 @@ void traceprov_aggregate_rewrite(
             ),
             0,
             false,
-            NIL
+            NIL,
+            NULL
         )
     );
     GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs = lappend_oid(GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
+    return layer_number;
 }
 
 Const *makeInt8Const(int64 value){
@@ -618,7 +625,8 @@ List *traceprov_propagate_child_targets(List *childTargets, Index rteIndex){
                 tpTarget->graph,
                 tpTarget->setNumber,
                 tpTarget->isSetPointer,
-                tpTarget->sublinks
+                tpTarget->sublinks,
+                tpTarget->window_entry
             )
         );
     }
