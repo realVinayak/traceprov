@@ -88,7 +88,7 @@ void tp_add_sublink_map_item(
     }
 }
 
-TraceProvWindowFrameEntry traceprov_make_window_frame_entry(
+TraceProvWindowFrameEntry *traceprov_make_window_frame_entry(
     TraceProvEntryKind kind,
     TraceProvLayerNumber log_layer_number
 ){
@@ -146,7 +146,7 @@ TraceProvEntry *traceprov_resolve_entry(
         if (tp_target->window_entry != NULL){
 
             if (graph != NULL)
-                elog(ERROR, "Expected the graph to always be null for window entry!")
+                elog(ERROR, "Expected the graph to always be null for window entry!");
 
             if (tp_target->window_entry->kind < TP_ENTRY_FRAME_START)
                 elog(ERROR, "Got invalid window entry kind!");

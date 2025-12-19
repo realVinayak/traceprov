@@ -178,7 +178,7 @@ TraceProvTarget *makeTraceProvTarget(
     TraceProvWindowFrameEntry *window_entry
 );
 
-TraceProvWindowFrameEntry traceprov_make_window_frame_entry(
+TraceProvWindowFrameEntry *traceprov_make_window_frame_entry(
     TraceProvEntryKind kind,
     TraceProvLayerNumber log_layer_number
 );
