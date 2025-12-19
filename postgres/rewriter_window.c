@@ -15,6 +15,9 @@ static Query *perform_window_clause_rewrite_inline(
 
 static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, List *sort_clause, Bitmapset **added_refs);
 
+static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, int64 *end_offset);
+static int64 assert_int8_const(const Node *result);
+
 // Technically, rows can be changed with group / range since row numbers are guaranteed to be unique.
 #define TRACEPROV_FRAMEOPTION_ORDERED_ROW_NUMBERS (FRAMEOPTION_ROWS | FRAMEOPTION_START_UNBOUNDED_PRECEDING | FRAMEOPTION_END_CURRENT_ROW)
 
@@ -97,9 +100,26 @@ static Query *perform_window_clause_rewrite_inline(
     TraceProvLayerNumber first_log = 0;
 
     List *added_traceprov_targets = NIL;
-
+    bool seen_empty_frame = false;
     foreach(window_clause_cursor, window_clauses){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
+
+        // In the case where frame is empty, still need to emit the current row.
+        // However, without looking at the data, we cannot possibly figure out all cases
+        // where the frames are empty. So, we might overlog in those rare cases.
+        // However, in cases where we can provably guarantee that the frames are completely empty,
+        // we add the current provenance attributes to the target list.
+        int64 start_offset, end_offset;
+        if (is_empty_window_frame(wc, &start_offset, &end_offset)){
+            // Provably empty frame case.
+            // Simply append the current provenance attrs.
+            // We should not keep on adding raw targets if they've been added before.
+            if (!seen_empty_frame){
+                seen_empty_frame = true;
+                added_traceprov_targets = list_concat(added_traceprov_targets, traceprov_targets_flattened);
+            }
+            continue;
+        }
 
         List *sort_clause = list_concat_copy(
             list_copy_deep(wc->partitionClause),
@@ -134,8 +154,31 @@ static Query *perform_window_clause_rewrite_inline(
                 frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_MAX_VALUE, list_make1(ordered_row_number_var), rows_window_def);
             }
 
-            set_winref(frame_start_fc_node, wc->winref);
-            set_winref(frame_end_fc_node, wc->winref);
+            WindowClause *marker_window_clause = NULL;
+            // In cases where the frame doesn't include the current row,
+            // need to extend the window clause to include it.
+            if (start_offset > 0 || end_offset < 0){
+                marker_window_clause = copyObject(wc);
+                if (start_offset > 0){
+                    // Need to start the frame at the current row.
+                    marker_window_clause->frameOptions &= ~FRAMEOPTION_START_OFFSET_FOLLOWING;
+                    marker_window_clause->frameOptions |= FRAMEOPTION_START_CURRENT_ROW;
+                    marker_window_clause->endInRangeFunc = NULL;
+                    marker_window_clause->endOffset = NULL;
+                }else{
+                    // Need to end the frame at the current row.
+                    marker_window_clause->frameOptions &= ~FRAMEOPTION_END_OFFSET_PRECEDING;
+                    marker_window_clause->frameOptions |= FRAMEOPTION_END_CURRENT_ROW;
+                    marker_window_clause->startInRangeFunc = NULL;
+                    marker_window_clause->startOffset = NULL;
+                }
+                query->windowClause = lappend(query->windowClause, marker_window_clause);
+                marker_window_clause->winref = list_length(query->windowClause);
+            }else{
+                marker_window_clause = wc;
+            }
+            set_winref(frame_start_fc_node, marker_window_clause->winref);
+            set_winref(frame_end_fc_node, marker_window_clause->winref);
 
             WindowDef *rows_window_def = makeNode(WindowDef);
             List *aggregate_target = NIL;
@@ -276,4 +319,37 @@ static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, Lis
     subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
     subquery->hasWindowFuncs = true;
     return ordered_row_number_te;
+}
+
+static int64 assert_int8_const(const Node *result){
+    if (!IsA(result, Const)) elog(ERROR, "Expected node to be a constant!");
+    const Const *result_const = (Const *)result;
+    if (result_const->consttype != INT8OID) elog(ERROR, "Expected the result to be of type int8!");
+    return DatumGetInt64(result_const->constvalue);
+}
+
+// Checks whether the window frames are always going to be empty.
+// In non-offset case, it can always be non-empty. In those cases,
+// it'll be empty only in the case where the number of input rows is 0.
+static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, int64 *end_offset){
+    *start_offset = 0;
+    *end_offset = 0;
+    // Non-offset case. Can be non-empty.
+    if (!(wc->frameOptions & (FRAMEOPTION_START_OFFSET | FRAMEOPTION_END_OFFSET))) return false;
+
+    if (wc->frameOptions & FRAMEOPTION_START_OFFSET){
+        const Node *start_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
+        *start_offset = assert_int8_const(start_result) * ((wc->frameOptions & FRAMEOPTION_START_OFFSET_FOLLOWING) ? 1 : -1);
+    }
+
+    if (wc->frameOptions & FRAMEOPTION_END_OFFSET){
+        const Node *end_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
+        *end_offset = assert_int8_const(end_result) * ((wc->frameOptions & FRAMEOPTION_END_OFFSET_FOLLOWING) ? 1 : -1);
+    }
+
+    // Both being equal to 0 is a special case.
+    // In that case, the frame will always include just the current row.
+    // So we can always treat it as empty frame.
+    if (*start_offset > *end_offset || (*start_offset == 0 && *end_offset == 0)) return true;
+    return false;
 }
