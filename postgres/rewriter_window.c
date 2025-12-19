@@ -13,7 +13,7 @@ static Query *perform_window_clause_rewrite_inline(
     List **extra_targets
 );
 
-static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause, Bitmapset **added_refs);
+static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, List *sort_clause, Bitmapset **added_refs);
 
 // Technically, rows can be changed with group / range since row numbers are guaranteed to be unique.
 #define TRACEPROV_FRAMEOPTION_ORDERED_ROW_NUMBERS (FRAMEOPTION_ROWS | FRAMEOPTION_START_UNBOUNDED_PRECEDING | FRAMEOPTION_END_CURRENT_ROW)
@@ -61,7 +61,7 @@ static Query *perform_window_clause_rewrite_inline(
 
     // Also adjust all the var refs in traceprov targets too.
     List *traceprov_targets_flattened = traceprov_flatten(traceprov_provenance_attrs);
-    List *traceprov_exprns_flattened = traceprov_append_targets(NIL, traceprov_targets_flattened);
+    List *traceprov_exprns_flattened = traceprov_append_targets(traceprov_targets_flattened, NIL);
     List *traceprov_vars = traceprov_assert_all_vars(traceprov_exprns_flattened);
     current_vars = list_concat_copy(current_vars, traceprov_vars);
     ListCell *var_cursor = NULL;
@@ -80,26 +80,28 @@ static Query *perform_window_clause_rewrite_inline(
     // We process that window clause first, and then proceed the rest. The process order doesn't otherwise matter.
     // This is done so that we don't have to do explicit logging for all the empty () clauses. They get "stickied"
     // to the first over(non-empty clause). This is because all the logging is the same. Any total logging is fine.
-
+    int window_clause_idx = 0;
     foreach(window_clause_cursor, window_clauses){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
+        window_clause_idx++;
         if (list_length(wc->orderClause) > 0 || list_length(wc->partitionClause) > 0) break;
     }
 
     if (window_clause_cursor != NULL){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
         // Move the found clause to the first of the list.
-        window_clauses = list_delete_nth_cell(window_clauses, foreach_current_index(window_clause_cursor));
+        window_clauses = list_delete_nth_cell(window_clauses, window_clause_idx);
         window_clauses = lcons(wc, window_clauses);
     }
 
     TraceProvLayerNumber first_log = 0;
 
     // Because we extend the query's window clauses.
-    List *window_clause_copy = list_copy_deep(window_clauses);
+    // Not deep copy because we do mutate some window clauses.
+    List *window_clause_copy = list_copy(window_clauses);
     List *added_traceprov_targets = NIL;
 
-    foreach(window_clause_cursor, window_clauses){
+    foreach(window_clause_cursor, window_clause_copy){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
 
         List *sort_clause = list_concat_copy(
@@ -109,7 +111,7 @@ static Query *perform_window_clause_rewrite_inline(
 
         if (list_length(sort_clause) > 0){
 
-            TargetEntry *ordered_row_number_te = append_ordered_row_number(subquery, sort_clause, &added_refs);
+            TargetEntry *ordered_row_number_te = append_ordered_row_number(query, subquery, sort_clause, &added_refs);
             // This ends up being used in both rows and range/groups case.
             Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
             Node *frame_start_fc_node, *frame_end_fc_node;
@@ -135,8 +137,8 @@ static Query *perform_window_clause_rewrite_inline(
                 frame_end_fc_node = traceprov_get_function_call_node(TRACEPROV_MAX_VALUE, list_make1(ordered_row_number_var), rows_window_def);
             }
 
-            set_winref(frame_start_fc_node, window_clause->winref);
-            set_winref(frame_end_fc_node, window_clause->winref);
+            set_winref(frame_start_fc_node, wc->winref);
+            set_winref(frame_end_fc_node, wc->winref);
 
             WindowDef *rows_window_def = makeNode(WindowDef);
             List *aggregate_target = NIL;
@@ -177,8 +179,8 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number);
-                ),
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number)
+                )
             );
 
             added_traceprov_targets = lappend(
@@ -190,8 +192,8 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number);
-                ),
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number)
+                )
             );
 
         }else{
@@ -230,8 +232,8 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log);
-                ),
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log)
+                )
             );
         }
     }
@@ -244,7 +246,7 @@ static Query *perform_window_clause_rewrite_inline(
     return query;
 }
 
-static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause, Bitmapset **added_refs){
+static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, List *sort_clause, Bitmapset **added_refs){
     ListCell *sort_clause_cursor = NULL;
     // Iteratre over the sort clause, and figure out the targets that
     // need to be pushed down.
@@ -275,5 +277,6 @@ static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause
     set_winref(fc_node, list_length(subquery->windowClause));
     TargetEntry *ordered_row_number_te = makeTargetEntry((Expr *)fc_node, 0, pstrdup("ordered_row_number"), false);
     subquery->targetList = traceprov_append_at_resjunk(subquery->targetList, ordered_row_number_te);
+    subquery->hasWindowFuncs = true;
     return ordered_row_number_te;
 }
