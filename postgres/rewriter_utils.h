@@ -106,5 +106,5 @@ Query *traceprov_perform_window_rewrite(
 
 Query *traceprov_push_down_query(Query *query, List **shift_spec);
 FromExpr *traceprov_make_from_expr(RangeTblEntry *rte);
-
+List *traceprov_assert_all_vars(List *target_list);
 #endif
