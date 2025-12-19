@@ -30,7 +30,7 @@ Query *traceprov_perform_window_rewrite(
 ){
     if (!base->hasWindowFuncs)
         elog(ERROR, "Expected window functions to be present for rewriting traceprov!");
-    Query *top_query = perform_window_clause_rewrite_inline(base, base->windowClause, context, traceprov_targets, extra_targets);
+    Query *top_query = perform_window_clause_rewrite_inline(base, list_copy(base->windowClause), context, traceprov_targets, extra_targets);
     return top_query;
 }
 
@@ -83,8 +83,8 @@ static Query *perform_window_clause_rewrite_inline(
     int window_clause_idx = 0;
     foreach(window_clause_cursor, window_clauses){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
-        window_clause_idx++;
         if (list_length(wc->orderClause) > 0 || list_length(wc->partitionClause) > 0) break;
+        window_clause_idx++;
     }
 
     if (window_clause_cursor != NULL){
@@ -96,12 +96,9 @@ static Query *perform_window_clause_rewrite_inline(
 
     TraceProvLayerNumber first_log = 0;
 
-    // Because we extend the query's window clauses.
-    // Not deep copy because we do mutate some window clauses.
-    List *window_clause_copy = list_copy(window_clauses);
     List *added_traceprov_targets = NIL;
 
-    foreach(window_clause_cursor, window_clause_copy){
+    foreach(window_clause_cursor, window_clauses){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
 
         List *sort_clause = list_concat_copy(
