@@ -163,14 +163,12 @@ static Query *perform_window_clause_rewrite_inline(
                     // Need to start the frame at the current row.
                     marker_window_clause->frameOptions &= ~FRAMEOPTION_START_OFFSET_FOLLOWING;
                     marker_window_clause->frameOptions |= FRAMEOPTION_START_CURRENT_ROW;
-                    marker_window_clause->endInRangeFunc = InvalidOid;
-                    marker_window_clause->endOffset = NULL;
+                    marker_window_clause->startOffset = NULL;
                 }else{
                     // Need to end the frame at the current row.
                     marker_window_clause->frameOptions &= ~FRAMEOPTION_END_OFFSET_PRECEDING;
                     marker_window_clause->frameOptions |= FRAMEOPTION_END_CURRENT_ROW;
-                    marker_window_clause->startInRangeFunc = InvalidOid;
-                    marker_window_clause->startOffset = NULL;
+                    marker_window_clause->endOffset = NULL;
                 }
                 query->windowClause = lappend(query->windowClause, marker_window_clause);
                 marker_window_clause->winref = list_length(query->windowClause);
