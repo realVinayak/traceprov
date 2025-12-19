@@ -72,12 +72,13 @@ List *traceprov_aggregate_on_set(
 bool traceprov_find_int_list(List *, int);
 bool traceprov_find_oid_list(List *, Oid);
 
-void traceprov_aggregate_rewrite(
+TraceProvLayerNumber traceprov_aggregate_rewrite(
     const List *,
     List **,
     TraceProvParseContext *,
     bool,
-    WindowDef *
+    WindowDef *,
+    Node **
 );
 
 Node *traceprov_get_function_call_node(const char *, List *, WindowDef *);
@@ -99,9 +100,9 @@ List *traceprov_prepare_arg_vars(TraceProvParseContext *context, TraceProvLayerN
 
 Query *traceprov_perform_window_rewrite(
     Query *base,
-    List **extra_targets,
     TraceProvParseContext *context,
-    List **traceprov_targets_per_rte
+    List *traceprov_targets,
+    List **extra_targets
 );
 
 Query *traceprov_push_down_query(Query *query, List **shift_spec);

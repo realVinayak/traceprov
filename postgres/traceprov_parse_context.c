@@ -88,13 +88,24 @@ void tp_add_sublink_map_item(
     }
 }
 
+TraceProvWindowFrameEntry traceprov_make_window_frame_entry(
+    TraceProvEntryKind kind,
+    TraceProvLayerNumber log_layer_number
+){
+    TraceProvWindowFrameEntry *window_entry = palloc0_object(TraceProvWindowFrameEntry);
+    window_entry->kind = kind;
+    window_entry->log_layer_number = log_layer_number;
+    return window_entry;
+}
+
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
     TraceProvDependency *dependency,
     int setNumber,
     bool isSetPointer,
-    List *sublinks
+    List *sublinks,
+    TraceProvWindowFrameEntry *window_entry
 ){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
@@ -103,6 +114,7 @@ TraceProvTarget *makeTraceProvTarget(
     tpTarget->setNumber = setNumber;
     tpTarget->isSetPointer = isSetPointer;
     tpTarget->sublinks = sublinks;
+    tpTarget->window_entry = window_entry;
     return tpTarget;
 }
 
@@ -113,43 +125,55 @@ void _assertIsArtificial(const TargetEntry *target){
 }
 
 TraceProvEntry *traceprov_resolve_entry(
-    const TraceProvTarget * tpTarget, 
-    List **childGraphs,
+    const TraceProvTarget * tp_target, 
+    List **child_graphs,
     List **exprs
 ){
-    const TargetEntry *target = tpTarget->targetEntry;
+    const TargetEntry *target = tp_target->targetEntry;
     if (exprs){
         *exprs = lappend(*exprs, target->expr);
     }
-    TraceProvEntry *tpEntry = makeTraceProvEntry();
-    TraceProvDependency *graph = tpTarget->graph;
-    if (tpTarget->isSetPointer){
-        tpEntry->kind = TP_ENTRY_SET_POINTER;
+    TraceProvEntry *tp_entry = makeTraceProvEntry();
+    TraceProvDependency *graph = tp_target->graph;
+    if (tp_target->isSetPointer){
+        tp_entry->kind = TP_ENTRY_SET_POINTER;
         _assertIsArtificial(target);
-        if (tpTarget->graph != NULL)
+        if (tp_target->graph != NULL)
             elog(ERROR, "Expected the graph for set pointer to be null!");
         graph = NULL;
     }else{
+        // In this case, we're dealing with a window entry.
+        if (tp_target->window_entry != NULL){
+
+            if (graph != NULL)
+                elog(ERROR, "Expected the graph to always be null for window entry!")
+
+            if (tp_target->window_entry->kind < TP_ENTRY_FRAME_START)
+                elog(ERROR, "Got invalid window entry kind!");
+
+            tp_entry->kind = tp_target->window_entry->kind;
+            tp_entry->window_entry.log_layer_number = tp_target->window_entry->log_layer_number;
+        }
         if (graph != NULL){
             if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
                 elog(ERROR, "Expected no table info to for the pointer node");
             }
-            tpEntry->kind = TP_ENTRY_KIND_POINTER;
+            tp_entry->kind = TP_ENTRY_KIND_POINTER;
         }else{
-            tpEntry->kind = TP_ENTRY_KIND_BASE_RELATION;
-            tpEntry->relId = target->resorigtbl;
-            tpEntry->resNo = target->resno;
-            tpEntry->attrNumber = target->resorigcol;
+            tp_entry->kind = TP_ENTRY_KIND_BASE_RELATION;
+            tp_entry->relId = target->resorigtbl;
+            tp_entry->resNo = target->resno;
+            tp_entry->attrNumber = target->resorigcol;
         }
         // Because there can be multiple graphs for the set. so, this makes things nicer.
-        if (tpTarget->setNumber > 0) graph = TRACEPROV_SET_GRAPH;
+        if (tp_target->setNumber > 0) graph = TRACEPROV_SET_GRAPH;
     }
-    if (childGraphs){
-        *childGraphs = lappend(*childGraphs, graph);
+    if (child_graphs){
+        *child_graphs = lappend(*child_graphs, graph);
     }
-    tpEntry->setNumber = tpTarget->setNumber;
-    tpEntry->sublinks = tpTarget->sublinks;
-    return tpEntry;
+    tp_entry->setNumber = tp_target->setNumber;
+    tp_entry->sublinks = tp_target->sublinks;
+    return tp_entry;
 }
 
 TraceProvEntry *makeTraceProvEntry(){

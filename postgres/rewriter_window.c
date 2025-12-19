@@ -8,31 +8,29 @@
 static Query *perform_window_clause_rewrite_inline(
     Query *query,
     List *window_clauses,
-    TraceProvParseContext *context
+    TraceProvParseContext *context,
+    List *traceprov_provenance_attrs,
+    List **extra_targets
 );
 
-static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause);
+static TargetEntry *append_ordered_row_number(Query *subquery, List *sort_clause, Bitmapset **added_refs);
+
+// Technically, rows can be changed with group / range since row numbers are guaranteed to be unique.
+#define TRACEPROV_FRAMEOPTION_ORDERED_ROW_NUMBERS (FRAMEOPTION_ROWS | FRAMEOPTION_START_UNBOUNDED_PRECEDING | FRAMEOPTION_END_CURRENT_ROW)
 
 // main entrypoint for window rewriting.
 // Postgres already sets up important things for us
 // (like copying window defs, sort group clauses, setting up winrefs.)
 // So, this is not _that_ much pain...
-// The idea is to perform rewrite one window clause at a time.
-// Since the number of rows are not changed, and references are still valid,
-// this works pretty good. In this case, we do let Postgres decide whatever the
-// optimum sort order. Although, we could do it by ourselves too....
-// Note that any sort is removed, and reapplied at the top level.
-// Since the sort exprns don't have any intrinsic ordering (that is, they are identified via tleSortGroupRef),
-// moving them around is fine....
 Query *traceprov_perform_window_rewrite(
     Query *base,
-    List **extra_targets,
     TraceProvParseContext *context,
-    List **traceprov_targets_per_rte
+    List *traceprov_targets,
+    List **extra_targets
 ){
     if (!base->hasWindowFuncs)
         elog(ERROR, "Expected window functions to be present for rewriting traceprov!");
-    Query *top_query = perform_window_clause_rewrite_inline(base, base->windowClause, context);
+    Query *top_query = perform_window_clause_rewrite_inline(base, base->windowClause, context, traceprov_targets, extra_targets);
     return top_query;
 }
 
@@ -48,8 +46,9 @@ static void set_winref(Node *func, Index winref){
 static Query *perform_window_clause_rewrite_inline(
     Query *query,
     List *window_clauses,
+    TraceProvParseContext *context,
     List *traceprov_provenance_attrs,
-    TraceProvParseContext *context
+    List **extra_targets
 ){
     // Push down the current query.
     // This is needed because, oth
@@ -60,8 +59,9 @@ static Query *perform_window_clause_rewrite_inline(
     // This is done before we append new targets.
     List *current_vars = pull_vars_of_level((Node*)query, 0);
 
-    // Also adjust all the var refs in traceprov targets.
-    List *traceprov_exprns_flattened = traceprov_append_targets(NIL, traceprov_flatten(traceprov_provenance_attrs));
+    // Also adjust all the var refs in traceprov targets too.
+    List *traceprov_targets_flattened = traceprov_flatten(traceprov_provenance_attrs);
+    List *traceprov_exprns_flattened = traceprov_append_targets(NIL, traceprov_targets_flattened);
     List *traceprov_vars = traceprov_assert_all_vars(traceprov_exprns_flattened);
     current_vars = list_concat_copy(current_vars, traceprov_vars);
     ListCell *var_cursor = NULL;
@@ -95,6 +95,10 @@ static Query *perform_window_clause_rewrite_inline(
 
     TraceProvLayerNumber first_log = 0;
 
+    // Because we extend the query's window clauses.
+    List *window_clause_copy = list_copy_deep(window_clauses);
+    List *added_traceprov_targets = NIL;
+
     foreach(window_clause_cursor, window_clauses){
         WindowClause *wc = lfirst_node(WindowClause, window_clause_cursor);
 
@@ -109,14 +113,14 @@ static Query *perform_window_clause_rewrite_inline(
             // This ends up being used in both rows and range/groups case.
             Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
             Node *frame_start_fc_node, *frame_end_fc_node;
-            
+
+            TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
+            query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
+            SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
+            ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
+
             if (wc->frameOptions & FRAMEOPTION_ROWS){
-                // Extend the order clause.
-                // The inner target entry doesn't need to be made a var otherwise.
-                TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
-                query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
-                SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
-                ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
+
                 wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
 
                 WindowDef *rows_window_def = makeNode(WindowDef);
@@ -134,12 +138,101 @@ static Query *perform_window_clause_rewrite_inline(
             set_winref(frame_start_fc_node, window_clause->winref);
             set_winref(frame_end_fc_node, window_clause->winref);
 
-            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_start_fc_node, 0, pstrdup("frame_start"), false));
-            query->targetList = traceprov_append_at_resjunk(query->targetList, makeTargetEntry((Expr *)frame_end_fc_node, 0, pstrdup("frame_end"), false));
-
             WindowDef *rows_window_def = makeNode(WindowDef);
-            TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
-            Node *log_fc_node = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, )
+            List *aggregate_target = NIL;
+            Node *window_fc_node = NULL;
+            TraceProvLayerNumber layer_number = traceprov_aggregate_rewrite(
+                traceprov_targets_flattened,
+                &aggregate_target,
+                context,
+                true,
+                rows_window_def,
+                &window_fc_node
+            );
+            if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");
+            // Need to set the window clause.
+            WindowClause *ordered_row_number_window_clause = makeNode(WindowClause);
+            ordered_row_number_window_clause->orderClause = list_make1(ordered_row_number_sgc);
+            ordered_row_number_window_clause->frameOptions = TRACEPROV_FRAMEOPTION_ORDERED_ROW_NUMBERS;
+            query->windowClause = lappend(query->windowClause, ordered_row_number_window_clause);
+            ordered_row_number_window_clause->winref = list_length(query->windowClause);
+            set_winref(window_fc_node, ordered_row_number_window_clause->winref);
+
+            if (first_log == 0){
+                // The same log ordering is reused when dealing with empty over() clauses, so that relogging is not needed.
+                first_log = layer_number;
+            }
+
+            added_traceprov_targets = list_concat(
+                added_traceprov_targets,
+                aggregate_target
+            );
+
+            added_traceprov_targets = lappend(
+                added_traceprov_targets,
+                makeTraceProvTarget(
+                    false,
+                    makeTargetEntry((Expr *)frame_start_fc_node, 0, pstrdup("frame_start"), false),
+                    NULL,
+                    0,
+                    false,
+                    NIL,
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number);
+                ),
+            );
+
+            added_traceprov_targets = lappend(
+                added_traceprov_targets,
+                makeTraceProvTarget(
+                    false,
+                    makeTargetEntry((Expr *)frame_end_fc_node, 0, pstrdup("frame_end"), false),
+                    NULL,
+                    0,
+                    false,
+                    NIL,
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number);
+                ),
+            );
+
+        }else{
+            // This is the case where there's an empty over () clause.
+            // We may get lucky and see an existing logged clause.
+            // In that case, use it.
+            // Otherwise, create a fresh log.
+            if (first_log == 0){
+                // At this point, we're technically also guaranteed that the current window clause is also empty.
+                // So we also use it (rather than creating another window clause.)
+                WindowDef *rows_window_def = makeNode(WindowDef);
+                List *aggregate_target = NIL;
+                Node *window_fc_node = NULL;
+                TraceProvLayerNumber layer_number = traceprov_aggregate_rewrite(
+                    traceprov_targets_flattened,
+                    &aggregate_target,
+                    context,
+                    true,
+                    rows_window_def,
+                    &window_fc_node
+                );
+                if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");
+                set_winref(window_fc_node, wc->winref);
+                added_traceprov_targets = list_concat(
+                    added_traceprov_targets,
+                    aggregate_target
+                );
+                first_log = layer_number;
+            }
+            added_traceprov_targets = lappend(
+                added_traceprov_targets,
+                makeTraceProvTarget(
+                    false,
+                    makeTargetEntry((Expr *)makeInt8Const(first_log), 0, pstrdup("frame_inherit"), false),
+                    NULL,
+                    0,
+                    false,
+                    NIL,
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log);
+                ),
+            );
         }
     }
 
@@ -147,6 +240,7 @@ static Query *perform_window_clause_rewrite_inline(
     RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context, true);
     query->rtable = list_make1(rte);
     query->jointree = traceprov_make_from_expr(rte);
+    *extra_targets = added_traceprov_targets;
     return query;
 }
 

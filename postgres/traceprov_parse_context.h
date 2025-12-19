@@ -32,13 +32,22 @@ typedef enum TraceProvEntryKind {
     // Since, for a given union op, we only take the first list, it is guaranteed that if it is composed of multiple unions,
     // horizontally, it'll still be unique enough for our purposes.
     TP_ENTRY_SET_POINTER = 2,
+    TP_ENTRY_FRAME_START = 3,
+    TP_ENTRY_FRAME_END = 4,
+    TP_ENTRY_FRAME_INHERIT = 5
 } TraceProvEntryKind;
 
 // Specifies what kind of graph is this
 typedef enum TraceProvGraphKind {
     TP_AGGREGATE = 0,
-    TP_LOG = 1
+    TP_LOG = 1,
+    TP_POINTER = 2
 } TraceProvGraphKind;
+
+typedef struct TraceProvWindowFrameEntry {
+    TraceProvEntryKind kind; // Whether this is start, or end, or pointer
+    TraceProvLayerNumber log_layer_number;
+} TraceProvWindowFrameEntry;
 
 typedef struct TraceProvEntry {
     TraceProvEntryKind kind; // What kind of entry is being logged?
@@ -48,6 +57,7 @@ typedef struct TraceProvEntry {
     // The set number that this entry corresponds to.
     int setNumber;
     List *sublinks;
+    TraceProvWindowFrameEntry window_entry;
 } TraceProvEntry;
 
 // Dependency stores which layers give information about the next ones.
@@ -154,6 +164,8 @@ typedef struct TraceProvTarget {
     bool isSetPointer;
     // List of TraceProvTargetSublinkItem
     List *sublinks;
+    // The window entry this target refers to.
+    TraceProvWindowFrameEntry *window_entry;
 } TraceProvTarget;
 
 TraceProvTarget *makeTraceProvTarget(
@@ -162,7 +174,13 @@ TraceProvTarget *makeTraceProvTarget(
     TraceProvDependency *dependency,
     int setNumber,
     bool isSetPointer,
-    List *sublinks
+    List *sublinks,
+    TraceProvWindowFrameEntry *window_entry
+);
+
+TraceProvWindowFrameEntry traceprov_make_window_frame_entry(
+    TraceProvEntryKind kind,
+    TraceProvLayerNumber log_layer_number
 );
 
 TraceProvEntry *traceprov_resolve_entry(const TraceProvTarget *, List **, List**);

@@ -395,7 +395,7 @@ PlannedStmt *traceprov_set_test(
 Query *traceprov_perform_rewrite(
     Query *parse, 
     List **addedTargets,
-    TraceProvParseContext *tpContext,
+    TraceProvParseContext *tp_context,
     bool parentHasAggs
 ){
     bool purePointerInParent = parentHasAggs || parse->hasAggs;
@@ -417,7 +417,7 @@ Query *traceprov_perform_rewrite(
             list_copy(parse->rtable),
             (Node*)stmt,
             parse,
-            tpContext
+            tp_context
         ) != NULL){
             elog(ERROR, "expected top-level call to return no query!");
         }
@@ -436,11 +436,11 @@ Query *traceprov_perform_rewrite(
         }
     }
 
-    List *targetsToAdd = NIL;
+    List *targets_to_add = NIL;
     // We need to store what are the targets for each rte. Then, when we walk through the join tree,
     // we'll need to add these attributes to the joinaliasvars. However, interestingly, things seem to work without changing the joinaliasvar??
     // But, eh, they are added anyways (maybe there's a bug downstream that occurs....)
-    List *targetsPerRTE = NIL;
+    List *targets_per_rte = NIL;
 
     ListCell *rteCell;
 
@@ -449,18 +449,18 @@ Query *traceprov_perform_rewrite(
         List *rteTargets = NIL;
         if (list_length(rteFilter) == 0 || (traceprov_find_int_list(rteFilter, foreach_current_index(rteCell)+1))){
             // TODO: hasAggs needs to also include distinct?
-            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tpContext, purePointerInParent);
+            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tp_context, purePointerInParent);
         }else{
             rteTargets = NIL;
         }
-        targetsToAdd = list_concat(targetsToAdd, rteTargets);
-        targetsPerRTE = lappend(targetsPerRTE, rteTargets);
+        targets_to_add = list_concat(targets_to_add, rteTargets);
+        targets_per_rte = lappend(targets_per_rte, rteTargets);
     }
 
     // if there are sublinks, need to go, also, go over them.
     // we log all of the matching keys, from the left side.
     if (parse->hasSubLinks){
-        traceprov_rewrite_sublinks(parse, tpContext, targetsPerRTE);
+        traceprov_rewrite_sublinks(parse, tp_context, targets_per_rte);
     }
 
     if (parse->hasAggs){
@@ -469,10 +469,11 @@ Query *traceprov_perform_rewrite(
         // We'll also have to nest the entire query in a subquery block (only if we're at the top level)
         // So, it is actually two functions. The nesting occurs at the top level (since that is the only place mark is explicitly needed)
         traceprov_aggregate_rewrite(
-            targetsToAdd,
-            &targetsToAdd,
-            tpContext,
+            targets_to_add,
+            &targets_to_add,
+            tp_context,
             parentHasAggs,
+            NULL,
             NULL
         );
     }
@@ -491,46 +492,52 @@ Query *traceprov_perform_rewrite(
             // 2. Add some counter for setop.
             // Don't need do anything in the case of intersect.
             List *unionAdjusted = traceprov_adjust_union(
-                setop, targetsPerRTE, parse->rtable, tpContext
+                setop, targets_per_rte, parse->rtable, tp_context
             );
-            targetsToAdd = traceprov_flatten(unionAdjusted);
-            targetsPerRTE = unionAdjusted;
+            targets_to_add = traceprov_flatten(unionAdjusted);
+            targets_per_rte = unionAdjusted;
         } else if (setop->op == SETOP_EXCEPT){
             parse = traceprov_adjust_except(
                 parse,
-                targetsPerRTE,
-                tpContext,
+                targets_per_rte,
+                tp_context,
                 parentHasAggs,
-                &targetsToAdd
+                &targets_to_add
             );
-            targetsPerRTE = NIL;
+            targets_per_rte = NIL;
         } else if (setop->op == SETOP_INTERSECT){
-            targetsPerRTE = traceprov_adjust_intersect(parse, targetsPerRTE, tpContext);
-            targetsToAdd = traceprov_flatten(targetsPerRTE);
+            targets_per_rte = traceprov_adjust_intersect(parse, targets_per_rte, tp_context);
+            targets_to_add = traceprov_flatten(targets_per_rte);
         }
     }else{
         // We don't care about the top-level returned join alias vars.
         // need to recursively go through the join tree and adjust the joinaliasvars
-        adjustJoinAliasVars(targetsPerRTE, parse->jointree->fromlist, parse->rtable, -1, NULL, NULL);
+        adjustJoinAliasVars(targets_per_rte, parse->jointree->fromlist, parse->rtable, -1, NULL, NULL);
     }
 
-    // In this case, simply extend the target list.
-    parse->targetList = traceprov_append_targets(targetsToAdd, parse->targetList);
-
-    List *addedFromSetOps = NIL;
-    parse = traceprov_rewrite_sets_to_joins(parse, tpContext, targetsPerRTE, &addedFromSetOps, parentHasAggs);
-    if (addedFromSetOps != NIL){
-        targetsToAdd = addedFromSetOps;
-    }
-
-    if (addedTargets) *addedTargets = targetsToAdd;
     if (parse->hasWindowFuncs){
+        if (parse->setOperations != NULL)
+            elog(ERROR, "Didn't expect setops to be at the same level as window funcs");
+        List *window_targets = NIL;
         parse = traceprov_perform_window_rewrite(
             parse,
-            NULL,
-            tpContext, NULL
+            tp_context,
+            targets_per_rte,
+            &window_targets
         );
+        targets_to_add = window_targets;
     }
+    // In this case, simply extend the target list.
+    parse->targetList = traceprov_append_targets(targets_to_add, parse->targetList);
+
+    List *added_from_set_ops = NIL;
+    parse = traceprov_rewrite_sets_to_joins(parse, tp_context, targets_per_rte, &added_from_set_ops, parentHasAggs);
+    if (added_from_set_ops != NIL){
+        targets_to_add = added_from_set_ops;
+    }
+
+    if (addedTargets) *addedTargets = targets_to_add;
+
     return parse;
 }
 
@@ -587,7 +594,7 @@ void rteRewrite(
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
                     // Also why there's no sublinks (yet)
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL));
+                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL));
                 }
             }
             ReleaseSysCache(indexTuple);
