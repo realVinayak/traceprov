@@ -34,6 +34,7 @@
 #include "access/xact.h"
 #include "rewrite/rewriteManip.h"
 #include "executor/executor.h"
+#include "rewrite/rewriteHandler.h"
 
 #include "plan_analyzer.h"
 
@@ -123,6 +124,13 @@ PlannedStmt *traceprov_rewriter(
     int cursorOptions,
 	ParamListInfo boundParams
 ){
+    Query *copied = copyObject(parse);
+    ListCell *cursor = NULL;
+    List *rewritten = QueryRewrite(copied);
+    foreach(cursor, rewritten){
+        if (Debug_print_parse)
+            elog_node_display(LOG, "rewritten", lfirst_node(Query, cursor), Debug_pretty_print);
+    }
     TraceProvParseContext context;
     tpParseInitializeContext(&context);
     // Set the root context to the parent context.
