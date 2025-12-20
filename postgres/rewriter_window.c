@@ -343,15 +343,13 @@ static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, i
         return false;
     }
 
-    if (wc->frameOptions & FRAMEOPTION_START_OFFSET){
-        const Node *start_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
-        *start_offset = assert_int8_const(start_result) * ((wc->frameOptions & FRAMEOPTION_START_OFFSET_FOLLOWING) ? 1 : -1);
-    }
+    if (wc->startOffset == NULL || wc->endOffset == NULL) elog(ERROR, "Expected both the expressions to be set!");
 
-    if (wc->frameOptions & FRAMEOPTION_END_OFFSET){
-        const Node *end_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
-        *end_offset = assert_int8_const(end_result) * ((wc->frameOptions & FRAMEOPTION_END_OFFSET_FOLLOWING) ? 1 : -1);
-    }
+    const Node *start_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
+    *start_offset = assert_int8_const(start_result) * ((wc->frameOptions & FRAMEOPTION_START_OFFSET_FOLLOWING) ? 1 : -1);
+
+    const Node *end_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
+    *end_offset = assert_int8_const(end_result) * ((wc->frameOptions & FRAMEOPTION_END_OFFSET_FOLLOWING) ? 1 : -1);
 
     // Both being equal to 0 is a special case.
     // In that case, the frame will always include just the current row.
