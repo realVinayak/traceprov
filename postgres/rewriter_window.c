@@ -348,7 +348,7 @@ static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, i
     const Node *start_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
     *start_offset = assert_int8_const(start_result) * ((wc->frameOptions & FRAMEOPTION_START_OFFSET_FOLLOWING) ? 1 : -1);
 
-    const Node *end_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
+    const Node *end_result = eval_const_expressions(NULL, (Node *) wc->endOffset);
     *end_offset = assert_int8_const(end_result) * ((wc->frameOptions & FRAMEOPTION_END_OFFSET_FOLLOWING) ? 1 : -1);
 
     // Both being equal to 0 is a special case.
