@@ -332,8 +332,16 @@ static int64 assert_int8_const(const Node *result){
 static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, int64 *end_offset){
     *start_offset = 0;
     *end_offset = 0;
-    // Non-offset case. Can be non-empty.
-    if (!(wc->frameOptions & (FRAMEOPTION_START_OFFSET | FRAMEOPTION_END_OFFSET))) return false;
+    const int preceding_mask = (FRAMEOPTION_START_OFFSET_PRECEDING | FRAMEOPTION_END_OFFSET_PRECEDING);
+    const int following_mask = (FRAMEOPTION_START_OFFSET_FOLLOWING | FRAMEOPTION_END_OFFSET_FOLLOWING);
+
+    if (!(wc->frameOptions & preceding_mask) && !(wc->frameOptions & following_mask)) return false;
+
+    if ((wc->frameOptions & FRAMEOPTION_RANGE)){
+        *start_offset = (wc->frameOptions & following_mask) ?  1 : 0;
+        *end_offset = (wc->frameOptions & preceding_mask) ? -1 : 0;
+        return false;
+    }
 
     if (wc->frameOptions & FRAMEOPTION_START_OFFSET){
         const Node *start_result = eval_const_expressions(NULL, (Node *) wc->startOffset);
