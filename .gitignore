@@ -58,3 +58,5 @@ postgres/bld/*
 */*.o.dSYM/
 tmp/
 *.db
+smokedduck_scratch/
+run_smokedduck
