@@ -24,6 +24,7 @@ from traceprovpy.tools.run_with_timeout import (
     ReplaceFILE,
     ReplaceSelectivity,
     RunParams,
+    SmokedDuckOptions,
     run_with_timeout,
     RunWithTimeoutOptions,
 )
@@ -110,7 +111,10 @@ class QuerySpec(NamedTuple):
         return pack
 
     def run_packs(
-        self, top_dir: Path, get_run_options: Callable[[str], RunWithTimeoutOptions]
+        self,
+        top_dir: Path,
+        get_run_options: Callable[[str], RunWithTimeoutOptions], 
+        _: 'GenericBenchmark'
     ):
         base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)._replace(
             preprocessors=self.preprocess
@@ -240,10 +244,10 @@ class QuerySpec(NamedTuple):
 
 class ValidationQuerySpec(QuerySpec):
 
-    def run_packs(self, top_dir, get_run_options):
+    def run_packs(self, top_dir, get_run_options, _):
         print("[validation]: ", self.base, self.materialize)
-        base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
-        other_pack = ValidationQuerySpec.get_pack(
+        base_pack = self.get_pack(top_dir, self.base, get_run_options)
+        other_pack = self.get_pack(
             top_dir, self.materialize, get_run_options
         )
 
@@ -276,6 +280,8 @@ class QueryDirectory(NamedTuple):
             "queries": [query.get_as_dict() for query in self.queries],
         }
 
+def bench_has_smokedduck(args: list[str]):
+    return '-sd_db' in args
 
 class GenericBenchmark(NamedTuple):
     name: str
@@ -286,6 +292,7 @@ class GenericBenchmark(NamedTuple):
 
     traceprov_path: str = None
     traceprov_infer_set_path: str = None
+    sd_options: SmokedDuckOptions = None
 
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
@@ -299,8 +306,11 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
+        parser.add_argument("-sd_db", required=False, type=str)
+        parser.add_argument("-sd_driver", required=False, type=str)
 
         parsed, _ = parser.parse_known_args()
+
         connection_params = ConnectionParams(
             host=parsed.host,
             port=parsed.port,
@@ -308,7 +318,16 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff, parsed.sd_driver)
+        # They both (or neither) should be set....
+        assert not ((parsed.sd_db is None) ^ (parsed.sd_driver is None))
+        if parsed.sd_db is not None:
+            assert setup_bench.sd_options is None
+            sd_options = SmokedDuckOptions(
+                db_executable=parsed.sd_db,
+                driver_executable=parsed.sd_driver    
+            )
+            setup_bench = setup_bench._replace(sd_options=sd_options)
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
@@ -359,6 +378,8 @@ class GenericBenchmark(NamedTuple):
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
         suff: str = None,
+        # the smokedduck shared library.
+        sd_driver: str = None
     ):
         if suff is None:
             suff = self.name
@@ -434,7 +455,7 @@ class GenericBenchmark(NamedTuple):
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
                 results = query.spec.run_packs(
-                    Path(top_dir) / directory.dir_name / query.query_name, _get_options
+                    Path(top_dir) / directory.dir_name / query.query_name, _get_options, self
                 )
                 combined_results[query.query_name] = {
                     **combined_results.get(query.query_name, {}),

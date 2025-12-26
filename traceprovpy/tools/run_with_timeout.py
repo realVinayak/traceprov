@@ -117,6 +117,9 @@ class ReplaceSelectivity(Preprocessor):
     def __repr__(self):
         return f"ReplaceSelectivity('{self.selectivity}')"
 
+class SmokedDuckOptions(NamedTuple):
+    db_executable: str
+    driver_executable: str
 
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
