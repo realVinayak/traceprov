@@ -281,7 +281,7 @@ class QueryDirectory(NamedTuple):
         }
 
 def bench_has_smokedduck(args: list[str]):
-    return '-sd_db' in args
+    return '-sd_lib' in args
 
 class GenericBenchmark(NamedTuple):
     name: str
@@ -306,8 +306,8 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
-        parser.add_argument("-sd_db", required=False, type=str)
-        parser.add_argument("-sd_driver", required=False, type=str)
+        parser.add_argument("-sd_lib", required=False, type=str)
+        parser.add_argument("-sd_include", required=False, type=str)
 
         parsed, _ = parser.parse_known_args()
 
@@ -318,16 +318,7 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff, parsed.sd_driver)
-        # They both (or neither) should be set....
-        assert not ((parsed.sd_db is None) ^ (parsed.sd_driver is None))
-        if parsed.sd_db is not None:
-            assert setup_bench.sd_options is None
-            sd_options = SmokedDuckOptions(
-                db_executable=parsed.sd_db,
-                driver_executable=parsed.sd_driver    
-            )
-            setup_bench = setup_bench._replace(sd_options=sd_options)
+        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff, parsed.sd_lib, parsed.sd_include)
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
@@ -379,13 +370,14 @@ class GenericBenchmark(NamedTuple):
         connection_params: ConnectionParams,
         suff: str = None,
         # the smokedduck shared library.
-        sd_driver: str = None
+        sd_lib_path: str = "",
+        sd_include_path: str = ""
     ):
         if suff is None:
             suff = self.name
 
         response = os.system(
-            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
+            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff} {sd_lib_path} {sd_include_path}"
         )
         if response != 0:
             raise Exception("Make failed!")
@@ -415,9 +407,17 @@ class GenericBenchmark(NamedTuple):
         traceprov_obj = f"libtraceprov{suff}"
         traceprv_infer_set_obj = f"libtraceprov_infer{suff}"
 
+        if sd_lib_path:
+            sd_executable_path = (Path(traceprov_postgres_root) / f"bld/bin/run_smokedduck_{suff}").resolve()
+            assert sd_executable_path.exists(), "smokedduck path should exist!"
+            sd_options = SmokedDuckOptions(driver_executable=sd_executable_path.as_posix())
+        else:
+            sd_options = None
+
         return self._replace(
             traceprov_path=traceprov_obj,
             traceprov_infer_set_path=traceprv_infer_set_obj,
+            sd_options=sd_options
         )
 
     def run(
