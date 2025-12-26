@@ -1,0 +1,6 @@
+python3 ../bench_uncompressed.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_uncompressed_v02 -tp_root ../../../ -t_root ./
+python3 ../bench_snappy.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_snappy_v02 -tp_root ../../../ -t_root ./
+python3 ../bench_gzip.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_gzip_v02 -tp_root ../../../ -t_root ./
+python3 ../bench_zstd.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_zstd_v02 -tp_root ../../../ -t_root ./
+python3 ../bench_lz4.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_lz4_v02 -tp_root ../../../ -t_root ./
+python3 ../bench_lz4_raw.py -cfg config_time.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_analyze_lz4_raw_v02 -tp_root ../../../ -t_root ./

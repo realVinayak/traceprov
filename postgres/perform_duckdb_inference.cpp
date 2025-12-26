@@ -12,6 +12,7 @@
 
 int main(int argc, char *argv[]){
 
+    std::cout << "Using path at " << argv[1] << std::endl;
     std::string sql_str;
     getline(std::cin, sql_str);
     const char *duckdb_str = sql_str.c_str();
@@ -27,7 +28,7 @@ int main(int argc, char *argv[]){
 
     duckdb_database db;
     duckdb_connection con;
-    if (duckdb_open(NULL, &db) == DuckDBError){
+    if (duckdb_open(argv[1], &db) == DuckDBError){
         std::cout << "Error opening db" << std::endl;
         exit(1);
     }
@@ -47,6 +48,33 @@ int main(int argc, char *argv[]){
     }
     duckdb_destroy_result(&result);
 
+    state = duckdb_query(con, "SELECT current_setting('threads')", &result);
+    if (state == DuckDBError){
+        std::cout << "Error running INSTALL" << std::endl;
+        std::cout << duckdb_result_error(&result);
+        exit(1);
+    }else{
+        duckdb_data_chunk data_chunk = duckdb_fetch_chunk(result);
+        if (data_chunk){
+            const idx_t row_count = duckdb_data_chunk_get_size(data_chunk);
+            const idx_t col_count = duckdb_data_chunk_get_column_count(data_chunk);
+            std::cout << "ROWS" << row_count << " | " << "COLS" << col_count << std::endl;
+            duckdb_vector col = duckdb_data_chunk_get_vector(data_chunk, 0);
+            uint32_t *col_data = (uint32_t *)duckdb_vector_get_data(col);
+            std::cout << "NUM_THREADS: " << col_data[0] << std::endl;
+            duckdb_destroy_data_chunk(&data_chunk);
+        }
+    }
+    duckdb_destroy_result(&result);
+
+    // state = duckdb_query(con, "SET threads=1;", &result);
+    // if (state == DuckDBError){
+    //     std::cout << "Error running threads" << std::endl;
+    //     std::cout << duckdb_result_error(&result);
+    //     exit(1);
+    // }
+    // duckdb_destroy_result(&result);
+
     std::vector<uint64_t> **derived_records = (std::vector<uint64_t> **)malloc(sizeof(std::vector<uint64_t> *)*MAX_NUM_COLUMNS);
     for (int i = 0; i < MAX_NUM_COLUMNS; i++){
         derived_records[i] = new std::vector<uint64_t>;
@@ -54,7 +82,7 @@ int main(int argc, char *argv[]){
     auto start = std::chrono::high_resolution_clock::now();
     state = duckdb_query(con, duckdb_str, &result);
     auto test_end = std::chrono::high_resolution_clock::now();
-    auto duration_query = std::chrono::duration_cast<std::chrono::milliseconds>(test_end - start);
+    auto duration_query = std::chrono::duration_cast<std::chrono::microseconds>(test_end - start);
     std::cout << "Took: " << duration_query.count() << "(ms)" << std::endl;
     if (state == DuckDBError){
         std::cout << "Error running query" << std::endl;
@@ -87,7 +115,7 @@ int main(int argc, char *argv[]){
     }
 
     auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << "Took: " << duration.count() << "(ms)" << std::endl;
     if (derived_records[0]->size() == 0){
         std::cout << "Expected some records to be in provenance;" << std::endl;

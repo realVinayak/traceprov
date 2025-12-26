@@ -204,7 +204,8 @@ def main():
             layer_context = [
                 LayerSpec(
                     layer_to_num_pk=layer_to_num_pk_map,
-                    compression_scheme="zstd",
+                    compression_scheme="--invalid--",
+                    use_native=True,
                 )
             ]
             subdir_queries.append(

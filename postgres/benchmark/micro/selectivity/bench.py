@@ -32,6 +32,7 @@ def get_context(compression_scheme: DUCKDB_COMPRESSION_SCHEMES):
         LayerSpec(
             layer_to_num_pk=layer_to_num_pk_map,
             compression_scheme=compression_scheme,
+            use_native=True,
         )
     ]
 
@@ -203,7 +204,7 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                     spec=DuckDbInferenceQuerySpec(
                         base="DUCKDB_BASE",
                         key=f"DUCKDB_INFERENCE_{selectivity}",
-                        context=get_context("lz4_raw"),
+                        context=get_context("--invalid--"),
                     ),
                 ),
             ],
@@ -226,8 +227,9 @@ def main():
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
+    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     # dir_names = ["1_000_000", "5_000_000"]
+    dir_names = ["50_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
@@ -257,7 +259,7 @@ def main():
         print(selectivity_directories)
         return
     result = benchmark.run_from_argparse(
-        selectivity_directories, params=RunParams(repeat=10, throwaway=5)
+        selectivity_directories, params=RunParams(repeat=1, throwaway=0)
     )
     print(result)
     benchmark.dump_final_result(result)

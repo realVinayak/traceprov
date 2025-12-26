@@ -36,6 +36,7 @@ class LayerSpec(NamedTuple):
     layer_to_num_pk: Dict[int, int]
     # compression schemes:  (uncompressed, snappy, gzip, zstd, brotli, lz4, lz4_raw).
     compression_scheme: DUCKDB_COMPRESSION_SCHEMES
+    use_native: bool = False
 
 
 class ParquetRepr(NamedTuple):
@@ -52,7 +53,11 @@ class ParquetRepr(NamedTuple):
         return self.alias
 
 
-MAKE_PARQUET = lambda table: ParquetRepr(f"'{table}.parquet'", table)
+def MAKE_PARQUET(table: str, layer_spec: LayerSpec):
+    return ParquetRepr(
+        f"'{table}.parquet'" if not layer_spec.use_native else f"'{table}_table'",
+        table,
+    )
 
 
 def make_base_layer_columns(base_layer: ParquetRepr, layer_spec: LayerSpec):
@@ -65,9 +70,9 @@ def make_base_layer_columns(base_layer: ParquetRepr, layer_spec: LayerSpec):
 
 
 def get_combine_join(main_worker, worker, layer_spec: LayerSpec):
-    final_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_2")
-    combine_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_3")
-    base_layer = MAKE_PARQUET(f"worker_{worker}_layer_1")
+    final_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_2", layer_spec)
+    combine_layer = MAKE_PARQUET(f"worker_{main_worker}_layer_3", layer_spec)
+    base_layer = MAKE_PARQUET(f"worker_{worker}_layer_1", layer_spec)
     base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
         f"select {base_layer_columns} "
@@ -92,8 +97,8 @@ def make_sql(main_worker_id: int | None, workers: Set[int], layer_spec: LayerSpe
         else make_combines(main_worker_id, workers, layer_spec)
     )
     main_worker_id = main_worker_id if main_worker_id is not None else list(workers)[0]
-    base_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_1")
-    final_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_2")
+    base_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_1", layer_spec)
+    final_layer = MAKE_PARQUET(f"worker_{main_worker_id}_layer_2", layer_spec)
     base_layer_columns = make_base_layer_columns(base_layer, layer_spec)
     sql = (
         f"select {base_layer_columns} "
@@ -103,6 +108,9 @@ def make_sql(main_worker_id: int | None, workers: Set[int], layer_spec: LayerSpe
     sql_stmts = [f"({sql})" for sql in sql_stmts]
     sql_stmts_unioned = "UNION ALL".join(sql_stmts)
     return f"select * from ({sql_stmts_unioned}) AS G;"
+
+
+TRACEPROV_DB = "traceprov_inference.db"
 
 
 def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
@@ -140,15 +148,26 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
             main_worker_id = worker
 
         worker_set.add(worker)
-        parquet_file_path = f"{db_inference_dir}/{file_prefix}.parquet"
-        assert (
-            os.system(
-                f"duckdb -c \"COPY (SELECT * FROM read_csv('{db_inference_dir}/{file}')) TO '{parquet_file_path}' (FORMAT PARQUET, COMPRESSION {layer_spec.compression_scheme});\""
+        if not layer_spec.use_native:
+            parquet_file_path = f"{db_inference_dir}/{file_prefix}.parquet"
+            assert (
+                os.system(
+                    f"duckdb -c \"COPY (SELECT * FROM read_csv('{db_inference_dir}/{file}')) TO '{parquet_file_path}' (FORMAT PARQUET, COMPRESSION {layer_spec.compression_scheme});\""
+                )
+                == 0
             )
-            == 0
-        )
-        assert parquet_file_path not in file_sizes
-        file_sizes[parquet_file_path] = os.path.getsize(parquet_file_path)
+            assert parquet_file_path not in file_sizes
+            file_sizes[parquet_file_path] = os.path.getsize(parquet_file_path)
+        else:
+            assert (
+                os.system(
+                    f'cd {db_inference_dir} && duckdb {TRACEPROV_DB} -c "CREATE TABLE {file_prefix}_table AS SELECT * FROM \'{file_prefix}.csv\'" && duckdb {TRACEPROV_DB} -c "ANALYZE;"'
+                )
+                == 0
+            )
+            file_sizes[TRACEPROV_DB] = os.path.getsize(
+                f"{db_inference_dir}/{TRACEPROV_DB}"
+            )
 
     print(worker_set)
     print(main_worker_id)
@@ -164,13 +183,15 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
         sql_file = f"{BENCH_DUCKDB}\n{sql}"
         with open("/tmp/duckdb_script.sql", "w") as f:
             f.write(sql_file)
-        os.system(f"cd {db_inference_dir} && duckdb test.db -f /tmp/duckdb_script.sql")
+        os.system(
+            f"cd {db_inference_dir} && duckdb {TRACEPROV_DB} -f /tmp/duckdb_script.sql"
+        )
         with open("/tmp/duckdb_profile.json") as f:
             profile = json.loads(f.read())
             time_taken = profile["latency"]
         if use_table and not use_temporary:
             os.system(
-                f'cd {db_inference_dir} && duckdb test.db -csv -noheader -c "select count(*) from test_table" > /tmp/duckdb_count.txt'
+                f'cd {db_inference_dir} && duckdb {TRACEPROV_DB} -csv -noheader -c "select count(*) from test_table" > /tmp/duckdb_count.txt'
             )
             with open("/tmp/duckdb_count.txt") as f:
                 count = int(f.read().strip())
@@ -179,7 +200,7 @@ def perform_duckdb_inference(layer_spec: LayerSpec, mode=0):
             f.write(sql)
         assert (
             os.system(
-                f"cd {db_inference_dir} && cat /tmp/duckdb_script.sql | perform_duckdb_inference"
+                f"cd {db_inference_dir} && cat /tmp/duckdb_script.sql | perform_duckdb_inference {os.getcwd()}/{db_inference_dir}/{TRACEPROV_DB}"
             )
             == 0
         )
