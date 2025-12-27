@@ -87,15 +87,25 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
+        print(graphs)
 
         expected_entry = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
-                "children": [{"graphType": "NULL"}],
+                "children": [
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    }
+                ],
             }
         ]
         self.assertEqual(graphs, expected_entry)
@@ -110,17 +120,28 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
+        print(graphs)
 
         expected_entry = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
-                "children": [{"graphType": "NULL"}],
+                "children": [
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    }
+                ],
             }
         ]
+
         self.assertEqual(graphs, expected_entry)
 
     def test_simple_aggregation_group_by_1_pk(self):
@@ -131,17 +152,28 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
+        print(graphs)
 
         expected_entry = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
-                "children": [{"graphType": "NULL"}],
+                "children": [
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    }
+                ],
             }
         ]
+
         self.assertEqual(graphs, expected_entry)
 
     def test_simple_aggregation_group_by_1_pk_nested_levels(self):
@@ -157,14 +189,24 @@ class TestRewrite(TestDbSetup):
 
         expected_entry = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
-                "children": [{"graphType": "NULL"}],
+                "children": [
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    }
+                ],
             }
         ]
+
         self.assertEqual(graphs, expected_entry)
 
     def test_simple_aggregation_no_group_by_cross_join(self):
@@ -177,24 +219,35 @@ class TestRewrite(TestDbSetup):
         print(TestRewrite.run_simple_query(tp_query))
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
+
         expected_entries = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
                 "children": [
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                        ],
+                        "children": [
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                        ],
+                    }
                 ],
             }
         ]
+
         self.assertEqual(expected_entries, graphs)
 
     def test_simple_aggregation_no_group_by_cross_joins_nested(self):
@@ -226,27 +279,37 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
 
+        # print(graphs)
         expected = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 1,
+                "graphType": "LOG",
+                "headNumber": 2,
                 "entries": [
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0, sublinks: [])]",
-                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
                 "children": [
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
-                    {"graphType": "NULL"},
+                    {
+                        "graphType": "AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                        ],
+                        "children": [
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                            {"graphType": "NULL"},
+                        ],
+                    }
                 ],
             }
         ]
@@ -275,50 +338,59 @@ class TestRewrite(TestDbSetup):
         print(TestRewrite.run_simple_query(tp_query))
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
-
+        # print(graphs)
         expected = [
             {
-                "graphType": "REGULAR",
-                "headNumber": 13,
+                "graphType": "LOG",
+                "headNumber": 6,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [])]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
                 ],
                 "children": [
                     {
-                        "graphType": "REGULAR",
-                        "headNumber": 1,
+                        "graphType": "AGGREGATE",
+                        "headNumber": 5,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
                         ],
-                        "children": [{"graphType": "NULL"}],
-                    },
-                    {
-                        "graphType": "REGULAR",
-                        "headNumber": 4,
-                        "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
+                        "children": [
+                            {
+                                "graphType": "AGGREGATE",
+                                "headNumber": 1,
+                                "entries": [
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                ],
+                                "children": [{"graphType": "NULL"}],
+                            },
+                            {
+                                "graphType": "AGGREGATE",
+                                "headNumber": 2,
+                                "entries": [
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                ],
+                                "children": [{"graphType": "NULL"}],
+                            },
+                            {
+                                "graphType": "AGGREGATE",
+                                "headNumber": 3,
+                                "entries": [
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                ],
+                                "children": [{"graphType": "NULL"}],
+                            },
+                            {
+                                "graphType": "AGGREGATE",
+                                "headNumber": 4,
+                                "entries": [
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                ],
+                                "children": [{"graphType": "NULL"}],
+                            },
                         ],
-                        "children": [{"graphType": "NULL"}],
-                    },
-                    {
-                        "graphType": "REGULAR",
-                        "headNumber": 7,
-                        "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
-                        ],
-                        "children": [{"graphType": "NULL"}],
-                    },
-                    {
-                        "graphType": "REGULAR",
-                        "headNumber": 10,
-                        "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [])]"
-                        ],
-                        "children": [{"graphType": "NULL"}],
-                    },
+                    }
                 ],
             }
         ]
