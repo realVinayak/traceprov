@@ -46,7 +46,6 @@ temp.out.sql
 tmp.sql
 postgres/benchmark/micro/set_operations
 postgres/complex.*
-demo_queries.sql
 aclocal.m4
 autom4te.cache/
 compile
@@ -57,4 +56,11 @@ config.sub
 configure
 postgres/bld/*
 */*.o.dSYM/
-.editorconfig
+smokedduck_scratch/
+postgres/run_smokedduck
+postgres/benchmark/tpch/distributed.json
+postgres/benchmark/tpch/distributed_time.json
+postgres/benchmark/micro/selectivity/distributed.json
+postgres/benchmark/micro/selectivity/distributed_time.json
+tmp/
+*.db
