@@ -51,7 +51,6 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         }
         // Figure out the correlated references, and also log the provenance attributes of them.
         // This is done by going through the queue of provenance attributes, level by level.
-        // We stop once we see find any match.
         List *correlated_arg_vars = NIL;
         ListCell *provenance_queue = NULL;
         List *correlated_provenance_targets = NIL;
@@ -68,7 +67,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                 const Var *correlated_var = (Var *)lfirst(correlated_var_cursor);
                 List *provenance_targets = list_nth(provenance_targets_per_rte, correlated_var->varno - 1);
                 ListCell *provenance_target_to_add;
-                correlated_provenance_targets = provenance_targets;
+                correlated_provenance_targets = list_concat(correlated_provenance_targets, provenance_targets);
                 foreach(provenance_target_to_add, provenance_targets){
                     Var *outerVar = NULL;
                     const TraceProvTarget *prov_target = ((TraceProvTarget *)lfirst(provenance_target_to_add));
@@ -85,8 +84,9 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                     );
                 }
             }
-            // If we find one correlation, that's all we need.
-            break;
+        }
+        if (list_length(correlated_provenance_targets) != list_length(correlated_arg_vars)){
+            elog(ERROR, "Expected both correlated targets to have the same length!");
         }
         // Log the traceprov references.
         TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
