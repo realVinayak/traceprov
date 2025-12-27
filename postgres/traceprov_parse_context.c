@@ -153,8 +153,7 @@ TraceProvEntry *traceprov_resolve_entry(
 
             tp_entry->kind = tp_target->window_entry->kind;
             tp_entry->window_entry.log_layer_number = tp_target->window_entry->log_layer_number;
-        }
-        if (graph != NULL){
+        } else if (graph != NULL){
             if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
                 elog(ERROR, "Expected no table info to for the pointer node");
             }
@@ -193,25 +192,12 @@ TraceProvDependency *make_traceprov_dependency(
     return graphNode;
 }
 
-static char *serializeTraceProvEntry(TraceProvEntry *entry){
-    StringInfoData buf;
-    initStringInfo(&buf);
-    char *kindStr = "TP_ENTRY_INVALID";
-    if (entry->kind == TP_ENTRY_KIND_BASE_RELATION){
-        kindStr = "TP_ENTRY_KIND_BASE_RELATION";
-    }else if (entry->kind == TP_ENTRY_KIND_POINTER){
-        kindStr = "TP_ENTRY_KIND_POINTER";
-    } else if (entry->kind == TP_ENTRY_SET_POINTER){
-        kindStr = "TP_ENTRY_SET_POINTER";
-    }else{
-        elog(ERROR, "Got invalid kind: %d", entry->kind);
-    }
-    
+static char *tp_entry_serialize_sublinks(List *sublinks){
     StringInfoData sublink_items;
     initStringInfo(&sublink_items);
     appendStringInfoChar(&sublink_items, '[');
     ListCell *sublink_item_cursor;
-    foreach(sublink_item_cursor, entry->sublinks){
+    foreach(sublink_item_cursor, sublinks){
         if (NEED_SEP(sublink_item_cursor)){
             appendStringInfoChar(&sublink_items, ',');
         }
@@ -219,15 +205,65 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
         appendStringInfo(&sublink_items, "(%d, %d)", sublink_item->layer_number, sublink_item->offset_in_key);
     }
     appendStringInfoChar(&sublink_items, ']');
+    return sublink_items.data;
+}
+
+static char *tp_entry_serialize_kind(TraceProvEntryKind kind){
+    char *kind_str = "TP_ENTRY_INVALID";
+    switch (kind) {
+        case TP_ENTRY_KIND_BASE_RELATION:
+            kind_str = "TP_ENTRY_KIND_BASE_RELATION";
+            break;
+        case TP_ENTRY_KIND_POINTER:
+            kind_str = "TP_ENTRY_KIND_POINTER";
+            break;
+        case TP_ENTRY_SET_POINTER:
+            kind_str = "TP_ENTRY_SET_POINTER";
+            break;
+        case TP_ENTRY_FRAME_START:
+            kind_str = "TP_ENTRY_FRAME_START";
+            break;
+        case TP_ENTRY_FRAME_END:
+            kind_str = "TP_ENTRY_FRAME_END";
+            break;
+        case TP_ENTRY_FRAME_INHERIT:
+            kind_str = "TP_ENTRY_FRAME_INHERIT";
+            break;
+        default:
+            elog(ERROR, "Got invalid kind: %d", kind);
+    }
+    return pstrdup(kind_str);
+}
+
+static char *tp_entry_serialize_window(TraceProvWindowFrameEntry *entry){
+    StringInfoData window_data;
+    initStringInfo(&window_data);
+    appendStringInfoChar(&window_data, '[');
+    if (entry->kind != 0 && entry->kind < TP_ENTRY_FRAME_START)
+        elog(ERROR, "Got invalid window entry state");
+    if (entry->kind >= TP_ENTRY_FRAME_START){
+        char *kind_str = tp_entry_serialize_kind(entry->kind);
+        appendStringInfo(&window_data, "Window(kind: %s, layer_number: %d)", kind_str, entry->log_layer_number);
+    }
+    appendStringInfoChar(&window_data, ']');
+    return window_data.data;
+}
+
+static char *serializeTraceProvEntry(TraceProvEntry *entry){
+    StringInfoData buf;
+    initStringInfo(&buf);
+    char *kindStr = tp_entry_serialize_kind(entry->kind);
+
     appendStringInfo(
         &buf, 
-        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s)]",
+        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s, window: %s)]",
         kindStr,
         entry->relId,
         entry->resNo,
         entry->attrNumber,
         entry->setNumber,
-        sublink_items.data
+        tp_entry_serialize_sublinks(entry->sublinks),
+        tp_entry_serialize_window(&entry->window_entry)
     );
     return buf.data;
 }
