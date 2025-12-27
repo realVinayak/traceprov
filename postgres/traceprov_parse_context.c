@@ -186,6 +186,7 @@ TraceProvDependency *make_traceprov_dependency(
     List *entries
 ){
     TraceProvDependency *graphNode = palloc0_object(TraceProvDependency);
+    graphNode->graph_type = kind;
     graphNode->headNumber = headNumber;
     graphNode->children = children;
     graphNode->entries = entries;
@@ -331,7 +332,17 @@ char *traceProvDependencyToJson(const TraceProvDependency *graph){
     }else if (graph == TRACEPROV_SET_GRAPH){
         appendStringInfo(&buf, "\"SET_GRAPH\"");
     }else{
-        appendStringInfo(&buf, "\"REGULAR\"");
+        switch (graph->graph_type){
+            case TP_AGGREGATE:
+                appendStringInfo(&buf, "\"AGGREGATE\"");
+                break;
+            case TP_LOG:
+                appendStringInfo(&buf, "\"LOG\"");
+                break;
+            default:
+                elog(ERROR, "Got unexpected graph type: %d", graph->graph_type);
+                break;
+        }
         appendStringInfo(&buf, ",");
         appendStringInfo(&buf, "\"headNumber\": %d,", graph->headNumber);
         appendStringInfo(&buf, "\"entries\": [");
@@ -373,6 +384,8 @@ char * traceprovDependencyToString(int indent, const TraceProvDependency *graph)
     initStringInfo(&buf);
     appendIndentAware(&buf, indent);
     appendStringInfo(&buf, "TraceProv Dependency Graph {\n");
+    appendIndentAware(&buf, indent);
+    appendStringInfo(&buf, "\tgraph_type: %d\n", graph->graph_type);
     appendIndentAware(&buf, indent);
     appendStringInfo(&buf, "\theadNumber: %d\n", graph->headNumber);
     appendIndentAware(&buf, indent);
@@ -520,6 +533,7 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
     memcpy(&header->graphPtr, &graph, sizeof(TraceProvDependency *));
     failSafeWrite(output_file, header, sizeof(TraceProvDependencyHeader));
     if (TRACEPROV_GRAPH_IS_VALID(graph)){
+        failSafeWrite(output_file, &graph->graph_type, sizeof(graph->graph_type));
         failSafeWrite(output_file, &graph->headNumber, sizeof(graph->headNumber));
         ListCell *entryCursor;
         // Write the entries next.
@@ -590,6 +604,7 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
     failSafeRead(file, &header, sizeof(TraceProvDependencyHeader));
     if (TRACEPROV_GRAPH_IS_VALID(header.graphPtr)){
         TraceProvDependency *graph = palloc0_object(TraceProvDependency);
+        failSafeRead(file, &graph->graph_type, sizeof(graph->graph_type));
         failSafeRead(file, &graph->headNumber, sizeof(graph->headNumber));
 
         List *entries = NIL;
