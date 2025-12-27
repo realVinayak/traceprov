@@ -357,6 +357,7 @@ DROP FUNCTION IF EXISTS traceprov_log_entry_n (
     BIGINT,
     BIGINT,
     BIGINT,
+    BIGINT,
     BIGINT
 );
 
@@ -964,6 +965,7 @@ CREATE FUNCTION traceprov_log_entry_n (
 
 CREATE FUNCTION traceprov_log_entry_n (
     INTEGER,
+    BIGINT,
     BIGINT,
     BIGINT,
     BIGINT,

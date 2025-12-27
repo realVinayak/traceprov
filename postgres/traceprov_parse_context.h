@@ -39,9 +39,10 @@ typedef enum TraceProvEntryKind {
 
 // Specifies what kind of graph is this
 typedef enum TraceProvGraphKind {
-    TP_AGGREGATE = 0,
-    TP_LOG = 1,
-    TP_POINTER = 2
+    // So bugs can be caught.
+    TP_INVALID = 0,
+    TP_AGGREGATE = 1,
+    TP_LOG = 2
 } TraceProvGraphKind;
 
 typedef struct TraceProvWindowFrameEntry {
