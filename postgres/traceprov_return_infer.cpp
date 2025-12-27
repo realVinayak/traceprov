@@ -227,7 +227,7 @@ extern "C" {
         }
         TraceProvParseContext *parseContext;
 
-        const TraceProvDependency *graph = (TraceProvDependency *)lfirst(list_head(deserializeTraceProvDependency(&parseContext)));
+        const TraceProvDependency *graph = (TraceProvDependency *)lfirst(list_head(deserializeTraceProvDependency(&parseContext, NULL)));
         const int group_layer_number = graph->headNumber + 1;
         void *group_layer_ptr = NULL;
         const struct local_context *main_worker_context = NULL;
@@ -730,7 +730,7 @@ extern "C" {
 
     Datum traceprov_json_graph(PG_FUNCTION_ARGS){
         TraceProvParseContext *context = NULL;
-        const List *graphs = deserializeTraceProvDependency(&context);
+        const List *graphs = deserializeTraceProvDependency(&context, NULL);
         ListCell *graphCursor;
         StringInfoData buf;
         initStringInfo(&buf);
@@ -757,6 +757,15 @@ extern "C" {
         graphStr = graphStr.append("}");
         elog(INFO, "%s", graphStr.c_str()); 
         PG_RETURN_TEXT_P(cstring_to_text(graphStr.c_str()));
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_parsed_back);
+
+    Datum traceprov_parsed_back(PG_FUNCTION_ARGS) {
+        TraceProvParseContext *context = NULL;
+        char *final_parsed_back = NULL;
+        deserializeTraceProvDependency(&context, &final_parsed_back);
+        PG_RETURN_TEXT_P(cstring_to_text(final_parsed_back));
     }
 };
 

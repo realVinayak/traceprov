@@ -140,8 +140,8 @@ TraceProvEntry *makeTraceProvEntry();
 
 TraceProvDependency *make_traceprov_dependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
 void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
-void serializeTraceProvDepedency(List *, TraceProvParseContext *);
-List *deserializeTraceProvDependency(TraceProvParseContext **);
+void serializeTraceProvDepedency(List *, TraceProvParseContext *, const char *);
+List *deserializeTraceProvDependency(TraceProvParseContext **, char **);
 
 void traceprovPrintContext(const TraceProvParseContext *);
 

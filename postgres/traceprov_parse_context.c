@@ -464,13 +464,17 @@ void _serializeContext(const TraceProvParseContext*, FILE *);
 TraceProvDependency *_deserializeTraceProvDependency(FILE *);
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *, TraceProvDependencyMetaHeader*);
 
+typedef struct TraceProvStringHeader {
+    size_t size;
+} TraceProvStringHeader;
 // Serializes multiple graphs in the graph file.
 // This needs to be a list, because we can multiple pointers.
 // Need to also dump some things from the context. For example, need to dump the set-padding map.
-void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
+// Also dumps the parsed back. Useful for debugging things layer + tests.
+void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context, const char *parsed_back_query){
     ListCell *graphCursor;
-    const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
-    FILE *fptr = fopen(dumpPath, "wb"); 
+    const char *dump_path = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
+    FILE *fptr = fopen(dump_path, "wb"); 
     if (fptr == NULL) {
         elog(ERROR, "Error opening file for dumping graph!");
     }
@@ -488,6 +492,16 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context){
         traceprovPrintDependency(graph, context);
         _serializeTraceProvDepedency(graph, fptr);
     }
+
+    TraceProvStringHeader string_header;
+    if (parsed_back_query == NULL) {
+        string_header.size = 0;
+    }else{
+        string_header.size = strlen(parsed_back_query);
+    }
+
+    failSafeWrite(fptr, &string_header, sizeof(TraceProvStringHeader));
+    if (string_header.size) failSafeWrite(fptr, parsed_back_query, string_header.size);
     fclose(fptr);
 }
 
@@ -575,9 +589,9 @@ void _serializeContext(const TraceProvParseContext* context, FILE* file){
 }
 
 // Returns list of deserialized graphs.
-List* deserializeTraceProvDependency(TraceProvParseContext **parsedContext){
-    const char *dumpPath = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
-    FILE *fptr = fopen(dumpPath, "rb"); 
+List* deserializeTraceProvDependency(TraceProvParseContext **parsed_context, char **parsed_back_query){
+    const char *dump_path = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
+    FILE *fptr = fopen(dump_path, "rb"); 
     if (fptr == NULL) {
         elog(ERROR, "Error opening file for dumping graph!");
     }
@@ -586,14 +600,25 @@ List* deserializeTraceProvDependency(TraceProvParseContext **parsedContext){
     if (metaHeader.num_graphs < 0){
         elog(ERROR, "Got invalid number of graphs in the file: %d", metaHeader.num_graphs);
     }
-    *parsedContext = _deserializeTraceProvParseContext(fptr, &metaHeader);
+    *parsed_context = _deserializeTraceProvParseContext(fptr, &metaHeader);
     List *graphs = NIL;
     for (int i = 0; i < metaHeader.num_graphs; i++){
         TraceProvDependency*graph = _deserializeTraceProvDependency(fptr);
         elog(INFO, "Deserializing: ");
-        traceprovPrintDependency(graph, *parsedContext);
+        traceprovPrintDependency(graph, *parsed_context);
         graphs = lappend(graphs, graph);
     }
+
+    if (parsed_back_query){
+        TraceProvStringHeader string_header;
+        failSafeRead(fptr, &string_header, sizeof(TraceProvStringHeader));
+        if (string_header.size){
+            char *parsed_back_holder = palloc0(string_header.size + 1);
+            failSafeRead(fptr, parsed_back_holder, string_header.size);
+            *parsed_back_query = parsed_back_holder;
+        }
+    }
+
 
     fclose(fptr);
     return graphs;
