@@ -46,8 +46,9 @@ def merge_items_strict(left: dict, right: dict) -> dict:
 
 def extract_path(path: str):
     path_split = path.split("/")
-    assert len(path_split) == 4
-    path_name = path_split[2]
+    print(path_split)
+    assert len(path_split) == 5
+    path_name = path_split[3]
     assert "local_test_duckdb_analyze_" in path_name
     path_name = path_name.replace("local_test_duckdb_analyze_", "")
     for compression in COMPRESSIONS:
@@ -56,17 +57,31 @@ def extract_path(path: str):
     return Exception("got unrecognized type!")
 
 
-def distribute_by_scale(previous: dict, current_pack: Tuple[str, dict]):
-    current = current_pack[1]
+def remove_key(in_dict: dict, key: str):
+    assert key in in_dict
+    return {left_key: value for (left_key, value) in in_dict.items() if left_key != key}
+
+
+def filter_empty(in_dict: dict):
+    return {key: value for (key, value) in in_dict.items() if len(value) > 0}
+
+
+def distribute_by_params(previous: dict, current_pack: Tuple[str, dict]):
     key = current_pack[0]
+    current = current_pack[1]
     return {
         **previous,
         **{
-            scale: {
-                **previous.get(scale, {}),
-                key: merge_items_strict(previous.get(scale, {}).get(key, {}), value),
+            param: {
+                **previous.get(param, {}),
+                key: filter_empty(
+                    {
+                        qnum: remove_key(qvalue, "base")
+                        for (qnum, qvalue) in param_values.items()
+                    }
+                ),
             }
-            for (scale, value) in current.items()
+            for (param, param_values) in current.items()
         },
     }
 
@@ -104,7 +119,7 @@ def extract_selectivity_duckdb(duckdb_results: dict):
 def extract_traceprov_timings(val: Any):
     assert isinstance(val, list)
     tp_timings = [
-        dict(time=values["traceprov_infer_time"]["captured"][0][0]) for values in val
+        dict(time=values["traceprov_infer_time_0"]["captured"][0][0]) for values in val
     ]
     return reduce(group_by_values, tp_timings, dict())
 
@@ -120,28 +135,26 @@ def extract_selectivity_traceprov(tp_results: dict):
 
 def distribute_by_tp(distributed: dict):
     return {
-        scale: {
+        params: {
             **{
-                cat: extract_selectivity_duckdb(
-                    {
-                        infer_type: infer_results
-                        for (infer_type, infer_results) in cat_value.items()
-                        if not infer_type.startswith("traceprov")
-                    }
-                )
-                for (cat, cat_value) in categories.items()
-            },
-            "traceprov": extract_selectivity_traceprov(
-                {
-                    # this arbitrarily takes any traceprov matching (with that selectivity.)
-                    infer_type: infer_results
-                    for cat_value in categories.values()
-                    for (infer_type, infer_results) in cat_value.items()
-                    if infer_type.startswith("traceprov")
+                infer_type: {
+                    qnum: extract_duckdb_timings(
+                        list(remove_key(qnum_data, "traceprov").values())[0]
+                    )
+                    for (qnum, qnum_data) in query_data.items()
                 }
-            ),
+                for (infer_type, query_data) in param_values.items()
+            },
+            "traceprov": {
+                **param_values.get("traceprov", {}),
+                **{
+                    qnum: extract_traceprov_timings(qnum_data["traceprov"]["extras"])
+                    for query_data in param_values.values()
+                    for qnum, qnum_data in query_data.items()
+                },
+            },
         }
-        for (scale, categories) in distributed.items()
+        for (params, param_values) in distributed.items()
     }
 
 
@@ -173,14 +186,14 @@ def tp_plot(scale: str, scale_results: dict):
         sorted(list(scale_results.keys()), key=lambda x: SCHEME_ORDER.index(x))
     ):
         category_result: dict = scale_results[category]
-        size = len(category_result.keys())
+        size = len(category_result.keys()) - 1
         if len(selectivity_set) and size not in selectivity_set:
             raise Exception("Expected same selectivity count!")
 
         selectivity_set.add(size)
         selectivity_timings = sorted(
-            list(category_result.items()), key=lambda x: float(x[0])
-        )
+            list(category_result.items()), key=lambda x: int(x[0])
+        )[1:]
         x_axis = np.arange(size)
         x_axis_values = [sel for (sel, _) in selectivity_timings]
         rects = ax.bar(
@@ -191,7 +204,7 @@ def tp_plot(scale: str, scale_results: dict):
         )
     ax.legend(ncols=3)
     ax.set_xticks(x_axis + width, x_axis_values)
-    fig.savefig(f"scale_{scale}.png")
+    fig.savefig(f"param_{scale}.png")
 
 
 def main():
@@ -209,19 +222,18 @@ def main():
                 main_result = json.loads(f.read())["result"]
             combined = [
                 *combined,
-                (
-                    category,
-                    {
-                        scale: value["predicate_post"]
-                        for scale, value in main_result.items()
-                    },
-                ),
+                (category, main_result),
             ]
 
     # Distribute by scale.
-    distributed = reduce(distribute_by_scale, combined, {})
+    distributed = reduce(distribute_by_params, combined, {})
     distributed_by_tp = distribute_by_tp(distributed)
     with open("distributed.json", "w") as f:
+        # sampled = {
+        #     key: value
+        #     for (idx, (key, value)) in enumerate(distributed_by_tp.items())
+        #     if idx < 2
+        # }
         f.write(json.dumps(distributed_by_tp, indent=4))
 
     timings = simple_timings(distributed_by_tp)
