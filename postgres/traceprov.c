@@ -1110,7 +1110,7 @@ Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
 PG_FUNCTION_INFO_V1(traceprov_log_entry);
 
 Datum traceprov_log_entry(PG_FUNCTION_ARGS){
-    PG_RETURN_INT64(perform_log(fcinfo, false, 0));
+    PG_RETURN_BOOL(perform_log(fcinfo, false, 0));
 }
 
 PG_FUNCTION_INFO_V1(traceprov_log_entry_n);

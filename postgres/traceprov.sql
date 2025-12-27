@@ -912,19 +912,19 @@ CREATE FUNCTION traceprov_make_ptr (
 ) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_log_entry (
@@ -935,7 +935,7 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS BIGINT AS '$libdir/__FILE__',
+) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
@@ -974,19 +974,19 @@ CREATE FUNCTION traceprov_log_entry_n (
 ) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
 
-CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
-CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
-CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
-CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
-CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
 CREATE FUNCTION traceprov_log_entry_volatile (
@@ -997,7 +997,7 @@ CREATE FUNCTION traceprov_log_entry_volatile (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS BIGINT AS '$libdir/__FILE__',
+) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
 
 DROP TYPE IF EXISTS traceprov_ptr_type CASCADE;
