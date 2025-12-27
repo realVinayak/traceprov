@@ -76,16 +76,11 @@ static void rteRewrite(
  * The input target entries become the entries that we log.
 */
 
-Query *traceprov_add_nested_query(
-    Query *, 
-    List *,
-    TraceProvParseContext *
-);
-
 Query *traceprov_add_nested_query_log(
     Query *, 
     List *,
-    TraceProvParseContext *
+    TraceProvParseContext *,
+    TraceProvDependency **pgraph
 );
 
 static void adjustJoinAliasVars(List *, List *, List *, int, List **, List **);
@@ -148,10 +143,19 @@ PlannedStmt *traceprov_rewriter(
         }
     }
     // Query *traceprovTopQuery = add_nested_query(traceprovParse, topLevelTargets, &context);
-    Query *traceprov_top_query = traceprov_add_nested_query_log(traceprov_parse, top_level_targets, &context);
+    TraceProvDependency *graph = NULL;
+    Query *traceprov_top_query = traceprov_add_nested_query_log(traceprov_parse, top_level_targets, &context, &graph);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov parse tree", traceprov_top_query, Debug_pretty_print);
-    tracprov_parse_back_query(traceprov_top_query);
+
+    char *parsed_back = tracprov_parse_back_query(traceprov_top_query);
+    serializeTraceProvDepedency(list_make1(graph), &context, parsed_back);
+    TraceProvParseContext *dupContext = NULL;
+    char *parsed_back_parsed = NULL;
+    deserializeTraceProvDependency(&dupContext, &parsed_back_parsed);
+    elog(INFO, "PARSED BACK (from FILE): %s", parsed_back_parsed);
+
+
     PlannedStmt *stmt = standard_planner(traceprov_top_query, query_string, cursorOptions, boundParams);
     traceprov_plan_analyzer(stmt, NULL, &context);
     return stmt;
@@ -627,7 +631,8 @@ void rteRewrite(
 Query *traceprov_add_nested_query_log(
     Query *base,
     List *targets,
-    TraceProvParseContext *context
+    TraceProvParseContext *context,
+    TraceProvDependency **pgraph
 ){
     if (list_length(targets) == 0)
         elog(ERROR, "Expected some traceprov targets!");
@@ -662,115 +667,15 @@ Query *traceprov_add_nested_query_log(
         entries
     );
 
-    serializeTraceProvDepedency(list_make1(graph), context);
-    TraceProvParseContext *dupContext = NULL;
-    deserializeTraceProvDependency(&dupContext);
-
     Query *nested = traceprov_make_nested_query(base, context, false, false);
     Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
     nested->targetList = traceprov_append_at_resjunk(
         nested->targetList,
         makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false)
     );
+
+    *pgraph = graph;
     return nested;
-}
-
-Query *traceprov_add_nested_query(
-    Query *base, 
-    List *targets,
-    TraceProvParseContext *context
-){
-    List *pointer_targets = NIL;
-    ListCell *target_entry_cursor;
-    List *graphs = NIL;
-    foreach(target_entry_cursor, targets){
-        const TraceProvTarget *current_target = ((TraceProvTarget *)lfirst(target_entry_cursor));
-        if (current_target->isPointer){
-            // Varno will be 1, because it is the only table.
-            List *pointer_args = list_make1(makeVarFromTargetEntry(1, current_target->targetEntry));
-            if (current_target->setNumber > 0){
-                // In the target list, need to, now, find the set pointer.
-                pointer_args = lappend(pointer_args, (makeVarFromTargetEntry(1, traceprov_find_matching_set_pointer(targets, current_target->setNumber)->targetEntry)));
-            }
-            pointer_targets = lappend(pointer_targets, pointer_args);
-        }
-        if (current_target->graph){
-            traceprovPrintDependency(current_target->graph, context);
-            graphs = lappend(graphs, current_target->graph);
-        }
-    }
-    serializeTraceProvDepedency(graphs, context);
-    TraceProvParseContext *dupContext = NULL;
-    deserializeTraceProvDependency(&dupContext);
-    if (list_length(pointer_targets) == 0){
-        // No pointers, no need to call the mark function.
-        // Return the original query in this case.
-        return base;
-    }
-    // Make the new table.
-    RangeTblEntry *newTable = makeNode(RangeTblEntry);
-    // we don't alias the table, so this is fine not being set.
-    char *aliasName = tp_parse_get_unique_alias(context);
-    newTable->alias = makeAlias(aliasName, NIL);
-    List *newTargetList = NIL;
-    target_entry_cursor = NULL;
-    List *colNames = NIL;
-    foreach(target_entry_cursor, base->targetList){
-        TargetEntry *te = (TargetEntry *)lfirst(target_entry_cursor);
-        Var *newVar = makeVarFromTargetEntry(1, te);
-        if (!te->resjunk){
-            newTargetList = traceprov_append_at_resjunk(
-                newTargetList, 
-                makeTargetEntry(
-                    (Expr *)newVar,
-                    // Because they are 1-indexed.
-                    foreach_current_index(target_entry_cursor) + 1,
-                    te->resname,
-                    false
-                )
-            );
-            colNames = lappend(colNames, makeString(pstrdup(te->resname)));
-        }
-    }
-
-
-    newTable->eref = makeAlias(pstrdup(aliasName), colNames);
-    newTable->inFromCl = true;
-    newTable->rtekind = RTE_SUBQUERY;
-    newTable->subquery = base;
-
-    // Make the table ref (for join tree)
-    RangeTblRef  *rtr = makeNode(RangeTblRef);
-    rtr->rtindex = 1;
-
-    FromExpr *fromExpr = makeFromExpr(
-        list_make1(rtr),
-        NULL
-    );
-
-    Query *targetQuery = traceprov_clone_query(base);
-    targetQuery->rtable = list_make1(newTable);
-    targetQuery->jointree = fromExpr;
-
-    ListCell *pointerTarget;
-    foreach(pointerTarget, pointer_targets){
-        int i = 0;
-        List *pointerFuncArgs = lfirst(pointerTarget);
-        Node *mark_later_func = traceprov_get_function_call_node(
-            list_length(pointerFuncArgs) == 1 ? TRACEPROV_MARK_LATER_FUNC_NAME : TRACEPROV_MARK_LATER_VALUE_FUNC_NAME,
-            pointerFuncArgs,
-            NULL
-        );
-        newTargetList = lappend(newTargetList, makeTargetEntry(
-            (Expr *)mark_later_func,
-            list_length(newTargetList) + 1,
-            psprintf("marked_%d", (i++)),
-            false
-        ));
-    }
-
-    targetQuery->targetList = newTargetList;
-    return targetQuery;
 }
 
 // First list is the list of targets created, for each rte.
