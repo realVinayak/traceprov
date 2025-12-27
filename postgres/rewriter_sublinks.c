@@ -4,6 +4,10 @@
 #include "catalog/pg_type_d.h"
 #include "nodes/makefuncs.h"
 #include "nodes/nodeFuncs.h"
+#include "optimizer/optimizer.h"
+#include "parser/parse_coerce.h"
+
+static const Oid boolOidConst = BOOLOID;
 
 static Node *rewrite_sublinks_mutator(Node *, TraceProvParseContext *);
 
@@ -111,31 +115,37 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             arg_vars = lappend(arg_vars, base_target->expr);
         }
         arg_vars = list_concat(arg_vars, correlated_arg_vars);
-        Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_VOLATILE_FUNC_NAME, arg_vars, NULL);
-        // Replace all the extra added traceprov targets with this newer func node.
-        target_entry_cursor = NULL;
-        List *original_without_targets = NIL;
-        foreach(target_entry_cursor, rewritten_subselect->targetList){
-            ListCell *inner_cell = NULL;
-            bool found = false;
-            foreach(inner_cell, added_targets){
-                if (((TraceProvTarget *)lfirst(inner_cell))->targetEntry == ((TargetEntry *)lfirst(target_entry_cursor))){
-                    found = true;
-                    break;
+
+
+        // Should be exists, and the current qual expr shouldn't contain any volatile function (because they will get reapplied...)
+        // Note: if no quals, no volatile functions are found (which is good.)
+        Node *current_quals = rewritten_subselect->jointree->quals;
+        const bool should_use_case_when = sublink->subLinkType == EXISTS_SUBLINK && !contain_volatile_functions_after_planning((Expr*)current_quals);
+
+        if (!should_use_case_when){
+            // Replace all the extra added traceprov targets with this newer func node.
+            target_entry_cursor = NULL;
+            List *original_without_targets = NIL;
+            foreach(target_entry_cursor, rewritten_subselect->targetList){
+                ListCell *inner_cell = NULL;
+                bool found = false;
+                foreach(inner_cell, added_targets){
+                    if (((TraceProvTarget *)lfirst(inner_cell))->targetEntry == ((TargetEntry *)lfirst(target_entry_cursor))){
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found){
+                    original_without_targets = lappend(original_without_targets, lfirst(target_entry_cursor));
                 }
             }
-            if (!found){
-                original_without_targets = lappend(original_without_targets, lfirst(target_entry_cursor));
+            if (list_length(original_without_targets) != (original_target_count)){
+                elog(ERROR, "Got mismatching original target lengths!");
             }
-        }
-        if (list_length(original_without_targets) != (original_target_count)){
-            elog(ERROR, "Got mismatching original target lengths!");
-        }
-        // Now, append the newly created function call node, to the target list.
-        TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false);
-        rewritten_subselect->targetList = traceprov_append_at_resjunk(original_without_targets, log_target_entry);
-
-        if (sublink->subLinkType != EXISTS_SUBLINK || true){
+            Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_VOLATILE_FUNC_NAME, arg_vars, NULL);
+            // Now, append the newly created function call node, to the target list.
+            TargetEntry *log_target_entry = makeTargetEntry((Expr*)traceprov_log_fcnode, 0, tp_parse_get_unique_alias(context), false);
+            rewritten_subselect->targetList = traceprov_append_at_resjunk(original_without_targets, log_target_entry);
             Query *subselect_wrapper = traceprov_clone_query(rewritten_subselect);
             subselect_wrapper->targetList = NIL;
 
@@ -163,6 +173,26 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             IncrementVarSublevelsUp((Node*)rewritten_subselect, 1, 1);
             sublink->subselect = (Node*)subselect_wrapper;
         }else{
+            // This is stable branch (exists.)
+            Node *traceprov_log_fcnode = traceprov_get_function_call_node(TRACEPROV_LOG_FUNC_NAME, arg_vars, NULL);
+            Node *new_quals = traceprov_log_fcnode;
+            if (current_quals != NULL){
+                Node *copied_quals = copyObject(current_quals);
+                CaseExpr *case_expr = makeNode(CaseExpr);
+                // There's only 1 WHEN.
+                // The default is just False.
+                CaseWhen *when = makeNode(CaseWhen);
+                when->expr = (Expr *)copied_quals;
+                when->result = (Expr*)traceprov_log_fcnode;
+                case_expr->casetype = BOOLOID;
+                case_expr->casecollid = InvalidOid;
+                case_expr->arg = NULL;
+                case_expr->args = list_make1(when);
+                case_expr->defresult = (Expr *)makeBoolConst(false, false);
+                new_quals = (Node*)makeBoolExpr(AND_EXPR, list_make2(current_quals, case_expr), -1);
+            }
+            
+            rewritten_subselect->jointree->quals = new_quals;
             sublink->subselect = (Node*)rewritten_subselect;
         }
         return (Node*)sublink;
