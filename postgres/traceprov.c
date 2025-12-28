@@ -416,7 +416,7 @@ static int initialize_layer_file(
     if (is_already_present) return 0;
 
     uint32 record_layer_number = 0;
-    if (record_length > 0){
+    if (record_length > 0 && layer->rows_layer_number == 0){
         record_layer_number = ++traceprov_current.maximum_local_layer_used;
         if ((rc = get_or_create_layer(record_layer_number, NULL, record_length, set_current_row, &is_already_present))){
             elog(ERROR, "Error creating the layer file (key)");
@@ -429,7 +429,7 @@ static int initialize_layer_file(
         // If the entries in this file will be hashed, need to also make the hash buckets for them.
         // This effectively makes a recursive call (but the state of the next is always null)
         // Technically, the recursive call can be used to implement a multi-level partitioning...
-        if (TRACEPROV_SHOULD_HASH(state)){
+        if (TRACEPROV_SHOULD_HASH(state) && layer->buckets[0] == 0){
             // Need to make the new levels
             // Note that we only need to construct buckets after the current layer.
             // because the current layer acts as the buckets for the other ones..
@@ -685,6 +685,13 @@ PG_FUNCTION_INFO_V1(traceprov_agg_key_combine);
 Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     int rc = 0;
 
+    // We cannot do anything more than this.
+    // That is, we cannot try to setup main file.
+    if ((rc = initialize_local_context())){
+        PRINT_ON_DEBUG("Error initializing local context.");
+        return rc;
+    }
+
     struct traceprov_agg_context *reference_struct, *other;
 
     if (PG_ARGISNULL(0)){
@@ -707,6 +714,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     assert(reference_struct != NULL);
     const uint32 layer_number = reference_struct->layer_number;
+
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
     uint32 combined_layer_number = 0;
     if ((combined_layer_number = main_layer->combined_aggregate_layer_number) == 0){
@@ -785,8 +793,10 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
             ))
         );
 
-        *(uint64*)current_column_layer->current_row = group_no;
-        current_column_layer->current_row += sizeof(uint64);
+        if (needs_logging_reference){
+            *(uint64*)current_column_layer->current_row = group_no;
+            current_column_layer->current_row += sizeof(uint64);
+        }
 
         if (other != NULL){
             *(uint64*)current_column_layer->current_row = group_no;
@@ -805,10 +815,12 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         ))
     );
 
-    *(uint64 *)(current_rows_layer->current_row) = reference_struct->worker_id;
-    current_rows_layer->current_row += sizeof(uint64);
-    *(uint64 *)(current_rows_layer->current_row) = reference_struct->group_cnt;
-    current_rows_layer->current_row += sizeof(uint64);
+    if (needs_logging_reference){
+        *(uint64 *)(current_rows_layer->current_row) = reference_struct->worker_id;
+        current_rows_layer->current_row += sizeof(uint64);
+        *(uint64 *)(current_rows_layer->current_row) = reference_struct->group_cnt;
+        current_rows_layer->current_row += sizeof(uint64);
+    }
 
     if (other != NULL){
         *(uint64 *)(current_rows_layer->current_row) = other->worker_id;

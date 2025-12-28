@@ -222,9 +222,11 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
-#define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
-#define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
+// #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
+// #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
 
+#define TRACEPROV_SHOULD_HASH(state) (false)
+#define TRACEPROV_SHOULD_SORT(state) (false)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)

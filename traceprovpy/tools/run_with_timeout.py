@@ -118,6 +118,19 @@ class ReplaceSelectivity(Preprocessor):
         return f"ReplaceSelectivity('{self.selectivity}')"
 
 
+class MakeTraceProv(Preprocessor):
+
+    def preprocess(self, in_content: str) -> str:
+        # make traceprov query.
+        return f"/*(traceprov)*/ {in_content}"
+
+    def __hash__(self):
+        return hash((self.__class__.__name__))
+
+    def __repr__(self):
+        return "MakeTraceProv"
+
+
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
     connection_params: ConnectionParams
@@ -128,6 +141,7 @@ class RunWithTimeoutOptions(NamedTuple):
     skip_validation: bool = False
     preprocessors: list[Preprocessor] = []
     strict_run: bool = False
+    shared_libraries: list[str] = []
 
     def close_all(self):
         if self.extras is None:
@@ -144,6 +158,12 @@ class RunWithTimeoutOptions(NamedTuple):
             return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
         else:
             return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+
+
+TP_SKIPPABLE_OPTION = "$PLACEHOLDER$"
+
+
+class SkippableRunTimeOptions(RunWithTimeoutOptions): ...
 
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
@@ -167,6 +187,12 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         password=options.connection_params.password,
         port=options.connection_params.port,
     )
+
+    if cached_connection is None:
+        cursor = connection.cursor()
+        for shared_library in options.shared_libraries:
+            cursor.execute(f"load '{shared_library}';")
+        cursor.close()
 
     if (
         options.extras is not None
