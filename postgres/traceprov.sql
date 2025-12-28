@@ -157,8 +157,6 @@ DROP FUNCTION IF EXISTS reinit_state ();
 
 DROP FUNCTION IF EXISTS mark_later (bigint);
 
-DROP FUNCTION IF EXISTS mark_later_value (bigint);
-
 DROP FUNCTION IF EXISTS test_local_setup (INTEGER, INTEGER);
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state internal, bigint);
@@ -404,9 +402,6 @@ CREATE FUNCTION traceprov_agg_key_combine (internal, internal) RETURNS internal 
 
 CREATE FUNCTION mark_later (bigint) RETURNS INTEGER AS '$libdir/__FILE__',
 'mark_later' LANGUAGE C PARALLEL SAFE;
-
-CREATE FUNCTION mark_later_value (bigint, bigint) RETURNS INTEGER AS '$libdir/__FILE__',
-'mark_later_value' LANGUAGE C PARALLEL SAFE;
 
 CREATE FUNCTION traceprov_agg_key_offset_finalfunc (state internal) RETURNS bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_offset_finalfunc' LANGUAGE C;

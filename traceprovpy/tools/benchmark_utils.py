@@ -1,5 +1,6 @@
 # This makes things more organized.
 from traceprovpy.tools.benchmark import ExtraQuery
+from traceprovpy.tools.run_with_timeout import MakeTraceProv
 
 
 TRACEPROV_SYNC_TIME = lambda: ExtraQuery(
@@ -47,4 +48,12 @@ GPROM_LINEAGE_COUNT = lambda: ExtraQuery(
     runs_after_materialize=True,
     strict_run=True,
     skip_validation=True,
+)
+
+TRACEPROV_CAPTURE_QUERY = lambda: ExtraQuery(
+    label="traceprov_capture_query",
+    query=f"$INLINE-select * from traceprov_parsed_back();",
+    runs_after_base=True,
+    strict_run=True,
+    capture_output=True,
 )

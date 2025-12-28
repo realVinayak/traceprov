@@ -19,11 +19,14 @@
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
+    TP_SKIPPABLE_OPTION,
     ConnectionParams,
+    MakeTraceProv,
     Preprocessor,
     ReplaceFILE,
     ReplaceSelectivity,
     RunParams,
+    SkippableRunTimeOptions,
     run_with_timeout,
     RunWithTimeoutOptions,
 )
@@ -56,6 +59,9 @@ def json_serial(obj):
             preprocessor_type=ReplaceSelectivity.__name__, param=obj.selectivity
         )
 
+    if isinstance(obj, MakeTraceProv):
+        return "MakeTraceProv"
+
     if isinstance(obj, PosixPath):
         return obj.as_posix()
 
@@ -67,6 +73,8 @@ def json_serial(obj):
 
 def _run_with_timeout(options: RunWithTimeoutOptions):
     print(options.file_path)
+    if isinstance(options, SkippableRunTimeOptions):
+        return dict(skipped=True)
     return run_with_timeout(options)
 
 
@@ -96,6 +104,8 @@ class QuerySpec(NamedTuple):
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
         print(path)
+        if path == TP_SKIPPABLE_OPTION:
+            return SkippableRunTimeOptions(*get_run_options(path))
         if path.startswith("$ROOT"):
             query_path = Path(path.replace("$ROOT", os.getcwd()))
         elif path.startswith("$INLINE-"):
@@ -389,6 +399,7 @@ class GenericBenchmark(NamedTuple):
                 connection_params=connection_params,
                 file_path=file_path,
                 params=params,
+                shared_libraries=[self.traceprov_rewriter_path],
             )
 
         results_from_dirs = {}
@@ -438,6 +449,8 @@ class GenericBenchmark(NamedTuple):
 
     def setup_preprocess(self, directory: QueryDirectory):
         def _map_preprocess(preprocess: Preprocessor):
+            if isinstance(preprocess, MakeTraceProv):
+                return preprocess
             if not isinstance(preprocess, ReplaceFILE):
                 raise Exception("Not implemented other preprocess yet")
             if preprocess.replace_with_token == "traceprov_path":
