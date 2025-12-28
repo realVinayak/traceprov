@@ -229,10 +229,13 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_SHOULD_SORT(state) (false)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
-#define TRACEPROV_GET_BUCKET(X) (uint8)(((uint64) X) >> 48)
+#define TRACEPROV_GET_BUCKET(X) ((uint8) (((uint64) X) >> 48))
 
 #define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
 #define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
+
+#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64) W) << 56) | X)
+#define TRACEPROV_GET_WORKER_ID(X) ((uint8) (((uint64) X) >> 56))
 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 

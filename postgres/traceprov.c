@@ -1138,12 +1138,19 @@ Datum traceprov_log_entry_n(PG_FUNCTION_ARGS){
 PG_FUNCTION_INFO_V1(traceprov_agg_key_offset_finalfunc);
 
 Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
+    // We don't care about setting any layer stuff, but do want to make sure that the worker
+    // is well defined.
+    if (initialize_local_context()){
+        elog(ERROR, "Error initializing local context!");
+    }
     if (unlikely(PG_ARGISNULL(0))){
         PG_RETURN_NULL();
     }
     struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+    int64 current_result = agg_context->group_cnt;
     if (agg_context->is_combined){
-        PG_RETURN_INT64(TRACEPROV_SET_IS_COMBINED(agg_context->group_cnt));
+        current_result = TRACEPROV_SET_IS_COMBINED(agg_context->group_cnt);
     }
-    PG_RETURN_INT64(agg_context->group_cnt);
+    current_result = TRACEPROV_SET_WORKER_ID(current_result, traceprov_current.my_worker_id);
+    PG_RETURN_INT64(current_result);
 }
