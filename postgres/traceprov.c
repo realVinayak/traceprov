@@ -562,7 +562,10 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
         }
-        agg_context->group_cnt = TRACEPROV_SET_BUCKET(absolute_group_number, bucket);
+        // Also set the worker id here.
+        // This is done because, technically, postgres can apply optimizations where it finalizes an aggregate entirely
+        // if it lives inside of a partition. In the worst case, that happens on a remote process (so need to infer it back by also logging worker id)
+        agg_context->group_cnt = TRACEPROV_SET_WORKER_ID(TRACEPROV_SET_BUCKET(absolute_group_number, bucket), traceprov_current.my_worker_id);
         agg_context->worker_id = traceprov_current.my_worker_id;
         agg_context->is_combined = 0;
         agg_context->layer_number = layer_number;
@@ -1151,6 +1154,5 @@ Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
     if (agg_context->is_combined){
         current_result = TRACEPROV_SET_IS_COMBINED(agg_context->group_cnt);
     }
-    current_result = TRACEPROV_SET_WORKER_ID(current_result, traceprov_current.my_worker_id);
     PG_RETURN_INT64(current_result);
 }

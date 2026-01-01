@@ -14,7 +14,7 @@ TraceProvLayerNumber tp_parse_get_layer_number(TraceProvParseContext *context){
     return current;
 }
 
-void tpParseInitializeContext(TraceProvParseContext *context){
+void tp_parse_initialize_context(TraceProvParseContext *context){
     // The first layer is 1.
     context->global_layer_number = 1;
     context->unique_idx = 0;
@@ -51,7 +51,7 @@ void tp_add_set_graph_item(TraceProvParseContext *context, int setNumber, TraceP
 }
 
 TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
-    int layer_number,
+    TraceProvLayerNumber layer_number,
     int offset_in_key
 ){
     TraceProvTargetSublinkItem *item = palloc0_object(TraceProvTargetSublinkItem);
@@ -70,7 +70,7 @@ void tp_add_sublink_map_item(
     ListCell *target_entry_cursor;
     List *entries = NIL;
     List *child_graphs = NIL;
-    foreach(target_entry_cursor, ptr_traceprov_targets){
+    foreach(target_entry_cursor, list_concat_copy(key_traceprov_targets, ptr_traceprov_targets)){
         TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &child_graphs, NULL);
         entries = lappend(entries, tpEntry);
     }
@@ -655,7 +655,7 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
 // Doesn't do all the fields, but only the ones necessary (like the set->graph, and set->padding maps)
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDependencyMetaHeader* metaHeader){
     TraceProvParseContext *context = palloc0_object(TraceProvParseContext);
-    tpParseInitializeContext(context);
+    tp_parse_initialize_context(context);
     for (uint32 i = 0; i < metaHeader->num_set_padding_map_items; i++){
         TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
         failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
@@ -673,6 +673,7 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
         TraceProvDependency *graph = _deserializeTraceProvDependency(file);
         context->properties->sublinkMap = lappend(context->properties->sublinkMap, graph);
     }
+    context->root_context = context;
     return context;
 }
 
@@ -719,4 +720,15 @@ void tp_add_aggregate_property(const TraceProvParseContext *context, const Agg *
     }else{
         elog(ERROR, "Unrecognized agg split field!");
     }
+}
+
+TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number){
+    ListCell *graph_cursor;
+    foreach(graph_cursor, GET_ROOT_CONTEXT(parsed_context)->properties->sublinkMap){
+        const TraceProvDependency *dependency = (TraceProvDependency *)lfirst(graph_cursor);
+        if (dependency->headNumber == graph_number)
+            return dependency;
+    }
+    elog(ERROR, "Expected to always find the sublink!");
+    return NULL;
 }

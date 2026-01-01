@@ -119,7 +119,7 @@ struct traceprov_aggregate_layer {
     // Defines number of PKs being logged.
     // This is NOT number of records
     // This is the "width" of records logged.
-    int32 num_pk_records;
+    uint32 num_pk_records;
     // We only store the last mapping that it uses.
     void *last_mapping;
     // The size of the layer in pages.
@@ -164,7 +164,7 @@ static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
 // Local context that each worker has.
 // This stores the layers.
 struct local_context {
-    int32   worker_pid;
+    pid_t   worker_pid;
     uint8   worker_id;
     // This stores the aggregate layers.
     // Each aggregate consists of multiple mappings (see struct traceprov_aggregate_layer)
@@ -183,6 +183,9 @@ static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
 
 struct traceprov_shared_context {
     int32   magic_word;
+    // NOTE: This exists here just for legacy.
+    // TODO: Remove all the old code and get rid of this.
+    // The new derivation (using graph) doesn't depend on it.
     uint8   main_worker_id;
     // Counts the number of workers.
     uint8   worker_count;
@@ -233,9 +236,11 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
 #define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
+#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64)1) << 47)) & X)
 
 #define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64) W) << 56) | X)
 #define TRACEPROV_GET_WORKER_ID(X) ((uint8) (((uint64) X) >> 56))
+#define TRACEPROV_STRIP_WORKER_ID(X) ((((uint64)(~((uint8)0))) << 56) & X)
 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 
