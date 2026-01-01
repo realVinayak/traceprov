@@ -6,7 +6,10 @@ from traceprovpy.tools.benchmark import (
     QuerySpec,
     ValidationQuerySpec,
 )
-from traceprovpy.tools.benchmark_utils import TRACEPROV_CAPTURE_QUERY
+from traceprovpy.tools.benchmark_utils import (
+    TRACEPROV_CAPTURE_QUERY,
+    TRACEPROV_PERFORM_DERIVATION,
+)
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     MakeTraceProv,
@@ -97,9 +100,22 @@ def main():
                                 base="base.sql",
                                 key="traceprov",
                                 preprocess=[MakeTraceProv()],
-                                extras=[TRACEPROV_CAPTURE_QUERY()],
+                                extras=[
+                                    TRACEPROV_CAPTURE_QUERY(),
+                                    TRACEPROV_PERFORM_DERIVATION(),
+                                ],
                             ),
                         ),
+                    )
+                    subdir_queries.append(
+                        Query(
+                            query_name=query_name,
+                            spec=CopyColumnCsv(
+                                "copy_traceprov_csv",
+                                base="base.sql",
+                                materialize=f"traceprov_infer_dump/{subdir}/{query_name}/",
+                            ),
+                        )
                     )
             else:
                 for spec in user_specs:
@@ -125,6 +141,20 @@ def main():
     # Also store the arguments from cmd line.
     result["extras"] = dict(config=parsed.config, layers=parsed.layers)
     benchmark.dump_final_result(result)
+
+
+import os
+
+
+class CopyColumnCsv(QuerySpec):
+    def run_packs(self, top_dir, get_run_options):
+        assert os.system(f"mkdir -p {self.materialize}") == 0
+        assert (
+            os.system(
+                f"sudo cp /var/lib/postgresql/14/main/traceprov/1_dump.csv {self.materialize}/"
+            )
+            == 0
+        )
 
 
 if __name__ == "__main__":

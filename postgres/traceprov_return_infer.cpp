@@ -1698,7 +1698,7 @@ extern "C" {
             TraceProvNode *node = (TraceProvNode *)lfirst(derivation_cursor);
             TraceProvData *node_result = traceprov_evaluate_node(node);
 
-            auto dump_file_name = psprintf("%ld_dump.csv", file_idx);
+            auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%ld_dump.csv"), DataDir, file_idx);
 
             traceprov_dump_data_to_csv(node_result, dump_file_name);
 

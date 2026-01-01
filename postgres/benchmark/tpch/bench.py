@@ -152,6 +152,17 @@ def main():
                 for layer_id in range(number_layers)
             ]
 
+            extra_measure_count = [
+                ExtraQuery(
+                    label=f"traceprov_infer_count_{layer_id}",
+                    query=f"$INLINE-select count(*) from layer_{layer_id};",
+                    runs_after_base=True,
+                    strict_run=True,
+                    skip_validation=True,
+                )
+                for layer_id in range(number_layers)
+            ]
+
             extras = [
                 *extra_sync,
                 *extra_drop_tables,
