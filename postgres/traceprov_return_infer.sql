@@ -57,3 +57,7 @@ OR REPLACE FUNCTION traceprov_json_graph () RETURNS text AS '$libdir/__FILE__',
 CREATE
 OR REPLACE FUNCTION traceprov_parsed_back () RETURNS text AS '$libdir/__FILE__',
 'traceprov_parsed_back' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_perform_derivation () RETURNS BOOLEAN AS '$libdir/__FILE__',
+'traceprov_perform_derivation' LANGUAGE C STRICT PARALLEL SAFE;

@@ -127,7 +127,7 @@ PlannedStmt *traceprov_rewriter(
             elog_node_display(LOG, "rewritten", lfirst_node(Query, cursor), Debug_pretty_print);
     }
     TraceProvParseContext context;
-    tpParseInitializeContext(&context);
+    tp_parse_initialize_context(&context);
     // Set the root context to the parent context.
     // This simplifies some operations (since, otherwise, layer numbers can be same across branches, during sublink)
     context.root_context = &context;
@@ -374,7 +374,7 @@ Query *traceprov_rewrite_sets_to_joins(
 
 Query *traceprov_set_rewriter(Query *initial){
     TraceProvParseContext context;
-    tpParseInitializeContext(&context);
+    tp_parse_initialize_context(&context);
     SetOperationStmt *stmt = (SetOperationStmt *)initial->setOperations;
     if(traceprov_breakup_sets(
         stmt->op,

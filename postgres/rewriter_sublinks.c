@@ -106,6 +106,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             true
         );
         List *arg_vars = list_make1(layer_number_const);
+        arg_vars = list_concat(arg_vars, correlated_arg_vars);
         ListCell *target_entry_cursor;
         foreach(target_entry_cursor, added_targets){
             TraceProvTarget *tp_target = (TraceProvTarget*)lfirst(target_entry_cursor);
@@ -114,8 +115,6 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             // This could be done, potentially, better by having yet another subquery block.
             arg_vars = lappend(arg_vars, base_target->expr);
         }
-        arg_vars = list_concat(arg_vars, correlated_arg_vars);
-
 
         // Should be exists, and the current qual expr shouldn't contain any volatile function (because they will get reapplied...)
         // Note: if no quals, no volatile functions are found (which is good.)

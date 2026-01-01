@@ -106,7 +106,7 @@ typedef struct TraceProvParseGraphProperties {
     List *setPaddingMap;
     // List of TraceProvSetGraphMapItem.
     List *setGraphMap;
-    // List of TraceProvParseContext (sublinks).
+    // List of TraceProvDependency (sublinks).
     List *sublinkMap;
     // Used to identify which functions are traceprov ones, during plan analysis.
     List *traceprov_funcs;
@@ -124,36 +124,10 @@ typedef struct TraceProvParseContext {
     struct TraceProvParseContext *root_context;
 } TraceProvParseContext;
 
-TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);
-
-void tpParseInitializeContext(TraceProvParseContext *);
-
-TraceProvLayerNumber tp_parse_get_layer_number(TraceProvParseContext *);
-char *tp_parse_get_unique_alias(TraceProvParseContext *);
-int tp_parse_get_unique_number(TraceProvParseContext *);
-void tp_add_set_padding_item(TraceProvParseContext *, int, int);
-void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
-void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
-void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, TraceProvLayerNumber);
-
-TraceProvEntry *makeTraceProvEntry();
-
-TraceProvDependency *make_traceprov_dependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
-void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
-void serializeTraceProvDepedency(List *, TraceProvParseContext *, const char *);
-List *deserializeTraceProvDependency(TraceProvParseContext **, char **);
-
-void traceprovPrintContext(const TraceProvParseContext *);
-
 typedef struct TraceProvTargetSublinkItem {
-    int layer_number;
+    TraceProvLayerNumber layer_number;
     int offset_in_key;
 } TraceProvTargetSublinkItem;
-
-TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
-    int layer_number,
-    int offset_in_key
-);
 
 typedef struct TraceProvTarget {
     bool isPointer;
@@ -169,12 +143,40 @@ typedef struct TraceProvTarget {
     TraceProvWindowFrameEntry *window_entry;
 } TraceProvTarget;
 
+TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);
+
+void tp_parse_initialize_context(TraceProvParseContext *);
+
+TraceProvLayerNumber tp_parse_get_layer_number(TraceProvParseContext *);
+char *tp_parse_get_unique_alias(TraceProvParseContext *);
+int tp_parse_get_unique_number(TraceProvParseContext *);
+void tp_add_set_padding_item(TraceProvParseContext *, int, int);
+void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
+void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
+TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number);
+void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, TraceProvLayerNumber);
+
+TraceProvEntry *makeTraceProvEntry();
+
+TraceProvDependency *make_traceprov_dependency(TraceProvGraphKind, TraceProvLayerNumber, List *, List *);
+void traceprovPrintDependency(const TraceProvDependency *, const TraceProvParseContext *);
+void serializeTraceProvDepedency(List *, TraceProvParseContext *, const char *);
+List *deserializeTraceProvDependency(TraceProvParseContext **, char **);
+
+void traceprovPrintContext(const TraceProvParseContext *);
+
+TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
+    TraceProvLayerNumber layer_number,
+    int offset_in_key
+);
+
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
     TraceProvDependency *dependency,
     int setNumber,
     bool isSetPointer,
+    // List of TraceProvTargetSublinkItem.
     List *sublinks,
     TraceProvWindowFrameEntry *window_entry
 );
