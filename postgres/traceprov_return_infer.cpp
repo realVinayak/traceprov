@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <unistd.h>
 #include <unordered_map>
+#include <fstream>
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
 extern "C" {
@@ -834,6 +835,7 @@ extern "C" {
     static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn);
     static TraceProvData *traceprov_evaluate_node(TraceProvNode *node);
     static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node);
+    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name);
     uint64 traceprov_get_node_column_count(TraceProvNode *node);
 
     TraceProvRelation *make_traceprov_relation(TraceProvData *data, char *name){
@@ -1641,6 +1643,23 @@ extern "C" {
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
+
+    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name){
+        std::string csv_str = "";
+        for (uint64 row_idx = 0; row_idx < data->at(0)->size(); row_idx++){
+            if (row_idx > 0) csv_str += "\n";
+            std::string row_str = "";
+            for (uint64 column_idx = 0; column_idx < data->size(); column_idx++){
+                if (column_idx > 0) row_str += ",";
+                row_str += std::to_string(data->at(column_idx)->at(row_idx));
+            }
+            csv_str += row_str;
+        }
+        std::ofstream out(file_name);
+        out << csv_str;
+        out.close();
+    }
+
     // static derive_from_log(const uint8 worker_count)
     // The main entry point to all the derivation.
     PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
@@ -1667,15 +1686,33 @@ extern "C" {
         }
         ListCell *derivation_cursor;
         uint64 final_result_size = 0;
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '[');
         foreach(derivation_cursor, derivation->derived_join_exprns){
+            uint64 file_idx = foreach_current_index(derivation_cursor) + 1;
+
+            if (file_idx > 1)
+                appendStringInfoChar(&buf, ',');
+
             TraceProvNode *node = (TraceProvNode *)lfirst(derivation_cursor);
             TraceProvData *node_result = traceprov_evaluate_node(node);
-            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->size(), traceprov_node_to_string(node));
+
+            auto dump_file_name = psprintf("%ld_dump.csv", file_idx);
+
+            traceprov_dump_data_to_csv(node_result, dump_file_name);
+
+            // elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->size(), traceprov_node_to_string(node));
+            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld)", node_result->at(0)->size());
             final_result_size += node_result->at(0)->size();
             elog(INFO, "Sample result: %s", get_sample_values(node_result));
+
+            appendStringInfo(&buf, "{\"idx\": %ld, \"size\": %ld}", file_idx, final_result_size);
+
         }
+        appendStringInfoChar(&buf, ']');
         elog(INFO, "Final result size: %ld", final_result_size);
-        PG_RETURN_BOOL(1);
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
     }
 };
 
