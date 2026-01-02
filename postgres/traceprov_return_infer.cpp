@@ -874,6 +874,8 @@ extern "C" {
     ){
         auto tp_append = palloc0_object(TraceProvAppend);
         tp_append->tag = T_TP_APPEND;
+        if (list_length(nodes) == 0)
+            elog(ERROR, "Making append rel with no nodes!");
         tp_append->nodes = nodes;
         return tp_append;
     }
@@ -962,7 +964,7 @@ extern "C" {
             (TraceProvNode *)join_side,
             parse_context,
             "intermediate_join",
-            join_side->output_columns->size()
+            traceprov_get_node_column_count(match_side)
         );
         // Prepend to include all, other than the join column.
         for (uint64 col_idx = 1; col_idx < traceprov_get_node_column_count(match_side); col_idx++){
@@ -1287,6 +1289,7 @@ extern "C" {
 
         ListCell *entry_cursor = NULL;
         List *next_child_pointers = NIL;
+        List *normal_log_entries = NIL;
         foreach(entry_cursor, log_dependency->entries){
             const TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
             if (entry->kind == TP_ENTRY_KIND_POINTER){
@@ -1294,8 +1297,15 @@ extern "C" {
                 if (child_graph == NULL || child_graph->graph_type == TP_INVALID)
                     elog(ERROR, "Got invalid child graph state! Expected to not be null and not to be invalid!");
                 next_child_pointers = lappend_int(next_child_pointers, foreach_current_index(entry_cursor));
+            } else if (entry->kind == TP_ENTRY_KIND_BASE_RELATION){
+                normal_log_entries= lappend_int(normal_log_entries, foreach_current_index(entry_cursor));
             }
         }
+        if ((list_length(next_child_pointers) == 0) && (list_length(normal_log_entries) == 0))
+            elog(ERROR, "Found both log entries to be completely empty!");
+
+        if ((list_length(next_child_pointers) > 0) && (list_length(normal_log_entries) > 0))
+            elog(ERROR, "Found both log entries to be populated... cannot handle this case right now.");
 
         // If more than 1 final log is found, it implies that final log was parallelized.
         // So, in that case, we don't need to try matching log entries from other workers.
@@ -1376,6 +1386,23 @@ extern "C" {
                 if (list_length(sublink_computation_nodes)){
                     derivation->derived_join_exprns = list_concat(derivation->derived_join_exprns, sublink_computation_nodes);
                 }
+            }
+
+            if (list_length(normal_log_entries)){
+                TraceProvData *cloned_log = new TraceProvData;
+                for(auto column: *current_worker_logs){
+                    cloned_log->push_back(column);
+                }
+                // Need to also look at any normal log entries (not pointers.)
+                ListCell *normal_log_entry;
+                foreach(normal_log_entry, normal_log_entries){
+                    cloned_log->push_back(current_worker_logs->at(lfirst_int(normal_log_entry)));
+                }
+                TraceProvNode *normal_log_relation = (TraceProvNode *)make_traceprov_relation(
+                    cloned_log,
+                    psprintf("normal_log_%s",  tp_parse_get_unique_alias(parsed_back_context))
+                );
+                derivation->derived_join_exprns = lappend(derivation->derived_join_exprns, normal_log_relation);
             }
         }
     }
@@ -1483,6 +1510,78 @@ extern "C" {
         return offsets_found;
     }
 
+    static std::vector<std::vector<uint64>*> *traceprov_flatten_data(TraceProvData *input_data){
+        auto row_count = input_data->at(0)->size();
+        auto flattened = new  std::vector<std::vector<uint64>*>;
+        for (uint64 row_idx = 0; row_idx < row_count; row_idx++){
+            auto row_data = new std::vector<uint64>;
+            for (uint64 col_idx = 0; col_idx < input_data->size(); col_idx++){
+                row_data->push_back(input_data->at(col_idx)->at(row_idx));
+            }
+            flattened->push_back(row_data);
+        }
+        return flattened;
+    }
+
+    bool vector_compare_is_less(const std::vector<uint64> *left, const std::vector<uint64> *right){
+        if (left->size() != right->size())
+            elog(ERROR, "Expected both sides to be of same size!");
+        
+        for (uint64 col_idx = 0; col_idx < left->size(); col_idx++){
+            uint64 left_value = left->at(col_idx);
+            uint64 right_value = right->at(col_idx);
+            if (left_value == right_value)
+                continue;
+
+            return left_value < right_value;
+        }
+        // In the case where they are all equal, return false...
+        return false;
+    }
+
+    bool vector_compare_is_equal(const std::vector<uint64> *left, const std::vector<uint64> *right){
+        if (left->size() != right->size())
+            elog(ERROR, "Expected both sides to be of same size!");
+
+        for (uint64 col_idx = 0; col_idx < left->size(); col_idx++){
+            uint64 left_value = left->at(col_idx);
+            uint64 right_value = right->at(col_idx);
+            if (left_value != right_value)
+                return false;
+        }
+        return true;
+    }
+
+    static TraceProvJoinResult *traceprov_evaluate_join_exprn_many_key(
+        TraceProvData *left_columns,
+        TraceProvData *right_columns
+    ){
+        auto offsets_found = new TraceProvJoinResult;
+        auto left_offsets = new TraceProvColumnData;
+        auto right_offsets = new TraceProvColumnData;
+        offsets_found->push_back(left_offsets);
+        offsets_found->push_back(right_offsets);
+        auto left_flattened = traceprov_flatten_data(left_columns);
+        auto right_flattened = traceprov_flatten_data(right_columns);
+        std::sort(left_flattened->begin(), left_flattened->end(), vector_compare_is_less);
+
+        for (uint64 offset = 0; offset < right_flattened->size(); offset++){
+            const auto match_key = right_flattened->at(offset);
+            auto it = (std::lower_bound(left_flattened->begin(), left_flattened->end(), match_key, vector_compare_is_less));
+            while (it != left_flattened->end()){
+                if (vector_compare_is_equal(*it, match_key)){
+                    auto left_offset = std::distance(left_flattened->begin(), it);
+                    left_offsets->push_back(left_offset);
+                    right_offsets->push_back(offset);
+                    it++;
+                    continue;
+                }
+                break;
+            }
+        }
+        return offsets_found;
+    }
+
     static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn){
         // If this join exprn is already evaluated, simply return the last result.
         if (join_exprn->result != nullptr)
@@ -1490,7 +1589,8 @@ extern "C" {
         
         TraceProvData *left_result = traceprov_evaluate_node(join_exprn->left);
         TraceProvData *right_result = traceprov_evaluate_node(join_exprn->right);
-
+        // traceprov_dump_data_to_csv(left_columns, psprintf(DEFINE_TRACE_PROV_FILE("/left_data.csv"), DataDir));
+        // traceprov_dump_data_to_csv(right_columns, psprintf(DEFINE_TRACE_PROV_FILE("/right_data.csv"), DataDir));
         // This is poor mans index nested loop join.
         // The left result is guaranteed to be smaller than the right side, so it is sorted.
 
@@ -1510,8 +1610,21 @@ extern "C" {
                 right_columns
             );
         }else{
-            elog(ERROR, "Currently, cannot handle more than 1 in join condition.");
+            TraceProvData *left_columns = new TraceProvData;
+            TraceProvData *right_columns = new TraceProvData;
+            for (auto join_pair: *join_exprn->join_condition){
+                if (join_pair->first->first != 1 || join_pair->second->first != 2)
+                    elog(ERROR, "Got unexpected numbering...");
+                left_columns->push_back(left_result->at(join_pair->first->second - 1));
+                right_columns->push_back(right_result->at(join_pair->second->second - 1));
+            }
+            offsets = traceprov_evaluate_join_exprn_many_key(
+                left_columns,
+                right_columns
+            );
         }
+        if (offsets->at(0)->size() == 0)
+            elog(ERROR, "Got 0 as the join result!");
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
             auto left_offsets = offsets->at(0);
@@ -1633,6 +1746,7 @@ extern "C" {
     static TraceProvData *traceprov_evaluate_node(TraceProvNode *node){
         if (node->tag == T_TP_RELATION){
             TraceProvRelation *relation = (TraceProvRelation *)node;
+            traceprov_dump_data_to_csv(relation->data, psprintf(DEFINE_TRACE_PROV_FILE("/%s.csv"), DataDir, relation->name));
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
             TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)node;
@@ -1702,12 +1816,12 @@ extern "C" {
 
             traceprov_dump_data_to_csv(node_result, dump_file_name);
 
-            // elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->size(), traceprov_node_to_string(node));
+            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->size(), traceprov_node_to_string(node));
             elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld)", node_result->at(0)->size());
             final_result_size += node_result->at(0)->size();
             elog(INFO, "Sample result: %s", get_sample_values(node_result));
 
-            appendStringInfo(&buf, "{\"idx\": %ld, \"size\": %ld}", file_idx, final_result_size);
+            appendStringInfo(&buf, "{\"idx\": %ld, \"size\": %ld}", file_idx, node_result->at(0)->size());
 
         }
         appendStringInfoChar(&buf, ']');
