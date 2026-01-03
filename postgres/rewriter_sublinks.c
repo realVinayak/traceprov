@@ -58,7 +58,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         List *correlated_arg_vars = NIL;
         ListCell *provenance_queue = NULL;
         List *correlated_provenance_targets = NIL;
-        foreach(provenance_queue, new_context->parent_targets){
+        foreach(provenance_queue, traceprov_reverse_list(new_context->parent_targets)){
             const int var_level_id = foreach_current_index(provenance_queue) + 1;
             const List *provenance_targets_per_rte = (List*)lfirst(provenance_queue);
             const List *correlated_targets = pull_vars_of_level_ignore_sublinks((Node*)rewritten_subselect, var_level_id);

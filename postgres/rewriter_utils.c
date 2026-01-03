@@ -822,3 +822,14 @@ List* traceprov_assert_all_vars(List *target_list){
     }
     return vars;
 }
+
+List *traceprov_reverse_list(const List *original_list){
+    List *reversed_list = NIL;
+    ListCell *cursor;
+    foreach(cursor, original_list){
+        reversed_list = list_insert_nth(reversed_list, 0, lfirst(cursor));
+    }
+    if (list_length(reversed_list) != list_length(original_list))
+        elog(ERROR, "Reversing creating list of different lengths!");
+    return reversed_list;
+}
