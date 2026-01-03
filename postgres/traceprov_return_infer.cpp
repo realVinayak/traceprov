@@ -24,6 +24,7 @@ extern "C" {
     #include "file_utils.h"
     #include "utils/builtins.h"
     #include "traceprov_parse_context.h"
+    #include "rewriter_utils.h"
     PG_MODULE_MAGIC;
 }
 
@@ -815,6 +816,7 @@ extern "C" {
         TraceProvData *result;
         bool is_left_star;
         bool is_right_star;
+        bool is_single_result;
     } TraceProvJoinExpr;
 
     typedef struct TraceProvAppend {
@@ -828,6 +830,7 @@ extern "C" {
         TraceProvSingleDerivation single_derivation;
         TraceProvMultipleDerivation multiple_derivation;
         List *derived_join_exprns;
+        List *utilized_sublinks;
     } TraceProvDerivation;
 
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
@@ -855,7 +858,8 @@ extern "C" {
         TraceProvJoinConditions *join_condition,
         std::vector<TraceProvColumn*> *output_columns,
         bool is_left_star = false,
-        bool is_right_star = false
+        bool is_right_star = false,
+        bool is_single_result = false
     ){
         auto tp_join_exprn = palloc0_object(TraceProvJoinExpr);
         tp_join_exprn->tag = T_TP_JOIN;
@@ -866,6 +870,7 @@ extern "C" {
         tp_join_exprn->result = nullptr;
         tp_join_exprn->is_left_star = is_left_star;
         tp_join_exprn->is_right_star = is_right_star;
+        tp_join_exprn->is_single_result = is_single_result;
         return tp_join_exprn;
     }
 
@@ -876,6 +881,16 @@ extern "C" {
         tp_append->tag = T_TP_APPEND;
         if (list_length(nodes) == 0)
             elog(ERROR, "Making append rel with no nodes!");
+        ListCell *node_cursor;
+        uint64 column_count = 0;
+        foreach(node_cursor, nodes){
+            if (column_count == 0){
+                column_count = traceprov_get_node_column_count((TraceProvNode*)lfirst(node_cursor));
+                continue;
+            }
+            if (column_count != traceprov_get_node_column_count((TraceProvNode*)lfirst(node_cursor)))
+                elog(ERROR, "Got differing column count in append!");
+        }
         tp_append->nodes = nodes;
         return tp_append;
     }
@@ -1240,10 +1255,11 @@ extern "C" {
     }
     
     static void perform_derive_from_log(
-        const TraceProvDependency *log_dependency,
+        TraceProvDependency *log_dependency,
         const uint8 worker_count,
         TraceProvDerivation *derivation,
-        TraceProvParseContext *parsed_back_context
+        TraceProvParseContext *parsed_back_context,
+        bool allow_both_logs = false
     ){
         const TraceProvLayerNumber log_layer_number = log_dependency->headNumber;
         const uint32 layer_width = list_length(log_dependency->entries);
@@ -1304,7 +1320,7 @@ extern "C" {
         if ((list_length(next_child_pointers) == 0) && (list_length(normal_log_entries) == 0))
             elog(ERROR, "Found both log entries to be completely empty!");
 
-        if ((list_length(next_child_pointers) > 0) && (list_length(normal_log_entries) > 0))
+        if ((list_length(next_child_pointers) > 0) && (list_length(normal_log_entries) > 0) && (!allow_both_logs))
             elog(ERROR, "Found both log entries to be populated... cannot handle this case right now.");
 
         // If more than 1 final log is found, it implies that final log was parallelized.
@@ -1319,6 +1335,12 @@ extern "C" {
 
             // Go over all the pointers and split based on each worker.
             ListCell *child_pointer;
+            TraceProvNode *compute_node = NULL;
+            List *graphs_to_explore = NIL;
+
+            if (list_length(next_child_pointers) > 1)
+                elog(ERROR, "Cannot handle more than 1 next child pointer, for now...");
+
             foreach(child_pointer, next_child_pointers){
                 TraceProvDependency *child_graph = ((TraceProvDependency *)list_nth(log_dependency->children, lfirst_int(child_pointer)));
                 List *child_join_exprns = NIL;
@@ -1335,10 +1357,38 @@ extern "C" {
                     &child_join_exprns
                 );
                 auto traceprov_append_node = make_traceprov_append(child_join_exprns);
+                compute_node =  (TraceProvNode *)traceprov_append_node;
                 derivation->derived_join_exprns = lappend(derivation->derived_join_exprns, traceprov_append_node);
+                graphs_to_explore = lappend(graphs_to_explore, child_graph);
+            }
+
+            if (list_length(normal_log_entries) && (list_length(next_child_pointers) == 0)){
+                TraceProvData *cloned_log = new TraceProvData;
+                for(auto column: *current_worker_logs){
+                    cloned_log->push_back(column);
+                }
+                // Need to also look at any normal log entries (not pointers.)
+                ListCell *normal_log_entry;
+                foreach(normal_log_entry, normal_log_entries){
+                    cloned_log->push_back(current_worker_logs->at(lfirst_int(normal_log_entry)));
+                }
+                TraceProvNode *normal_log_relation = (TraceProvNode *)make_traceprov_relation(
+                    cloned_log,
+                    psprintf("normal_log_%s",  tp_parse_get_unique_alias(parsed_back_context))
+                );
+                derivation->derived_join_exprns = lappend(derivation->derived_join_exprns, normal_log_relation);
+                graphs_to_explore = lappend(graphs_to_explore, log_dependency);
+                compute_node = normal_log_relation;
+            }
+
+            if (compute_node == NULL)
+                elog(ERROR, "Expected compute node to be set..");
+
+            auto layer_graph_map = new std::unordered_map<TraceProvLayerNumber, TraceProvSublinkMapInferItem *>;
+            ListCell *child_graph_cursor;
+            foreach(child_graph_cursor, graphs_to_explore){
                 ListCell *child_entry_cursor;
-                auto layer_graph_map = new std::unordered_map<TraceProvLayerNumber, TraceProvSublinkMapInferItem *>;
-                foreach(child_entry_cursor, child_graph->entries){
+                foreach(child_entry_cursor, ((TraceProvDependency *)(lfirst(child_graph_cursor)))->entries){
                     TraceProvEntry *entry = (TraceProvEntry *)lfirst(child_entry_cursor);
                     if (list_length(entry->sublinks) == 0) continue;
 
@@ -1360,50 +1410,40 @@ extern "C" {
                         item->first->push_back(join_condition);
                     }
                 }
-                List *sublink_computation_nodes = NIL;
-                for(auto layer_graph_map_item: *layer_graph_map){
-                    auto child_derivation = new TraceProvDerivation;
-                    child_derivation->derived_join_exprns = NIL;
-                    TraceProvSublinkMapInferItem *infer_item = layer_graph_map_item.second;
-                    TraceProvJoinConditions *join_conditions = infer_item->first;
-                    // Derive the graph on the child.
-                    perform_derive_from_log(infer_item->second, worker_count, child_derivation, parsed_back_context);
-                    TraceProvNode *traceprov_child_append_node = (TraceProvNode *)make_traceprov_append(child_derivation->derived_join_exprns);
-                    if (join_conditions->size()){
-                        traceprov_child_append_node = (TraceProvNode *)make_traceprov_join_expr(
-                            (TraceProvNode*)traceprov_append_node,
-                            traceprov_child_append_node,
-                            join_conditions,
-                            nullptr,
-                            true,
-                            // So that we don't have to explictly know how it does it.
-                            true
-                        );
-                    }
-                    sublink_computation_nodes = lappend(sublink_computation_nodes, traceprov_child_append_node);
-                }
-
-                if (list_length(sublink_computation_nodes)){
-                    derivation->derived_join_exprns = list_concat(derivation->derived_join_exprns, sublink_computation_nodes);
-                }
             }
 
-            if (list_length(normal_log_entries)){
-                TraceProvData *cloned_log = new TraceProvData;
-                for(auto column: *current_worker_logs){
-                    cloned_log->push_back(column);
+            List *sublink_computation_nodes = NIL;
+            for(auto layer_graph_map_item: *layer_graph_map){
+                auto child_derivation = new TraceProvDerivation;
+                child_derivation->derived_join_exprns = NIL;
+                child_derivation->utilized_sublinks = NIL;
+                TraceProvSublinkMapInferItem *infer_item = layer_graph_map_item.second;
+                TraceProvJoinConditions *join_conditions = infer_item->first;
+                // Derive the graph on the child.
+                perform_derive_from_log(infer_item->second, worker_count, child_derivation, parsed_back_context, true);
+                TraceProvNode *traceprov_child_append_node = (TraceProvNode *)make_traceprov_append(child_derivation->derived_join_exprns);
+                if (join_conditions->size()){
+                    traceprov_child_append_node = (TraceProvNode *)make_traceprov_join_expr(
+                        (TraceProvNode*)compute_node,
+                        traceprov_child_append_node,
+                        join_conditions,
+                        nullptr,
+                        true,
+                        // So that we don't have to explictly know how it does it.
+                        true,
+                        // temp.
+                        true
+                    );
                 }
-                // Need to also look at any normal log entries (not pointers.)
-                ListCell *normal_log_entry;
-                foreach(normal_log_entry, normal_log_entries){
-                    cloned_log->push_back(current_worker_logs->at(lfirst_int(normal_log_entry)));
-                }
-                TraceProvNode *normal_log_relation = (TraceProvNode *)make_traceprov_relation(
-                    cloned_log,
-                    psprintf("normal_log_%s",  tp_parse_get_unique_alias(parsed_back_context))
-                );
-                derivation->derived_join_exprns = lappend(derivation->derived_join_exprns, normal_log_relation);
+                sublink_computation_nodes = lappend(sublink_computation_nodes, traceprov_child_append_node);
+                derivation->utilized_sublinks = lappend_int(derivation->utilized_sublinks, infer_item->second->headNumber);
+                derivation->utilized_sublinks = list_concat(derivation->utilized_sublinks, child_derivation->utilized_sublinks);
             }
+
+            if (list_length(sublink_computation_nodes)){
+                derivation->derived_join_exprns = list_concat(derivation->derived_join_exprns, sublink_computation_nodes);
+            }
+
         }
     }
 
@@ -1430,7 +1470,7 @@ extern "C" {
         if (node->tag == T_TP_RELATION){
             const TraceProvRelation *relation = (TraceProvRelation *)node;
             appendStringInfo(&buf, "RELATION: %s (columns: %ld, count: %ld)", relation->name, relation->data->size(), relation->data->at(0)->size());
-            appendStringInfo(&buf, "sample_values: %s", get_sample_values(relation->data));
+            // appendStringInfo(&buf, "sample_values: %s", get_sample_values(relation->data));
         }else if (node->tag == T_TP_JOIN){
             const TraceProvJoinExpr *join_expr = (TraceProvJoinExpr *)node;
             appendStringInfo(&buf, "%s", traceprov_node_to_string(join_expr->left));
@@ -1484,7 +1524,8 @@ extern "C" {
     // Evaluates the join exprn
     static TraceProvJoinResult* traceprov_evaluate_join_exprn_key_count_1(
         TraceProvColumnData *left_column,
-        TraceProvColumnData *right_column
+        TraceProvColumnData *right_column,
+        bool is_single_result
      ){
         // Basically, return the offsets that are found.
         auto offsets_found = new TraceProvJoinResult;
@@ -1497,11 +1538,15 @@ extern "C" {
             const auto match_key = right_column->at(offset);
             auto it = (std::lower_bound(left_column->begin(), left_column->end(), match_key));
             while (it != left_column->end()){
+                bool has_seen_before = false;
                 if (*it == match_key){
+                    if (has_seen_before && is_single_result)
+                        elog(ERROR, "Got multiple matches!");
                     auto left_offset = std::distance(left_column->begin(), it);
                     left_offsets->push_back(left_offset);
                     right_offsets->push_back(offset);
                     it++;
+                    has_seen_before = true;
                     continue;
                 }
                 break;
@@ -1554,7 +1599,8 @@ extern "C" {
 
     static TraceProvJoinResult *traceprov_evaluate_join_exprn_many_key(
         TraceProvData *left_columns,
-        TraceProvData *right_columns
+        TraceProvData *right_columns,
+        bool is_single_result
     ){
         auto offsets_found = new TraceProvJoinResult;
         auto left_offsets = new TraceProvColumnData;
@@ -1569,11 +1615,15 @@ extern "C" {
             const auto match_key = right_flattened->at(offset);
             auto it = (std::lower_bound(left_flattened->begin(), left_flattened->end(), match_key, vector_compare_is_less));
             while (it != left_flattened->end()){
+                bool has_seen_before = false;
                 if (vector_compare_is_equal(*it, match_key)){
+                    if (has_seen_before && is_single_result)
+                        elog(ERROR, "Got multiple matches, when only one was expected!");
                     auto left_offset = std::distance(left_flattened->begin(), it);
                     left_offsets->push_back(left_offset);
                     right_offsets->push_back(offset);
                     it++;
+                    has_seen_before = true;
                     continue;
                 }
                 break;
@@ -1589,8 +1639,12 @@ extern "C" {
         
         TraceProvData *left_result = traceprov_evaluate_node(join_exprn->left);
         TraceProvData *right_result = traceprov_evaluate_node(join_exprn->right);
-        // traceprov_dump_data_to_csv(left_columns, psprintf(DEFINE_TRACE_PROV_FILE("/left_data.csv"), DataDir));
-        // traceprov_dump_data_to_csv(right_columns, psprintf(DEFINE_TRACE_PROV_FILE("/right_data.csv"), DataDir));
+        if (join_exprn->is_single_result){
+            traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_single_result.csv"), DataDir));
+            traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_single_result.csv"), DataDir));
+            elog(INFO, "Logging join exprn: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+        }
+
         // This is poor mans index nested loop join.
         // The left result is guaranteed to be smaller than the right side, so it is sorted.
 
@@ -1607,7 +1661,8 @@ extern "C" {
             TraceProvColumnData *right_columns =  right_result->at(join_pair->second->second - 1);
             offsets = traceprov_evaluate_join_exprn_key_count_1(
                 left_columns,
-                right_columns
+                right_columns,
+                join_exprn->is_single_result
             );
         }else{
             TraceProvData *left_columns = new TraceProvData;
@@ -1620,11 +1675,15 @@ extern "C" {
             }
             offsets = traceprov_evaluate_join_exprn_many_key(
                 left_columns,
-                right_columns
+                right_columns,
+                join_exprn->is_single_result
             );
         }
-        if (offsets->at(0)->size() == 0)
-            elog(ERROR, "Got 0 as the join result!");
+        if (offsets->at(0)->size() == 0){
+            traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_no_result.csv"), DataDir));
+            traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_no_result.csv"), DataDir));
+            elog(INFO, "Got 0 as the join result: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+        }
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
             auto left_offsets = offsets->at(0);
@@ -1728,19 +1787,27 @@ extern "C" {
     static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node){
         ListCell *node_cursor;
         TraceProvNode *first_node = (TraceProvNode *)list_nth(append_node->nodes, 0);
-        TraceProvData *result = traceprov_evaluate_node(first_node);
+        const TraceProvData *result = traceprov_evaluate_node(first_node);
         const uint64 initial_result_width = result->size();
+        TraceProvData *final_result = new TraceProvData;
+        for (uint64 col_idx = 0; col_idx < result->size(); col_idx++){
+            TraceProvColumnData *column_data = new TraceProvColumnData;
+            for (auto value: *result->at(col_idx)){
+                column_data->push_back(value);
+            }
+            final_result->push_back(column_data);
+        }
         for_each_from(node_cursor, append_node->nodes, 1){
             TraceProvData *current = traceprov_evaluate_node((TraceProvNode *)lfirst(node_cursor));
             if (current->size() != initial_result_width)
                 elog(ERROR, "Expected all the nodes in an append block to have the same width");
             for (uint64 col_cursor = 0; col_cursor < initial_result_width; col_cursor++){
                 for (uint64 row_cursor = 0; row_cursor < current->at(col_cursor)->size(); row_cursor++){
-                    result->at(col_cursor)->push_back(current->at(col_cursor)->at(row_cursor));
+                    final_result->at(col_cursor)->push_back(current->at(col_cursor)->at(row_cursor));
                 }
             }
         }
-        return result;
+        return final_result;
     }
 
     static TraceProvData *traceprov_evaluate_node(TraceProvNode *node){
@@ -1774,6 +1841,43 @@ extern "C" {
         out.close();
     }
 
+    static List *get_used_sublinks_in_dependency(const TraceProvDependency *dependency){
+        List *used_layer_numbers = NIL;
+        ListCell *cursor;
+        foreach(cursor, dependency->entries){
+            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            if (entry->kind == TP_ENTRY_KIND_POINTER){
+                const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(dependency->children, foreach_current_index(cursor));
+                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph));
+            }else if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
+                ListCell *sublink_cursor;
+                foreach(sublink_cursor, entry->sublinks){
+                    TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+                    used_layer_numbers = lappend_int(used_layer_numbers, item->layer_number);
+                }
+            }else{
+                elog(ERROR, "Only handling pointer or base relation for now..");
+            }
+        }
+        return used_layer_numbers;
+    }
+
+    static List* get_used_sublinks(List *graphs){
+        // Sublinks can refer to other sublinks.
+        // So, discover those cases too.
+        List *used_sublinks = NIL;
+        ListCell *graph_cursor;
+        foreach(graph_cursor, graphs){
+            used_sublinks = list_concat(
+                used_sublinks,
+                get_used_sublinks_in_dependency(
+                    (TraceProvDependency *)lfirst(graph_cursor)
+                )
+            );
+        }
+        return used_sublinks;
+    }
+
     // static derive_from_log(const uint8 worker_count)
     // The main entry point to all the derivation.
     PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
@@ -1782,6 +1886,7 @@ extern "C" {
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
         struct traceprov_shared_context shared_context;
+        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublinkMap));
 
         // NOTE: Shared context is used just to get the total number of workers.
         if (map_traceprov_shared_context(&shared_context))
@@ -1791,6 +1896,7 @@ extern "C" {
         ListCell *graph_cursor;
         auto derivation = new TraceProvDerivation;
         derivation->derived_join_exprns = NIL;
+        derivation->utilized_sublinks = NIL;
         foreach(graph_cursor, graphs){
             TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
             // The top level graph should always be the simple log.
@@ -1798,6 +1904,15 @@ extern "C" {
                 elog(ERROR, "Expected the top level graph to always be a TP_LOG. Got %d", graph->graph_type);
             perform_derive_from_log(graph, worker_count, derivation, parsed_back_context);
         }
+        ListCell *sublink_cursor;
+        foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
+            TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
+            if (traceprov_find_int_list(used_sublinks, child_sublink->headNumber)) continue;
+            // Sublinks without any correlation can also exist.
+            // This catches those cases (but we need to be careful and not add any that has correlation)
+            perform_derive_from_log(child_sublink, worker_count, derivation, parsed_back_context);
+        }
+;
         ListCell *derivation_cursor;
         uint64 final_result_size = 0;
         StringInfoData buf;
@@ -1810,8 +1925,9 @@ extern "C" {
                 appendStringInfoChar(&buf, ',');
 
             TraceProvNode *node = (TraceProvNode *)lfirst(derivation_cursor);
+            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(node));
+ 
             TraceProvData *node_result = traceprov_evaluate_node(node);
-
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%ld_dump.csv"), DataDir, file_idx);
 
             traceprov_dump_data_to_csv(node_result, dump_file_name);
@@ -1822,7 +1938,6 @@ extern "C" {
             elog(INFO, "Sample result: %s", get_sample_values(node_result));
 
             appendStringInfo(&buf, "{\"idx\": %ld, \"size\": %ld}", file_idx, node_result->at(0)->size());
-
         }
         appendStringInfoChar(&buf, ']');
         elog(INFO, "Final result size: %ld", final_result_size);
