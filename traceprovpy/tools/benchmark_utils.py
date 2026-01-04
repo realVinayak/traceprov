@@ -61,7 +61,7 @@ TRACEPROV_CAPTURE_QUERY = lambda: ExtraQuery(
 
 TRACEPROV_PERFORM_DERIVATION = lambda: ExtraQuery(
     label="traceprov_capture_query",
-    query=f"$INLINE-select * from traceprov_perform_derivation();",
+    query=f"$INLINE-select * from traceprov_dump_derivation();",
     runs_after_base=True,
     strict_run=True,
     capture_output=True,

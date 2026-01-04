@@ -14,6 +14,10 @@ DROP FUNCTION IF EXISTS traceprov_perform_derivation (BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_perform_derivation (BIGINT, BOOLEAN);
 
+DROP FUNCTION IF EXISTS traceprov_dump_derivation ();
+
+DROP FUNCTION IF EXISTS traceprov_derivation_spec ();
+
 CREATE
 OR REPLACE FUNCTION traceprov_infer (
     IN integer,
@@ -67,3 +71,11 @@ OR REPLACE FUNCTION traceprov_parsed_back () RETURNS text AS '$libdir/__FILE__',
 CREATE
 OR REPLACE FUNCTION traceprov_perform_derivation (IN BIGINT, IN BOOLEAN) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_perform_derivation' LANGUAGE C STRICT PARALLEL SAFE STABLE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_dump_derivation () RETURNS BIGINT AS '$libdir/__FILE__',
+'traceprov_dump_derivation' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_derivation_spec () RETURNS text AS '$libdir/__FILE__',
+'traceprov_derivation_spec' LANGUAGE C STRICT PARALLEL SAFE;
