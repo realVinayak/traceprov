@@ -151,7 +151,7 @@ class CopyColumnCsv(QuerySpec):
         assert os.system(f"mkdir -p {self.materialize}") == 0
         assert (
             os.system(
-                f"sudo cp /var/lib/postgresql/14/main/traceprov/1_dump.csv {self.materialize}/"
+                f"sudo cp /var/lib/postgresql/14/main/traceprov/2_dump.csv {self.materialize}/"
             )
             == 0
         )

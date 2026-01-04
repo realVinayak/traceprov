@@ -2020,14 +2020,10 @@ extern "C" {
         return used_sublinks;
     }
 
-    // static derive_from_log(const uint8 worker_count)
-    // The main entry point to all the derivation.
-    PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
-
-    Datum traceprov_perform_derivation(PG_FUNCTION_ARGS){
-        const uint64 result_to_return = PG_GETARG_INT64(0);
-        bool found_in_map = false;
-        const bool should_dump = PG_GETARG_BOOL(1);
+    static std::unordered_map<TraceProvLayerNumber, TraceProvData *>* perform_derivation(
+        char **derivation_spec,
+        TraceProvEvaluateNodeContext *eval_context
+    ){
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
         struct traceprov_shared_context shared_context;
@@ -2063,8 +2059,6 @@ extern "C" {
         StringInfoData buf;
         initStringInfo(&buf);
         appendStringInfoChar(&buf, '[');
-        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
-        eval_context->should_dump = should_dump;
 
         auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvData *>;
         foreach(derivation_cursor, derivation->derived_join_exprns){
@@ -2083,7 +2077,7 @@ extern "C" {
             TraceProvData *node_result = traceprov_evaluate_node(derived_node->node, eval_context);
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%d_dump.csv"), DataDir,  derived_node->layer_number);
 
-            if (should_dump){
+            if (eval_context->should_dump){
                 traceprov_dump_data_to_csv(node_result, dump_file_name);                
             }
 
@@ -2094,14 +2088,29 @@ extern "C" {
 
             appendStringInfo(&buf, "{\"idx\": %d, \"size\": %ld, \"width\": %ld}", derived_node->layer_number, node_result->at(0)->data->size(), node_result->size());
             derived_node_map->insert({derived_node->layer_number, node_result});
-            if (derived_node->layer_number == result_to_return)
-                found_in_map = true;
         }
         appendStringInfoChar(&buf, ']');
         elog(INFO, "Final result size: %ld", final_result_size);
         elog(INFO, "Returned spec: %s", buf.data);
-        if (!found_in_map)
-            elog(ERROR, "Didn't find the input in map!");
+        if (derivation_spec){
+            *derivation_spec = buf.data;
+        }
+        return derived_node_map;
+    }
+
+    // static derive_from_log(const uint8 worker_count)
+    // The main entry point to all the derivation.
+    PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
+
+    Datum traceprov_perform_derivation(PG_FUNCTION_ARGS){
+        const uint64 result_to_return = PG_GETARG_INT64(0);
+        const bool should_dump = PG_GETARG_BOOL(1);
+        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
+        eval_context->should_dump = should_dump;
+
+        auto derived_node_map = perform_derivation(NULL, eval_context);
+        if (derived_node_map->find(result_to_return) == derived_node_map->end())
+            elog(ERROR, "Didn't find the input result idx!");
         TraceProvData *selected_result = derived_node_map->at(result_to_return);
         traceprov_materialize_derived_result(fcinfo, selected_result);
         return (Datum) 0;
@@ -2152,5 +2161,25 @@ extern "C" {
         #endif
         return;
     }
+
+    PG_FUNCTION_INFO_V1(traceprov_dump_derivation);
+
+    Datum traceprov_dump_derivation(PG_FUNCTION_ARGS){
+        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
+        eval_context->should_dump = true;
+        perform_derivation(NULL, eval_context);
+        PG_RETURN_INT64(0);
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_derivation_spec);
+
+    Datum traceprov_derivation_spec(PG_FUNCTION_ARGS){
+        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
+        eval_context->should_dump = false;
+        char *spec = NULL;
+        perform_derivation(&spec, eval_context);
+        PG_RETURN_TEXT_P(cstring_to_text(spec));
+    }
+
 };
 
