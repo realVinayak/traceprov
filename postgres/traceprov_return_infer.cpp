@@ -98,11 +98,20 @@ extern "C" {
         List *utilized_sublinks;
     } TraceProvDerivation;
 
+    typedef struct TraceProvDerivedNode {
+        TraceProvLayerNumber layer_number;
+        TraceProvNode *node;
+    } TraceProvDerivedNode;
+    
+    typedef struct TraceProvEvaluateNodeContext {
+        bool should_dump;
+    } TraceProvEvaluateNodeContext;
+    
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
 
-    static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn);
-    static TraceProvData *traceprov_evaluate_node(TraceProvNode *node);
-    static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node);
+    static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn, TraceProvEvaluateNodeContext *eval_context);
+    static TraceProvData *traceprov_evaluate_node(TraceProvNode *node, TraceProvEvaluateNodeContext *eval_context);
+    static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node, TraceProvEvaluateNodeContext *eval_context);
     static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name);
     uint64 traceprov_get_node_column_count(TraceProvNode *node);
 
@@ -113,6 +122,14 @@ extern "C" {
     );
 
     static TraceProvColumnData *traceprov_make_empty_column();
+    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvData *derived);
+
+    static TraceProvDerivedNode *traceprov_make_derived_node(TraceProvLayerNumber layer_number, TraceProvNode *node){
+        TraceProvDerivedNode *derived = (TraceProvDerivedNode *)malloc(sizeof(TraceProvDerivedNode));
+        derived->layer_number = layer_number;
+        derived->node = node;
+        return derived;
+    }
 
     static TraceProvData *traceprov_make_column_data(
         std::vector<std::vector<uint64>*> *vectors
@@ -131,6 +148,7 @@ extern "C" {
         col_data->data = new std::vector<uint64>;
         return col_data;
     }
+    
 
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
@@ -881,6 +899,11 @@ extern "C" {
         return tp_rel;
     }
 
+    static void traceprov_assert_is_in_range(const uint64 column_count, TraceProvColumn *column){
+        if (column->second > column_count)
+            elog(ERROR, "Table access out of range!");
+    }
+
     TraceProvJoinExpr *make_traceprov_join_expr(
         TraceProvNode *left,
         TraceProvNode *right,
@@ -894,6 +917,14 @@ extern "C" {
         tp_join_exprn->tag = T_TP_JOIN;
         tp_join_exprn->left= left;
         tp_join_exprn->right = right;
+        const auto left_column_count = traceprov_get_node_column_count(left);
+        const auto right_column_count = traceprov_get_node_column_count(right);
+        for(auto condition: *join_condition){
+            if (condition->first->first != 1 || condition->second->first != 2)
+                elog(ERROR, "Numberig is inconsistent!");
+            traceprov_assert_is_in_range(left_column_count, condition->first);
+            traceprov_assert_is_in_range(right_column_count, condition->second);
+        }
         tp_join_exprn->join_condition = join_condition;
         tp_join_exprn->output_columns = output_columns;
         tp_join_exprn->result = nullptr;
@@ -1364,12 +1395,11 @@ extern "C" {
                     elog(ERROR, "Got invalid child graph state! Expected to not be null and not to be invalid!");
                 next_child_pointers = lappend_int(next_child_pointers, foreach_current_index(entry_cursor));
                 graphs_to_explore = lappend(graphs_to_explore, child_graph);
-                // +1 for the group number
-                graphs_size = lappend_int(graphs_size, list_length(child_graph->entries) + 1);
+                graphs_size = lappend_int(graphs_size, list_length(log_dependency->entries));
             } else if (entry->kind == TP_ENTRY_KIND_BASE_RELATION && (!has_appended_self)){
                 normal_log_entries= lappend_int(normal_log_entries, foreach_current_index(entry_cursor));
                 graphs_to_explore = lappend(graphs_to_explore, log_dependency);
-                graphs_size = lappend_int(graphs_size, list_length(log_dependency->entries));
+                graphs_size = lappend_int(graphs_size, 0);
                 has_appended_self = true;
             }
         }
@@ -1421,11 +1451,11 @@ extern "C" {
                 for(auto column: *current_worker_logs){
                     cloned_log->push_back(column);
                 }
-                // Need to also look at any normal log entries (not pointers.)
-                ListCell *normal_log_entry;
-                foreach(normal_log_entry, normal_log_entries){
-                    cloned_log->push_back(current_worker_logs->at(lfirst_int(normal_log_entry)));
-                }
+                // // Need to also look at any normal log entries (not pointers.)
+                // ListCell *normal_log_entry;
+                // foreach(normal_log_entry, normal_log_entries){
+                //     cloned_log->push_back(current_worker_logs->at(lfirst_int(normal_log_entry)));
+                // }
                 TraceProvNode *normal_log_relation = (TraceProvNode *)make_traceprov_relation(
                     cloned_log,
                     psprintf("normal_log_%s",  tp_parse_get_unique_alias(parsed_back_context))
@@ -1455,7 +1485,7 @@ extern "C" {
                     }
                     TraceProvSublinkMapInferItem *item = layer_graph_map->at(sublink_item->layer_number);
                     auto join_condition = new std::pair<TraceProvColumn*, TraceProvColumn*>(
-                        new TraceProvColumn(1, foreach_current_index(child_entry_cursor) + list_nth_int(graphs_size, foreach_current_index(child_entry_cursor)) + 1),
+                        new TraceProvColumn(1, foreach_current_index(child_entry_cursor) + list_nth_int(graphs_size, foreach_current_index(child_graph_cursor)) + 1),
                         new TraceProvColumn(2, sublink_item->offset_in_key + 1)
                     );
                     item->first->push_back(join_condition);
@@ -1464,7 +1494,9 @@ extern "C" {
         }
 
         auto current_compute_node = make_traceprov_append(current_compute_nodes);
-        derivation->derived_join_exprns = lappend(derivation->derived_join_exprns, current_compute_node);
+        derivation->derived_join_exprns = lappend(
+            derivation->derived_join_exprns, traceprov_make_derived_node(log_dependency->headNumber, (TraceProvNode *)current_compute_node) 
+        );
         List *sublink_computation_nodes = NIL;
         for(auto layer_graph_map_item: *layer_graph_map){
             auto child_derivation = new TraceProvDerivation;
@@ -1474,21 +1506,32 @@ extern "C" {
             TraceProvJoinConditions *join_conditions = infer_item->first;
             // Derive the graph on the child.
             perform_derive_from_log(infer_item->second, worker_count, child_derivation, parsed_back_context, true);
-            TraceProvNode *traceprov_child_append_node = (TraceProvNode *)make_traceprov_append(child_derivation->derived_join_exprns);
+            List *child_join_exprns = NIL;
+            ListCell *child_join_cursor;
+            foreach(child_join_cursor, child_derivation->derived_join_exprns){
+                child_join_exprns = lappend(child_join_exprns, ((TraceProvDerivedNode *)lfirst(child_join_cursor))->node);
+            }
+            TraceProvNode *traceprov_child_append_node = (TraceProvNode *)make_traceprov_append(child_join_exprns);
             if (join_conditions->size()){
                 traceprov_child_append_node = (TraceProvNode *)make_traceprov_join_expr(
                     (TraceProvNode*)current_compute_node,
                     traceprov_child_append_node,
                     join_conditions,
                     nullptr,
-                    true,
+                    false,
                     // So that we don't have to explictly know how it does it.
                     true,
                     // temp.
                     true
                 );
             }
-            sublink_computation_nodes = lappend(sublink_computation_nodes, traceprov_child_append_node);
+            sublink_computation_nodes = lappend(
+                sublink_computation_nodes, 
+                traceprov_make_derived_node(
+                    infer_item->second->headNumber,
+                    traceprov_child_append_node
+                )
+            );
             derivation->utilized_sublinks = lappend_int(derivation->utilized_sublinks, infer_item->second->headNumber);
             derivation->utilized_sublinks = list_concat(derivation->utilized_sublinks, child_derivation->utilized_sublinks);
         }
@@ -1553,7 +1596,7 @@ extern "C" {
 
             if (join_expr->result != nullptr){
                 appendStringInfo(&buf, " - RESULT_SIZE: [%ld]", join_expr->result->at(0)->data->size());
-                appendStringInfo(&buf, "sample_values: %s", get_sample_values(join_expr->result));
+                // appendStringInfo(&buf, "sample_values: %s", get_sample_values(join_expr->result));
             }
 
         } else if (node->tag == T_TP_APPEND){
@@ -1719,17 +1762,22 @@ extern "C" {
         return offsets_found;
     }
 
-    static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn){
+    static TraceProvData* traceprov_evaluate_join_exprn(
+        TraceProvJoinExpr *join_exprn, 
+        TraceProvEvaluateNodeContext *eval_context
+    ){
         // If this join exprn is already evaluated, simply return the last result.
         if (join_exprn->result != nullptr)
             return join_exprn->result;
         
-        TraceProvData *left_result = traceprov_evaluate_node(join_exprn->left);
-        TraceProvData *right_result = traceprov_evaluate_node(join_exprn->right);
+        TraceProvData *left_result = traceprov_evaluate_node(join_exprn->left, eval_context);
+        TraceProvData *right_result = traceprov_evaluate_node(join_exprn->right, eval_context);
         if (join_exprn->is_single_result){
-            traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_single_result.csv"), DataDir));
-            traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_single_result.csv"), DataDir));
-            elog(INFO, "Logging join exprn: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+            if (eval_context->should_dump){
+                traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_single_result.csv"), DataDir));
+                traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_single_result.csv"), DataDir));
+                elog(INFO, "Logging join exprn: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+            }
         }
 
         // This is poor mans index nested loop join.
@@ -1767,9 +1815,13 @@ extern "C" {
             );
         }
         if (offsets->at(0)->data->size() == 0){
-            traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_no_result.csv"), DataDir));
-            traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_no_result.csv"), DataDir));
-            elog(INFO, "Got 0 as the join result: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+            if (eval_context->should_dump){
+                traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_no_result.csv"), DataDir));
+                traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_no_result.csv"), DataDir));
+                elog(INFO, "Got 0 as the join result: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+            }else{
+                // elog(INFO, "Got 0 as the join result!");
+            }
         }
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
@@ -1871,10 +1923,10 @@ extern "C" {
 
 
 
-    static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node){
+    static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node, TraceProvEvaluateNodeContext *eval_context){
         ListCell *node_cursor;
         TraceProvNode *first_node = (TraceProvNode *)list_nth(append_node->nodes, 0);
-        const TraceProvData *result = traceprov_evaluate_node(first_node);
+        const TraceProvData *result = traceprov_evaluate_node(first_node, eval_context);
         const uint64 initial_result_width = result->size();
         TraceProvData *final_result = new TraceProvData;
         for (uint64 col_idx = 0; col_idx < result->size(); col_idx++){
@@ -1886,7 +1938,7 @@ extern "C" {
             final_result->push_back(column_data);
         }
         for_each_from(node_cursor, append_node->nodes, 1){
-            TraceProvData *current = traceprov_evaluate_node((TraceProvNode *)lfirst(node_cursor));
+            TraceProvData *current = traceprov_evaluate_node((TraceProvNode *)lfirst(node_cursor), eval_context);
             if (current->size() != initial_result_width)
                 elog(ERROR, "Expected all the nodes in an append block to have the same width");
             for (uint64 col_cursor = 0; col_cursor < initial_result_width; col_cursor++){
@@ -1898,17 +1950,19 @@ extern "C" {
         return final_result;
     }
 
-    static TraceProvData *traceprov_evaluate_node(TraceProvNode *node){
+    static TraceProvData *traceprov_evaluate_node(TraceProvNode *node, TraceProvEvaluateNodeContext *eval_context){
         if (node->tag == T_TP_RELATION){
             TraceProvRelation *relation = (TraceProvRelation *)node;
-            traceprov_dump_data_to_csv(relation->data, psprintf(DEFINE_TRACE_PROV_FILE("/%s.csv"), DataDir, relation->name));
+            if (eval_context->should_dump){
+                traceprov_dump_data_to_csv(relation->data, psprintf(DEFINE_TRACE_PROV_FILE("/%s.csv"), DataDir, relation->name));
+            }
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
             TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)node;
-            return traceprov_evaluate_join_exprn(join_exprn);
+            return traceprov_evaluate_join_exprn(join_exprn, eval_context);
         } else if (node->tag == T_TP_APPEND){
             TraceProvAppend *append_node = (TraceProvAppend *)node;
-            return traceprov_evaluate_append(append_node);
+            return traceprov_evaluate_append(append_node, eval_context);
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
@@ -1971,6 +2025,9 @@ extern "C" {
     PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
 
     Datum traceprov_perform_derivation(PG_FUNCTION_ARGS){
+        const uint64 result_to_return = PG_GETARG_INT64(0);
+        bool found_in_map = false;
+        const bool should_dump = PG_GETARG_BOOL(1);
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
         struct traceprov_shared_context shared_context;
@@ -2000,36 +2057,100 @@ extern "C" {
             // This catches those cases (but we need to be careful and not add any that has correlation)
             perform_derive_from_log(child_sublink, worker_count, derivation, parsed_back_context);
         }
-;
+
         ListCell *derivation_cursor;
         uint64 final_result_size = 0;
         StringInfoData buf;
         initStringInfo(&buf);
         appendStringInfoChar(&buf, '[');
+        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
+        eval_context->should_dump = should_dump;
+
+        auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvData *>;
         foreach(derivation_cursor, derivation->derived_join_exprns){
             uint64 file_idx = foreach_current_index(derivation_cursor) + 1;
 
             if (file_idx > 1)
                 appendStringInfoChar(&buf, ',');
 
-            TraceProvNode *node = (TraceProvNode *)lfirst(derivation_cursor);
-            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(node));
+            TraceProvDerivedNode *derived_node = (TraceProvDerivedNode *)lfirst(derivation_cursor); 
+            // We should never see a derived node again. Assert just that.
+            if (derived_node_map->find(derived_node->layer_number) != derived_node_map->end()){
+                elog(ERROR, "Layer number %d is being evaluated again!", derived_node->layer_number);
+            }
+            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
  
-            TraceProvData *node_result = traceprov_evaluate_node(node);
-            auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%ld_dump.csv"), DataDir, file_idx);
+            TraceProvData *node_result = traceprov_evaluate_node(derived_node->node, eval_context);
+            auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%d_dump.csv"), DataDir,  derived_node->layer_number);
 
-            traceprov_dump_data_to_csv(node_result, dump_file_name);
+            if (should_dump){
+                traceprov_dump_data_to_csv(node_result, dump_file_name);                
+            }
 
-            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->data->size(), traceprov_node_to_string(node));
+            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->data->size(), traceprov_node_to_string(derived_node->node));
             elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld)", node_result->at(0)->data->size());
             final_result_size += node_result->at(0)->data->size();
             elog(INFO, "Sample result: %s", get_sample_values(node_result));
 
-            appendStringInfo(&buf, "{\"idx\": %ld, \"size\": %ld}", file_idx, node_result->at(0)->data->size());
+            appendStringInfo(&buf, "{\"idx\": %d, \"size\": %ld, \"width\": %ld}", derived_node->layer_number, node_result->at(0)->data->size(), node_result->size());
+            derived_node_map->insert({derived_node->layer_number, node_result});
+            if (derived_node->layer_number == result_to_return)
+                found_in_map = true;
         }
         appendStringInfoChar(&buf, ']');
         elog(INFO, "Final result size: %ld", final_result_size);
-        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+        elog(INFO, "Returned spec: %s", buf.data);
+        if (!found_in_map)
+            elog(ERROR, "Didn't find the input in map!");
+        TraceProvData *selected_result = derived_node_map->at(result_to_return);
+        traceprov_materialize_derived_result(fcinfo, selected_result);
+        return (Datum) 0;
+    }
+
+    // Based off pg_prepared_statement.
+    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvData *derived){
+        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+        TupleDesc	tupdesc;
+        Tuplestorestate *tupstore;
+        MemoryContext per_query_ctx;
+        MemoryContext oldcontext;
+
+	    /* check to see if caller supports us returning a tuplestore */
+        if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("set-valued function called in context that cannot accept a set")));
+        if (!(rsinfo->allowedModes & SFRM_Materialize))
+            ereport(ERROR,
+                    (errcode(ERRCODE_FEATURE_NOT_SUPPORTED),
+                        errmsg("materialize mode required, but it is not allowed in this context")));
+
+        per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
+        oldcontext = MemoryContextSwitchTo(per_query_ctx);
+        const int32 num_attrs = (int32)derived->size();
+        tupdesc = CreateTemplateTupleDesc(num_attrs);
+        for (int32 col_idx = 0; col_idx < num_attrs; col_idx++){
+            TupleDescInitEntry(tupdesc, (AttrNumber) col_idx + 1, psprintf("column_%d", col_idx), INT8OID, -1, 0);
+        }
+
+        tupstore = tuplestore_begin_heap(rsinfo->allowedModes & SFRM_Materialize_Random, false, work_mem);
+        rsinfo->returnMode = SFRM_Materialize;
+        rsinfo->setResult = tupstore;
+        rsinfo->setDesc = tupdesc;
+        MemoryContextSwitchTo(oldcontext);
+
+        Datum *record = (Datum *)palloc0(sizeof(Datum)*num_attrs);
+        bool *nulls = palloc0_array(bool, num_attrs);
+        for (uint64 row_idx = 0; row_idx < derived->at(0)->data->size(); row_idx++){
+            for (int32 col_idx = 0; col_idx < num_attrs; col_idx++){
+                record[col_idx] = Int64GetDatum(derived->at(col_idx)->data->at(row_idx));
+            }
+            tuplestore_putvalues(tupstore, tupdesc, record, nulls);
+        }
+        #if (PG_MAJORVERSION_NUM != 18)
+        tuplestore_donestoring(tupstore);
+        #endif
+        return;
     }
 };
 
