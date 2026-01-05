@@ -5,9 +5,10 @@
 #include <string>
 #include <cstring>
 #include "duckdb.hpp"
-#include "duckdb.h"
 #include <sstream>
 #include <fstream>
+#include <chrono>
+#include <vector>
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
@@ -41,6 +42,8 @@ struct Options {
     int repeat;
     // via --settings
     std::string settings_out_path;
+    // via --time
+    std::string time_out_path;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -55,7 +58,8 @@ struct Options parse_args(int argc, char **argv){
         .num_threads = 1,
         .stats_path = "",
         .repeat = 1,
-        .settings_out_path = ""
+        .settings_out_path = "",
+        .time_out_path = ""
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -85,6 +89,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--settings")){
             options.settings_out_path = std::string(argv[++i]);
             continue;
+        } else if (IS_OPTION("--time")){
+            options.time_out_path = std::string(argv[++i]);
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -100,6 +107,7 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\tinput_path: " << options.input_path << std::endl;
     std::cout << "\trepeat: " << options.repeat<< std::endl;
     std::cout << "\tsettings_out_path: " << options.settings_out_path << std::endl;
+    std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
 
     return options;
@@ -138,7 +146,13 @@ struct Options parse_args(int argc, char **argv){
 } \
 
 
-void perform_query(struct Options &options, duckdb_connection &con, std::string &in_sql, int iter){
+void perform_query(
+    struct Options &options, 
+    duckdb_connection &con, 
+    std::string &in_sql, 
+    int iter,
+    std::vector<int64_t> &computed_time
+){
 
     if (IS_SET(options.profile_out_path)){
         DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
@@ -156,6 +170,8 @@ void perform_query(struct Options &options, duckdb_connection &con, std::string 
     // Need to use both, the pending and the streaming API.
     duckdb_prepared_statement stmt;
     duckdb_result final_result;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
 
     DUCKDB_EXIT_ON_ERROR(duckdb_prepare(con, in_sql.c_str(), &stmt));
     if (options.use_pending){
@@ -182,7 +198,7 @@ void perform_query(struct Options &options, duckdb_connection &con, std::string 
             duckdb_destroy_data_chunk(&data_chunk);
         }
     }else{
-        int temp_chunk_count = duckdb_result_chunk_count(final_result);
+        uint64 temp_chunk_count = duckdb_result_chunk_count(final_result);
         for (idx_t chunk_idx = 0; chunk_idx < temp_chunk_count; chunk_idx++){
             duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
             duckdb_destroy_data_chunk(&data_chunk);
@@ -192,6 +208,15 @@ void perform_query(struct Options &options, duckdb_connection &con, std::string 
 
     duckdb_destroy_result(&final_result);
     duckdb_destroy_prepare(&stmt);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    if (duration.count() == 0){
+        std::cout << "Got 0 as the measured time, use a finer granularity..." << std::endl;
+        exit(1);
+    }
+
+    computed_time.push_back(duration.count());
 
     // This needs to run before anything else bc of overwrites.
     DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
@@ -226,6 +251,7 @@ int main(int argc, char **argv){
     buffer << in_sql_stream.rdbuf();
     std::string in_sql(buffer.str());
     std::cout << "From file: " << in_sql << std::endl;
+    std::vector<int64_t> computed_time;
 
     duckdb_database db;
     duckdb_connection con;
@@ -238,13 +264,31 @@ int main(int argc, char **argv){
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
 
     for (int i = 0; i < options.repeat; i++){
-        perform_query(options, con, in_sql, i);
+        perform_query(options, con, in_sql, i, computed_time);
     }
 
     if (IS_SET(options.settings_out_path)){
         char settings_out_query[256] = {0};
         sprintf(settings_out_query, TP_DUMP_SETTINGS, options.settings_out_path.c_str());
         DUCKDB_RUN_SHORT_QUERY(con, settings_out_query, "dumping settings");
+    }
+
+    if (IS_SET(options.time_out_path)){
+        if (computed_time.size() != options.repeat){
+            std::cout << "Got inconsistent size of computed time!" << std::endl;
+            exit(1);
+        }
+        std::string time_out_json = "[";
+        for (uint64_t computed_time_idx = 0; computed_time_idx < computed_time.size(); computed_time_idx++){
+            if (computed_time_idx > 0) time_out_json += ",";
+            time_out_json += "\"";
+            time_out_json += std::to_string(computed_time.at(computed_time_idx));
+            time_out_json += "\"";
+        }
+        time_out_json += "]";
+        std::ofstream out(options.time_out_path);
+        out << time_out_json;
+        out.close();
     }
 
     duckdb_disconnect(&con);
