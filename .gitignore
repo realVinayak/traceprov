@@ -60,7 +60,9 @@ smokedduck_scratch/
 postgres/run_smokedduck
 postgres/benchmark/tpch/distributed.json
 postgres/benchmark/tpch/distributed_time.json
+postgres/benchmark/tpch/distributed_file_size.json
 postgres/benchmark/micro/selectivity/distributed.json
 postgres/benchmark/micro/selectivity/distributed_time.json
+postgres/benchmark/micro/selectivity/distributed_file_size.json
 tmp/
 *.db

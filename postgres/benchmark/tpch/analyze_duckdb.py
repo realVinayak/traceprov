@@ -174,18 +174,40 @@ def simple_timings(result: dict):
     }
 
 
+def simple_file_sizes(result: dict):
+    return {
+        scale: {
+            infer_type: {
+                sel: (
+                    0
+                    if infer_type == "traceprov"
+                    else statistics.median(
+                        [sum(single.values()) for single in sel_result["file_sizes"]]
+                    )
+                )
+                for (sel, sel_result) in infer_result.items()
+            }
+            for (infer_type, infer_result) in category.items()
+        }
+        for (scale, category) in result.items()
+    }
+
+
 import numpy as np
 
 width = 0.1
 
 
-def tp_plot(scale: str, scale_results: dict, out_dir: str):
+def tp_plot(scale: str, scale_results: dict, out_dir: str, size_results: dict):
     selectivity_set = set()
-    fig, ax = plt.subplots(layout="constrained")
+    fig, (ax, ax_file_size) = plt.subplots(1, 2, figsize=(15, 6))
+    fig.suptitle(f"TPC-H {scale}")
     for idx, category in enumerate(
         sorted(list(scale_results.keys()), key=lambda x: SCHEME_ORDER.index(x))
     ):
+        # print(size_results)
         category_result: dict = scale_results[category]
+        size_result = size_results[category]
         size = len(category_result.keys()) - 1
         if len(selectivity_set) and size not in selectivity_set:
             raise Exception("Expected same selectivity count!")
@@ -194,6 +216,9 @@ def tp_plot(scale: str, scale_results: dict, out_dir: str):
         selectivity_timings = sorted(
             list(category_result.items()), key=lambda x: int(x[0])
         )[1:]
+        selectivity_sizes = sorted(list(size_result.items()), key=lambda x: int(x[0]))[
+            1:
+        ]
         x_axis = np.arange(size)
         x_axis_values = [sel for (sel, _) in selectivity_timings]
         rects = ax.bar(
@@ -202,9 +227,21 @@ def tp_plot(scale: str, scale_results: dict, out_dir: str):
             width,
             label=category,
         )
-    ax.legend(ncols=3)
+        rects2 = ax_file_size.bar(
+            x_axis + width * idx,
+            [value for (_, value) in selectivity_sizes],
+            width,
+            label=category,
+        )
     ax.set_xticks(x_axis + width, x_axis_values)
     ax.set(xlabel="Query", ylabel="Execution time (microseconds)")
+    ax_file_size.set_xticks(x_axis + width, x_axis_values)
+    ax_file_size.set(xlabel="Query", ylabel="Total size (bytes)")
+    ax_file_size.legend(
+        loc="center right", prop=dict(size=8), bbox_to_anchor=(1.25, 0.5)
+    )
+    ax_file_size.set_yscale("log", base=10)
+    ax.set_yscale("log", base=10)
     fig.savefig(f"{out_dir}/param_{scale}.png")
 
 
@@ -244,11 +281,15 @@ def main():
         f.write(json.dumps(distributed_by_tp, indent=4))
 
     timings = simple_timings(distributed_by_tp)
+    file_sizes = simple_file_sizes(distributed_by_tp)
     with open("distributed_time.json", "w") as f:
         f.write(json.dumps(timings, indent=4))
 
+    with open("distributed_file_size.json", "w") as f:
+        f.write(json.dumps(file_sizes, indent=4))
+
     for scale, scale_results in timings.items():
-        tp_plot(scale, scale_results, parsed.out_dir)
+        tp_plot(scale, scale_results, parsed.out_dir, file_sizes[scale])
 
 
 if __name__ == "__main__":
