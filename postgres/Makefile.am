@@ -7,3 +7,10 @@ AM_CPPFLAGS = -I${TRACEPROV_PG_INCLUDE_DIR} -DTRACEPROV_PAGE_SIZE_RAW=${TRACEPRO
 libtraceprov_la_LDFLAGS = -avoid-version
 libtraceprov_infer_la_LDFLAGS = -avoid-version
 librewriter_la_LDFLAGS = -avoid-version
+if ENABLE_SMOKEDDUCK
+bin_PROGRAMS = run_smokedduck
+run_smokedduck_SOURCES = run_duckdb_query.cpp
+run_smokedduck_CPPFLAGS = -I${SMOKEDDUCK_INCUDE_PATH}
+run_smokedduck_LDFLAGS = -L${SMOKEDDUCK_PATH} -Wl,-rpath,${SMOKEDDUCK_PATH}
+run_smokedduck_LDADD = -lduckdb 
+endif

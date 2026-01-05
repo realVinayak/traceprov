@@ -5,10 +5,13 @@ from traceprovpy.tools.benchmark import (
     QueryDirectory,
     QuerySpec,
     ValidationQuerySpec,
+    bench_has_smokedduck,
 )
 from traceprovpy.tools.run_with_timeout import ReplaceFILE, RunParams
 import json
 import argparse
+
+from traceprovpy.tools.smokedduck import SmokedDuckQuerySpec
 
 
 # This parses out the config file, and generates the directories
@@ -19,11 +22,13 @@ def main():
     parser = argparse.ArgumentParser(prog="tpch-driver")
     parser.add_argument("-cfg", "--config", required=True, type=str)
     parser.add_argument("-l", "--layers", required=True, type=str)
-    parsed, _ = parser.parse_known_args()
+    parser.add_argument("--traceprov", action=argparse.BooleanOptionalAction, default=True)
+    parsed, others = parser.parse_known_args()
     with open(parsed.config) as f:
         config: dict = json.loads(f.read())
     is_validate = config.get("validate", False)
 
+    has_sd = bench_has_smokedduck(others)
     dir_queries = []
 
     for subdir in config["subdirs"]:
@@ -187,7 +192,9 @@ def main():
                 ),
             )
 
-            subdir_queries.append(traceprov_query)
+            if parsed.traceprov:
+                subdir_queries.append(traceprov_query)
+
             if is_validate:
                 subdir_queries.append(
                     Query(
@@ -198,6 +205,17 @@ def main():
                             materialize="lineage_restricted.sql",
                         ),
                     ),
+                )
+
+            if has_sd:
+                subdir_queries.append(
+                    Query(
+                        query_name=query_name,
+                        spec=SmokedDuckQuerySpec(
+                            base="base.sql",
+                            key="SmokedDuck",
+                        )
+                    )
                 )
 
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
