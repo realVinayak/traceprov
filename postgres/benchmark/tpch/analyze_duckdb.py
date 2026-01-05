@@ -47,8 +47,8 @@ def merge_items_strict(left: dict, right: dict) -> dict:
 def extract_path(path: str):
     path_split = path.split("/")
     print(path_split)
-    assert len(path_split) == 5
-    path_name = path_split[3]
+    assert len(path_split) == 4
+    path_name = path_split[2]
     assert "local_test_duckdb_analyze_" in path_name
     path_name = path_name.replace("local_test_duckdb_analyze_", "")
     for compression in COMPRESSIONS:
@@ -179,7 +179,7 @@ import numpy as np
 width = 0.1
 
 
-def tp_plot(scale: str, scale_results: dict):
+def tp_plot(scale: str, scale_results: dict, out_dir: str):
     selectivity_set = set()
     fig, ax = plt.subplots(layout="constrained")
     for idx, category in enumerate(
@@ -204,12 +204,19 @@ def tp_plot(scale: str, scale_results: dict):
         )
     ax.legend(ncols=3)
     ax.set_xticks(x_axis + width, x_axis_values)
-    fig.savefig(f"param_{scale}.png")
+    ax.set(xlabel="Query", ylabel="Execution time (microseconds)")
+    fig.savefig(f"{out_dir}/param_{scale}.png")
+
+
+import os
 
 
 def main():
     bench_plotter = BenchmarkPlot("duckdb_inference")
+    bench_plotter.parser.add_argument("-o", "--out_dir", required=True)
     parsed = bench_plotter.parser.parse_args()
+    assert os.system(f"rm -rf {parsed.out_dir}/") == 0
+    assert os.system(f"mkdir -p {parsed.out_dir}") == 0
     combined = []
     for file in parsed.files:
         print(file)
@@ -241,7 +248,7 @@ def main():
         f.write(json.dumps(timings, indent=4))
 
     for scale, scale_results in timings.items():
-        tp_plot(scale, scale_results)
+        tp_plot(scale, scale_results, parsed.out_dir)
 
 
 if __name__ == "__main__":

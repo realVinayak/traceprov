@@ -46,8 +46,9 @@ def merge_items_strict(left: dict, right: dict) -> dict:
 
 def extract_path(path: str):
     path_split = path.split("/")
-    assert len(path_split) == 4
-    path_name = path_split[2]
+    print(path_split)
+    assert len(path_split) == 3
+    path_name = path_split[1]
     assert "local_test_duckdb_analyze_" in path_name
     path_name = path_name.replace("local_test_duckdb_analyze_", "")
     for compression in COMPRESSIONS:
@@ -169,6 +170,7 @@ width = 0.1
 def tp_plot(scale: str, scale_results: dict):
     selectivity_set = set()
     fig, ax = plt.subplots(layout="constrained")
+    fig.suptitle(f"Execution Time vs Selectivity ({scale})")
     for idx, category in enumerate(
         sorted(list(scale_results.keys()), key=lambda x: SCHEME_ORDER.index(x))
     ):
@@ -191,6 +193,7 @@ def tp_plot(scale: str, scale_results: dict):
         )
     ax.legend(ncols=3)
     ax.set_xticks(x_axis + width, x_axis_values)
+    ax.set(xlabel="Selectivity (%)", ylabel="Execution time (microseconds)")
     fig.savefig(f"scale_{scale}.png")
 
 
@@ -202,6 +205,7 @@ def main():
         print(file)
         complete_path = f"{parsed.root}/{file}/main_result.json"
         paths = glob.glob(complete_path)
+        print(paths)
         for path in paths:
             category = extract_path(path)
             print(path, category)
