@@ -1,0 +1,252 @@
+// The source for running duckdb (smokedduck) queries.
+// This doesn't exist in Makefiles (because it gets compiled during setup)
+
+#include <iostream>
+#include <string>
+#include <cstring>
+#include "duckdb.hpp"
+#include "duckdb.h"
+#include <sstream>
+#include <fstream>
+
+#define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
+#define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
+#define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
+
+#define TP_ENABLE_LINEAGE "PRAGMA enable_lineage;"
+#define TP_DISABLE_LINEAGE "PRAGMA disable_lineage;"
+#define TP_CLEAR_LINEAGE "PRAGMA clear_lineage;"
+
+#define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
+#define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
+
+struct Options {
+    // via --lineage
+    bool capture_lineage;
+    // via --db
+    std::string db_path;
+    // via --profile
+    // If empty, no profiling is done.
+    std::string profile_out_path;
+    // via --pending
+    // whwther to utilie pending system (for testing.)
+    bool use_pending;
+    // via --threads
+    int num_threads;
+    // via --stats
+    std::string stats_path;
+    // via --i
+    std::string input_path;
+    // via --repeat
+    int repeat;
+    // via --settings
+    std::string settings_out_path;
+};
+
+#define IS_OPTION(X) (strcmp(argv[i], X) == 0)
+#define IS_SET(X) (X.size() != 0)
+
+struct Options parse_args(int argc, char **argv){
+    struct Options options {
+        .capture_lineage = false,
+        .db_path = "",
+        .profile_out_path = "",
+        .use_pending = false,
+        .num_threads = 1,
+        .stats_path = "",
+        .repeat = 1,
+        .settings_out_path = ""
+    };
+    for (int i = 1; i < argc; i++){
+        if (IS_OPTION("--lineage")){
+            options.capture_lineage = true;
+            continue;
+        } else if (IS_OPTION("--db")){
+            options.db_path = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--profile")){
+            options.profile_out_path = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--pending")){
+            options.use_pending = true;
+            continue;
+        } else if (IS_OPTION("--threads")){
+            options.num_threads = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--stats")){
+            options.stats_path = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--i")){
+            options.input_path = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--repeat")){
+            options.repeat = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--settings")){
+            options.settings_out_path = std::string(argv[++i]);
+            continue;
+        }
+
+        std::cout << "Got unexpected option: " << argv[i] << std::endl;
+        std::exit(1);
+    }
+    std::cout << "OPTIONS: [" << std::endl;
+    std::cout << "\tcapture_lineage: " << options.capture_lineage << std::endl;
+    std::cout << "\tdb_path: " << options.db_path << std::endl;
+    std::cout << "\tprofile_out_path: " << options.profile_out_path << std::endl;
+    std::cout << "\tuse_pending: " << options.use_pending << std::endl;
+    std::cout << "\tnum_threads: " << options.num_threads << std::endl;
+    std::cout << "\tstats_path: " << options.stats_path << std::endl;
+    std::cout << "\tinput_path: " << options.input_path << std::endl;
+    std::cout << "\trepeat: " << options.repeat<< std::endl;
+    std::cout << "\tsettings_out_path: " << options.settings_out_path << std::endl;
+    std::cout << "]" << std::endl;
+
+    return options;
+};
+
+#define DUCKDB_EXIT_ON_ERROR(state) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_EXIT_ON_ERROR_MSG(state, msg) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::cout << "error: " << msg << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_EXIT_ON_ERROR_RESULT(state, result) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::cout << duckdb_result_error(&result) << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_RUN_SHORT_QUERY(con, query, msg) { \
+    duckdb_result result; \
+    std::cout << "QUERY: " << query << std::endl; \
+    duckdb_state state = duckdb_query(con, query, &result); \
+    DUCKDB_EXIT_ON_ERROR_RESULT(state, result); \
+    duckdb_destroy_result(&result); \
+    std::cout << "Reached " << msg << " correctly" << std::endl; \
+} \
+
+
+void perform_query(struct Options &options, duckdb_connection &con, std::string &in_sql, int iter){
+
+    if (IS_SET(options.profile_out_path)){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
+        char profile_out[256] = {0};
+        sprintf(profile_out, options.profile_out_path.c_str(), iter);
+        char final_profile_out[256] = {0};
+        sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+        DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
+    }
+
+    if (options.capture_lineage){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_LINEAGE, "enable lineage");
+        DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
+    }
+    // Need to use both, the pending and the streaming API.
+    duckdb_prepared_statement stmt;
+    duckdb_result final_result;
+
+    DUCKDB_EXIT_ON_ERROR(duckdb_prepare(con, in_sql.c_str(), &stmt));
+    if (options.use_pending){
+        duckdb_pending_result result;
+        DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(stmt, &result));
+        DUCKDB_EXIT_ON_ERROR(duckdb_execute_pending(
+            result,
+            &final_result
+        ));
+    }else{
+        DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
+    }
+
+    std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
+
+    int chunk_count = 0;
+    int cell_count = 0;
+
+    if (options.use_pending){
+        while (true) {
+            duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(final_result);
+            if (!data_chunk) break;
+            chunk_count++;
+            duckdb_destroy_data_chunk(&data_chunk);
+        }
+    }else{
+        int temp_chunk_count = duckdb_result_chunk_count(final_result);
+        for (idx_t chunk_idx = 0; chunk_idx < temp_chunk_count; chunk_idx++){
+            duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
+            duckdb_destroy_data_chunk(&data_chunk);
+            chunk_count++;
+        }
+    }
+
+    duckdb_destroy_result(&final_result);
+    duckdb_destroy_prepare(&stmt);
+
+    // This needs to run before anything else bc of overwrites.
+    DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
+    
+    if (options.capture_lineage){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_LINEAGE, "disable lineage");
+    }
+
+    std::cout << "Chunks: " << chunk_count;
+
+    if (IS_SET(options.stats_path)){
+        char stats_query[256] = { 0 };
+        char final_stats_query[256] = { 0 };
+        sprintf(stats_query,  options.stats_path.c_str(), iter);
+        sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
+        std::cout << "STATS QUERY: " << final_stats_query << std::endl;
+        if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
+            std::cout << duckdb_prepare_error(stmt) << std::endl;
+        }
+        DUCKDB_EXIT_ON_ERROR(duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
+        DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
+        duckdb_destroy_result(&final_result);
+        duckdb_destroy_prepare(&stmt);
+    }
+
+}
+int main(int argc, char **argv){
+    struct Options options = parse_args(argc, argv);
+
+    std::ifstream in_sql_stream(options.input_path.c_str());
+    std::stringstream buffer;
+    buffer << in_sql_stream.rdbuf();
+    std::string in_sql(buffer.str());
+    std::cout << "From file: " << in_sql << std::endl;
+
+    duckdb_database db;
+    duckdb_connection con;
+    char *error_msg;
+    DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
+    DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
+
+    char thread_set_query[256] = {0};
+    sprintf(thread_set_query, "SET threads=%d;", options.num_threads);
+    DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
+
+    for (int i = 0; i < options.repeat; i++){
+        perform_query(options, con, in_sql, i);
+    }
+
+    if (IS_SET(options.settings_out_path)){
+        char settings_out_query[256] = {0};
+        sprintf(settings_out_query, TP_DUMP_SETTINGS, options.settings_out_path.c_str());
+        DUCKDB_RUN_SHORT_QUERY(con, settings_out_query, "dumping settings");
+    }
+
+    duckdb_disconnect(&con);
+    duckdb_close(&db);   
+}

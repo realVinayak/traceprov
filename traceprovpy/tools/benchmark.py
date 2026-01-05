@@ -27,6 +27,7 @@ from traceprovpy.tools.run_with_timeout import (
     ReplaceSelectivity,
     RunParams,
     SkippableRunTimeOptions,
+    SmokedDuckOptions,
     run_with_timeout,
     RunWithTimeoutOptions,
 )
@@ -121,7 +122,10 @@ class QuerySpec(NamedTuple):
         return pack
 
     def run_packs(
-        self, top_dir: Path, get_run_options: Callable[[str], RunWithTimeoutOptions]
+        self,
+        top_dir: Path,
+        get_run_options: Callable[[str], RunWithTimeoutOptions],
+        _: "GenericBenchmark",
     ):
         base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)._replace(
             preprocessors=self.preprocess
@@ -205,6 +209,8 @@ class QuerySpec(NamedTuple):
                 base_pack.params.throwaway is not None
                 and iter_count < base_pack.params.throwaway
             ):
+                if materialize_pack:
+                    materialize_pack.close_all()
                 iter_count += 1
                 continue
             results["base"].append(base_time)
@@ -244,12 +250,10 @@ class QuerySpec(NamedTuple):
 
 class ValidationQuerySpec(QuerySpec):
 
-    def run_packs(self, top_dir, get_run_options):
+    def run_packs(self, top_dir, get_run_options, _):
         print("[validation]: ", self.base, self.materialize)
-        base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
-        other_pack = ValidationQuerySpec.get_pack(
-            top_dir, self.materialize, get_run_options
-        )
+        base_pack = self.get_pack(top_dir, self.base, get_run_options)
+        other_pack = self.get_pack(top_dir, self.materialize, get_run_options)
 
         base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
         other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_pack.file_path} > /tmp/traceprov_other.out"
@@ -281,6 +285,10 @@ class QueryDirectory(NamedTuple):
         }
 
 
+def bench_has_smokedduck(args: list[str]):
+    return "-sd_lib" in args
+
+
 class GenericBenchmark(NamedTuple):
     name: str
 
@@ -291,6 +299,7 @@ class GenericBenchmark(NamedTuple):
     traceprov_path: str = None
     traceprov_infer_set_path: str = None
     traceprov_rewriter_path: str = None
+    sd_options: SmokedDuckOptions = None
 
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
@@ -308,8 +317,11 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
+        parser.add_argument("-sd_lib", required=False, type=str)
+        parser.add_argument("-sd_include", required=False, type=str)
 
         parsed, _ = parser.parse_known_args()
+
         connection_params = ConnectionParams(
             host=parsed.host,
             port=parsed.port,
@@ -317,7 +329,13 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        setup_bench = self.setup(
+            parsed.traceprov_root,
+            connection_params,
+            parsed.suff,
+            parsed.sd_lib,
+            parsed.sd_include,
+        )
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
@@ -368,9 +386,16 @@ class GenericBenchmark(NamedTuple):
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
         suff: str = None,
+        # the smokedduck shared library.
+        sd_lib_path: str = "",
+        sd_include_path: str = "",
     ):
         setup_response = traceprov_setup(
-            suff or self.name, traceprov_postgres_root, connection_params
+            suff or self.name,
+            traceprov_postgres_root,
+            connection_params,
+            sd_lib_path,
+            sd_include_path,
         )
 
         return self._replace(**setup_response)
@@ -411,7 +436,9 @@ class GenericBenchmark(NamedTuple):
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
                 results = query.spec.run_packs(
-                    Path(top_dir) / directory.dir_name / query.query_name, _get_options
+                    Path(top_dir) / directory.dir_name / query.query_name,
+                    _get_options,
+                    self,
                 )
                 combined_results[query.query_name] = {
                     **combined_results.get(query.query_name, {}),

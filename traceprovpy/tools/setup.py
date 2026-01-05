@@ -1,11 +1,16 @@
 # sets up traceprovpy.
-from traceprovpy.tools.run_with_timeout import ConnectionParams
+from traceprovpy.tools.run_with_timeout import ConnectionParams, SmokedDuckOptions
 import os
 from pathlib import Path
 
 
 def traceprov_setup(
-    suff: str, traceprov_postgres_root: str, connection_params: ConnectionParams
+    suff: str,
+    traceprov_postgres_root: str,
+    connection_params: ConnectionParams,
+    # the smokedduck shared library.
+    sd_lib_path: str = "",
+    sd_include_path: str = "",
 ):
     assert suff is not None
 
@@ -51,10 +56,20 @@ def traceprov_setup(
         )
         == 0
     )
+
+    if sd_lib_path:
+        sd_executable_path = (
+            Path(traceprov_postgres_root) / f"bld/bin/run_smokedduck_{suff}"
+        ).resolve()
+        assert sd_executable_path.exists(), "smokedduck path should exist!"
+        sd_options = SmokedDuckOptions(driver_executable=sd_executable_path.as_posix())
+    else:
+        sd_options = None
     return dict(
         traceprov_path=traceprov_obj,
         traceprov_infer_set_path=traceprv_infer_set_obj,
         traceprov_rewriter_path=rewriter_obj,
+        sd_options=sd_options,
     )
 
 

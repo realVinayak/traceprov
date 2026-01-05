@@ -68,3 +68,7 @@ traceprov_infer_dump/
 traceprov_out/
 end_analyzer.c
 temp.out
+tmp/
+*.db
+smokedduck_scratch/
+run_smokedduck
