@@ -63,16 +63,20 @@ extern "C" {
 
     typedef struct TraceProvNode {
         TraceProvNodeKind tag;
+        // This doesn't need to be set until conversion to SQL.
+        char *alias_name;
     } TraceProvNode;
 
     typedef struct TraceProvRelation {
         TraceProvNodeKind tag;
+        char *alias_name;
         TraceProvData *data;
         char *name;
     } TraceProvRelation;
 
     typedef struct TraceProvJoinExpr {
         TraceProvNodeKind tag;
+        char *alias_name;
         TraceProvNode *left;
         TraceProvNode *right;
         // The join condition.
@@ -86,6 +90,7 @@ extern "C" {
 
     typedef struct TraceProvAppend {
         TraceProvNodeKind tag;
+        char *alias_name;
         // List of TraceProvNode (get evaulated separately)
         // TraceProvAppend just appends the results individually.
         List *nodes;
@@ -112,8 +117,10 @@ extern "C" {
     static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn, TraceProvEvaluateNodeContext *eval_context);
     static TraceProvData *traceprov_evaluate_node(TraceProvNode *node, TraceProvEvaluateNodeContext *eval_context);
     static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node, TraceProvEvaluateNodeContext *eval_context);
-    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name);
+    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name, bool include_headers = false);
     uint64 traceprov_get_node_column_count(TraceProvNode *node);
+    // Converts the node to SQL.
+    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvParseContext *context);
 
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
@@ -1922,7 +1929,6 @@ extern "C" {
     }
 
 
-
     static TraceProvData *traceprov_evaluate_append(TraceProvAppend *append_node, TraceProvEvaluateNodeContext *eval_context){
         ListCell *node_cursor;
         TraceProvNode *first_node = (TraceProvNode *)list_nth(append_node->nodes, 0);
@@ -1954,7 +1960,7 @@ extern "C" {
         if (node->tag == T_TP_RELATION){
             TraceProvRelation *relation = (TraceProvRelation *)node;
             if (eval_context->should_dump){
-                traceprov_dump_data_to_csv(relation->data, psprintf(DEFINE_TRACE_PROV_FILE("/%s.csv"), DataDir, relation->name));
+                traceprov_dump_data_to_csv(relation->data, psprintf(DEFINE_TRACE_PROV_FILE("/%s.csv"), DataDir, relation->name), true);
             }
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
@@ -1967,8 +1973,15 @@ extern "C" {
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
 
-    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name){
+    static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name, bool include_headers){
         std::string csv_str = "";
+        if (include_headers){
+            for (uint64 col_idx = 0; col_idx < data->size(); col_idx++){
+                if (col_idx > 0) csv_str += ",";
+                csv_str += psprintf("column_%ld", col_idx);
+            }
+            csv_str += "\n";
+        }
         for (uint64 row_idx = 0; row_idx < data->at(0)->data->size(); row_idx++){
             if (row_idx > 0) csv_str += "\n";
             std::string row_str = "";
@@ -1981,6 +1994,133 @@ extern "C" {
         std::ofstream out(file_name);
         out << csv_str;
         out.close();
+    }
+
+    static char *traceprov_get_column_name_idx(char *alias, uint64 column_idx){
+        return psprintf("%s.column_%ld", alias, column_idx);
+    }
+
+    static char *traceprov_get_column_select(char *alias, uint64 column_count){
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        for (uint64 column_idx = 0; column_idx < column_count; column_idx++){
+            if (column_idx > 0) appendStringInfoChar(&sql_repr, ',');
+            appendStringInfoString(&sql_repr, traceprov_get_column_name_idx(alias, column_idx));
+        }
+        return sql_repr.data;
+    }
+
+    static char *traceprov_relation_to_sql(TraceProvRelation *relation){
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        appendStringInfoString(&sql_repr, "SELECT ");
+        appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size()));
+        appendStringInfo(&sql_repr, " FROM %s", relation->name);
+        return sql_repr.data;
+    }
+
+    static char *traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvParseContext *context){
+        char *left_node_raw_sql = traceprov_node_to_sql(join_expr->left, context);
+        char *right_node_raw_sql = traceprov_node_to_sql(join_expr->right, context);
+        char *left_alias = join_expr->left->alias_name;
+        char *right_alias = join_expr->right->alias_name;
+
+        char *left_node_sql = psprintf("(%s) as %s", left_node_raw_sql, left_alias);
+        char *right_node_sql = psprintf("(%s) as %s", right_node_raw_sql, right_alias);
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        appendStringInfoString(&sql_repr, "SELECT ");
+        bool did_append = false;
+
+        // Expand all lefts.
+        if (join_expr->is_left_star){
+            did_append = true;
+            const uint64 left_column_count = traceprov_get_node_column_count(join_expr->left);
+            appendStringInfoString(&sql_repr, traceprov_get_column_select(left_alias, left_column_count));
+        }
+
+        // Expand all the rights.
+        if (join_expr->is_right_star){
+            if (did_append) appendStringInfoString(&sql_repr, ", ");
+            did_append = true;
+            const uint64 right_column_count = traceprov_get_node_column_count(join_expr->right);
+            appendStringInfoString(&sql_repr, traceprov_get_column_select(right_alias, right_column_count));
+        }
+
+        if (join_expr->output_columns != nullptr){
+            for (auto output_column: *join_expr->output_columns){
+                if (
+                    (output_column->first == 1 && join_expr->is_left_star) ||
+                    (output_column->first == 2 && join_expr->is_right_star)
+                ){
+                    elog(INFO, "Skipping because of left/right *");
+                    continue;
+                }
+                if (did_append) appendStringInfoString(&sql_repr, ", ");
+                auto alias_name = output_column->first == 1 ? left_alias : right_alias;
+                appendStringInfoString(&sql_repr, traceprov_get_column_name_idx(alias_name, output_column->second - 1));
+                did_append = true;
+            }
+        }
+        // Add the from claause.
+        StringInfoData join_repr;
+        initStringInfo(&join_repr);
+        bool did_add_in_join = false;
+        for (auto join_condition: *join_expr->join_condition){
+            if (did_add_in_join)
+                appendStringInfoString(&join_repr, " AND ");
+            did_add_in_join = true;
+            auto left_column = join_condition->first;
+            auto right_column = join_condition->second;
+            if (left_column->first != 1 || right_column->first != 2)
+                elog(ERROR, "Got invalid numbering!");
+            appendStringInfo(
+                &join_repr, 
+                "%s=%s", 
+                traceprov_get_column_name_idx(left_alias, left_column->second - 1),
+                traceprov_get_column_name_idx(right_alias, right_column->second - 1)
+            );
+        }
+        appendStringInfo(&sql_repr, " FROM %s JOIN %s ON (%s) ", left_node_sql, right_node_sql, join_repr.data);
+        return sql_repr.data;
+    }
+
+    static char *traceprov_append_to_sql(TraceProvAppend *append, TraceProvParseContext *context){
+        if (list_length(append->nodes) == 1){
+            TraceProvNode *single_node =  (TraceProvNode*)list_nth(append->nodes, 0);
+            char *node_sql = traceprov_node_to_sql(single_node, context);
+            // Don't bother generating a new alias for this specific case.
+            // Just use whatever the child is.
+            append->alias_name = single_node->alias_name;
+            return node_sql;
+        }
+        append->alias_name = tp_parse_get_unique_alias(context);
+        StringInfoData append_repr;
+        initStringInfo(&append_repr);
+        ListCell *node_cursor;
+        foreach(node_cursor, append->nodes){
+            if (foreach_current_index(node_cursor) > 0)
+                appendStringInfoString(&append_repr, " UNION ALL ");
+            TraceProvNode *node = (TraceProvNode *)lfirst(node_cursor);
+            char *node_sql = traceprov_node_to_sql(node, context);
+            appendStringInfo(&append_repr, " (%s) ", node_sql);
+        }
+        return append_repr.data;
+    }
+
+    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvParseContext *context){
+        if (node->tag == T_TP_RELATION){
+            node->alias_name = tp_parse_get_unique_alias(context);
+            return traceprov_relation_to_sql((TraceProvRelation *)node);
+        }
+        if (node->tag == T_TP_JOIN){
+            node->alias_name = tp_parse_get_unique_alias(context);
+            return traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
+        }
+        if (node->tag == T_TP_APPEND){
+            return traceprov_append_to_sql((TraceProvAppend *)node, context);
+        }
+        elog(ERROR, "Found handling invalid node: %d", node->tag);
     }
 
     static List *get_used_sublinks_in_dependency(const TraceProvDependency *dependency){
@@ -2073,9 +2213,11 @@ extern "C" {
                 elog(ERROR, "Layer number %d is being evaluated again!", derived_node->layer_number);
             }
             elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
+            char *node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context);
+            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
  
             TraceProvData *node_result = traceprov_evaluate_node(derived_node->node, eval_context);
-            auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/%d_dump.csv"), DataDir,  derived_node->layer_number);
+            auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/final_output_%d_dump.csv"), DataDir,  derived_node->layer_number);
 
             if (eval_context->should_dump){
                 traceprov_dump_data_to_csv(node_result, dump_file_name);                
@@ -2086,7 +2228,14 @@ extern "C" {
             final_result_size += node_result->at(0)->data->size();
             elog(INFO, "Sample result: %s", get_sample_values(node_result));
 
-            appendStringInfo(&buf, "{\"idx\": %d, \"size\": %ld, \"width\": %ld}", derived_node->layer_number, node_result->at(0)->data->size(), node_result->size());
+            appendStringInfo(
+                &buf, 
+                "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\"}",
+                derived_node->layer_number,
+                node_result->at(0)->data->size(),
+                node_result->size(),
+                node_sql
+            );
             derived_node_map->insert({derived_node->layer_number, node_result});
         }
         appendStringInfoChar(&buf, ']');
@@ -2180,6 +2329,17 @@ extern "C" {
         perform_derivation(&spec, eval_context);
         PG_RETURN_TEXT_P(cstring_to_text(spec));
     }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_sql_derivation);
+
+    Datum traceprov_get_sql_derivation(PG_FUNCTION_ARGS){
+        TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
+        eval_context->should_dump = true;
+        char *spec = NULL;
+        perform_derivation(&spec, eval_context);
+        PG_RETURN_TEXT_P(cstring_to_text(spec));
+    }
+
 
 };
 
