@@ -72,3 +72,4 @@ tmp/
 *.db
 smokedduck_scratch/
 run_smokedduck
+.venv/
