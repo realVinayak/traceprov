@@ -1,7 +1,7 @@
 # This makes things more organized.
 from traceprovpy.tools.benchmark import ExtraQuery
 from traceprovpy.tools.run_with_timeout import MakeTraceProv
-
+import os
 
 TRACEPROV_SYNC_TIME = lambda: ExtraQuery(
     label="traceprov_sync_time",
@@ -66,3 +66,9 @@ TRACEPROV_PERFORM_DERIVATION = lambda: ExtraQuery(
     strict_run=True,
     capture_output=True,
 )
+
+TRACEPROV_SQL_DERIVATION_QUERY = "select * from traceprov_get_sql_derivation();"
+
+def traceprov_assert_safe_run(cmd: str):
+    print("Running: ", cmd)
+    assert os.system(cmd) == 0

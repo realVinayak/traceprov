@@ -3,6 +3,20 @@ import glob
 import os
 import pathlib
 
+from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
+
+
+def convert_csv_to_duckdb(input_path: str, output_path: str, header: bool):
+    pathlib_path = pathlib.Path(input_path)
+    table_name = pathlib_path.stem
+    print("converting path at: ", input_path, " to ", table_name)
+    duckdb_sql = f"/tmp/dump_{table_name}.sql"
+    with open(duckdb_sql, "w") as f:
+        f.write(
+            f'create table {table_name} as (select * from read_csv("{input_path}", header = {header})) ;'
+        )
+    duckdb_cmd = f"duckdb {output_path} -f {duckdb_sql}"
+    traceprov_assert_safe_run(duckdb_cmd)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -19,17 +33,9 @@ def main():
     tables_seen = set()
     for path in paths:
         assert ".csv" in path
-        pathlib_path = pathlib.Path(path)
-        table_name = pathlib_path.stem
-        assert table_name not in tables_seen, f"Handling table: {table_name} again!"
-        print("converting path at: ", path, " to ", table_name)
-        duckdb_sql = f"/tmp/dump_{table_name}.sql"
-        with open(duckdb_sql, "w") as f:
-            f.write(
-                f'create table {table_name} as (select * from read_csv("{path}", header = {header})) ;'
-            )
-        duckdb_cmd = f"duckdb {parsed.output} -f {duckdb_sql}"
-        os.system(duckdb_cmd)
+        assert path not in tables_seen, f"Handing {path} again!"
+        tables_seen.add(path)
+        convert_csv_to_duckdb(path, parsed.output, header)
 
 
 if __name__ == "__main__":
