@@ -18,6 +18,8 @@ DROP FUNCTION IF EXISTS traceprov_dump_derivation ();
 
 DROP FUNCTION IF EXISTS traceprov_derivation_spec ();
 
+DROP FUNCTION IF EXISTS traceprov_get_sql_derivation ();
+
 CREATE
 OR REPLACE FUNCTION traceprov_infer (
     IN integer,
@@ -79,3 +81,7 @@ OR REPLACE FUNCTION traceprov_dump_derivation () RETURNS BIGINT AS '$libdir/__FI
 CREATE
 OR REPLACE FUNCTION traceprov_derivation_spec () RETURNS text AS '$libdir/__FILE__',
 'traceprov_derivation_spec' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_get_sql_derivation () RETURNS text AS '$libdir/__FILE__',
+'traceprov_get_sql_derivation' LANGUAGE C STRICT PARALLEL SAFE;
