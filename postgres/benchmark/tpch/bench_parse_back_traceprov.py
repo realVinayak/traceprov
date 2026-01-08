@@ -1,3 +1,4 @@
+from typing import List
 from traceprovpy.tools.benchmark import (
     ExtraQuery,
     GenericBenchmark,
@@ -9,7 +10,9 @@ from traceprovpy.tools.benchmark import (
 )
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_CAPTURE_QUERY,
+    TRACEPROV_GET_DERIVATION_SPEC,
     TRACEPROV_PERFORM_DERIVATION,
+    TRACEPROV_SYNC_TIME,
 )
 from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec
 from traceprovpy.tools.run_with_timeout import (
@@ -22,14 +25,15 @@ import json
 import argparse
 
 
-def special_query(query_name: str):
+def special_query(query_name: str, is_traceprov: bool):
     if query_name != "15":
         return None
+    key = "traceprov_15_skippable" if is_traceprov else "base_15_skippable"
     return Query(
         query_name=query_name,
         spec=QuerySpec(
             base=TP_SKIPPABLE_OPTION,
-            key="traceprov_15_skippable",
+            key=key,
             extras=[
                 ExtraQuery(
                     label="15_post",
@@ -48,13 +52,13 @@ def special_query(query_name: str):
                     strict_run=True,
                 ),
                 ExtraQuery(
-                    label="traceprov",
+                    label="traceprov" if is_traceprov else "base",
                     query="base.sql",
                     runs_after_base=True,
                     skip_validation=False,
                     capture_output=False,
                     strict_run=False,
-                    preprocess=[MakeTraceProv()],
+                    preprocess=([MakeTraceProv()] if is_traceprov else []),
                 ),
                 TRACEPROV_CAPTURE_QUERY(),
                 ExtraQuery(
@@ -68,6 +72,78 @@ def special_query(query_name: str):
             ],
         ),
     )
+
+
+def make_normal_query(query_name: str, is_traceprov=False):
+    if not is_traceprov:
+        return Query(
+            query_name=query_name,
+            spec=QuerySpec(base="base.sql", key="base"),
+        )
+
+    # don't need to check if we'll dump or not.
+    extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
+    return Query(
+        query_name=query_name,
+        spec=QuerySpec(
+            base="base.sql",
+            key="traceprov",
+            preprocess=[MakeTraceProv()],
+            extras=extras,
+        ),
+    )
+
+
+def get_query(
+    query_name: str, config: dict, use_duckdb_inference: bool, is_validate: bool
+):
+    user_specs = config.get("specs", [])
+    subdir_queries: List[Query] = []
+    if len(user_specs) == 0:
+        special_query_maybe = special_query(query_name, is_traceprov=False)
+        if special_query_maybe:
+            subdir_queries.append(special_query_maybe)
+            special_query_traceprov = special_query(query_name, is_traceprov=True)
+            assert special_query_traceprov is not None
+            subdir_queries.append(special_query_traceprov)
+        else:
+            subdir_queries.append(make_normal_query(query_name, is_traceprov=False))
+            subdir_queries.append(make_normal_query(query_name, is_traceprov=True))
+            if use_duckdb_inference:
+                subdir_queries.append(
+                    Query(
+                        query_name=query_name,
+                        spec=DuckDBInferenceQuerySpec(
+                            base="DUCKDB_INFERENCE",
+                            key=f"DUCKDB_INFERENCE_{query_name}",
+                        ),
+                    )
+                )
+    else:
+        for spec in user_specs:
+            spec_without_extras = {
+                key: value for (key, value) in spec.items() if key != "extras"
+            }
+            extras = [ExtraQuery(**kwargs) for kwargs in spec.get("extras", [])]
+            subdir_queries.append(
+                Query(
+                    query_name=query_name,
+                    spec=QuerySpec(**spec_without_extras, extras=extras),
+                ),
+            )
+
+    if is_validate:
+        subdir_queries.append(
+            Query(
+                query_name=query_name,
+                spec=ValidationQuerySpec(
+                    base="base.sql",
+                    key="VALIDATION",
+                    materialize="validate_dynamic.sql",
+                ),
+            )
+        )
+    return subdir_queries
 
 
 # This parses out the config file, and generates the directories
@@ -89,70 +165,10 @@ def main():
         subdir_queries = []
         for query_name in config["queries"]:
             query_name = str(query_name)
-            user_specs = config.get("specs", [])
-            if len(user_specs) == 0:
-                special_query_maybe = special_query(query_name)
-                if special_query_maybe:
-                    subdir_queries.append(special_query_maybe)
-                else:
-                    subdir_queries.append(
-                        Query(
-                            query_name=query_name,
-                            spec=QuerySpec(
-                                base="base.sql",
-                                key="traceprov",
-                                preprocess=[MakeTraceProv()],
-                                extras=[
-                                    # TRACEPROV_CAPTURE_QUERY()
-                                ],
-                            ),
-                        ),
-                    )
-                    if use_duckdb_inference:
-                        subdir_queries.append(
-                            Query(
-                                query_name=query_name,
-                                spec=DuckDBInferenceQuerySpec(
-                                    base="DUCKDB_INFERENCE",
-                                    key=f"DUCKDB_INFERENCE_{query_name}",
-                                ),
-                            )
-                        )
-                    # subdir_queries.append(
-                    #     Query(
-                    #         query_name=query_name,
-                    #         spec=CopyColumnCsv(
-                    #             "copy_traceprov_csv",
-                    #             base="base.sql",
-                    #             materialize=f"traceprov_infer_dump/{subdir}/{query_name}/",
-                    #         ),
-                    #     )
-                    # )
-            else:
-                for spec in user_specs:
-                    spec_without_extras = {
-                        key: value for (key, value) in spec.items() if key != "extras"
-                    }
-                    extras = [ExtraQuery(**kwargs) for kwargs in spec.get("extras", [])]
-                    subdir_queries.append(
-                        Query(
-                            query_name=query_name,
-                            spec=QuerySpec(**spec_without_extras, extras=extras),
-                        ),
-                    )
-
-            if is_validate:
-                subdir_queries.append(
-                    Query(
-                        query_name=query_name,
-                        spec=ValidationQuerySpec(
-                            base="base.sql",
-                            key="VALIDATION",
-                            materialize="validate_dynamic.sql",
-                        ),
-                    )
-                )
-
+            subdir_queries = [
+                *subdir_queries,
+                *get_query(query_name, config, use_duckdb_inference, is_validate),
+            ]
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 
     result = benchmark.run_from_argparse(
@@ -164,20 +180,6 @@ def main():
     # Also store the arguments from cmd line.
     result["extras"] = dict(config=parsed.config, layers=parsed.layers)
     benchmark.dump_final_result(result)
-
-
-import os
-
-
-class CopyColumnCsv(QuerySpec):
-    def run_packs(self, top_dir, get_run_options):
-        assert os.system(f"mkdir -p {self.materialize}") == 0
-        assert (
-            os.system(
-                f"sudo cp /var/lib/postgresql/14/main/traceprov/2_dump.csv {self.materialize}/"
-            )
-            == 0
-        )
 
 
 if __name__ == "__main__":

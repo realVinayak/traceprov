@@ -69,6 +69,16 @@ TRACEPROV_PERFORM_DERIVATION = lambda: ExtraQuery(
 
 TRACEPROV_SQL_DERIVATION_QUERY = "select * from traceprov_get_sql_derivation();"
 
+
 def traceprov_assert_safe_run(cmd: str):
     print("Running: ", cmd)
     assert os.system(cmd) == 0
+
+
+TRACEPROV_GET_DERIVATION_SPEC = lambda: ExtraQuery(
+    label="traceprov_derivation_spec",
+    query=f"$INLINE-select * from traceprov_derivation_spec();",
+    runs_after_base=True,
+    strict_run=True,
+    capture_output=True,
+)

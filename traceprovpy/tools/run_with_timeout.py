@@ -239,7 +239,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
             planning_time = analyze_result["Planning Time"]
             execution_time = analyze_result["Execution Time"]
             computed_time = dict(
-                explain_time=float((planning_time + execution_time) / 1000)
+                explain_time=float((planning_time + execution_time) / 1000),
+                # complete_plan=str(analyze_result),
             )
 
         # print(flattend_sql_query)
