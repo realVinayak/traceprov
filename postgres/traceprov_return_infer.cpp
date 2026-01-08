@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <fstream>
+
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
 extern "C" {
@@ -25,6 +26,7 @@ extern "C" {
     #include "utils/builtins.h"
     #include "traceprov_parse_context.h"
     #include "rewriter_utils.h"
+    #include "traceprov_infer.hpp"
     PG_MODULE_MAGIC;
 }
 
@@ -32,87 +34,6 @@ extern "C" {
     // static_assert(!(HAVE__BUILTIN_TYPES_COMPATIBLE_P))
 
     #define UNUSED(X) do {} while(0 && X);
-    // There are two versions because in some (rare-ish) cases multiple keys form the primary key.
-    // Usually, that won't happen, so having a separate map is useful to not construct redundant single element vectors
-    typedef std::unordered_map<Oid, std::vector<Datum>> TraceProvSingleDerivation;
-    typedef std::unordered_map<Oid, std::vector<std::vector<Datum>>> TraceProvMultipleDerivation;
-
-    typedef std::pair<uint8, struct traceprov_aggregate_layer *> TraceProvWorkerLayer;
-
-    typedef std::pair<uint64, uint64> TraceProvColumn;
-
-    enum TraceProvNodeKind {
-        T_TP_RELATION,
-        T_TP_JOIN,
-        T_TP_APPEND
-    };
-
-    typedef struct TraceProvDescriptor {
-        TraceProvLayerNumber layer_number;
-        TraceProvEntry *entry;
-    } TraceProvDescriptor;
-
-    typedef struct {
-        TraceProvDescriptor *descriptor;
-        std::vector<uint64> *data;
-    } TraceProvColumnData;
-
-    typedef std::vector<TraceProvColumnData*> TraceProvData;
-    typedef std::vector<std::pair<TraceProvColumn*, TraceProvColumn*>*> TraceProvJoinConditions;
-    typedef std::vector<uint64> TraceProvOffset;
-
-    typedef struct TraceProvNode {
-        TraceProvNodeKind tag;
-        // This doesn't need to be set until conversion to SQL.
-        char *alias_name;
-    } TraceProvNode;
-
-    typedef struct TraceProvRelation {
-        TraceProvNodeKind tag;
-        char *alias_name;
-        TraceProvData *data;
-        char *name;
-    } TraceProvRelation;
-
-    typedef struct TraceProvJoinExpr {
-        TraceProvNodeKind tag;
-        char *alias_name;
-        TraceProvNode *left;
-        TraceProvNode *right;
-        // The join condition.
-        TraceProvJoinConditions *join_condition;
-        std::vector<TraceProvColumn*> *output_columns;
-        TraceProvData *result;
-        bool is_left_star;
-        bool is_right_star;
-        bool is_single_result;
-    } TraceProvJoinExpr;
-
-    typedef struct TraceProvAppend {
-        TraceProvNodeKind tag;
-        char *alias_name;
-        // List of TraceProvNode (get evaulated separately)
-        // TraceProvAppend just appends the results individually.
-        List *nodes;
-    } TraceProvAppender;
-
-    typedef struct TraceProvDerivation {
-        TraceProvSingleDerivation single_derivation;
-        TraceProvMultipleDerivation multiple_derivation;
-        List *derived_join_exprns;
-        List *utilized_sublinks;
-    } TraceProvDerivation;
-
-    typedef struct TraceProvDerivedNode {
-        TraceProvLayerNumber layer_number;
-        TraceProvNode *node;
-    } TraceProvDerivedNode;
-    
-    typedef struct TraceProvEvaluateNodeContext {
-        bool should_dump;
-    } TraceProvEvaluateNodeContext;
-    
-    typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
 
     static TraceProvData* traceprov_evaluate_join_exprn(TraceProvJoinExpr *join_exprn, TraceProvEvaluateNodeContext *eval_context);
     static TraceProvData *traceprov_evaluate_node(TraceProvNode *node, TraceProvEvaluateNodeContext *eval_context);
@@ -1997,15 +1918,20 @@ extern "C" {
     }
 
     static char *traceprov_get_column_name_idx(char *alias, uint64 column_idx){
+        if (alias == nullptr)
+            return psprintf("column_%ld", column_idx);
         return psprintf("%s.column_%ld", alias, column_idx);
     }
 
-    static char *traceprov_get_column_select(char *alias, uint64 column_count){
+    static char *traceprov_get_column_select(char *alias, uint64 column_count, bool add_bigint_cast=false){
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
         for (uint64 column_idx = 0; column_idx < column_count; column_idx++){
             if (column_idx > 0) appendStringInfoChar(&sql_repr, ',');
             appendStringInfoString(&sql_repr, traceprov_get_column_name_idx(alias, column_idx));
+            if (add_bigint_cast){
+               appendStringInfoString(&sql_repr, "::bigint");
+            }
         }
         return sql_repr.data;
     }
@@ -2014,9 +1940,18 @@ extern "C" {
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
         appendStringInfoString(&sql_repr, "SELECT ");
-        appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size()));
+        appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size(), true));
         appendStringInfo(&sql_repr, " FROM %s", relation->name);
         return sql_repr.data;
+    }
+
+    static char *expand_alias(const char *alias_name, const uint64 column_count){
+        // Expands alias such that it is as table(col0, col1, col2...)
+        StringInfoData alias_repr;
+        initStringInfo(&alias_repr);
+        auto select = traceprov_get_column_select(nullptr, column_count);
+        appendStringInfo(&alias_repr, "%s(%s)", alias_name, select);
+        return alias_repr.data;
     }
 
     static char *traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvParseContext *context){
@@ -2024,9 +1959,11 @@ extern "C" {
         char *right_node_raw_sql = traceprov_node_to_sql(join_expr->right, context);
         char *left_alias = join_expr->left->alias_name;
         char *right_alias = join_expr->right->alias_name;
+        char *left_alias_expanded =expand_alias(left_alias, traceprov_get_node_column_count(join_expr->left));
+        char *right_alias_expanded =expand_alias(right_alias, traceprov_get_node_column_count(join_expr->right));
 
-        char *left_node_sql = psprintf("(%s) as %s", left_node_raw_sql, left_alias);
-        char *right_node_sql = psprintf("(%s) as %s", right_node_raw_sql, right_alias);
+        char *left_node_sql = psprintf("(%s) as %s", left_node_raw_sql, left_alias_expanded);
+        char *right_node_sql = psprintf("(%s) as %s", right_node_raw_sql, right_alias_expanded);
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
         appendStringInfoString(&sql_repr, "SELECT ");
@@ -2220,7 +2157,8 @@ extern "C" {
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/final_output_%d_dump.csv"), DataDir,  derived_node->layer_number);
 
             if (eval_context->should_dump){
-                traceprov_dump_data_to_csv(node_result, dump_file_name);                
+                // eh, dumping the header here is useful for handling things easily downstream.
+                traceprov_dump_data_to_csv(node_result, dump_file_name, true);                
             }
 
             elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->data->size(), traceprov_node_to_string(derived_node->node));

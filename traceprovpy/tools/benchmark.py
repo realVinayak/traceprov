@@ -286,8 +286,22 @@ class QueryDirectory(NamedTuple):
         }
 
 
-def bench_has_smokedduck(args: list[str]):
-    return "-sd_lib" in args
+def bench_has_bool_option(option: str):
+    def _checker(args: list[str]):
+        if f"--{option}" in args:
+            return True
+        if f"--no-{option}" in args:
+            return False
+        return False
+
+    return _checker
+
+
+INFER_DUCKDB_OPTION = "infer_duckdb"
+SMOKEDDUCK_OPTION = "use_sdb"
+
+bench_has_duckdb_infer = bench_has_bool_option(INFER_DUCKDB_OPTION)
+bench_has_smokedduck = bench_has_bool_option(SMOKEDDUCK_OPTION)
 
 
 class GenericBenchmark(NamedTuple):
@@ -320,6 +334,16 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-t_root", "--test_root", required=True)
         parser.add_argument("-sd_lib", required=False, type=str)
         parser.add_argument("-sd_include", required=False, type=str)
+        parser.add_argument(
+            f"--{INFER_DUCKDB_OPTION}",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
+        parser.add_argument(
+            f"--{SMOKEDDUCK_OPTION}",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
 
         parsed, _ = parser.parse_known_args()
 

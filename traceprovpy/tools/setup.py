@@ -16,9 +16,11 @@ def traceprov_setup(
 
     skip_build = int(os.getenv("tp_skip_build", "0"))
     if not skip_build:
-        response = os.system(
-            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
-        )
+        build_and_install = f"./build_and_install.sh {suff}"
+        if sd_lib_path:
+            assert sd_include_path
+            build_and_install = f"{build_and_install} {sd_lib_path} {sd_include_path}"
+        response = os.system(f"cd {traceprov_postgres_root} && {build_and_install}")
         if response != 0:
             raise Exception("Make failed!")
     else:
