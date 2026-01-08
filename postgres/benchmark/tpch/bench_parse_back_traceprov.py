@@ -141,6 +141,18 @@ def main():
                         ),
                     )
 
+            if is_validate:
+                subdir_queries.append(
+                    Query(
+                        query_name=query_name,
+                        spec=ValidationQuerySpec(
+                            base="base.sql",
+                            key="VALIDATION",
+                            materialize="validate_dynamic.sql",
+                        ),
+                    )
+                )
+
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 
     result = benchmark.run_from_argparse(
