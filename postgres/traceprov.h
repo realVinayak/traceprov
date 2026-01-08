@@ -64,6 +64,7 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 #define DEBUG_MODE 0
+#define VALIDATE_MODE 1
 
 // Forward definitions.
 struct trace_file_forward_row;
@@ -78,6 +79,16 @@ int get_error_no();
 
 #define PRINT_ON_DEBUG(...) do { \
     if (DEBUG_MODE) { \
+        elog(INFO,\
+            "[traceprov]: %s, %d. PID: %d\t", \
+             __FILE__, __LINE__,\
+             getpid());\
+        elog(INFO, __VA_ARGS__);\
+        elog(INFO, "Error no: %d", get_error_no()); \
+    } } while(0) \
+
+#define PRINT_ON_VALIDATE(...) do { \
+    if (VALIDATE_MODE) { \
         elog(INFO,\
             "[traceprov]: %s, %d. PID: %d\t", \
              __FILE__, __LINE__,\
