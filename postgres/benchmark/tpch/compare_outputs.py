@@ -19,7 +19,8 @@ def dump_normalized(
     header_value = "true" if has_header else "false"
     read_csv_function = f"read_csv({path}, header={header_value})"
     if ignore_column_count:
-        exclude_columns = ",".join([f"column{i}" for i in range(ignore_column_count)])
+        # ugh
+        exclude_columns = ",".join([f"column_{i}" for i in range(ignore_column_count)])
         exclude = f"exclude({exclude_columns})"
     else:
         exclude = ""
@@ -53,7 +54,7 @@ def compare_outputs(
     count_base = dump_normalized(
         base_path, True, base_out_path, 0, special_selects.get(query, "")
     )
-    count_new = dump_normalized(new_path, False, new_out_path, 1)
+    count_new = dump_normalized(new_path, True, new_out_path, 1)
     assert os.path.exists(base_out_path) and os.path.exists(new_out_path)
     print("comparing: ", base_out_path, new_out_path)
     assert os.system(f"diff {base_out_path} {new_out_path} > temp.out") == 0
