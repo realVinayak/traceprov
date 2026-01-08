@@ -2164,8 +2164,12 @@ extern "C" {
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
             char *node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context);
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
- 
+            
+            const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvData *node_result = traceprov_evaluate_node(derived_node->node, eval_context);
+            const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            const auto duration = evaluate_end - evaluate_start;
+            const uint64 duration_time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/final_output_%d_dump.csv"), DataDir,  derived_node->layer_number);
 
             if (eval_context->should_dump){
@@ -2180,11 +2184,12 @@ extern "C" {
 
             appendStringInfo(
                 &buf, 
-                "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\"}",
+                "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\", \"evaluate_time\": \"%ld\"}",
                 derived_node->layer_number,
                 node_result->at(0)->data->size(),
                 node_result->size(),
-                node_sql
+                node_sql,
+                duration_time
             );
             derived_node_map->insert({derived_node->layer_number, node_result});
         }
@@ -2289,7 +2294,6 @@ extern "C" {
         perform_derivation(&spec, eval_context);
         PG_RETURN_TEXT_P(cstring_to_text(spec));
     }
-
 
 };
 
