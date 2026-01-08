@@ -78,7 +78,32 @@ extern "C" {
     }
     
 
+    static std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32 worker_count){
+        auto worker_local_contexts = new std::vector<struct local_context *>;
+        for (uint8 worker_id = 0; worker_id < worker_count; worker_id++){
+            int fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1), O_RDONLY);
+            if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
+            void *ptr = mmap(
+                NULL,
+                sizeof(struct local_context),
+                PROT_READ,
+                MAP_SHARED,
+                fd,
+                0
+            );
+            if (ptr == MAP_FAILED){
+                elog(ERROR, "Error mmaping the layer file!");
+            }
+            struct local_context *worker_local_context = (struct local_context *)ptr;
+            worker_local_contexts->push_back(worker_local_context);
+        }
+        return worker_local_contexts;
+    }
+
     int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
+        if (unlikely(worker_id == 0)){
+            elog(ERROR, "Didn't expect to ever be called for worker_id == 0");
+        }
         char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
         if (file_name == NULL) return 1;
         int fd = open(file_name, O_RDONLY);
@@ -607,27 +632,30 @@ extern "C" {
         }
 
 	    int final_code = 0;
+        const auto worker_local_contexts = traceprov_get_local_contexts(context.worker_count);
 
         for (int worker_id = 0; worker_id < context.worker_count; worker_id++){
 
-            struct local_context *worker_local_context = NULL;
+            struct local_context *worker_local_context = worker_local_contexts->at(worker_id);
 
             for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
 
                 if (worker_local_context->cached_layers[layer_id].layer_number){
                     void *ptr = NULL;
-                    map_layer_file(
+                    if(map_layer_file(
                         worker_local_context->cached_layers[layer_id].layer_number,
-                        worker_id,
+                        worker_id + 1,
                         &ptr,
                         worker_local_context->cached_layers[layer_id].size
-                    );
+                    )){
+                        elog(ERROR, "Error opening layer file!");
+                    }
                     char worker_layer[128] = {0};
                     if (ptr == NULL){
                         messages->push_back("Skipping");
                         continue;
                     }
-                    sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id, layer_id);
+                    sprintf(worker_layer, "(WORKER: %d, Layer: %d)", worker_id + 1, layer_id);
                     messages->push_back(worker_layer);
                     final_code |= (msync(ptr, worker_local_context->cached_layers[layer_id].size*TRACEPROV_PAGE_SIZE, MS_SYNC));
 		            if (final_code) {elog(ERROR, "Error doing the msync!");}
@@ -668,7 +696,7 @@ extern "C" {
         combined_aggregate_layer_number,
         rows_layer_number,
 
-      NUM_COLUMNS
+        NUM_COLUMNS
     };
 
     Datum traceprov_layer_stat(FunctionCallInfo fcinfo){
@@ -1010,7 +1038,7 @@ extern "C" {
         uint64 match_key_idx,
         TraceProvDependency *graph,
         struct local_context *local_context,
-        std::vector<struct local_context *> *local_contexts,
+        const std::vector<struct local_context *> *local_contexts,
         const uint8 worker_count,
         bool parent_was_parallelized,
         TraceProvParseContext *parse_context,
@@ -1265,29 +1293,15 @@ extern "C" {
         const uint8 worker_count,
         TraceProvDerivation *derivation,
         TraceProvParseContext *parsed_back_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
         bool allow_both_logs = false
     ){
         const TraceProvLayerNumber log_layer_number = log_dependency->headNumber;
         const uint32 layer_width = list_length(log_dependency->entries);
 
         std::vector<TraceProvWorkerLayer *> *log_layers = new std::vector<TraceProvWorkerLayer *>();
-        std::vector<struct local_context *> *worker_local_contexts = new std::vector<struct local_context *>();
         for (uint8 worker_id = 0; worker_id < worker_count; worker_id++){
-            int fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1), O_RDONLY);
-            if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
-            void *ptr = mmap(
-                NULL,
-                sizeof(struct local_context),
-                PROT_READ,
-                MAP_SHARED,
-                fd,
-                0
-            );
-            if (ptr == MAP_FAILED){
-                elog(ERROR, "Error mmaping the layer file!");
-            }
-            struct local_context *worker_local_context = (struct local_context *)ptr;
-            worker_local_contexts->push_back(worker_local_context);
+            struct local_context *worker_local_context = worker_local_contexts->at(worker_id);
 
             struct traceprov_aggregate_layer *candidate_layer = &worker_local_context->cached_layers[log_layer_number - 1];
             if (candidate_layer->layer_number == 0) continue;
@@ -1433,7 +1447,7 @@ extern "C" {
             TraceProvSublinkMapInferItem *infer_item = layer_graph_map_item.second;
             TraceProvJoinConditions *join_conditions = infer_item->first;
             // Derive the graph on the child.
-            perform_derive_from_log(infer_item->second, worker_count, child_derivation, parsed_back_context, true);
+            perform_derive_from_log(infer_item->second, worker_count, child_derivation, parsed_back_context, worker_local_contexts, true);
             List *child_join_exprns = NIL;
             ListCell *child_join_cursor;
             foreach(child_join_cursor, child_derivation->derived_join_exprns){
@@ -2113,6 +2127,7 @@ extern "C" {
         char **derivation_spec,
         TraceProvEvaluateNodeContext *eval_context
     ){
+        #define PERFORM_IF_USED(X) if (derivation_spec != NULL) X
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
         struct traceprov_shared_context shared_context;
@@ -2127,12 +2142,13 @@ extern "C" {
         auto derivation = new TraceProvDerivation;
         derivation->derived_join_exprns = NIL;
         derivation->utilized_sublinks = NIL;
+        const auto worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
         foreach(graph_cursor, graphs){
             TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
             // The top level graph should always be the simple log.
             if (graph->graph_type != TraceProvGraphKind::TP_LOG)
                 elog(ERROR, "Expected the top level graph to always be a TP_LOG. Got %d", graph->graph_type);
-            perform_derive_from_log(graph, worker_count, derivation, parsed_back_context);
+            perform_derive_from_log(graph, worker_count, derivation, parsed_back_context, worker_local_contexts);
         }
         ListCell *sublink_cursor;
         foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
@@ -2140,21 +2156,20 @@ extern "C" {
             if (traceprov_find_int_list(used_sublinks, child_sublink->headNumber)) continue;
             // Sublinks without any correlation can also exist.
             // This catches those cases (but we need to be careful and not add any that has correlation)
-            perform_derive_from_log(child_sublink, worker_count, derivation, parsed_back_context);
+            perform_derive_from_log(child_sublink, worker_count, derivation, parsed_back_context, worker_local_contexts);
         }
 
         ListCell *derivation_cursor;
         uint64 final_result_size = 0;
         StringInfoData buf;
-        initStringInfo(&buf);
-        appendStringInfoChar(&buf, '[');
+        PERFORM_IF_USED(initStringInfo(&buf));
+        PERFORM_IF_USED(appendStringInfoChar(&buf, '['));
 
         auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvData *>;
         foreach(derivation_cursor, derivation->derived_join_exprns){
             uint64 file_idx = foreach_current_index(derivation_cursor) + 1;
 
-            if (file_idx > 1)
-                appendStringInfoChar(&buf, ',');
+            PERFORM_IF_USED(if (file_idx > 1) appendStringInfoChar(&buf, ','));
 
             TraceProvDerivedNode *derived_node = (TraceProvDerivedNode *)lfirst(derivation_cursor); 
             // We should never see a derived node again. Assert just that.
@@ -2162,7 +2177,8 @@ extern "C" {
                 elog(ERROR, "Layer number %d is being evaluated again!", derived_node->layer_number);
             }
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
-            char *node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context);
+            char *node_sql = NULL;
+            PERFORM_IF_USED((node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context)));
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
             
             const auto evaluate_start = std::chrono::high_resolution_clock::now();
@@ -2182,7 +2198,7 @@ extern "C" {
             final_result_size += node_result->at(0)->data->size();
             PRINT_ON_VALIDATE("Sample result: %s", get_sample_values(node_result));
 
-            appendStringInfo(
+            PERFORM_IF_USED(appendStringInfo(
                 &buf, 
                 "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\", \"evaluate_time\": \"%ld\"}",
                 derived_node->layer_number,
@@ -2190,15 +2206,13 @@ extern "C" {
                 node_result->size(),
                 node_sql,
                 duration_time
-            );
+            ));
             derived_node_map->insert({derived_node->layer_number, node_result});
         }
-        appendStringInfoChar(&buf, ']');
+        PERFORM_IF_USED(appendStringInfoChar(&buf, ']'));
         PRINT_ON_VALIDATE("Final result size: %ld", final_result_size);
-        PRINT_ON_VALIDATE("Returned spec: %s", buf.data);
-        if (derivation_spec){
-            *derivation_spec = buf.data;
-        }
+        PERFORM_IF_USED(PRINT_ON_VALIDATE("Returned spec: %s", buf.data);)
+        PERFORM_IF_USED((*derivation_spec = buf.data));
         return derived_node_map;
     }
 
@@ -2281,8 +2295,18 @@ extern "C" {
         TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
         eval_context->should_dump = false;
         char *spec = NULL;
+        const auto evaluate_start = std::chrono::high_resolution_clock::now();
         perform_derivation(&spec, eval_context);
-        PG_RETURN_TEXT_P(cstring_to_text(spec));
+        const auto evaluate_end = std::chrono::high_resolution_clock::now();
+        const auto duration = evaluate_end - evaluate_start;
+        const uint64 duration_time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '{');
+        appendStringInfo(&buf, "\"child_result\": %s,", spec);
+        appendStringInfo(&buf, "\"total_time\": %ld", duration_time);
+        appendStringInfoChar(&buf, '}');
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
     }
 
     PG_FUNCTION_INFO_V1(traceprov_get_sql_derivation);
