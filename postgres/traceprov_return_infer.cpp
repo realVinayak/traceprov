@@ -823,7 +823,7 @@ extern "C" {
         tp_rel->tag = T_TP_RELATION;
         tp_rel->data = data;
         tp_rel->name = name;
-        elog(INFO, "REL: %s, %ld;", name, data->at(0)->data->size());
+        PRINT_ON_VALIDATE("REL: %s, %ld;", name, data->at(0)->data->size());
         return tp_rel;
     }
 
@@ -1236,7 +1236,7 @@ extern "C" {
                 data->push_back(second);
             }
         }
-        elog(INFO, "READ LAYER: %d, got: %ld", layer_number, data->at(0)->size());
+        PRINT_ON_VALIDATE("READ LAYER: %d, got: %ld", layer_number, data->at(0)->size());
         TraceProvData *return_data = new TraceProvData;
         for (auto column: *data){
             TraceProvColumnData *column_data = traceprov_make_empty_column();
@@ -1304,7 +1304,7 @@ extern "C" {
         if (log_layers->size() == 0)
             elog(ERROR, "Expected the log to always be found!");
 
-        elog(INFO, "Found %ld log_layers for %d layer number", log_layers->size(), log_layer_number);
+        PRINT_ON_VALIDATE("Found %ld log_layers for %d layer number", log_layers->size(), log_layer_number);
     
         if (list_length(log_dependency->entries) > 64)
             elog(ERROR, "Cannot support more than 64 entries for now...");
@@ -1704,7 +1704,7 @@ extern "C" {
             if (eval_context->should_dump){
                 traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_single_result.csv"), DataDir));
                 traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_single_result.csv"), DataDir));
-                elog(INFO, "Logging join exprn: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+                PRINT_ON_VALIDATE("Logging join exprn: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
             }
         }
 
@@ -1717,8 +1717,10 @@ extern "C" {
         TraceProvJoinResult *offsets = nullptr;
         if (join_exprn->join_condition->size() == 1){
             auto join_pair = join_exprn->join_condition->at(0);
-            if (join_pair->first->first != 1 || join_pair->second->first != 2)
-                elog(ERROR, "Got unexpected numbering..");
+            if (VALIDATE_MODE){
+                if (join_pair->first->first != 1 || join_pair->second->first != 2)
+                    elog(ERROR, "Got unexpected numbering..");
+            }
 
             TraceProvColumnData *left_columns =  left_result->at(join_pair->first->second - 1);
             TraceProvColumnData *right_columns =  right_result->at(join_pair->second->second - 1);
@@ -1731,8 +1733,11 @@ extern "C" {
             TraceProvData *left_columns = new TraceProvData;
             TraceProvData *right_columns = new TraceProvData;
             for (auto join_pair: *join_exprn->join_condition){
-                if (join_pair->first->first != 1 || join_pair->second->first != 2)
-                    elog(ERROR, "Got unexpected numbering...");
+                if (VALIDATE_MODE){
+                    if (join_pair->first->first != 1 || join_pair->second->first != 2)
+                        elog(ERROR, "Got unexpected numbering...");
+                }
+
                 left_columns->push_back(left_result->at(join_pair->first->second - 1));
                 right_columns->push_back(right_result->at(join_pair->second->second - 1));
             }
@@ -1742,15 +1747,18 @@ extern "C" {
                 join_exprn->is_single_result
             );
         }
-        if (offsets->at(0)->data->size() == 0){
-            if (eval_context->should_dump){
-                traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_no_result.csv"), DataDir));
-                traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_no_result.csv"), DataDir));
-                elog(INFO, "Got 0 as the join result: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
-            }else{
-                // elog(INFO, "Got 0 as the join result!");
+        if (VALIDATE_MODE){
+            if (offsets->at(0)->data->size() == 0){
+                if (eval_context->should_dump){
+                    traceprov_dump_data_to_csv(left_result, psprintf(DEFINE_TRACE_PROV_FILE("/left_data_no_result.csv"), DataDir));
+                    traceprov_dump_data_to_csv(right_result, psprintf(DEFINE_TRACE_PROV_FILE("/right_data_no_result.csv"), DataDir));
+                    elog(INFO, "Got 0 as the join result: %s!", traceprov_node_to_string((TraceProvNode *)join_exprn));
+                }else{
+                    // elog(INFO, "Got 0 as the join result!");
+                }
             }
         }
+
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
             auto left_offsets = offsets->at(0);
@@ -1804,8 +1812,10 @@ extern "C" {
             if (i == 0){
                 final_result_size = result->at(i)->data->size();
             }else{
-                if (final_result_size != result->at(i)->data->size())
-                    elog(ERROR, "Expected final join result to be of same columns: %ld, %ld", final_result_size, result->at(i)->data->size());
+                if (VALIDATE_MODE){
+                    if (final_result_size != result->at(i)->data->size())
+                        elog(ERROR, "Expected final join result to be of same columns: %ld, %ld", final_result_size, result->at(i)->data->size());
+                }
             }
         }
         join_exprn->result = result;
@@ -2009,8 +2019,10 @@ extern "C" {
             did_add_in_join = true;
             auto left_column = join_condition->first;
             auto right_column = join_condition->second;
-            if (left_column->first != 1 || right_column->first != 2)
-                elog(ERROR, "Got invalid numbering!");
+            if (VALIDATE_MODE){
+                if (left_column->first != 1 || right_column->first != 2)
+                    elog(ERROR, "Got invalid numbering!");
+            }
             appendStringInfo(
                 &join_repr, 
                 "%s=%s", 
@@ -2149,9 +2161,9 @@ extern "C" {
             if (derived_node_map->find(derived_node->layer_number) != derived_node_map->end()){
                 elog(ERROR, "Layer number %d is being evaluated again!", derived_node->layer_number);
             }
-            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
+            PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
             char *node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context);
-            elog(INFO, "TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
+            PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
  
             TraceProvData *node_result = traceprov_evaluate_node(derived_node->node, eval_context);
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/final_output_%d_dump.csv"), DataDir,  derived_node->layer_number);
@@ -2161,10 +2173,10 @@ extern "C" {
                 traceprov_dump_data_to_csv(node_result, dump_file_name, true);                
             }
 
-            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->data->size(), traceprov_node_to_string(derived_node->node));
-            elog(INFO, "TRACEPROV_EXPRN (COUNT: %ld)", node_result->at(0)->data->size());
+            PRINT_ON_VALIDATE("TRACEPROV_EXPRN (COUNT: %ld): %s", node_result->at(0)->data->size(), traceprov_node_to_string(derived_node->node));
+            PRINT_ON_VALIDATE("TRACEPROV_EXPRN (COUNT: %ld)", node_result->at(0)->data->size());
             final_result_size += node_result->at(0)->data->size();
-            elog(INFO, "Sample result: %s", get_sample_values(node_result));
+            PRINT_ON_VALIDATE("Sample result: %s", get_sample_values(node_result));
 
             appendStringInfo(
                 &buf, 
@@ -2177,8 +2189,8 @@ extern "C" {
             derived_node_map->insert({derived_node->layer_number, node_result});
         }
         appendStringInfoChar(&buf, ']');
-        elog(INFO, "Final result size: %ld", final_result_size);
-        elog(INFO, "Returned spec: %s", buf.data);
+        PRINT_ON_VALIDATE("Final result size: %ld", final_result_size);
+        PRINT_ON_VALIDATE("Returned spec: %s", buf.data);
         if (derivation_spec){
             *derivation_spec = buf.data;
         }
