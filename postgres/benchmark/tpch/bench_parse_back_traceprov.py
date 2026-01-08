@@ -5,11 +5,13 @@ from traceprovpy.tools.benchmark import (
     QueryDirectory,
     QuerySpec,
     ValidationQuerySpec,
+    bench_has_duckdb_infer,
 )
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_CAPTURE_QUERY,
     TRACEPROV_PERFORM_DERIVATION,
 )
+from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     MakeTraceProv,
@@ -76,11 +78,11 @@ def main():
     parser = argparse.ArgumentParser(prog="tpch-driver")
     parser.add_argument("-cfg", "--config", required=True, type=str)
     parser.add_argument("-l", "--layers", required=True, type=str)
-    parsed, _ = parser.parse_known_args()
+    parsed, others = parser.parse_known_args()
     with open(parsed.config) as f:
         config: dict = json.loads(f.read())
     is_validate = config.get("validate", False)
-
+    use_duckdb_inference = bench_has_duckdb_infer(others)
     dir_queries = []
 
     for subdir in config["subdirs"]:
@@ -101,22 +103,31 @@ def main():
                                 key="traceprov",
                                 preprocess=[MakeTraceProv()],
                                 extras=[
-                                    TRACEPROV_CAPTURE_QUERY(),
-                                    TRACEPROV_PERFORM_DERIVATION(),
+                                    # TRACEPROV_CAPTURE_QUERY()
                                 ],
                             ),
                         ),
                     )
-                    subdir_queries.append(
-                        Query(
-                            query_name=query_name,
-                            spec=CopyColumnCsv(
-                                "copy_traceprov_csv",
-                                base="base.sql",
-                                materialize=f"traceprov_infer_dump/{subdir}/{query_name}/",
-                            ),
+                    if use_duckdb_inference:
+                        subdir_queries.append(
+                            Query(
+                                query_name=query_name,
+                                spec=DuckDBInferenceQuerySpec(
+                                    base="DUCKDB_INFERENCE",
+                                    key=f"DUCKDB_INFERENCE_{query_name}",
+                                ),
+                            )
                         )
-                    )
+                    # subdir_queries.append(
+                    #     Query(
+                    #         query_name=query_name,
+                    #         spec=CopyColumnCsv(
+                    #             "copy_traceprov_csv",
+                    #             base="base.sql",
+                    #             materialize=f"traceprov_infer_dump/{subdir}/{query_name}/",
+                    #         ),
+                    #     )
+                    # )
             else:
                 for spec in user_specs:
                     spec_without_extras = {

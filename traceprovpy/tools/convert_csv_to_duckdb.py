@@ -17,6 +17,8 @@ def convert_csv_to_duckdb(input_path: str, output_path: str, header: bool):
         )
     duckdb_cmd = f"duckdb {output_path} -f {duckdb_sql}"
     traceprov_assert_safe_run(duckdb_cmd)
+    return table_name
+
 
 def main():
     parser = argparse.ArgumentParser()

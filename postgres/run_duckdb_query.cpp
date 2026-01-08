@@ -9,6 +9,7 @@
 #include <fstream>
 #include <chrono>
 #include <vector>
+#include "traceprov_infer.hpp"
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
@@ -20,6 +21,8 @@
 
 #define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
 #define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
+
+#undef sprintf
 
 struct Options {
     // via --lineage
@@ -145,13 +148,58 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "Reached " << msg << " correctly" << std::endl; \
 } \
 
+// Simply populates the data, given a chunk.
+static void populate_traceprov_data(
+    TraceProvData *traceprov_data, 
+    duckdb_data_chunk *chunk
+){
+    const uint64 column_count = duckdb_data_chunk_get_column_count(*chunk);
+    const uint64 row_count = duckdb_data_chunk_get_size(*chunk);
+    // Unlikely because it'll happen just once, for the first chunk.
+    if (unlikely(column_count != traceprov_data->size())){
+        if (traceprov_data->size() != 0){
+            std::cout << "Attempting to set different number of column entries" << std::endl;
+            exit(1);
+        }
+        for (uint64 col_idx = 0; col_idx < column_count; col_idx++){
+            auto column_data = new TraceProvColumnData;
+            column_data->data = new std::vector<uint64>();
+            traceprov_data->push_back(column_data);
+        }
+    }
+    for (uint64 col_idx = 0; col_idx < column_count; col_idx++){
+        duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, col_idx);
+        uint64 *col_data = (uint64 *)duckdb_vector_get_data(col);
+        uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
+        auto current_column_data = traceprov_data->at(col_idx)->data;
+        for (uint64 row_idx = 0; row_idx < row_count; row_idx++){
+            if(unlikely(!duckdb_validity_row_is_valid(col_validity, row_idx))){
+                std::cout << "Expected all non-null row, for now" << std::endl;
+                exit(1);
+            }
+            current_column_data->push_back(col_data[row_idx]);
+        }
+    }
+}
+
+typedef struct PerformQueryResult {
+    int64_t computed_time;
+    TraceProvData *data;
+} PerformQueryResult;
+
+PerformQueryResult *make_result(int64_t computed_time, TraceProvData *data){
+    auto result = new PerformQueryResult;
+    result->computed_time = computed_time;
+    result->data = data;
+    return result;
+}
 
 void perform_query(
     struct Options &options, 
     duckdb_connection &con, 
     std::string &in_sql, 
     int iter,
-    std::vector<int64_t> &computed_time
+    std::vector<PerformQueryResult *> &agg_result
 ){
 
     if (IS_SET(options.profile_out_path)){
@@ -173,7 +221,7 @@ void perform_query(
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    DUCKDB_EXIT_ON_ERROR(duckdb_prepare(con, in_sql.c_str(), &stmt));
+    DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
     if (options.use_pending){
         duckdb_pending_result result;
         DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(stmt, &result));
@@ -189,18 +237,21 @@ void perform_query(
 
     int chunk_count = 0;
     int cell_count = 0;
+    auto traceprov_data = new TraceProvData;
 
     if (options.use_pending){
         while (true) {
             duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(final_result);
             if (!data_chunk) break;
             chunk_count++;
+            populate_traceprov_data(traceprov_data, &data_chunk);
             duckdb_destroy_data_chunk(&data_chunk);
         }
     }else{
-        uint64 temp_chunk_count = duckdb_result_chunk_count(final_result);
-        for (idx_t chunk_idx = 0; chunk_idx < temp_chunk_count; chunk_idx++){
+        uint64_t total_chunk_count = duckdb_result_chunk_count(final_result);
+        for (idx_t chunk_idx = 0; chunk_idx < total_chunk_count; chunk_idx++){
             duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
+            populate_traceprov_data(traceprov_data, &data_chunk);
             duckdb_destroy_data_chunk(&data_chunk);
             chunk_count++;
         }
@@ -216,7 +267,7 @@ void perform_query(
         exit(1);
     }
 
-    computed_time.push_back(duration.count());
+    agg_result.push_back(make_result(duration.count(), traceprov_data));
 
     // This needs to run before anything else bc of overwrites.
     DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
@@ -251,7 +302,7 @@ int main(int argc, char **argv){
     buffer << in_sql_stream.rdbuf();
     std::string in_sql(buffer.str());
     std::cout << "From file: " << in_sql << std::endl;
-    std::vector<int64_t> computed_time;
+    std::vector<PerformQueryResult *> agg_result;
 
     duckdb_database db;
     duckdb_connection con;
@@ -264,7 +315,7 @@ int main(int argc, char **argv){
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
 
     for (int i = 0; i < options.repeat; i++){
-        perform_query(options, con, in_sql, i, computed_time);
+        perform_query(options, con, in_sql, i, agg_result);
     }
 
     if (IS_SET(options.settings_out_path)){
@@ -274,16 +325,21 @@ int main(int argc, char **argv){
     }
 
     if (IS_SET(options.time_out_path)){
-        if (computed_time.size() != options.repeat){
+        if (agg_result.size() != options.repeat){
             std::cout << "Got inconsistent size of computed time!" << std::endl;
             exit(1);
         }
         std::string time_out_json = "[";
-        for (uint64_t computed_time_idx = 0; computed_time_idx < computed_time.size(); computed_time_idx++){
+        for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
+            auto current = agg_result.at(computed_time_idx);
             if (computed_time_idx > 0) time_out_json += ",";
-            time_out_json += "\"";
-            time_out_json += std::to_string(computed_time.at(computed_time_idx));
-            time_out_json += "\"";
+            time_out_json += "{";
+            time_out_json += "\"time\":" + std::to_string(current->computed_time);
+            time_out_json += ",";
+            time_out_json += "\"width\":" + std::to_string(current->data->size());
+            time_out_json += ",";
+            time_out_json += "\"row_count\": " + std::to_string(current->data->at(0)->data->size());
+            time_out_json += "}";
         }
         time_out_json += "]";
         std::ofstream out(options.time_out_path);

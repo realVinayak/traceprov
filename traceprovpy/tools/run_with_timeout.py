@@ -55,16 +55,19 @@ class ConnectionParams(NamedTuple):
         ]
         return " ".join(flat_options)
 
+    def make_connection(self):
+        return psycopg2.connect(
+            database=self.database,
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            port=self.port,
+        )
+
     @staticmethod
     def make_simple_connection(parsed):
         connection_params = ConnectionParams.make_from_parsed(parsed)
-        return psycopg2.connect(
-            database=connection_params.database,
-            host=connection_params.host,
-            user=connection_params.user,
-            password=connection_params.password,
-            port=connection_params.port,
-        )
+        return connection_params.make_connection()
 
     @staticmethod
     def make_from_parsed(parsed):
@@ -117,8 +120,10 @@ class ReplaceSelectivity(Preprocessor):
     def __repr__(self):
         return f"ReplaceSelectivity('{self.selectivity}')"
 
+
 class SmokedDuckOptions(NamedTuple):
     driver_executable: str
+
 
 class MakeTraceProv(Preprocessor):
 
