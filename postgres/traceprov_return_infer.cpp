@@ -922,9 +922,9 @@ extern "C" {
         TraceProvColumn *join_column_2 = new TraceProvColumn(2, 1);
         auto join_conditions = new TraceProvJoinConditions;
         join_conditions->push_back(new std::pair<TraceProvColumn *, TraceProvColumn*>(join_column_1, join_column_2));
-        auto output_columns = new std::vector<TraceProvColumn*>;
+        auto output_columns = new std::vector<TraceProvColumn*>(output_column_side - 1);
         for (int i = 0; i < output_column_side - 1; i++){
-            output_columns->push_back(new TraceProvColumn(2, i + 2));
+            output_columns->at(i) = (new TraceProvColumn(2, i + 2));
         }
         
         return make_traceprov_join_expr(
@@ -1011,9 +1011,11 @@ extern "C" {
         std::vector<uint64> *offsets,
         TraceProvColumnData *final_column_data
     ){
-        std::vector<uint64> *data = new std::vector<uint64>;
+        std::vector<uint64> *data = new std::vector<uint64>(offsets->size());
+        uint64 idx = 0;
         for (auto offset: *offsets){
-            data->push_back(column_data->data->at(offset));
+            data->at(idx) = (column_data->data->at(offset));
+            idx++;
         }
         final_column_data->data = data;
         final_column_data->descriptor = column_data->descriptor;
@@ -1058,7 +1060,9 @@ extern "C" {
             // If it was split, then only consider splitting the input match keys,
             // based on whether they are combined are not.
             std::vector<uint64> *combined_offsets = new std::vector<uint64>();;
+            combined_offsets->reserve(match_key->data->size() / 2);
             not_combined_offsets =  new std::vector<uint64>();
+            not_combined_offsets->reserve(match_key->data->size() / 2);
             std::vector<uint64> *combined = new std::vector<uint64>();
             for (uint64 offset = 0; offset < match_key->data->size(); offset++){
                 const uint64 key = match_key->data->at(offset);
@@ -1069,19 +1073,23 @@ extern "C" {
                     not_combined_offsets->push_back(offset);
                 }
             }
-            TraceProvData **worker_split = palloc0_array(TraceProvData *, worker_count);
-            for (int i = 0; i < worker_count; i++){
-                auto worker_vector = new std::vector<std::vector<uint64>*>;
-                worker_vector->push_back(new std::vector<uint64>);
-                worker_vector->push_back(new std::vector<uint64>);
-                worker_split[i] = traceprov_make_column_data(worker_vector);
-            }
             // In this case, need to consider the combine layer too.
             const TraceProvLayerNumber combine_layer_number = layer->combined_aggregate_layer_number;
             if (combine_layer_number == 0)
                 elog(ERROR, "Expected combine layer to always be set!");
          
             auto combined_layer_data = read_all_columns(combine_layer_number, local_context, nullptr);
+            TraceProvData **worker_split = palloc0_array(TraceProvData *, worker_count);
+            for (int i = 0; i < worker_count; i++){
+                auto worker_vector = new std::vector<std::vector<uint64>*>;
+                auto col1 = new std::vector<uint64>;
+                col1->reserve(combined_layer_data->at(0)->data->size() / worker_count);
+                auto col2 = new std::vector<uint64>;
+                col2->reserve(combined_layer_data->at(0)->data->size() / worker_count);
+                worker_vector->push_back(new std::vector<uint64>);
+                worker_vector->push_back(new std::vector<uint64>);
+                worker_split[i] = traceprov_make_column_data(worker_vector);
+            }
             // Split the combined layer based on each worker id.
             for (long unsigned int i = 0; i < combined_layer_data->at(0)->data->size(); i++){
                 // Technically, this can be inferred from the local log entry.
@@ -1229,9 +1237,15 @@ extern "C" {
         const void *final_log_ptr = get_final_ptr(log_ptr, current_layer);
         const uint32 layer_record_padding = current_layer->record_padding; 
         std::vector<std::vector<uint64> *> *current_worker_logs = new std::vector<std::vector<uint64> *>();
+        current_worker_logs->reserve(current_layer->num_pk_records);
+        const uint64 total_number_of_records = (current_layer->size * TRACEPROV_PAGE_SIZE) / TRACEPROV_GET_RECORD_SIZE(current_layer);
         // Reserve space for next pointers.
-        for (uint32 i = 0; i < current_layer->num_pk_records; i++)
-            current_worker_logs->push_back(new std::vector<uint64>);
+        for (uint32 i = 0; i < current_layer->num_pk_records; i++){
+            auto data_vec = new std::vector<uint64>;
+            data_vec->reserve(total_number_of_records);
+            current_worker_logs->push_back(data_vec);
+        }
+
 
         while (log_ptr < final_log_ptr){
             log_ptr += layer_record_padding;
@@ -1250,6 +1264,7 @@ extern "C" {
         const struct local_context *local_context,
         const TraceProvDependency *dependency
     ){
+        const auto evaluate_start = std::chrono::high_resolution_clock::now();
         const struct traceprov_aggregate_layer *current_layer = &local_context->cached_layers[layer_number - 1];
         // In this case, the layer wasn't set.
         if (current_layer->layer_number == 0) return nullptr;
@@ -1285,6 +1300,8 @@ extern "C" {
                 return_data->at(foreach_current_index(entry_cursor))->descriptor = descriptor;
             }
         }
+        const auto evaluate_end = std::chrono::high_resolution_clock::now();
+        PRINT_ON_VALIDATE("read all took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
         return return_data;
     }
     
@@ -1570,7 +1587,16 @@ extern "C" {
  
         offsets_found->push_back(left_offsets);
         offsets_found->push_back(right_offsets);
+        // Trivial case.
+        if (left_column->data->size() == 0 || right_column->data->size() == 0)
+            return offsets_found;
+    
+        // eh.
+        left_offsets->data->reserve(left_column->data->size() / 2);
+        right_offsets->data->reserve(right_column->data->size() / 2);
+
         std::vector<TraceProvTuple> *left_column_clone = new std::vector<TraceProvTuple>;
+        left_column_clone->reserve(left_column->data->size());
         for (uint64 left_offset = 0; left_offset < left_column->data->size(); left_offset++){
             left_column_clone->push_back(TraceProvTuple(left_column->data->at(left_offset), left_offset));
         }
@@ -1608,8 +1634,10 @@ extern "C" {
     static std::vector<std::vector<uint64>*> *traceprov_flatten_data(TraceProvData *input_data){
         auto row_count = input_data->at(0)->data->size();
         auto flattened = new  std::vector<std::vector<uint64>*>;
+        flattened->reserve(row_count);
         for (uint64 row_idx = 0; row_idx < row_count; row_idx++){
             auto row_data = new std::vector<uint64>;
+            row_data->reserve(input_data->size());
             for (uint64 col_idx = 0; col_idx < input_data->size(); col_idx++){
                 row_data->push_back(input_data->at(col_idx)->data->at(row_idx));
             }
@@ -1659,9 +1687,16 @@ extern "C" {
         auto right_offsets = traceprov_make_empty_column();
         offsets_found->push_back(left_offsets);
         offsets_found->push_back(right_offsets);
+
+        if (left_columns->at(0)->data->size() == 0 || right_columns->at(0)->data->size() == 0)
+            return offsets_found;
+
+        left_offsets->data->reserve(left_columns->at(0)->data->size() / 2);
+        right_offsets->data->reserve(right_columns->at(0)->data->size() / 2);
         auto left_flattened = traceprov_flatten_data(left_columns);
         auto right_flattened = traceprov_flatten_data(right_columns);
         auto left_flattened_cloned = new std::vector<TraceProvMultipleTuple>();
+        left_flattened_cloned->reserve(left_flattened->size());
         for (uint64 left_offset = 0; left_offset < left_flattened->size(); left_offset++){
             left_flattened_cloned->push_back(TraceProvMultipleTuple(left_flattened->at(left_offset), left_offset));
         }
@@ -1882,6 +1917,8 @@ extern "C" {
         TraceProvData *final_result = new TraceProvData;
         for (uint64 col_idx = 0; col_idx < result->size(); col_idx++){
             TraceProvColumnData *column_data = traceprov_make_empty_column();
+            // This is very very over-approximate.
+            column_data->data->reserve(result->at(col_idx)->data->size()*list_length(append_node->nodes));
             for (auto value: *result->at(col_idx)->data){
                 column_data->data->push_back(value);
             }
@@ -1909,11 +1946,19 @@ extern "C" {
             }
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
+            const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)node;
-            return traceprov_evaluate_join_exprn(join_exprn, eval_context);
+            auto result = traceprov_evaluate_join_exprn(join_exprn, eval_context);
+            const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            PRINT_ON_VALIDATE("Join took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
+            return result;
         } else if (node->tag == T_TP_APPEND){
+            const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvAppend *append_node = (TraceProvAppend *)node;
-            return traceprov_evaluate_append(append_node, eval_context);
+            auto result = traceprov_evaluate_append(append_node, eval_context);
+            const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            PRINT_ON_VALIDATE("Append took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
+            return result;
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
