@@ -202,7 +202,7 @@ createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
     DistinctExpr *equal;
     Expr *notExpr;
     HeapTuple tup = NULL;
-    Operator operTuple;
+    Operator operTuple = NULL;
     Oid eqOpOid;
 
     get_sort_group_operators(leftChild->vartype, false, true, false, NULL, &eqOpOid, NULL, NULL);
@@ -215,6 +215,8 @@ createNotDistinctConditionForVars (Var *leftChild, Var *rightChild)
         }else{
             elog(ERROR, "Heap tuple not valid!");
         }
+    }else{
+        elog(ERROR, "Got invalid equipid!");
     }
 
     operator = (Form_pg_operator) GETSTRUCT(operTuple);
@@ -662,7 +664,14 @@ dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
     return result;
 }
 
-
+// For some reason, it doesn't work well on > 14.
+// Temporarily, just return invalid.
+// Everything else just picks this repr up so they don't need to be changed
+#if (PG_MAJORVERSION_NUM > 14)
+char *tracprov_parse_back_query(Query *query){
+    return pstrdup("--invalid-parsed-back--")
+}
+#else
 // Get str representation of the query.
 // This, first, makes a function out of the query.
 // Then, looks at the SQL body of the function.
@@ -703,6 +712,7 @@ char *tracprov_parse_back_query(Query *query){
     elog(INFO, "parsed back: %s", str);
     return str;
 }
+#endif
 
 typedef struct
 {

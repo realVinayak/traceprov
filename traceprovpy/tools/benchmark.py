@@ -334,6 +334,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-t_root", "--test_root", required=True)
         parser.add_argument("-sd_lib", required=False, type=str)
         parser.add_argument("-sd_include", required=False, type=str)
+        parser.add_argument("-sd_num_threads", required=False, type=int)
         parser.add_argument(
             f"--{INFER_DUCKDB_OPTION}",
             action=argparse.BooleanOptionalAction,
@@ -360,6 +361,7 @@ class GenericBenchmark(NamedTuple):
             parsed.suff,
             parsed.sd_lib,
             parsed.sd_include,
+            parsed.sd_num_threads,
         )
 
         start = time.perf_counter()
@@ -414,6 +416,7 @@ class GenericBenchmark(NamedTuple):
         # the smokedduck shared library.
         sd_lib_path: str = "",
         sd_include_path: str = "",
+        sd_num_threads: int = None,
     ):
         setup_response = traceprov_setup(
             suff or self.name,
@@ -421,6 +424,7 @@ class GenericBenchmark(NamedTuple):
             connection_params,
             sd_lib_path,
             sd_include_path,
+            sd_num_threads,
         )
 
         return self._replace(**setup_response)

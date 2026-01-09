@@ -11,6 +11,7 @@ def traceprov_setup(
     # the smokedduck shared library.
     sd_lib_path: str = "",
     sd_include_path: str = "",
+    sd_num_threads: int = None,
 ):
     assert suff is not None
 
@@ -64,7 +65,10 @@ def traceprov_setup(
             Path(traceprov_postgres_root) / f"bld/bin/run_smokedduck_{suff}"
         ).resolve()
         assert sd_executable_path.exists(), "smokedduck path should exist!"
-        sd_options = SmokedDuckOptions(driver_executable=sd_executable_path.as_posix())
+        sd_options = SmokedDuckOptions(
+            driver_executable=sd_executable_path.as_posix(),
+            number_of_threads=sd_num_threads or 1,
+        )
     else:
         sd_options = None
     return dict(

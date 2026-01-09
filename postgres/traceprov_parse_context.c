@@ -725,7 +725,7 @@ void tp_add_aggregate_property(const TraceProvParseContext *context, const Agg *
 TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number){
     ListCell *graph_cursor;
     foreach(graph_cursor, GET_ROOT_CONTEXT(parsed_context)->properties->sublinkMap){
-        const TraceProvDependency *dependency = (TraceProvDependency *)lfirst(graph_cursor);
+        TraceProvDependency *dependency = (TraceProvDependency *)lfirst(graph_cursor);
         if (dependency->headNumber == graph_number)
             return dependency;
     }

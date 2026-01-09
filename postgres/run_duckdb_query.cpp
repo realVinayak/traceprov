@@ -235,8 +235,7 @@ void perform_query(
 
     std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
 
-    int chunk_count = 0;
-    int cell_count = 0;
+    uint64 chunk_count = 0;
     auto traceprov_data = new TraceProvData;
 
     if (options.use_pending){
@@ -325,7 +324,7 @@ int main(int argc, char **argv){
     }
 
     if (IS_SET(options.time_out_path)){
-        if (agg_result.size() != options.repeat){
+        if (agg_result.size() != (uint64)options.repeat){
             std::cout << "Got inconsistent size of computed time!" << std::endl;
             exit(1);
         }
