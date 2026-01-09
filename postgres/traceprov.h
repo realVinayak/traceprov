@@ -89,12 +89,7 @@ int get_error_no();
 
 #define PRINT_ON_VALIDATE(...) do { \
     if (VALIDATE_MODE) { \
-        elog(INFO,\
-            "[traceprov]: %s, %d. PID: %d\t", \
-             __FILE__, __LINE__,\
-             getpid());\
         elog(INFO, __VA_ARGS__);\
-        elog(INFO, "Error no: %d", get_error_no()); \
     } } while(0) \
 
 

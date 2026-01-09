@@ -1,4 +1,7 @@
 {
+    "_queries": [
+        1
+    ],
     "queries": [
         1,
         2,
@@ -35,7 +38,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 8,
-        "throwaway": 2
+        "repeat": 10,
+        "throwaway": 5
     }
 }

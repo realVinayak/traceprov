@@ -30,6 +30,13 @@ typedef struct {
 } TraceProvColumnData;
 
 typedef std::vector<TraceProvColumnData*> TraceProvData;
+typedef struct TraceProvTopResult {
+    bool is_lazy;
+    List *pdata;
+    uint64 width;
+    uint64 result_count;
+} TraceProvTopResult;
+
 typedef std::vector<std::pair<TraceProvColumn*, TraceProvColumn*>*> TraceProvJoinConditions;
 typedef std::vector<uint64> TraceProvOffset;
 
@@ -66,6 +73,7 @@ typedef struct TraceProvAppend {
     // List of TraceProvNode (get evaulated separately)
     // TraceProvAppend just appends the results individually.
     List *nodes;
+    bool is_lazy;
 } TraceProvAppender;
 
 typedef struct TraceProvDerivation {
