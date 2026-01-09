@@ -123,6 +123,7 @@ class ReplaceSelectivity(Preprocessor):
 
 class SmokedDuckOptions(NamedTuple):
     driver_executable: str
+    number_of_threads: int = 1
 
 
 class MakeTraceProv(Preprocessor):
