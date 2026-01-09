@@ -107,11 +107,17 @@ class DuckDBInferenceQuerySpec(QuerySpec):
                 db=duckdb_db_dir.as_posix(),
                 i=duckdb_inference_sql_query,
                 time="/tmp/duckdb_result.json",
+                threads=sd_options.number_of_threads,
+                settings="/tmp/duckdb_stats.json",
             )
             traceprov_assert_safe_run(f"{executable} {driver_options.serialize()}")
-            with open("/tmp/duckdb_result.json") as f:
+            with open(driver_options.time) as f:
                 duckdb_result_spec = json.loads(f.read())
-                print(duckdb_result_spec)
+                # print(duckdb_result_spec)
+
+            with open(driver_options.settings) as f:
+                duckdb_settings = json.loads(f.read())
+                # print(duckdb_settings)
 
             run_simple_query(
                 f"COPY (select * from ({sql_query}) F ORDER BY ALL) to 'duckdb_inference_{layer_idx}.tmp' (FORMAT CSV, HEADER false);",
@@ -135,6 +141,10 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             )
             final_results = [
                 *final_results,
-                {**result_spec, "duckdb_inference": duckdb_result_spec},
+                {
+                    **result_spec,
+                    "duckdb_inference": duckdb_result_spec,
+                    "duckdb_settings": duckdb_settings,
+                },
             ]
         return final_results

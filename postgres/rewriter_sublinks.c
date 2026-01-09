@@ -7,8 +7,6 @@
 #include "optimizer/optimizer.h"
 #include "parser/parse_coerce.h"
 
-static const Oid boolOidConst = BOOLOID;
-
 static Node *rewrite_sublinks_mutator(Node *, TraceProvParseContext *);
 
 // To a given sublink, there is a stack of provenance attributes are available

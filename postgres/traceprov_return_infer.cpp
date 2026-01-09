@@ -1250,7 +1250,7 @@ extern "C" {
 
 
         while (log_ptr < final_log_ptr){
-            log_ptr += layer_record_padding;
+            log_ptr = (void *)((char *)log_ptr + layer_record_padding);
             uint64 *log_canonical_ptr = (uint64 *)log_ptr;
             for (uint32 entry_id = 0; entry_id < current_layer->num_pk_records; entry_id++, log_canonical_ptr++){
                 current_worker_logs->at(entry_id)->push_back(*log_canonical_ptr);
@@ -1266,7 +1266,7 @@ extern "C" {
         const struct local_context *local_context,
         const TraceProvDependency *dependency
     ){
-        const auto evaluate_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_start = std::chrono::high_resolution_clock::now();
         const struct traceprov_aggregate_layer *current_layer = &local_context->cached_layers[layer_number - 1];
         // In this case, the layer wasn't set.
         if (current_layer->layer_number == 0) return nullptr;
@@ -1302,8 +1302,8 @@ extern "C" {
                 return_data->at(foreach_current_index(entry_cursor))->descriptor = descriptor;
             }
         }
-        const auto evaluate_end = std::chrono::high_resolution_clock::now();
-        PRINT_ON_VALIDATE("read all took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
+        // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+        // PRINT_ON_VALIDATE("read all took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
         return return_data;
     }
     
@@ -1606,7 +1606,7 @@ extern "C" {
         }
 
         std::sort(left_column_clone->begin(), left_column_clone->end());
-        const auto evaluate_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_start = std::chrono::high_resolution_clock::now();
         for (uint64 offset = 0; offset < right_column->data->size(); offset++){
             const auto match_key = right_column->data->at(offset);
             auto it = (std::lower_bound(
@@ -1813,7 +1813,7 @@ extern "C" {
             }
         }
 
-        const auto evaluate_late_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_late_start = std::chrono::high_resolution_clock::now();
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
             auto left_offsets = offsets->at(0);
@@ -1951,18 +1951,18 @@ extern "C" {
             }
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
-            const auto evaluate_start = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)node;
             auto result = traceprov_evaluate_join_exprn(join_exprn, eval_context);
-            const auto evaluate_end = std::chrono::high_resolution_clock::now();
-            PRINT_ON_VALIDATE("Join took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
+            // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            // PRINT_ON_VALIDATE("Join took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
             return result;
         } else if (node->tag == T_TP_APPEND){
-            const auto evaluate_start = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvAppend *append_node = (TraceProvAppend *)node;
             auto result = traceprov_evaluate_append(append_node, eval_context);
-            const auto evaluate_end = std::chrono::high_resolution_clock::now();
-            PRINT_ON_VALIDATE("Append took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
+            // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            // PRINT_ON_VALIDATE("Append took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
             return result;
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
@@ -2328,7 +2328,7 @@ extern "C" {
         bool *nulls = palloc0_array(bool, num_attrs);
 
         for (uint64 row_idx = 0; row_idx < data->at(0)->data->size(); row_idx++){
-            for (int32 col_idx = 0; col_idx < num_attrs; col_idx++){
+            for (uint32 col_idx = 0; col_idx < num_attrs; col_idx++){
                 record[col_idx] = Int64GetDatum(data->at(col_idx)->data->at(row_idx));
             }
             tuplestore_putvalues(tupstore, tupdesc, record, nulls);
