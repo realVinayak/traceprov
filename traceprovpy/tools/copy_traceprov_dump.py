@@ -35,5 +35,5 @@ def make_copy(connection_params: ConnectionParams, destination_dir: str):
     traceprov_assert_safe_run("chmod +x /tmp/prepare_for_duckdb.sh")
     traceprov_assert_safe_run("/tmp/prepare_for_duckdb.sh")
     traceprov_assert_safe_run(
-        f"sudo chown -R {original_user}:{original_user} {destination_dir}"
+        f"sudo chown -R {original_user} {destination_dir}"
     )
