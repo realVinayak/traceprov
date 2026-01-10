@@ -9,6 +9,7 @@ from traceprovpy.tools.convert_csv_to_duckdb import convert_csv_to_duckdb
 from traceprovpy.tools.benchmark import GenericBenchmark, QuerySpec
 from traceprovpy.tools.run_with_timeout import (
     DEFAULT_REPEAT,
+    DEFAULT_THROWAWAY,
     TP_SKIPPABLE_OPTION,
     RunWithTimeoutOptions,
 )
@@ -24,7 +25,7 @@ class DuckDBDriverOptions(NamedTuple):
     pending: bool = None
     threads: int = None
     stats: str = None
-    repeat: int = DEFAULT_REPEAT
+    repeat: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY
     settings: str = None
     time: str = None
 
