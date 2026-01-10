@@ -669,7 +669,7 @@ dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 // Everything else just picks this repr up so they don't need to be changed
 #if (PG_MAJORVERSION_NUM > 14)
 char *tracprov_parse_back_query(Query *query){
-    return pstrdup("--invalid-parsed-back--")
+    return pstrdup("--invalid-parsed-back--");
 }
 #else
 // Get str representation of the query.
@@ -811,7 +811,7 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec){
         ListCell *col_var_cursor = NULL;
         foreach(col_var_cursor, col_vars){
             const int idx = foreach_current_index(col_var_cursor);
-            TargetEntry *te = makeTargetEntry((Expr *)lfirst_node(Var, col_var_cursor), 0, pstrdup(strVal(list_nth_node(Value, col_names, idx))), false);
+            TargetEntry *te = makeTargetEntry((Expr *)lfirst_node(Var, col_var_cursor), 0, pstrdup(strVal(list_nth_node(Node, col_names, idx))), false);
             new_targets = traceprov_append_at_resjunk(new_targets, te);
         }
     }

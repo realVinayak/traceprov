@@ -15,7 +15,7 @@ def convert_csv_to_duckdb(input_path: str, output_path: str, header: bool):
         f.write(
             f'create table {table_name} as (select * from read_csv("{input_path}", header = {header})) ;'
         )
-    duckdb_cmd = f"duckdb {output_path} -f {duckdb_sql}"
+    duckdb_cmd = f"cat {duckdb_sql} | duckdb {output_path}"
     traceprov_assert_safe_run(duckdb_cmd)
     return table_name
 
