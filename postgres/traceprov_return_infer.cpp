@@ -436,7 +436,7 @@ extern "C" {
         
         UNUSED(infer_result_computed);
 
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         uint64 duration_time = (uint64)duration.count();
 
         PG_RETURN_INT64(duration_time);
@@ -486,7 +486,7 @@ extern "C" {
 
         auto end = std::chrono::high_resolution_clock::now();
 
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
         uint64 duration_time = (uint64)duration.count();
 
         for (std::string s: *messages){

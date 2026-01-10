@@ -18,7 +18,8 @@
         19
     ],
     "validate": false,
-    "subdirs": [
+    "subdirs": ["params_default"],
+    "_subdirs": [
         "params_1",
         "params_2",
         "params_3",
@@ -27,7 +28,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 1,
-        "throwaway": 2
+        "repeat": 10,
+        "throwaway": 5
     }
 }

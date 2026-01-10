@@ -46,7 +46,6 @@ temp.out.sql
 tmp.sql
 postgres/benchmark/micro/set_operations
 postgres/complex.*
-<<<<<<< HEAD
 aclocal.m4
 autom4te.cache/
 compile
@@ -57,5 +56,4 @@ config.sub
 configure
 postgres/bld/*
 */*.o.dSYM/
-=======
->>>>>>> issue-62-macos
+tmp/
