@@ -64,7 +64,7 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 #define DEBUG_MODE 0
-#define VALIDATE_MODE 1
+#define VALIDATE_MODE 0
 
 // Forward definitions.
 struct trace_file_forward_row;
