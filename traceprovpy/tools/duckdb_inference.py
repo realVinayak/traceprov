@@ -28,6 +28,7 @@ class DuckDBDriverOptions(NamedTuple):
     repeat: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY
     settings: str = None
     time: str = None
+    idx_scan_percent: str = None
 
     def _boolean_options(self):
         return {"lineage", "pending"}
@@ -104,12 +105,29 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             duckdb_inference_sql_query = "/tmp/duckdb_inference_dynamic.sql"
             with open(duckdb_inference_sql_query, "w") as f:
                 f.write(sql_query)
+            create_idx_queries = result_spec["create_idx"]
+            if create_idx_queries:
+                for create_idx_query in create_idx_queries.split(";"):
+                    print(create_idx_query)
+                    run_simple_query(
+                        create_idx_query,
+                        executable,
+                        duckdb_db_dir.as_posix(),
+                        repeat=1,
+                    )
+            # run_simple_query(
+            #     "SET index_scan_percentage=99;",
+            #     executable,
+            #     duckdb_db_dir.as_posix(),
+            #     repeat=1,
+            # )
             driver_options = DuckDBDriverOptions(
                 db=duckdb_db_dir.as_posix(),
                 i=duckdb_inference_sql_query,
                 time="/tmp/duckdb_result.json",
                 threads=sd_options.number_of_threads,
                 settings="/tmp/duckdb_stats.json",
+                idx_scan_percent="1",
             )
             traceprov_assert_safe_run(f"{executable} {driver_options.serialize()}")
             with open(driver_options.time) as f:
@@ -140,12 +158,21 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             traceprov_assert_safe_run(
                 f"diff duckdb_inference_{layer_idx}.tmp traceprov_inference_{layer_idx}.tmp"
             )
+            driver_options_profiled = driver_options._replace(
+                profile="/tmp/duckdb_profile.json", repeat=1
+            )
+            traceprov_assert_safe_run(
+                f"{executable} {driver_options_profiled.serialize()}"
+            )
+            with open(driver_options_profiled.profile) as f:
+                duckdb_terminal_profile = json.loads(f.read())
             final_results = [
                 *final_results,
                 {
                     **result_spec,
                     "duckdb_inference": duckdb_result_spec,
                     "duckdb_settings": duckdb_settings,
+                    "duckdb_terminal_profile": duckdb_terminal_profile,
                 },
             ]
         return final_results
