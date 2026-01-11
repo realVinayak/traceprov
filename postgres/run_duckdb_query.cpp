@@ -315,6 +315,8 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
+    DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
+
     char thread_set_query[256] = {0};
     sprintf(thread_set_query, "SET threads=%d;", options.num_threads);
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
