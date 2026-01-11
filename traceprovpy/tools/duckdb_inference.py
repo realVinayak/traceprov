@@ -106,7 +106,8 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             with open(duckdb_inference_sql_query, "w") as f:
                 f.write(sql_query)
             create_idx_queries = result_spec["create_idx"]
-            if create_idx_queries:
+            idx_scan_percent = None
+            if create_idx_queries and sd_options.create_idx:
                 for create_idx_query in create_idx_queries.split(";"):
                     print(create_idx_query)
                     run_simple_query(
@@ -115,19 +116,15 @@ class DuckDBInferenceQuerySpec(QuerySpec):
                         duckdb_db_dir.as_posix(),
                         repeat=1,
                     )
-            # run_simple_query(
-            #     "SET index_scan_percentage=99;",
-            #     executable,
-            #     duckdb_db_dir.as_posix(),
-            #     repeat=1,
-            # )
+                idx_scan_percent = "1"
+
             driver_options = DuckDBDriverOptions(
                 db=duckdb_db_dir.as_posix(),
                 i=duckdb_inference_sql_query,
                 time="/tmp/duckdb_result.json",
                 threads=sd_options.number_of_threads,
                 settings="/tmp/duckdb_stats.json",
-                idx_scan_percent="1",
+                idx_scan_percent=idx_scan_percent,
             )
             traceprov_assert_safe_run(f"{executable} {driver_options.serialize()}")
             with open(driver_options.time) as f:

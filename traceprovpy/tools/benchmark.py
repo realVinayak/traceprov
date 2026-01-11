@@ -345,7 +345,11 @@ class GenericBenchmark(NamedTuple):
             action=argparse.BooleanOptionalAction,
             default=False,
         )
-
+        parser.add_argument(
+            f"--sd_create_idx",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
         parsed, _ = parser.parse_known_args()
 
         connection_params = ConnectionParams(
@@ -362,6 +366,7 @@ class GenericBenchmark(NamedTuple):
             parsed.sd_lib,
             parsed.sd_include,
             parsed.sd_num_threads,
+            parsed.sd_create_idx,
         )
 
         start = time.perf_counter()
@@ -417,6 +422,7 @@ class GenericBenchmark(NamedTuple):
         sd_lib_path: str = "",
         sd_include_path: str = "",
         sd_num_threads: int = None,
+        sd_create_idx: bool = False,
     ):
         setup_response = traceprov_setup(
             suff or self.name,
@@ -425,6 +431,7 @@ class GenericBenchmark(NamedTuple):
             sd_lib_path,
             sd_include_path,
             sd_num_threads,
+            sd_create_idx,
         )
 
         return self._replace(**setup_response)

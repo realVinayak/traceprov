@@ -12,6 +12,7 @@ def traceprov_setup(
     sd_lib_path: str = "",
     sd_include_path: str = "",
     sd_num_threads: int = None,
+    sd_create_idx: bool = False,
 ):
     assert suff is not None
 
@@ -68,6 +69,7 @@ def traceprov_setup(
         sd_options = SmokedDuckOptions(
             driver_executable=sd_executable_path.as_posix(),
             number_of_threads=sd_num_threads or 1,
+            create_idx=sd_create_idx,
         )
     else:
         sd_options = None
