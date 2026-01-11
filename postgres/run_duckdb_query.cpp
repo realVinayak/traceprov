@@ -47,6 +47,8 @@ struct Options {
     std::string settings_out_path;
     // via --time
     std::string time_out_path;
+    // via --idx_scan_percent
+    std::string index_scan_percentage;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -62,7 +64,8 @@ struct Options parse_args(int argc, char **argv){
         .stats_path = "",
         .repeat = 1,
         .settings_out_path = "",
-        .time_out_path = ""
+        .time_out_path = "",
+        .index_scan_percentage = ""
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -94,6 +97,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--time")){
             options.time_out_path = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--idx_scan_percent")){
+            options.index_scan_percentage = std::string(argv[++i]);
             continue;
         }
 
@@ -313,8 +319,14 @@ int main(int argc, char **argv){
     sprintf(thread_set_query, "SET threads=%d;", options.num_threads);
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
 
+    if (IS_SET(options.index_scan_percentage)){
+        std::string indx_set_query = "SET index_scan_percentage=" + options.index_scan_percentage + ";";
+        DUCKDB_RUN_SHORT_QUERY(con, indx_set_query.c_str(), "setting index scan percent");
+    }
+
     for (int i = 0; i < options.repeat; i++){
         perform_query(options, con, in_sql, i, agg_result);
+        // delete agg_result.back()->data;
     }
 
     if (IS_SET(options.settings_out_path)){

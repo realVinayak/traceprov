@@ -890,14 +890,22 @@ extern "C" {
         return tp_join_exprn;
     }
 
-    TraceProvAppend *make_traceprov_append(
+    // We may not actually end up returning an append, depending on how things went.
+    // So, the return type is a node (rather than append node)
+    TraceProvNode *make_traceprov_append(
         List *nodes,
         bool is_lazy
     ){
-        auto tp_append = palloc0_object(TraceProvAppend);
-        tp_append->tag = T_TP_APPEND;
         if (list_length(nodes) == 0)
             elog(ERROR, "Making append rel with no nodes!");
+        
+        if (list_length(nodes) == 1){
+            return (TraceProvNode*)list_nth(nodes, 0);
+        }
+
+        auto tp_append = palloc0_object(TraceProvAppend);
+        tp_append->tag = T_TP_APPEND;
+
         ListCell *node_cursor;
         uint64 column_count = 0;
         foreach(node_cursor, nodes){
@@ -910,7 +918,7 @@ extern "C" {
         }
         tp_append->nodes = nodes;
         tp_append->is_lazy = is_lazy;
-        return tp_append;
+        return (TraceProvNode*)tp_append;
     }
 
     TraceProvJoinExpr *make_traceprov_join_from_rel(
@@ -1454,8 +1462,13 @@ extern "C" {
                 }
             }
         }
+        TraceProvNode *current_compute_node;
+        if (list_length(current_compute_nodes) > 1){
+            current_compute_node = (TraceProvNode *)make_traceprov_append(current_compute_nodes, is_top_level);
+        }else{
+            current_compute_node = (TraceProvNode *)list_nth(current_compute_nodes, 0);
+        }
 
-        auto current_compute_node = make_traceprov_append(current_compute_nodes, is_top_level);
         derivation->derived_join_exprns = lappend(
             derivation->derived_join_exprns, traceprov_make_derived_node(log_dependency->headNumber, (TraceProvNode *)current_compute_node) 
         );
@@ -1474,7 +1487,10 @@ extern "C" {
                 child_join_exprns = lappend(child_join_exprns, ((TraceProvDerivedNode *)lfirst(child_join_cursor))->node);
             }
             TraceProvNode *traceprov_child_append_node = (TraceProvNode *)make_traceprov_append(child_join_exprns, false);
-            current_compute_node->is_lazy = false;
+            if (current_compute_node->tag == T_TP_APPEND){
+                ((TraceProvAppend*)current_compute_node)->is_lazy = false;
+            }
+
             if (join_conditions->size()){
                 traceprov_child_append_node = (TraceProvNode *)make_traceprov_join_expr(
                     (TraceProvNode*)current_compute_node,
@@ -2048,6 +2064,60 @@ extern "C" {
         return sql_repr.data;
     }
 
+    static List *traceprov_get_indexes(TraceProvNode *node){
+        if (node->tag == T_TP_RELATION){
+            if (node->alias_name == NULL)
+                elog(ERROR, "Expected alias to be set, so far!");
+            TraceProvRelation *relation = (TraceProvRelation *)node;
+            char *create_index = psprintf("create index if not exists %s_idx on %s (%s)", node->alias_name, relation->name, traceprov_get_column_select(nullptr, relation->data->size()));
+            PRINT_ON_VALIDATE("IDX: %s",create_index );
+            List *create_indexes = list_make1(
+                create_index
+            );
+            return create_indexes;
+            // return NIL;
+        }
+        if (node->tag == T_TP_APPEND){
+            TraceProvAppend *append = (TraceProvAppend *)node;
+            List *indexes = NIL;
+            ListCell *cursor;
+            foreach(cursor, append->nodes){
+                indexes = list_concat(indexes, traceprov_get_indexes((TraceProvNode *)lfirst(cursor)));
+            }
+            return indexes;
+        }
+        if (node->tag == T_TP_JOIN){
+            TraceProvJoinExpr *join_expr = (TraceProvJoinExpr *)node;
+            List *indexes = traceprov_get_indexes(join_expr->left);
+            indexes = list_concat(indexes, traceprov_get_indexes(join_expr->right));
+            // std::string left_idx = "";
+            // std::string right_idx = "";
+            // for (auto join_pair: *join_expr->join_condition){
+            //     if (join_expr->left->tag == T_TP_RELATION){
+            //         if (left_idx != "") left_idx += ",";
+            //         left_idx += traceprov_get_column_name_idx(nullptr, join_pair->first->second - 1);
+            //     }
+            //     if (join_expr->right->tag == T_TP_RELATION){
+            //         if (right_idx != "") right_idx += ",";
+            //         right_idx += traceprov_get_column_name_idx(nullptr, join_pair->second->second - 1);
+            //     }
+            // }
+            // if (left_idx != ""){
+            //     TraceProvRelation *left_relation = (TraceProvRelation *)join_expr->left;
+            //     char *create_index = psprintf("create index if not exists %s_idx on %s (%s)", left_relation->alias_name, left_relation->name, left_idx.c_str());
+            //     indexes = lappend(indexes, create_index);
+            // }
+            // if (right_idx != ""){
+            //     TraceProvRelation *right_relation = (TraceProvRelation *)join_expr->right;
+            //     char *create_index = psprintf("create index if not exists %s_idx on %s (%s)", right_relation->alias_name, right_relation->name, right_idx.c_str());
+            //     indexes = lappend(indexes, create_index);
+            // }
+            return indexes;
+        }
+        elog(ERROR, "invalid node: %d", node->tag);
+        return NIL;
+    }
+
     static char *traceprov_relation_to_sql(TraceProvRelation *relation){
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
@@ -2269,6 +2339,9 @@ extern "C" {
             PERFORM_IF_USED((node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context)));
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
             
+            List *create_idx = NIL;
+            PERFORM_IF_USED((create_idx = traceprov_get_indexes(derived_node->node)));
+
             const auto evaluate_start = std::chrono::high_resolution_clock::now();
             TraceProvTopResult *node_result = traceprov_evaluate_node_top(derived_node->node, eval_context);
             const auto evaluate_end = std::chrono::high_resolution_clock::now();
@@ -2286,13 +2359,24 @@ extern "C" {
             // final_result_size += node_result->at(0)->data->size();
             // PRINT_ON_VALIDATE("Sample result: %s", get_sample_values(node_result));
 
+            std::string create_idx_str = "";
+            if (create_idx){
+                ListCell *cursor;
+                bool use_delimiter = false;
+                foreach(cursor, create_idx){
+                    if (use_delimiter) create_idx_str += ";";
+                    create_idx_str += std::string((char*)lfirst(cursor));
+                    use_delimiter = true;
+                }
+            }
             PERFORM_IF_USED(appendStringInfo(
                 &buf, 
-                "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\", \"evaluate_time\": \"%ld\"}",
+                "{\"idx\": %d, \"size\": %ld, \"width\": %ld, \"sql\": \"%s\", \"create_idx\": \"%s\", \"evaluate_time\": \"%ld\"}",
                 derived_node->layer_number,
                 node_result->result_count,
                 node_result->width,
                 node_sql,
+                create_idx_str.c_str(),
                 duration_time
             ));
             derived_node_map->insert({derived_node->layer_number, node_result});
