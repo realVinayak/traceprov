@@ -1,0 +1,929 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "1_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.01",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_0.01",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "5_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.01",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_0.01",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "10_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.01",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_0.01",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "50_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.01",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_0.01",
+                        "base": "traceprov.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_table",
+                                "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_drop_function",
+                                "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_create_function",
+                                "$ROOT/templates/traceprov_create_function.sql",
+                                true,
+                                false,
+                                true,
+                                [
+                                    {
+                                        "preprocessor_type": "ReplaceFILE",
+                                        "param": "traceprov_infer_set_path"
+                                    }
+                                ],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_materialize",
+                                "$ROOT/templates/traceprov_materialize.sql",
+                                true,
+                                false,
+                                true,
+                                [],
+                                false,
+                                false
+                            ],
+                            [
+                                "traceprov_infer_time",
+                                "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_infer_count",
+                                "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                true,
+                                false,
+                                true,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "/tmp/",
+        "port": "5460",
+        "user": "vinny",
+        "password": "vinny",
+        "database": "microbench_selectivity_10000"
+    },
+    "runparams": {
+        "repeat": 10,
+        "throwaway": 5,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "selectivity",
+    "call_options": [
+        "./",
+        [
+            [
+                "1_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.01",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_0.01",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "5_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.01",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_0.01",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "10_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.01",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_0.01",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "50_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.01",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_0.01",
+                            "traceprov.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_table",
+                                    "$INLINE-DROP TABLE IF EXISTS traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_drop_function",
+                                    "$INLINE-DROP FUNCTION IF EXISTS traceprov_infer_selectivity_bench;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_create_function",
+                                    "$ROOT/templates/traceprov_create_function.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [
+                                        {
+                                            "preprocessor_type": "ReplaceFILE",
+                                            "param": "traceprov_infer_set_path"
+                                        }
+                                    ],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_materialize",
+                                    "$ROOT/templates/traceprov_materialize.sql",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    false,
+                                    false
+                                ],
+                                [
+                                    "traceprov_infer_time",
+                                    "$INLINE-select * from traceprov_infer_time(1, 0, 0);",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_infer_count",
+                                    "$INLINE-select count(*) from traceprov_lineage_selectivity;",
+                                    true,
+                                    false,
+                                    true,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "/tmp/",
+            "5460",
+            "vinny",
+            "vinny",
+            "microbench_selectivity_10000"
+        ],
+        [
+            10,
+            5,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "libtraceprovmacos_traceprov_run",
+    "traceprov_infer_set_path": "libtraceprov_infermacos_traceprov_run"
+}
