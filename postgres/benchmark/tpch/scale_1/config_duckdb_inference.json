@@ -25,8 +25,8 @@
 		22
 	],
 	"validate": false,
-	"_subdirs": ["params_default"],
-        "subdirs": [
+	"subdirs": ["params_default"],
+        "_subdirs": [
 		"params_1",
 		"params_2",
 		"params_3",
