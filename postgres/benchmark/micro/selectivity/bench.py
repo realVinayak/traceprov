@@ -35,78 +35,78 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         preprocess=[replaces_selectivity],
                     ),
                 ),
-                Query(
-                    query_name=f"predicate_{mode}",
-                    spec=QuerySpec(
-                        base="gprom_join.sql",
-                        materialize="gprom_join.materialize.sql",
-                        key=f"gprom_join_selectivity_{selectivity}",
-                        preprocess=[replaces_selectivity],
-                        extras=[
-                            ExtraQuery(
-                                label="count",
-                                query=f"$INLINE-select count(*) from gprom_lineage;",
-                                runs_after_materialize=True,
-                                strict_run=True,
-                                skip_validation=True,
-                            )
-                        ],
-                    ),
-                ),
-                Query(
-                    query_name=f"predicate_{mode}",
-                    spec=QuerySpec(
-                        base="gprom_window.sql",
-                        materialize="gprom_window.materialize.sql",
-                        key=f"gprom_window_selectivity_{selectivity}",
-                        preprocess=[replaces_selectivity],
-                        extras=[
-                            ExtraQuery(
-                                label="count",
-                                query=f"$INLINE-select count(*) from gprom_lineage;",
-                                runs_after_materialize=True,
-                                strict_run=True,
-                                skip_validation=True,
-                            )
-                        ],
-                    ),
-                ),
-                Query(
-                    query_name=f"predicate_{mode}",
-                    spec=QuerySpec(
-                        base="gprom_join_heuristics.sql",
-                        materialize="gprom_join_heuristics.materialize.sql",
-                        key=f"gprom_join_heuristics_{selectivity}",
-                        preprocess=[replaces_selectivity],
-                        extras=[
-                            ExtraQuery(
-                                label="count",
-                                query=f"$INLINE-select count(*) from gprom_lineage;",
-                                runs_after_materialize=True,
-                                strict_run=True,
-                                skip_validation=True,
-                            )
-                        ],
-                    ),
-                ),
-                Query(
-                    query_name=f"predicate_{mode}",
-                    spec=QuerySpec(
-                        base="gprom_window_heuristics.sql",
-                        materialize="gprom_window_heuristics.materialize.sql",
-                        key=f"gprom_window_heuristics_{selectivity}",
-                        preprocess=[replaces_selectivity],
-                        extras=[
-                            ExtraQuery(
-                                label="count",
-                                query=f"$INLINE-select count(*) from gprom_lineage;",
-                                runs_after_materialize=True,
-                                strict_run=True,
-                                skip_validation=True,
-                            )
-                        ],
-                    ),
-                ),
+#                Query(
+#                    query_name=f"predicate_{mode}",
+#                    spec=QuerySpec(
+#                        base="gprom_join.sql",
+#                        materialize="gprom_join.materialize.sql",
+#                        key=f"gprom_join_selectivity_{selectivity}",
+#                        preprocess=[replaces_selectivity],
+#                        extras=[
+#                            ExtraQuery(
+#                                label="count",
+#                                query=f"$INLINE-select count(*) from gprom_lineage;",
+#                                runs_after_materialize=True,
+#                                strict_run=True,
+#                                skip_validation=True,
+#                            )
+#                        ],
+#                    ),
+#                ),
+#                Query(
+#                    query_name=f"predicate_{mode}",
+#                    spec=QuerySpec(
+#                        base="gprom_window.sql",
+#                        materialize="gprom_window.materialize.sql",
+#                        key=f"gprom_window_selectivity_{selectivity}",
+#                        preprocess=[replaces_selectivity],
+#                        extras=[
+#                            ExtraQuery(
+#                                label="count",
+#                                query=f"$INLINE-select count(*) from gprom_lineage;",
+#                                runs_after_materialize=True,
+#                                strict_run=True,
+#                                skip_validation=True,
+#                            )
+#                        ],
+#                    ),
+#                ),
+ #               Query(
+ #                   query_name=f"predicate_{mode}",
+ #                   spec=QuerySpec(
+ #                       base="gprom_join_heuristics.sql",
+ #                       materialize="gprom_join_heuristics.materialize.sql",
+ #                       key=f"gprom_join_heuristics_{selectivity}",
+ #                       preprocess=[replaces_selectivity],
+ #                       extras=[
+ #                           ExtraQuery(
+ #                               label="count",
+ #                               query=f"$INLINE-select count(*) from gprom_lineage;",
+ #                               runs_after_materialize=True,
+ #                               strict_run=True,
+ #                               skip_validation=True,
+ #                           )
+ #                       ],
+ #                   ),
+ #               ),
+ #               Query(
+ #                   query_name=f"predicate_{mode}",
+ #                   spec=QuerySpec(
+ #                       base="gprom_window_heuristics.sql",
+ #                       materialize="gprom_window_heuristics.materialize.sql",
+  #                      key=f"gprom_window_heuristics_{selectivity}",
+  #                      preprocess=[replaces_selectivity],
+ #                       extras=[
+ #                           ExtraQuery(
+ #                               label="count",
+ #                               query=f"$INLINE-select count(*) from gprom_lineage;",
+ #                               runs_after_materialize=True,
+ #                               strict_run=True,
+ #                               skip_validation=True,
+ #                           )
+ #                       ],
+ #                  ),
+ #               ),
                 Query(
                     query_name=f"predicate_{mode}",
                     spec=QuerySpec(
@@ -199,8 +199,8 @@ def main():
     print(parsed)
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
-    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
+    #dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
+    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
