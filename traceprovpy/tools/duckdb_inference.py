@@ -77,7 +77,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
         result_specs = json.loads(result[0][0])
 
         destination_dir = top_dir / "tmp/duckdb_inference/"
-        traceprov_assert_safe_run(f"sudo rm -rf {destination_dir.as_posix()}")
+        traceprov_assert_safe_run(f"rm -rf {destination_dir.as_posix()}")
         make_copy(pg_pack.connection_params, destination_dir.as_posix())
 
         duckdb_db_dir = destination_dir / "duck_inference.db"

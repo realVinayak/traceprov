@@ -9,9 +9,9 @@ import getpass
 copy_csv_func = (
     lambda data_dir, destination_dir: f"""
 #!/bin/bash
-sudo -s <<EOF
+# sudo -s <<EOF
 cp {data_dir}/traceprov/*.csv {destination_dir}
-EOF
+# EOF
 """
 )
 
@@ -34,6 +34,6 @@ def make_copy(connection_params: ConnectionParams, destination_dir: str):
 
     traceprov_assert_safe_run("chmod +x /tmp/prepare_for_duckdb.sh")
     traceprov_assert_safe_run("/tmp/prepare_for_duckdb.sh")
-    traceprov_assert_safe_run(
-        f"sudo chown -R {original_user} {destination_dir}"
-    )
+    #traceprov_assert_safe_run(
+    #    f"sudo chown -R {original_user} {destination_dir}"
+    #)
