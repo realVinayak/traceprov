@@ -1,0 +1,607 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "1_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            },
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_predicate_post_0.05",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "5_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            },
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_predicate_post_0.05",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "10_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            },
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_predicate_post_0.05",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                }
+            ]
+        },
+        {
+            "dir_name": "50_000_000",
+            "queries": [
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "base_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "traceprov_selectivity_0.05",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5"
+                            },
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "predicate_post",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_predicate_post_0.05",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "/tmp/",
+        "port": "5460",
+        "user": "vinny",
+        "password": "vinny",
+        "database": "microbench_selectivity_10000"
+    },
+    "runparams": {
+        "repeat": 10,
+        "throwaway": 5,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "selectivity",
+    "call_options": [
+        "./",
+        [
+            [
+                "1_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                },
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "DUCKDB_INFERENCE_predicate_post_0.05",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "5_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                },
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "DUCKDB_INFERENCE_predicate_post_0.05",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "10_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                },
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "DUCKDB_INFERENCE_predicate_post_0.05",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ]
+                ]
+            ],
+            [
+                "50_000_000",
+                [
+                    [
+                        "predicate_post",
+                        [
+                            "base_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "traceprov_selectivity_0.05",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5"
+                                },
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "predicate_post",
+                        [
+                            "DUCKDB_INFERENCE_predicate_post_0.05",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "/tmp/",
+            "5460",
+            "vinny",
+            "vinny",
+            "microbench_selectivity_10000"
+        ],
+        [
+            10,
+            5,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "libtraceprovmacos_duckdb_infer_analyze_index_thread_02",
+    "traceprov_infer_set_path": "libtraceprov_infermacos_duckdb_infer_analyze_index_thread_02",
+    "traceprov_rewriter_path": "librewritermacos_duckdb_infer_analyze_index_thread_02",
+    "sd_options": [
+        "/Users/uicdbgroup/vinny/git_experiments/traceprov/postgres/bld/bin/run_smokedduck_macos_duckdb_infer_analyze_index_thread_02",
+        2,
+        true
+    ]
+}
