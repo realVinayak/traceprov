@@ -108,17 +108,18 @@ class ReplaceFILE(Preprocessor):
 
 
 class ReplaceSelectivity(Preprocessor):
-    def __init__(self, selectivity: Any):
+    def __init__(self, selectivity: Any, clause: str = ":selectivity"):
         self.selectivity = str(selectivity)
+        self.clause = clause
 
     def preprocess(self, in_content: str) -> str:
-        return in_content.replace(":selectivity", self.selectivity)
+        return in_content.replace(self.clause, self.selectivity)
 
     def __hash__(self):
         return hash((self.__class__.__name__, self.selectivity))
 
     def __repr__(self):
-        return f"ReplaceSelectivity('{self.selectivity}')"
+        return f"ReplaceSelectivity('{self.clause}->{self.selectivity}')"
 
 
 class SmokedDuckOptions(NamedTuple):
