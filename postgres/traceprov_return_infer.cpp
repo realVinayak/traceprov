@@ -76,6 +76,12 @@ extern "C" {
         col_data->data = new std::vector<uint64>;
         return col_data;
     }
+
+    // this is fine, even within the same "scope", because they can be separated by {....}
+    #define TP_EVALUATE_START() const auto evaluate_start = std::chrono::high_resolution_clock::now()
+    #define TP_EVALUATE_END() const auto evaluate_end = std::chrono::high_resolution_clock::now()
+    // This is an expression, since callers may want to do something else with it (assign and then log and then push into some vectorksz)
+    #define TP_EVALUATE_DURATION() (std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count())
     
 
     static std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32 worker_count){
@@ -2501,5 +2507,70 @@ extern "C" {
         PG_RETURN_TEXT_P(cstring_to_text(spec));
     }
 
+    // Calls read_all_columns multiple times
+    // and reuturs json of time taken.
+    PG_FUNCTION_INFO_V1(traceprov_perf_read);
+    Datum traceprov_perf_read(PG_FUNCTION_ARGS){
+        const TraceProvLayerNumber input_layer_number = PG_GETARG_INT32(0);
+        const uint64 repeat = PG_GETARG_INT64(1);
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping shared context");
+        }
+
+        const auto worker_local_contexts = traceprov_get_local_contexts(context.worker_count);
+        // We really don't need more than 1.
+        if (worker_local_contexts->size() != 1)
+            elog(ERROR, "Got invalid worker local contexts..");
+
+        const auto worker_context = worker_local_contexts->at(0);
+        const auto layer = &worker_context->cached_layers[input_layer_number - 1];  
+        if (layer->layer_number != input_layer_number)
+            elog(ERROR, "Expected layer number to be set!");
+        
+
+        typedef struct ReadResult {
+            uint64 read_size;
+            uint64 time;
+            uint64 width;
+        } ReadResult;
+
+        auto read_record_spec = new std::vector<ReadResult>;
+        read_record_spec->reserve(repeat);
+
+        for (uint64 read_idx = 0; read_idx < repeat; read_idx++){
+            TP_EVALUATE_START();
+            auto all_records = read_all_columns(input_layer_number, worker_context, nullptr);
+            TP_EVALUATE_END();
+            read_record_spec->emplace_back(ReadResult{
+                .read_size = all_records->at(0)->data->size(),
+                .time = (uint64)TP_EVALUATE_DURATION(),
+                .width = all_records->size()
+                }
+            );
+            // NOTE: Temporarily disabled, to check against duckdb..
+            // for (auto column: *all_records){
+            //     // Delete all the column data (for efficieny reasons.)
+            //     delete column->data;
+            // }
+        }
+
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoString(&buf, "[");
+        for (uint64 read_idx = 0; read_idx < repeat; read_idx++){
+            if (read_idx > 0) appendStringInfoString(&buf, ",");
+            appendStringInfo(
+                &buf,
+                "{\"read_size\": %ld, \"time\": %ld, \"width\": %ld}",
+                read_record_spec->at(read_idx).read_size,
+                read_record_spec->at(read_idx).time,
+                read_record_spec->at(read_idx).width
+            );
+        }
+        appendStringInfoString(&buf, "]");
+        delete read_record_spec;
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+    }
 };
 

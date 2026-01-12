@@ -97,6 +97,7 @@ class QuerySpec(NamedTuple):
     materialize: str | None = None
     extras: list[ExtraQuery] = []
     preprocess: list[Preprocessor] = []
+    # random options.
     extra_options: dict = {}
 
     @staticmethod
