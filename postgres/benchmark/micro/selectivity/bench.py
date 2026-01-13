@@ -114,12 +114,12 @@ def make_directory(dir_name, mode, num_groups, selectivity):
                         key=f"traceprov_{selectivity}",
                         preprocess=[replaces_selectivity],
                         extras=[
-                            ExtraQuery(
-                                label="traceprov_sync_time",
-                                query=f"$INLINE-select * from traceprov_sync_time(0);",
-                                runs_after_base=True,
-                                strict_run=True,
-                            ),
+                            #ExtraQuery(
+                            #    label="traceprov_sync_time",
+                            #    query=f"$INLINE-select * from traceprov_sync_time(0);",
+                            #    runs_after_base=True,
+                            #    strict_run=True,
+                            #),
                             # ExtraQuery(
                             #     label="traceprov_get_tables_before",
                             #     query=f"$INLINE-SELECT table_name FROM information_schema.tables;",

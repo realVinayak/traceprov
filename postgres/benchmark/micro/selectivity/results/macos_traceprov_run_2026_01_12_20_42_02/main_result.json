@@ -1,0 +1,1635 @@
+{
+    "result": {
+        "1_000_000": {
+            "predicate_post": {
+                "base_selectivity_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.033205000000000005
+                        },
+                        {
+                            "explain_time": 0.033069
+                        },
+                        {
+                            "explain_time": 0.033141000000000004
+                        },
+                        {
+                            "explain_time": 0.033101
+                        },
+                        {
+                            "explain_time": 0.033094
+                        },
+                        {
+                            "explain_time": 0.033101
+                        },
+                        {
+                            "explain_time": 0.033972999999999996
+                        },
+                        {
+                            "explain_time": 0.036176
+                        },
+                        {
+                            "explain_time": 0.033216999999999997
+                        },
+                        {
+                            "explain_time": 0.033194
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.039805
+                        },
+                        {
+                            "explain_time": 0.039839
+                        },
+                        {
+                            "explain_time": 0.065115
+                        },
+                        {
+                            "explain_time": 0.039756
+                        },
+                        {
+                            "explain_time": 0.039782000000000005
+                        },
+                        {
+                            "explain_time": 0.039906
+                        },
+                        {
+                            "explain_time": 0.039829
+                        },
+                        {
+                            "explain_time": 0.039960999999999997
+                        },
+                        {
+                            "explain_time": 0.039820999999999995
+                        },
+                        {
+                            "explain_time": 0.03962799999999999
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": [
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.069549
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9609
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.06922400000000001
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9617
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.068908
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9402
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.069898
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9629
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.06938599999999999
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9597
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.069492
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9585
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.069303
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9710
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.06917100000000001
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9386
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.070533
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9372
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.069243
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        9791
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        500000
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "5_000_000": {
+            "predicate_post": {
+                "base_selectivity_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.095003
+                        },
+                        {
+                            "explain_time": 0.09484400000000001
+                        },
+                        {
+                            "explain_time": 0.094728
+                        },
+                        {
+                            "explain_time": 0.094822
+                        },
+                        {
+                            "explain_time": 0.09494600000000002
+                        },
+                        {
+                            "explain_time": 0.094906
+                        },
+                        {
+                            "explain_time": 0.094925
+                        },
+                        {
+                            "explain_time": 0.09498999999999999
+                        },
+                        {
+                            "explain_time": 0.094845
+                        },
+                        {
+                            "explain_time": 0.09482399999999999
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.111732
+                        },
+                        {
+                            "explain_time": 0.11284000000000001
+                        },
+                        {
+                            "explain_time": 0.114052
+                        },
+                        {
+                            "explain_time": 0.11210200000000001
+                        },
+                        {
+                            "explain_time": 0.111932
+                        },
+                        {
+                            "explain_time": 0.111773
+                        },
+                        {
+                            "explain_time": 0.123668
+                        },
+                        {
+                            "explain_time": 0.11212000000000001
+                        },
+                        {
+                            "explain_time": 0.11166
+                        },
+                        {
+                            "explain_time": 0.114253
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": [
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.33406100000000005
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        46052
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.33314399999999994
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        43642
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.33511199999999997
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        46791
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.332949
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        46202
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.332001
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        45417
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.331958
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        45979
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.333261
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        45060
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.332889
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        45341
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.33625800000000006
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        47023
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.34432999999999997
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        46560
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        2500000
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "10_000_000": {
+            "predicate_post": {
+                "base_selectivity_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.198472
+                        },
+                        {
+                            "explain_time": 0.19821200000000003
+                        },
+                        {
+                            "explain_time": 0.19993599999999997
+                        },
+                        {
+                            "explain_time": 0.198273
+                        },
+                        {
+                            "explain_time": 0.19878300000000002
+                        },
+                        {
+                            "explain_time": 0.19909100000000002
+                        },
+                        {
+                            "explain_time": 0.197015
+                        },
+                        {
+                            "explain_time": 0.198212
+                        },
+                        {
+                            "explain_time": 0.19775299999999998
+                        },
+                        {
+                            "explain_time": 0.198069
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.230202
+                        },
+                        {
+                            "explain_time": 0.227168
+                        },
+                        {
+                            "explain_time": 0.22736599999999998
+                        },
+                        {
+                            "explain_time": 0.232261
+                        },
+                        {
+                            "explain_time": 0.22864199999999998
+                        },
+                        {
+                            "explain_time": 0.227228
+                        },
+                        {
+                            "explain_time": 0.229329
+                        },
+                        {
+                            "explain_time": 0.22699599999999998
+                        },
+                        {
+                            "explain_time": 0.227512
+                        },
+                        {
+                            "explain_time": 0.227719
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": [
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.666501
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        90829
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.6645279999999999
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        89385
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.666553
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        92492
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.6705679999999999
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        90131
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.667717
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        90641
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.671766
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        90640
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.667515
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        90603
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.665954
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        89807
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.662584
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        89272
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 0.667725
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        111702
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        5000000
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "50_000_000": {
+            "predicate_post": {
+                "base_selectivity_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.658167
+                        },
+                        {
+                            "explain_time": 0.6590280000000001
+                        },
+                        {
+                            "explain_time": 0.657015
+                        },
+                        {
+                            "explain_time": 0.6580450000000001
+                        },
+                        {
+                            "explain_time": 0.659961
+                        },
+                        {
+                            "explain_time": 0.659456
+                        },
+                        {
+                            "explain_time": 0.659122
+                        },
+                        {
+                            "explain_time": 0.658452
+                        },
+                        {
+                            "explain_time": 0.660966
+                        },
+                        {
+                            "explain_time": 0.658644
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": []
+                },
+                "traceprov_50.0": {
+                    "base": [
+                        {
+                            "explain_time": 0.7823539999999999
+                        },
+                        {
+                            "explain_time": 0.783462
+                        },
+                        {
+                            "explain_time": 0.7844679999999999
+                        },
+                        {
+                            "explain_time": 0.784409
+                        },
+                        {
+                            "explain_time": 0.786142
+                        },
+                        {
+                            "explain_time": 0.784392
+                        },
+                        {
+                            "explain_time": 0.789346
+                        },
+                        {
+                            "explain_time": 0.784286
+                        },
+                        {
+                            "explain_time": 0.782998
+                        },
+                        {
+                            "explain_time": 0.783749
+                        }
+                    ],
+                    "materialize": [],
+                    "extras": [
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.269087
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        406150
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.264774
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        405739
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.237625
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        410721
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.237855
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        408259
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.284121
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        409224
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.264701
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        408436
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.267679
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        407274
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.261663
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        406868
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.265828
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        405908
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        },
+                        {
+                            "traceprov_drop_table": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_drop_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_create_function": {
+                                "timing": null,
+                                "captured": null
+                            },
+                            "traceprov_materialize": {
+                                "explain_time": 3.262571
+                            },
+                            "traceprov_infer_time": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        405158
+                                    ]
+                                ]
+                            },
+                            "traceprov_infer_count": {
+                                "timing": null,
+                                "captured": [
+                                    [
+                                        25000000
+                                    ]
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "time_taken": 124.51075779274106,
+    "db": "microbench_selectivity_10000",
+    "prefix": "macos_traceprov_run"
+}
