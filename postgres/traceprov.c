@@ -769,7 +769,8 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
         }
-        group_no = TRACEPROV_SET_BUCKET(absolute_group_number, bucket);
+        // Setting is combined here makes things simpler during inference.
+        group_no = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_BUCKET(absolute_group_number, bucket));
         reference_struct->is_combined = 1;
     }
 
@@ -1150,9 +1151,5 @@ Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
         PG_RETURN_NULL();
     }
     struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
-    int64 current_result = agg_context->group_cnt;
-    if (agg_context->is_combined){
-        current_result = TRACEPROV_SET_IS_COMBINED(agg_context->group_cnt);
-    }
-    PG_RETURN_INT64(current_result);
+    PG_RETURN_INT64(agg_context->group_cnt);
 }
