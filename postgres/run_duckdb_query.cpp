@@ -11,6 +11,10 @@
 #include <vector>
 #include "traceprov_infer.hpp"
 
+// whatever
+#define TP_DUCKDB_INCLUDED
+#include "traceprov_duckdb_infer.cpp"
+
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
 #define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
@@ -49,6 +53,8 @@ struct Options {
     std::string time_out_path;
     // via --idx_scan_percent
     std::string index_scan_percentage;
+    // via --dry_run
+    bool dry_run;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -65,7 +71,8 @@ struct Options parse_args(int argc, char **argv){
         .repeat = 1,
         .settings_out_path = "",
         .time_out_path = "",
-        .index_scan_percentage = ""
+        .index_scan_percentage = "",
+        .dry_run = false,
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -100,6 +107,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--idx_scan_percent")){
             options.index_scan_percentage = std::string(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--dry_run")){
+            options.dry_run = true;
             continue;
         }
 
@@ -315,7 +325,13 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
+    auto function = setup_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
+    std::cout << "ran register successfully!" << std::endl;
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
+
+    if (options.dry_run)
+        return 0;
 
     char thread_set_query[256] = {0};
     sprintf(thread_set_query, "SET threads=%d;", options.num_threads);

@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <fstream>
+#include "traceprov_infer_essentials.hpp"
 
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
@@ -41,7 +42,7 @@ extern "C" {
     static void traceprov_dump_data_to_csv(TraceProvData *data, char *file_name, bool include_headers = false);
     uint64 traceprov_get_node_column_count(TraceProvNode *node);
     // Converts the node to SQL.
-    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvParseContext *context);
+    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context);
 
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
@@ -109,7 +110,14 @@ extern "C" {
     #define TP_EVALUATE_END() const auto evaluate_end = std::chrono::high_resolution_clock::now()
     // This is an expression, since callers may want to do something else with it (assign and then log and then push into some vectorksz)
     #define TP_EVALUATE_DURATION() (std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count())
-    
+
+    static TraceProvRelation* get_relation_from_join(TraceProvJoinExpr *join_exprn, bool right=true){
+        TraceProvNode *node = right ? join_exprn->right : join_exprn->left;
+        if (node->tag != T_TP_RELATION)
+            elog(ERROR, "Expected to always be a relation!");
+        TraceProvRelation *relation = (TraceProvRelation *)node;
+        return relation;
+    }
 
     static std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32 worker_count){
         auto worker_local_contexts = new std::vector<struct local_context *>;
@@ -879,6 +887,13 @@ extern "C" {
         PG_RETURN_TEXT_P(cstring_to_text(final_parsed_back));
     }
 
+    TraceProvRelationArgs *make_relation_args(uint64_t worker_id, uint64_t layer_number){
+        auto rel_args = palloc0_object(TraceProvRelationArgs);
+        rel_args->worker_id = worker_id;
+        rel_args->layer_number = layer_number;
+        return rel_args;
+    }
+
     TraceProvRelation *make_traceprov_relation(TraceProvData *data, char *name){
         if (data->size() == 0)
             elog(ERROR, "Expected to have at least 1 column!");
@@ -886,6 +901,7 @@ extern "C" {
         tp_rel->tag = T_TP_RELATION;
         tp_rel->data = data;
         tp_rel->name = name;
+        tp_rel->rel_args = NULL;
         PRINT_ON_VALIDATE("REL: %s, %ld;", name, data->at(0)->data->size());
         return tp_rel;
     }
@@ -2154,12 +2170,18 @@ extern "C" {
         return NIL;
     }
 
-    static char *traceprov_relation_to_sql(TraceProvRelation *relation){
+    static char *traceprov_relation_to_sql(TraceProvRelation *relation, TraceProvToSQLContext context){
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
         appendStringInfoString(&sql_repr, "SELECT ");
         appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size(), true));
-        appendStringInfo(&sql_repr, " FROM %s", relation->name);
+        if (context.use_table_def){
+            if (relation->rel_args == NULL)
+                elog(INFO, "For table defs, expected the rel args to be filled!");
+            appendStringInfo(&sql_repr, " FROM traceprov_read_worker_layer(%ld::bigint, %ld::bigint)", relation->rel_args->worker_id, relation->rel_args->layer_number);
+        }else{
+            appendStringInfo(&sql_repr, " FROM %s", relation->name);
+        }
         return sql_repr.data;
     }
 
@@ -2172,7 +2194,7 @@ extern "C" {
         return alias_repr.data;
     }
 
-    static char *traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvParseContext *context){
+    static char *traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvToSQLContext context){
         char *left_node_raw_sql = traceprov_node_to_sql(join_expr->left, context);
         char *right_node_raw_sql = traceprov_node_to_sql(join_expr->right, context);
         char *left_alias = join_expr->left->alias_name;
@@ -2259,7 +2281,7 @@ extern "C" {
         return sql_repr.data;
     }
 
-    static char *traceprov_append_to_sql(TraceProvAppend *append, TraceProvParseContext *context){
+    static char *traceprov_append_to_sql(TraceProvAppend *append, TraceProvToSQLContext context){
         if (list_length(append->nodes) == 1){
             TraceProvNode *single_node =  (TraceProvNode*)list_nth(append->nodes, 0);
             char *node_sql = traceprov_node_to_sql(single_node, context);
@@ -2268,7 +2290,7 @@ extern "C" {
             append->alias_name = single_node->alias_name;
             return node_sql;
         }
-        append->alias_name = tp_parse_get_unique_alias(context);
+        append->alias_name = tp_parse_get_unique_alias(context.context);
         StringInfoData append_repr;
         initStringInfo(&append_repr);
         ListCell *node_cursor;
@@ -2282,13 +2304,13 @@ extern "C" {
         return append_repr.data;
     }
 
-    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvParseContext *context){
+    static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
         if (node->tag == T_TP_RELATION){
-            node->alias_name = tp_parse_get_unique_alias(context);
-            return traceprov_relation_to_sql((TraceProvRelation *)node);
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_relation_to_sql((TraceProvRelation *)node, context);
         }
         if (node->tag == T_TP_JOIN){
-            node->alias_name = tp_parse_get_unique_alias(context);
+            node->alias_name = tp_parse_get_unique_alias(context.context);
             return traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
         }
         if (node->tag == T_TP_APPEND){
@@ -2402,7 +2424,10 @@ extern "C" {
             }
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE: %s", traceprov_node_to_string(derived_node->node));
             char *node_sql = NULL;
-            PERFORM_IF_USED((node_sql = traceprov_node_to_sql(derived_node->node, parsed_back_context)));
+            PERFORM_IF_USED((node_sql = traceprov_node_to_sql(derived_node->node, TraceProvToSQLContext{
+                .context = parsed_back_context,
+                .use_table_def = false
+            })));
             PRINT_ON_VALIDATE("TRACEPROV_EXPRN_PRE_EVALUATE_SQL: %s", node_sql);
             
             List *create_idx = NIL;
@@ -2924,6 +2949,9 @@ extern "C" {
                 "intermediate_join",
                 reference_match_idx
             );
+
+            get_relation_from_join(join_exprn)->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+
             join_exprn->is_left_star = true;
             current_tree->children->push_back(derive_on_node(
                 (TraceProvNode*)join_exprn, 
@@ -2957,7 +2985,7 @@ extern "C" {
                 combine_logs,
                 psprintf("combined_entry")
             );
-
+            combine_relation->rel_args = make_relation_args(leader_worker_context->worker_id, combine_layer_number);
             // Need to:
             // 1. Join the combine logs to the previous log.
             // 2. Join the combine logs (in an union) to all the local worker logs.
@@ -2991,6 +3019,7 @@ extern "C" {
                 auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr);
                 if (base_logs == nullptr) continue;
                 auto base_log_relation = make_traceprov_relation(base_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
+                base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
                 TraceProvJoinExpr *base_join_exprn = make_traceprov_join_from_rel(
                     reference_node, 
                     (TraceProvNode *)base_log_relation,
@@ -3257,6 +3286,7 @@ extern "C" {
                 current_layer_data,
                 psprintf("log_read_to_append_%s",  tp_parse_get_unique_alias(parse_context))
             );
+            relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
             nodes = lappend(nodes, relation);
         }
         return make_traceprov_append(nodes, false);
@@ -3295,6 +3325,7 @@ extern "C" {
             );
             if (!traceprov_use_top_level_log){
                 TraceProvRelation *top_level_log_relation = make_traceprov_relation(current_layer_data, psprintf("top_level_%s", tp_parse_get_unique_alias(parsed_back_context)));
+                top_level_log_relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
                 current_tree->children->push_back(
                     derive_on_node(
                         (TraceProvNode *)top_level_log_relation,
@@ -3426,7 +3457,7 @@ extern "C" {
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
             TraceProvNode *node = child.second;
-            char *sql = traceprov_node_to_sql(node, parsed_back_context);
+            char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
             TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
             eval_context->should_dump = false;
             TraceProvData *data = traceprov_evaluate_node(node, eval_context);
