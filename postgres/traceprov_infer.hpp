@@ -37,7 +37,10 @@ typedef struct TraceProvTopResult {
     uint64 result_count;
 } TraceProvTopResult;
 
-typedef std::vector<std::pair<TraceProvColumn*, TraceProvColumn*>*> TraceProvJoinConditions;
+typedef std::pair<TraceProvColumn*, TraceProvColumn*> TraceProvJoinPair;
+typedef std::pair<TraceProvColumn*, uint64> TraceProvConstJoinPair;
+typedef std::vector<TraceProvJoinPair*> TraceProvJoinConditions;
+typedef std::vector<TraceProvConstJoinPair*> TraceProvConstJoinPairs;
 typedef std::vector<uint64> TraceProvOffset;
 
 typedef struct TraceProvNode {
@@ -60,6 +63,10 @@ typedef struct TraceProvJoinExpr {
     TraceProvNode *right;
     // The join condition.
     TraceProvJoinConditions *join_condition;
+    // The const join conditions where not supported initially.
+    // This makes everything else before "just" work
+    // \_ .. _/
+    TraceProvConstJoinPairs *const_join_condition;
     std::vector<TraceProvColumn*> *output_columns;
     TraceProvData *result;
     bool is_left_star;
@@ -93,5 +100,34 @@ typedef struct TraceProvEvaluateNodeContext {
 } TraceProvEvaluateNodeContext;
 
 typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
+
+// This gets used to determine whether we're done processing everything we need for a sublink.
+// It is possible that multiple paths exist to a sublink. So, that's why each graph gets a map to sublink.
+typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
+
+typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
+// Just so they can be processed together
+typedef struct TraceProvRecursePack {
+    const TraceProvDepthMap *depth_map;
+    const uint32 level;
+    // If the level for a sublink has not been reached,
+    // the pending are stored in pending sublinks.
+    TraceProvPendingSublinks *pending_sublinks;
+} TraceProvRecursePack;
+
+// the abstract tree for join computation.
+// Only the leaf nodes are allowed to have a valid node(s)
+// Techncally, it can be posible that we represent multiple nodes
+// as separate children but that gets unnecessarily verbose in places.
+// Everything that has the same path (starting at the root) gets "folded" into
+// union all.
+// This is a technically a graph (because the layer number can get repeated)
+typedef struct TraceProvInferAbstractTree {
+    TraceProvLayerNumber layer_number;
+    std::vector<TraceProvInferAbstractTree *> *children;
+    std::vector<TraceProvNode *> *nodes;
+} TraceProvInferAbstractTree;
+
+
 
 #endif

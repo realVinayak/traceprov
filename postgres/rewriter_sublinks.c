@@ -65,8 +65,13 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             if (list_length(correlated_targets) == 0) continue;
             ListCell *correlated_var_cursor;
 
+            Bitmapset *added_correlated_varnos = NULL;
+
             foreach(correlated_var_cursor, correlated_targets){
                 const Var *correlated_var = (Var *)lfirst(correlated_var_cursor);
+                if (bms_is_member(correlated_var->varno, added_correlated_varnos)) continue;
+                // If tiis table was present before, don't bother addinng it again.. 
+                added_correlated_varnos = bms_add_member(added_correlated_varnos, correlated_var->varno);
                 List *provenance_targets = list_nth(provenance_targets_per_rte, correlated_var->varno - 1);
                 ListCell *provenance_target_to_add;
                 correlated_provenance_targets = list_concat(correlated_provenance_targets, provenance_targets);

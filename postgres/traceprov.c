@@ -756,7 +756,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     uint8 bucket = 0;
 
-    int group_no = 0;
+    uint64 group_no = 0;
     const bool is_init = needs_logging_reference;
     if (!needs_logging_reference){
         group_no = reference_struct->group_cnt;
@@ -1151,5 +1151,6 @@ Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
         PG_RETURN_NULL();
     }
     struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+
     PG_RETURN_INT64(agg_context->group_cnt);
 }
