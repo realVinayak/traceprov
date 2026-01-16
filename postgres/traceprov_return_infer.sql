@@ -89,3 +89,7 @@ OR REPLACE FUNCTION traceprov_get_sql_derivation () RETURNS text AS '$libdir/__F
 CREATE
 OR REPLACE FUNCTION traceprov_perf_read (INT, BIGINT) RETURNS text AS '$libdir/__FILE__',
 'traceprov_perf_read' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_perform_generic_derivation (INT, BIGINT) RETURNS text AS '$libdir/__FILE__',
+'traceprov_perform_generic_derivation' LANGUAGE C STRICT PARALLEL SAFE;
