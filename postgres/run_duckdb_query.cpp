@@ -11,10 +11,6 @@
 #include <vector>
 #include "traceprov_infer.hpp"
 
-// whatever
-#define TP_DUCKDB_INCLUDED
-#include "traceprov_duckdb_infer.cpp"
-
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
 #define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
@@ -325,9 +321,9 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
-    auto function = setup_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
-    std::cout << "ran register successfully!" << std::endl;
+    // auto function = setup_func();
+    // DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
+    // std::cout << "ran register successfully!" << std::endl;
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
 
     if (options.dry_run)

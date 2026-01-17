@@ -3,7 +3,7 @@
 #include <vector>
 #include "traceprov_parse_context.h"
 #include <unordered_map>
-#include "traceprov_infer_essentials.hpp"
+#include "traceprov_infer_essentials.h"
 
 // There are two versions because in some (rare-ish) cases multiple keys form the primary key.
 // Usually, that won't happen, so having a separate map is useful to not construct redundant single element vectors
@@ -135,5 +135,8 @@ typedef struct TraceProvToSQLContext {
     bool use_table_def;
 } TraceProvToSQLContext;
 
+extern "C" {
+    TraceProvData *traceprov_perform_duckdb_inference(char *generated_sql);
+}
 
 #endif

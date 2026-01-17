@@ -13,7 +13,8 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <fstream>
-#include "traceprov_infer_essentials.hpp"
+#include "traceprov_infer_essentials.h"
+#include "traceprov_ext_utils.hpp"
 
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
@@ -47,7 +48,8 @@ extern "C" {
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
         const struct local_context *local_context,
-        const TraceProvDependency *dependency
+        const TraceProvDependency *dependency,
+        bool emulate_read=false
     );
 
     static TraceProvColumnData *traceprov_make_empty_column();
@@ -117,108 +119,6 @@ extern "C" {
             elog(ERROR, "Expected to always be a relation!");
         TraceProvRelation *relation = (TraceProvRelation *)node;
         return relation;
-    }
-
-    static std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32 worker_count){
-        auto worker_local_contexts = new std::vector<struct local_context *>;
-        for (uint8 worker_id = 0; worker_id < worker_count; worker_id++){
-            int fd = open(psprintf(TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1), O_RDONLY);
-            if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
-            void *ptr = mmap(
-                NULL,
-                sizeof(struct local_context),
-                PROT_READ,
-                MAP_SHARED,
-                fd,
-                0
-            );
-            if (ptr == MAP_FAILED){
-                elog(ERROR, "Error mmaping the layer file!");
-            }
-            struct local_context *worker_local_context = (struct local_context *)ptr;
-            worker_local_contexts->push_back(worker_local_context);
-        }
-        return worker_local_contexts;
-    }
-
-    int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size){
-        if (unlikely(worker_id == 0)){
-            elog(ERROR, "Didn't expect to ever be called for worker_id == 0");
-        }
-        char *file_name = get_bi_injected_str(TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, worker_id, NULL);
-        if (file_name == NULL) return 1;
-        int fd = open(file_name, O_RDONLY);
-        if (fd < 0) {
-            PRINT_ON_DEBUG("Error opening the group layer file");
-            return 1;
-        }
-        void *temp_ptr = mmap(
-            NULL,
-            file_size * TRACEPROV_PAGE_SIZE,
-            PROT_READ,
-            MAP_SHARED,
-            fd,
-            0
-        );
-
-        if (temp_ptr == MAP_FAILED){
-            PRINT_ON_DEBUG("Error mmaping group layer file");
-            return 1;
-        }
-        close(fd);
-        *ptr = temp_ptr;
-        return 0;
-    }
-
-    int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
-        const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
-        int rc = 0;
-        struct traceprov_shared_context *temp_ptr;
-        char *shared_context_filename = (char*)malloc(size_shared_context_filename);
-        if (shared_context_filename == NULL){
-            elog(ERROR, "Couldn't allocate memory to hold shared context file");
-            return 1;
-        }
-        memset(shared_context_filename, 0, size_shared_context_filename);
-        sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
-
-        int shared_context_fd = open(shared_context_filename, O_RDONLY);
-        if (shared_context_fd < 0){
-            PRINT_ON_DEBUG("Error opening the scratch file");
-            goto exit_map;
-        }
-
-        temp_ptr = (struct traceprov_shared_context *)mmap(
-            NULL,
-            TRACEPROV_SHARED_CONTEXT_SIZE,
-            PROT_READ,
-            MAP_SHARED,
-            shared_context_fd,
-            0
-        );
-
-        if (temp_ptr == MAP_FAILED){
-            PRINT_ON_DEBUG("Error mapping the scratch file");
-            goto exit_map;
-        }
-
-        PRINT_ON_DEBUG("Map shared context succesful!");
-
-        memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
-
-    exit_map:
-        if (shared_context_fd > 0) close(shared_context_fd);
-        if (shared_context_filename) free(shared_context_filename);
-        return rc;
-    }
-
-    void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
-        const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
-        assert(gap >= 0);
-        // Now, figure out what the last mapped region will have been (or the starting address of it.)
-        const uint64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
-        void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
-        return final_row;
     }
 
     struct infer_result {
@@ -1289,7 +1189,8 @@ extern "C" {
     // Doesn't go into rows.
     static std::vector<std::vector<uint64> *> *read_all_columns_simple(
         const struct traceprov_aggregate_layer *current_layer,
-        const struct local_context *local_context
+        const struct local_context *local_context,
+        bool emulate_read
     ){
         const uint8 worker_id = local_context->worker_id;
         void *log_ptr = NULL;
@@ -1308,6 +1209,8 @@ extern "C" {
             current_worker_logs->push_back(data_vec);
         }
 
+        if (emulate_read)
+            return current_worker_logs;
 
         while (log_ptr < final_log_ptr){
             log_ptr = (void *)((char *)log_ptr + layer_record_padding);
@@ -1324,18 +1227,20 @@ extern "C" {
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
         const struct local_context *local_context,
-        const TraceProvDependency *dependency
+        const TraceProvDependency *dependency,
+        bool emulate_read
     ){
         // const auto evaluate_start = std::chrono::high_resolution_clock::now();
         const struct traceprov_aggregate_layer *current_layer = &local_context->cached_layers[layer_number - 1];
         // In this case, the layer wasn't set.
         if (current_layer->layer_number == 0) return nullptr;
-        std::vector<TraceProvOffset *> *data = read_all_columns_simple(current_layer, local_context);
+        std::vector<TraceProvOffset *> *data = read_all_columns_simple(current_layer, local_context, emulate_read);
 
         if (current_layer->rows_layer_number){
             auto row_data = read_all_columns_simple(
                 &local_context->cached_layers[current_layer->rows_layer_number - 1],
-                local_context
+                local_context,
+                emulate_read
             );
             for (auto second: *row_data){
                 data->push_back(second);
@@ -2178,7 +2083,7 @@ extern "C" {
         if (context.use_table_def){
             if (relation->rel_args == NULL)
                 elog(INFO, "For table defs, expected the rel args to be filled!");
-            appendStringInfo(&sql_repr, " FROM traceprov_read_worker_layer(%ld::bigint, %ld::bigint)", relation->rel_args->worker_id, relation->rel_args->layer_number);
+            appendStringInfo(&sql_repr, " FROM traceprov_read_worker_layer(%ld::bigint, %ld::bigint) AS %s", relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name);
         }else{
             appendStringInfo(&sql_repr, " FROM %s", relation->name);
         }
@@ -2940,7 +2845,7 @@ extern "C" {
         // we still need to read data to make base relations out of it.
         if (!aggregate_was_split){
             // The simple case.
-            auto self_logs = read_all_columns(layer_number_to_search, current_local_context, nullptr);
+            auto self_logs = read_all_columns(layer_number_to_search, current_local_context, nullptr, true);
             if (self_logs == nullptr) return current_tree;
             TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
                 self_logs,
@@ -2980,7 +2885,7 @@ extern "C" {
 
             auto leader_worker_context = worker_local_contexts->at(leader_layer_pair.first - 1);
             TraceProvLayerNumber combine_layer_number = leader_layer_pair.second->combined_aggregate_layer_number;
-            auto combine_logs = read_all_columns(combine_layer_number, leader_worker_context, nullptr);
+            auto combine_logs = read_all_columns(combine_layer_number, leader_worker_context, nullptr, true);
             TraceProvRelation *combine_relation = make_traceprov_relation(
                 combine_logs,
                 psprintf("combined_entry")
@@ -3016,7 +2921,7 @@ extern "C" {
 
             for (auto worker_local_pair: *layers_across_workers){
                 const uint8 worker_id = worker_local_pair.first;
-                auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr);
+                auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr, true);
                 if (base_logs == nullptr) continue;
                 auto base_log_relation = make_traceprov_relation(base_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
                 base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
@@ -3280,7 +3185,8 @@ extern "C" {
             TraceProvData *current_layer_data = read_all_columns(
                 agg_layer->layer_number,
                 worker_local_contexts->at(worker_id - 1),
-                nullptr
+                nullptr,
+                true
             );
             TraceProvRelation *relation = make_traceprov_relation(
                 current_layer_data,
@@ -3321,7 +3227,8 @@ extern "C" {
             TraceProvData *current_layer_data = read_all_columns(
                 agg_layer->layer_number,
                 worker_local_contexts->at(worker_id - 1),
-                nullptr
+                nullptr,
+                !traceprov_use_top_level_log
             );
             if (!traceprov_use_top_level_log){
                 TraceProvRelation *top_level_log_relation = make_traceprov_relation(current_layer_data, psprintf("top_level_%s", tp_parse_get_unique_alias(parsed_back_context)));
@@ -3382,6 +3289,7 @@ extern "C" {
         }
         return current_tree;
     }
+
 
     PG_FUNCTION_INFO_V1(traceprov_perform_generic_derivation);
 
@@ -3451,22 +3359,42 @@ extern "C" {
 
 
         auto result_map = new TraceProvResultMap;
+        #ifdef TRACEPROV_BUILD_WITH_DUCKDB
+        const bool use_duckdb = true;
+        #else
+        const bool use_duckdb = false;
+        #endif
+        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
 
         flattenTraceProvInferAbstractTree(top_tree, result_map, parsed_back_context);
-
+        auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvTopResult *>;
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
             TraceProvNode *node = child.second;
             char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
-            TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
-            eval_context->should_dump = false;
-            TraceProvData *data = traceprov_evaluate_node(node, eval_context);
+            TraceProvData *data = nullptr;
+            if (use_duckdb){
+                elog(INFO, "Used duckdb!");
+                data = traceprov_perform_duckdb_inference(sql);
+            }else{
+                TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
+                eval_context->should_dump = false;
+                data = traceprov_evaluate_node(node, eval_context);
+            }
+
             elog(INFO, "Gen SQL: %s", sql);
             elog(INFO, "Size %ld", data->at(0)->data->size());
             elog(INFO, "Width %ld", data->size());
-            elog(INFO, "String: %s", traceprov_node_to_string(node));
+            auto top_result = new TraceProvTopResult;
+            top_result->pdata = list_make1(data);
+            top_result->width = data->size();
+            derived_node_map->insert({child.first, top_result});
         }
-        PG_RETURN_TEXT_P(cstring_to_text("OK"));
+        if (derived_node_map->find(result_to_return) == derived_node_map->end())
+            elog(ERROR, "Didn't find the input result idx!");
+        TraceProvTopResult *selected_result = derived_node_map->at(result_to_return);
+        traceprov_materialize_derived_result(fcinfo, selected_result);
+        return (Datum) 0;
     }
 };
 
