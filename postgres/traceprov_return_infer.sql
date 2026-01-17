@@ -14,6 +14,10 @@ DROP FUNCTION IF EXISTS traceprov_perform_derivation (BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_perform_derivation (BIGINT, BOOLEAN);
 
+DROP FUNCTION IF EXISTS traceprov_perform_generic_derivation (INT, BIGINT);
+
+DROP FUNCTION IF EXISTS traceprov_perform_generic_derivation (BIGINT);
+
 DROP FUNCTION IF EXISTS traceprov_dump_derivation ();
 
 DROP FUNCTION IF EXISTS traceprov_derivation_spec ();
@@ -91,5 +95,5 @@ OR REPLACE FUNCTION traceprov_perf_read (INT, BIGINT) RETURNS text AS '$libdir/_
 'traceprov_perf_read' LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE
-OR REPLACE FUNCTION traceprov_perform_generic_derivation (INT, BIGINT) RETURNS text AS '$libdir/__FILE__',
+OR REPLACE FUNCTION traceprov_perform_generic_derivation (BIGINT) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_perform_generic_derivation' LANGUAGE C STRICT PARALLEL SAFE;
