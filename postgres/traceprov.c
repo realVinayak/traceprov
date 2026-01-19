@@ -22,10 +22,12 @@ PG_MODULE_MAGIC;
 
 int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
 int grow_layer_file(struct traceprov_aggregate_layer *);
+void reinit_traceprov_infer_state();
+uint32 traceprov_hashint8(int64);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
 
-static struct current_context traceprov_current = {
+struct current_context traceprov_current = {
     .my_worker_id =                 0,
     .traceprov_shared_context_fd =  -1,
     .shared_context =               NULL,

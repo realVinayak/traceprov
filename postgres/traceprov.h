@@ -222,8 +222,6 @@ struct traceprov_agg_context {
     uint32 layer_number;
 };
 
-uint32 traceprov_hashint8(int64);
-
 // Whenever this condition fails, also need to update the function definition.
 static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
@@ -251,6 +249,4 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64)*layer->num_pk_records))
-
-void reinit_traceprov_infer_state();
 #endif
