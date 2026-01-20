@@ -61,7 +61,7 @@ static_assert(0, "page size not defined!");
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
-#define DEBUG_MODE 1
+#define DEBUG_MODE 0
 #define VALIDATE_MODE 0
 
 // Forward definitions.
@@ -218,7 +218,7 @@ struct traceprov_agg_context {
     // Whether this aggregation was combined.
     uint8_t is_combined;
     // Group count for this group.
-    int64_t group_cnt;
+    uint64_t group_cnt;
     // Worker on which this group was processed.
     uint8_t worker_id;
     // Layer number for this group.
@@ -255,5 +255,9 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
+duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args);
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 #endif

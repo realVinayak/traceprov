@@ -246,6 +246,9 @@ extern "C" {
             DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_LINEAGE, "enable lineage");
             DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
         }
+
+        DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+
         // Need to use both, the pending and the streaming API.
         duckdb_prepared_statement stmt;
         duckdb_result final_result;
@@ -342,12 +345,16 @@ extern "C" {
 
         const uint32_t num_args = 7;
         duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
+        duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args);
         for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
             DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
-            std::cout << "ran register successfully!" << std::endl;
+            std::cout << "ran aggregate register successfully!" << std::endl;
+            DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, log_funcs[farg_idx]));
+            std::cout << "ran top-level log register successfully!" << std::endl;
         }
         duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
+        
         // auto function = setup_func();
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
         // std::cout << "ran register successfully!" << std::endl;
