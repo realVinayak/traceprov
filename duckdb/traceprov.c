@@ -133,6 +133,8 @@ void traceprov_combine(
     for (idx_t idx = 0; idx < count; idx++){
         if (target_states[idx]->is_combined && source_states[idx]->is_combined)
             elog(ERROR, "Didn't expect both of the states to be combined...");
+        if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0)
+            memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
         // Makes sense to just do this one inline (in a row-based fashion for now...)
         uint64_t ref_group_number = 0;
         // not touching this
@@ -192,7 +194,7 @@ duckdb_aggregate_function *traceprov_create_funcs(const uint32_t num_args){
     for (uint32_t idx = 0; idx < num_args; idx++){
         char func_name[256] = {0};
         sprintf(func_name, "traceprov_agg_key_parallel_offset_%d", idx + 1);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
         duckdb_aggregate_function func = (duckdb_aggregate_function) duckdb_create_aggregate_function();
         PRINT_ON_DEBUG("name: %s", func_name);
         duckdb_aggregate_function_set_name(func, func_name);
@@ -251,12 +253,39 @@ void traceprov_log(duckdb_function_info, duckdb_data_chunk input, duckdb_vector 
     if ((initialize_local_and_layer(layer_number, num_cols - 1, 0, true))){
         elog(ERROR, "Error setting up local or layer!");
     }
+
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
         uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
+        // We need to do simple logging now...
+        struct traceprov_aggregate_layer *rows_layer = get_layer(layer_number);
+        TRACEPROV_GROW_IF_TRUE(rows_layer, ((rows_layer->current_row + sizeof(uint64_t)*num_rows) > rows_layer->end_of_memory_zone));
+        memcpy(rows_layer->current_row, col_data, sizeof(uint64_t)*num_rows);
+        rows_layer->current_row += sizeof(uint64_t)*num_rows;
     }
+    memset(((bool*)duckdb_vector_get_data(output)), true, sizeof(bool)*num_rows);
 }
 
-duckdb_scalar_function traceprov_create_log_function(const uint32_t num_args){
-
+duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args){
+    duckdb_scalar_function *funcs = malloc(sizeof(duckdb_scalar_function) * num_args);
+    for (uint32_t idx = 0; idx < num_args; idx++){
+        char func_name[256] = {0};
+        sprintf(func_name, "traceprov_log_entry_%d", idx + 1);
+        duckdb_scalar_function func = duckdb_create_scalar_function();
+        duckdb_scalar_function_set_name(func, func_name);
+        duckdb_logical_type ret_type = duckdb_create_logical_type(DUCKDB_TYPE_BOOLEAN);
+        duckdb_scalar_function_set_return_type(func, ret_type);
+        duckdb_logical_type first_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+        duckdb_scalar_function_add_parameter(func, first_type);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        for (uint32_t arg_idx = 0; arg_idx < idx + 1; arg_idx++){
+            duckdb_scalar_function_add_parameter(func, type);
+        }
+        duckdb_destroy_logical_type(&first_type);
+        duckdb_destroy_logical_type(&type);
+        duckdb_destroy_logical_type(&ret_type);
+        duckdb_scalar_function_set_function(func, traceprov_log);
+        funcs[idx] = func;
+    }
+    return funcs;
 }
