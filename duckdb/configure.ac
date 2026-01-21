@@ -3,8 +3,8 @@ AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CC
 AC_PROG_CXX
 LT_INIT
-CFLAGS="-Wall -g -O3"
-CXXFLAGS="-Wall -g -std=c++11 -O3"
+CFLAGS="-Wall -g -O0"
+CXXFLAGS="-Wall -g -std=c++11 -O0"
 AC_CONFIG_FILES([Makefile])
 TRACEPROV_PAGE_SIZE="$(gcc -g get_page_size.c -o get_page_size.o && ./get_page_size.o)"
 TRACEPROV_CUR_DIR="$(pwd)"
