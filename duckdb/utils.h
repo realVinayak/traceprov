@@ -12,6 +12,7 @@ void portable_elog(int level);
 #ifndef elog
 #define elog(level, ...) do { \
     printf(__VA_ARGS__); \
+    printf("%s", "\n"); \
     fflush(stdout); \
     portable_elog(level); \
 } while(0); \
@@ -41,3 +42,6 @@ int initialize_layer_file(
 
 extern struct current_context traceprov_current;
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer);
+int map_traceprov_shared_context(struct traceprov_shared_context *ptr);
+int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size);
+void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer);

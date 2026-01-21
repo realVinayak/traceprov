@@ -247,7 +247,7 @@ extern "C" {
             DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
         }
 
-        DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        // DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
 
         // Need to use both, the pending and the streaming API.
         duckdb_prepared_statement stmt;
@@ -327,6 +327,9 @@ extern "C" {
         }
 
     }
+
+    duckdb_table_function traceprov_create_table_func();
+
     int main(int argc, char **argv){
         struct Options options = parse_args(argc, argv);
 
@@ -345,21 +348,25 @@ extern "C" {
 
         const uint32_t num_args = 7;
         duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
-        duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args);
+        duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
+        duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
         for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
             DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
             std::cout << "ran aggregate register successfully!" << std::endl;
             DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, log_funcs[farg_idx]));
             std::cout << "ran top-level log register successfully!" << std::endl;
+            DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, volatile_log_funcs[farg_idx]));
+            std::cout << "ran top-level volatile log register successfully!" << std::endl;
         }
         duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
-        
+        duckdb_table_function tp_read_func = traceprov_create_table_func();
+        DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
         // auto function = setup_func();
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
         // std::cout << "ran register successfully!" << std::endl;
         DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
-        DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        // DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
 
         if (options.dry_run)
             return 0;

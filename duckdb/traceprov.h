@@ -9,6 +9,8 @@
 #include "duckdb.h"
 #include <unistd.h>
 
+#define TP_STD_VECTOR_SIZE 2048
+
 // TODO: Make this customimizable..
 #define DataDir "./"
 #define MyProcPid getpid()
@@ -159,11 +161,6 @@ struct traceprov_aggregate_layer {
     // All layers are stored in a columnar fashion.
     // This points to the rows (because we always index the columns directly)
     uint32_t rows_layer_number;
-    // for any extra info.
-    // When duckdb and postgres implementation are combined (rather than copy-pasting)
-    // this might be useful....
-    // Currently used in duckdb implementation to store the last size seen.
-    void *extra_info;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -255,7 +252,7 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
-duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args);
+duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
