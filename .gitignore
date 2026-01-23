@@ -1,4 +1,5 @@
 data/
+perf.data
 crimes.csv
 .vscode
 *.so
@@ -83,3 +84,8 @@ base_dump.sql
 graph.bin
 infer_1_out.csv
 duckdb/benchmark/tpch/queries/root/*/*.csv
+duckdb/benchmark/tpch/queries/root/*/base_spec.json
+duckdb/benchmark/tpch/queries/root/*/capture_spec.json
+duckdb/benchmark/tpch/queries/root/*/infer_spec*.json
+duckdb/benchmark/tpch/queries/root/*/*_count.sql
+duckdb/benchmark/tpch/queries/root/*/*_csv.sql

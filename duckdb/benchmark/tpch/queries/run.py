@@ -26,7 +26,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db", required=True)
     parser.add_argument("--exe", required=True)
-    # parser.add_argument("--qnum", required=True)
+    parser.add_argument("--qnum", required=False)
     parsed = parser.parse_args()
     with open("spec_2.json") as f:
         spec = json.loads(f.read())["result"]["params_default"]
@@ -49,6 +49,7 @@ def main():
         int_query = int(query_num)
         if int_query not in query_list:
             continue
+        if parsed.qnum is not None and parsed.qnum != str(query_num): continue
         path = root / Path(query_num)
 
         captured_sql = path / "capture.sql"
@@ -70,7 +71,7 @@ def main():
         graph_path = path / "graph.bin"
 
         traceprov_assert_safe_run("rm -rf traceprov/*")
-        traceprov_assert_safe_run(f"cp {graph_path.as_posix()} traceprov/")
+        #traceprov_assert_safe_run(f"cp {graph_path.as_posix()} traceprov/")
         traceprov_assert_safe_run(f"{parsed.exe} {options.serialize()}")
 
         options = options._replace(repeat=1)
@@ -119,7 +120,7 @@ def main():
         )
     current_timestamp = datetime.now()
     datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
-    result_dir = Path(f"results/result_{datetime_string}/")
+    result_dir = Path(f"results/local_test_result_{datetime_string}/")
     os.makedirs(result_dir, exist_ok=True)
     with open(result_dir / "result.json", "w") as f:
         f.write(json.dumps(all_results))
