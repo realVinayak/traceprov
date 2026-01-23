@@ -36,19 +36,32 @@ def traceprov_setup(
         traceprov_infer_set.exists()
     ), f"{traceprov_infer_set.as_posix()} should exist!"
 
+    # needs to be loaded first..
+
+    with open(traceprov_infer_set.as_posix()) as f:
+        infer_sql = f.read()
+
+    with open(traceprov_sql.as_posix()) as f:
+        base_sql = f.read()
+
+    combined_file = "/tmp/combined.sql"
+    with open(combined_file, "w") as f:
+        f.write(infer_sql)
+        f.write(base_sql)
+
     assert (
         os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
+            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {combined_file} -v ON_ERROR_STOP=1"
         )
         == 0
     )
 
-    assert (
-        os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()} -v ON_ERROR_STOP=1"
-        )
-        == 0
-    )
+    # assert (
+    #     os.system(
+    #         f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
+    #     )
+    #     == 0
+    # )
 
     traceprov_obj = f"libtraceprov{suff}"
     traceprv_infer_set_obj = f"libtraceprov_infer{suff}"

@@ -11,6 +11,7 @@ from traceprovpy.tools.benchmark import (
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_CAPTURE_QUERY,
     TRACEPROV_GET_DERIVATION_SPEC,
+    TRACEPROV_GET_GENERIC_DERIVATION_SPEC,
     TRACEPROV_PERFORM_DERIVATION,
     TRACEPROV_SYNC_TIME,
 )
@@ -82,7 +83,8 @@ def make_normal_query(query_name: str, is_traceprov=False):
         )
 
     # don't need to check if we'll dump or not.
-    extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
+    # extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
+    extras = [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
     return Query(
         query_name=query_name,
         spec=QuerySpec(
@@ -107,7 +109,7 @@ def get_query(
             assert special_query_traceprov is not None
             subdir_queries.append(special_query_traceprov)
         else:
-            subdir_queries.append(make_normal_query(query_name, is_traceprov=False))
+            # subdir_queries.append(make_normal_query(query_name, is_traceprov=False))
             subdir_queries.append(make_normal_query(query_name, is_traceprov=True))
             if use_duckdb_inference:
                 subdir_queries.append(
@@ -167,7 +169,7 @@ def main():
             query_name = str(query_name)
             subdir_queries = [
                 *subdir_queries,
-                *get_query(query_name, config, use_duckdb_inference, is_validate),
+                *get_query(query_name, config, False, False),
             ]
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 

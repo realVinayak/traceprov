@@ -1,0 +1,58 @@
+-- using default substitutions
+select
+    o_year,
+    sum(
+        case
+            when nation = 'BRAZIL' then volume
+            else 0
+        end
+    ) / sum(volume) as mkt_share
+from
+    (
+        select
+            extract(
+                year
+                from
+                    o_orderdate
+            ) as o_year,
+            l_extendedprice * (1 - l_discount) as volume,
+            n2.n_name as nation
+        from
+            part,
+            supplier,
+            lineitem,
+            orders,
+            customer,
+            nation n1,
+            nation n2,
+            region
+        where
+            (
+                p_partkey,
+                s_suppkey,
+                l_orderkey,
+                l_linenumber,
+                o_orderkey,
+                c_custkey,
+                n1.n_nationkey,
+                n2.n_nationkey,
+                r_regionkey
+            ) in (
+                select
+                    column_1,
+                    column_2,
+                    column_3,
+                    column_4,
+                    column_5,
+                    column_6,
+                    column_7,
+                    column_8,
+                    column_9
+                from
+                    'LAYER_1'
+            )
+    ) as all_nations
+group by
+    o_year
+order by
+    o_year;

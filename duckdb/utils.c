@@ -1,5 +1,8 @@
 // These are portable utils.
 #include "traceprov.h"
+#define __GNU_SOURCE
+#define __USE_MISC
+#define __USE_LARGEFILE64
 #include <sys/mman.h>
 #include <string.h>
 #include <stdio.h>
@@ -98,7 +101,8 @@ int initialize_local_context(){
     is_locked = 1;
 
     int32_t magic_word = 0;
-    uint32_t maximum_layer_used = 8;
+    // ugh.
+    uint32_t maximum_layer_used = traceprov_current.maximum_local_layer_used;
 
     if(read(shared_context_fd, &magic_word, sizeof(int32_t)) == -1){
         PRINT_ON_DEBUG("Had error reading in magic word.");
@@ -294,6 +298,20 @@ int get_or_create_layer(
         return 0;
     }
 
+    // Need to mmap the file.
+    #if TRACEPROV_USE_HUGE_PAGE
+    PRINT_ON_DEBUG("Mapping huge pages!");
+    // Can make do with anonymous mapping.
+    void *trace_ptr = mmap(
+        NULL,
+        TRACEPROV_PAGE_SIZE,
+        PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB,
+        0,
+        0
+    );
+    int trace_file_fd = 0;
+    #else
     // Map the actual trace file for this layer.
     // Each worker gets its own trace file.
     char buff[1024] = {0};
@@ -306,8 +324,6 @@ int get_or_create_layer(
     if (trace_file_fd < 0){
         return 1;
     }
-    
-    // Need to mmap the file.
     void *trace_ptr = mmap(
         NULL,
         TRACEPROV_PAGE_SIZE,
@@ -316,10 +332,10 @@ int get_or_create_layer(
         trace_file_fd,
         0
     );
+    #endif
 
     if (trace_ptr == MAP_FAILED){
-        PRINT_ON_DEBUG("Mapping the trace file failed.");
-        return 1;
+        elog(ERROR, "Mapping the trace file failed.");
     }
 
     layer->num_pk_records = record_width;
@@ -340,6 +356,16 @@ int get_or_create_layer(
     layer->layer_fd = trace_file_fd;
     layer->size = 1;
     if (p_layer) *p_layer = layer;
+
+    #if TRACEPROV_USE_HUGE_PAGE
+    // Need to so some huge-page specific initialization.
+    void **page_mapping = malloc(sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP);
+    memset(page_mapping, 0, sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP); 
+    layer->page_mapping = page_mapping;
+    layer->page_mapping_capacity = TRACEPROV_PG_MAPPING_INCR_STEP;
+    layer->page_mapping_size = 1;
+    layer->page_mapping[0] = trace_ptr;
+    #endif
     return rc;
 }
 
@@ -399,16 +425,55 @@ int initialize_layer_file(
     return 0;
 }
 
+
+// variant for huge page bc other sucks
+int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
+    PRINT_ON_DEBUG("re-mapping huge pages!");
+    current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
+    void *trace_ptr = mmap(
+        NULL,
+        TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
+        PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB,
+        0,
+        0
+    );
+    if (trace_ptr == MAP_FAILED){
+        elog(ERROR, "remap failed for huge.");
+    }
+    // once every 4096...
+    if (unlikely(current_layer->page_mapping_size == current_layer->page_mapping_capacity)){
+        current_layer->page_mapping_capacity += TRACEPROV_PG_MAPPING_INCR_STEP;
+        current_layer->page_mapping = realloc(current_layer->page_mapping, sizeof(void *)*(current_layer->page_mapping_capacity));
+        if (unlikely(current_layer->page_mapping == 0)){
+            elog(ERROR, "failed realloc!");
+        }
+    }
+    current_layer->page_mapping_size += 1;
+    current_layer->page_mapping[current_layer->page_mapping_size - 1] = trace_ptr;
+    current_layer->current_row = trace_ptr;
+    // Also set the last mapping.
+    current_layer->last_mapping = trace_ptr;
+    current_layer->end_of_memory_zone = (void*)((TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE) + (char*)trace_ptr);
+
+    return 0;
+}
+
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
+    #if TRACEPROV_USE_HUGE_PAGE
+    if (current_layer->page_mapping != NULL){
+        return grow_layer_file_huge(current_layer);
+    }
+    #endif
     int rc = 0;
     // In this case, we'd have to grow the file.
-    const long int initial_size = current_layer->size;
+    const uint64_t initial_size = current_layer->size;
     // Unmap previous allocation.
     if ((rc = munmap(current_layer->last_mapping, TRACEPROV_SIZE_OF_ALLOCATION(initial_size) * TRACEPROV_PAGE_SIZE))){
         elog(ERROR, "Error unmaping");
     }
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
-    const long int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
+    const uint64_t next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
     if ((rc = ftruncate(current_layer->layer_fd, next_size))){
         elog(ERROR, "Error increasing the page size layer: %d", rc);
     }

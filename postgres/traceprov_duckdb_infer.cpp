@@ -73,7 +73,7 @@ extern "C" {
             if (map_traceprov_shared_context(&shared_context))
                 elog(ERROR, "error maping shared context!");
 
-            g_tp_duckdb_state.did_initialize = true;
+            g_tp_duckdb_state.did_initialize = false;
             g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
         }
 

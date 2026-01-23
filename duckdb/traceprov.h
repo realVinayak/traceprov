@@ -37,6 +37,11 @@
 #define TRACEPROV_PAGE_SIZE_RAW 4096
 #endif
 
+#define TRACEPROV_USE_HUGE_PAGE 1
+
+#define TP_MAP_HUGE_1GB    (30 << MAP_HUGE_SHIFT)
+#define TP_MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
+
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
 #ifndef TRACEPROV_PAGE_SIZE_RAW
@@ -44,6 +49,14 @@ static_assert(0, "page size not defined!");
 #else
 // The casting is helpful since shifts get performed using it.
 #define TRACEPROV_PAGE_SIZE ((long int) TRACEPROV_PAGE_SIZE_RAW)
+#endif
+
+#if TRACEPROV_USE_HUGE_PAGE
+#undef TRACEPROV_PAGE_SIZE
+// 2 MB.
+#define TRACEPROV_PAGE_SIZE (((long) 1024) * 1024 * 2)
+// bc each page is 2MB.......
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 32
 #endif
 
 // Defines the maximum number of workers currently supported.
@@ -60,6 +73,8 @@ static_assert(0, "page size not defined!");
 #endif
 // Increase the group-mapping by these many pages at once.
 #define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
+
+#define TRACEPROV_PG_MAPPING_INCR_STEP  4096
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -161,6 +176,11 @@ struct traceprov_aggregate_layer {
     // All layers are stored in a columnar fashion.
     // This points to the rows (because we always index the columns directly)
     uint32_t rows_layer_number;
+    // In cases of huge mapping usage, this is grown dynamically.
+    // used to emulate page table.
+    void **page_mapping;
+    uint32_t page_mapping_capacity;
+    uint32_t page_mapping_size;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -249,6 +269,18 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64_t)*layer->num_pk_records))
+
+void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state state);
+void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
+void traceprov_combine(
+    duckdb_function_info info,
+    duckdb_aggregate_state *source_p,
+    duckdb_aggregate_state *target_p,
+    idx_t count
+);
+void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *source_p, duckdb_vector result, idx_t count, idx_t offset);
+idx_t traceprov_get_state_size(duckdb_function_info info);
+
 
 duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
