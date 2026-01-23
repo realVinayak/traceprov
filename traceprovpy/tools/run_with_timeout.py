@@ -202,6 +202,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         cursor = connection.cursor()
         for shared_library in options.shared_libraries:
             cursor.execute(f"load '{shared_library}';")
+        # cursor.execute("set max_parallel_workers_per_gather = 0;")
         cursor.close()
 
     if (

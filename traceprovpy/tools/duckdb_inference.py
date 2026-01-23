@@ -29,9 +29,13 @@ class DuckDBDriverOptions(NamedTuple):
     settings: str = None
     time: str = None
     idx_scan_percent: str = None
+    no_reinit: bool = None
+    min_layer_number: int = None
+    extra: str = None
+    disable_col_opt: bool = None
 
     def _boolean_options(self):
-        return {"lineage", "pending"}
+        return {"lineage", "pending", "no_reinit", "disable_col_opt"}
 
     def serialize(self) -> str:
         options = self._asdict()

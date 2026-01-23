@@ -516,11 +516,11 @@ Datum reinit_state(PG_FUNCTION_ARGS){
         PRINT_ON_DEBUG("Error removing files: %d", rc);
     }
 
-    #ifdef TRACEPROV_BUILD_WITH_DUCKDB
-    // This is why traceprov return infer needs to be loaded before base.
-    // It can be compiled arbitrarily, since linking doesn't happen yet.
-    reinit_traceprov_infer_state();
-    #endif
+    // #ifdef TRACEPROV_BUILD_WITH_DUCKDB
+    // // This is why traceprov return infer needs to be loaded before base.
+    // // It can be compiled arbitrarily, since linking doesn't happen yet.
+    // reinit_traceprov_infer_state();
+    // #endif
 
     PG_RETURN_INT32(rc);    
 }

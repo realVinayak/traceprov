@@ -461,7 +461,10 @@ class GenericBenchmark(NamedTuple):
                 connection_params=connection_params,
                 file_path=file_path,
                 params=params,
-                shared_libraries=[self.traceprov_rewriter_path],
+                shared_libraries=[
+                    self.traceprov_infer_set_path,
+                    self.traceprov_rewriter_path,
+                ],
             )
 
         results_from_dirs = {}

@@ -77,3 +77,9 @@ tmp2
 duckdb/bld
 duckdb/Makefile.in
 duckdb/Makefile
+data_filled.csv
+validate_filled.sql
+base_dump.sql
+graph.bin
+infer_1_out.csv
+duckdb/benchmark/tpch/queries/root/*/*.csv

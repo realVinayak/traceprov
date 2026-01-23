@@ -3290,12 +3290,17 @@ extern "C" {
         return current_tree;
     }
 
+    #ifdef TRACEPROV_BUILD_WITH_DUCKDB
+    const bool use_duckdb = true;
+    #else
+    const bool use_duckdb = false;
+    #endif
 
-    PG_FUNCTION_INFO_V1(traceprov_perform_generic_derivation);
-
-    Datum traceprov_perform_generic_derivation(PG_FUNCTION_ARGS){
+    static TraceProvResultMap *get_generic_derivation_spec(TraceProvParseContext **p_parsed_back_context){
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
+        if (p_parsed_back_context)
+            *p_parsed_back_context = parsed_back_context;
         struct traceprov_shared_context shared_context;
         if (map_traceprov_shared_context(&shared_context)){
             elog(ERROR, "Error mmaping shared context");
@@ -3357,16 +3362,20 @@ extern "C" {
             );
         }
 
-
         auto result_map = new TraceProvResultMap;
-        #ifdef TRACEPROV_BUILD_WITH_DUCKDB
-        const bool use_duckdb = true;
-        #else
-        const bool use_duckdb = false;
-        #endif
-        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
-
         flattenTraceProvInferAbstractTree(top_tree, result_map, parsed_back_context);
+        return result_map;
+    }
+
+
+    PG_FUNCTION_INFO_V1(traceprov_perform_generic_derivation);
+
+    Datum traceprov_perform_generic_derivation(PG_FUNCTION_ARGS){
+
+        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        TraceProvParseContext *parsed_back_context = NULL;
+        auto result_map = get_generic_derivation_spec(&parsed_back_context);
+
         auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvTopResult *>;
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
@@ -3396,5 +3405,44 @@ extern "C" {
         traceprov_materialize_derived_result(fcinfo, selected_result);
         return (Datum) 0;
     }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_generic_derivation_spec);
+
+    Datum traceprov_get_generic_derivation_spec(PG_FUNCTION_ARGS){
+
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping shared context");
+        }
+        TraceProvParseContext *parse_context = NULL;
+        auto result_map = get_generic_derivation_spec(&parse_context);
+        std::string graph_str = "{";
+        graph_str.append("\"elements\": [");
+        bool needs_sep = false;
+        for (auto child: *result_map){
+            if (needs_sep)
+                graph_str.append(",");
+            const TraceProvLayerNumber idx = child.first;
+            TraceProvNode *node = child.second;
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
+            needs_sep = true;
+            graph_str.append("{");
+            graph_str.append("\"idx\": ");
+            graph_str.append(std::to_string(idx));
+            graph_str.append(",");
+            graph_str.append("\"sql\": ");
+            graph_str.append("\"");
+            graph_str.append(sql);
+            graph_str.append("\"");
+            graph_str.append("}");
+        }
+        graph_str.append("]");
+        graph_str.append(",");
+        graph_str.append("\"min_local_used\": ");
+        graph_str.append(std::to_string(context.maximum_layer_number_used));
+        graph_str.append("}");
+        PG_RETURN_TEXT_P(cstring_to_text(graph_str.c_str()));
+    }
+
 };
 

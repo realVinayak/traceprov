@@ -28,6 +28,7 @@ extern "C" {
 
     #include "traceprov.h"
     #include "duckdb.h"
+    #include "utils.h"
 
     typedef uint32_t TraceProvLayerNumber;
 
@@ -70,6 +71,14 @@ extern "C" {
         std::string index_scan_percentage;
         // via --dry_run
         bool dry_run;
+        // via --no_reinit
+        bool no_reinit_state;
+        // via --min_layer_number
+        uint32_t min_layer_number;
+        // via --extra
+        std::string extra_query_path;
+        // via --disable_col_opt
+        bool disable_column_optimizer;
     };
 
     #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -88,6 +97,10 @@ extern "C" {
             .time_out_path = "",
             .index_scan_percentage = "",
             .dry_run = false,
+            .no_reinit_state = false,
+            .min_layer_number = 0,
+            .extra_query_path = "",
+            .disable_column_optimizer = false
         };
         for (int i = 1; i < argc; i++){
             if (IS_OPTION("--lineage")){
@@ -125,6 +138,18 @@ extern "C" {
                 continue;
             } else if (IS_OPTION("--dry_run")){
                 options.dry_run = true;
+                continue;
+            } else if (IS_OPTION("--no_reinit")){
+                options.no_reinit_state = true;
+                continue;
+            } else if (IS_OPTION("--min_layer_number")){
+                options.min_layer_number = std::atoi(argv[++i]);
+                continue;
+            } else if (IS_OPTION("--extra")){
+                options.extra_query_path = std::string(argv[++i]);
+                continue;
+            } else if (IS_OPTION("--disable_col_opt")){
+                options.disable_column_optimizer = true;
                 continue;
             }
 
@@ -247,7 +272,13 @@ extern "C" {
             DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
         }
 
-        // DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        if (!options.no_reinit_state){
+            DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        }
+
+        if (options.min_layer_number){
+            traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        }
 
         // Need to use both, the pending and the streaming API.
         duckdb_prepared_statement stmt;
@@ -264,7 +295,7 @@ extern "C" {
                 &final_result
             ));
         }else{
-            DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
+            DUCKDB_EXIT_ON_ERROR_MSG(duckdb_execute_prepared(stmt, &final_result), duckdb_result_error(&final_result));
         }
 
         std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
@@ -340,13 +371,22 @@ extern "C" {
         std::cout << "From file: " << in_sql << std::endl;
         std::vector<PerformQueryResult *> agg_result;
 
+        std::string extra_sql = "";
+        if (IS_SET(options.extra_query_path)){
+            std::ifstream extra_sql_stream(options.extra_query_path.c_str());
+            std::stringstream extra_buffer;
+            extra_buffer << extra_sql_stream.rdbuf();
+            extra_sql = extra_buffer.str();
+            std::cout << "From file (extra): " << extra_sql << std::endl;
+        }
+
         duckdb_database db;
         duckdb_connection con;
         char *error_msg;
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
         DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
-        const uint32_t num_args = 7;
+        const uint32_t num_args = 12;
         duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
         duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
         duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
@@ -365,8 +405,21 @@ extern "C" {
         // auto function = setup_func();
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
         // std::cout << "ran register successfully!" << std::endl;
+        DUCKDB_RUN_SHORT_QUERY(con, "set disabled_optimizers='unnest_rewriter';", "run analyze;");
+         
+        if (options.disable_column_optimizer){
+            DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
+        }
+
         DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
-        // DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+
+        if (!options.no_reinit_state){
+            DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        }
+
+        if (options.min_layer_number){
+            traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        }
 
         if (options.dry_run)
             return 0;
@@ -382,7 +435,11 @@ extern "C" {
 
         for (int i = 0; i < options.repeat; i++){
             perform_query(options, con, in_sql, i, agg_result);
-            // delete agg_result.back()->data;
+            Options new_options = options;
+            new_options.no_reinit_state = true;
+            if (IS_SET(extra_sql)){
+                perform_query(new_options, con, extra_sql, i, agg_result);
+            }
         }
 
         if (IS_SET(options.settings_out_path)){
@@ -392,10 +449,10 @@ extern "C" {
         }
 
         if (IS_SET(options.time_out_path)){
-            if (agg_result.size() != (uint64_t)options.repeat){
-                std::cout << "Got inconsistent size of computed time!" << std::endl;
-                exit(1);
-            }
+            // if (agg_result.size() != (uint64_t)options.repeat){
+            //     std::cout << "Got inconsistent size of computed time!" << std::endl;
+            //     exit(1);
+            // }
             std::string time_out_json = "[";
             for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
                 auto current = agg_result.at(computed_time_idx);
