@@ -4,7 +4,11 @@ import statistics
 
 
 def compute_median(result):
-    return statistics.median(row.get("time") for row in result)
+    mapped = result
+    if (not isinstance(result, list)):
+        mapped = list(result)
+    print('all', list(row.get('cpu_time') for row in result))
+    return statistics.median(row.get("cpu_time") for row in result)
 
 
 def main():
@@ -15,7 +19,7 @@ def main():
         results = json.loads(f.read())
     speced = {
         qnum: dict(
-            base=compute_median(data["base"]), capture=compute_median(data["forward"])
+            base=compute_median(data["base_profile"]), capture=compute_median(data["forward_profile"]) if 'forward_profile' in data else 0
         )
         for (qnum, data) in results.items()
     }
@@ -24,6 +28,7 @@ def main():
         for qnum, data in speced.items()
     }
     print(slowdown)
+    print(speced)
 
 
 if __name__ == "__main__":

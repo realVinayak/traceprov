@@ -24,7 +24,7 @@ where
     and l1.l_receiptdate > l1.l_commitdate
     and exists (
         select
-            *
+            1
         from
             lineitem l2
         where
@@ -40,7 +40,7 @@ where
     )
     and not exists (
         select
-            *
+            1
         from
             lineitem l3
         where

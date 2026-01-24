@@ -11,15 +11,15 @@ select
         2,
         traceprov_agg_key_parallel_offset_8 (
             1,
-            (all_nations.tp_p_partkey)::bigint,
-            (all_nations.tp_s_suppkey)::bigint,
-            (all_nations.tp_l_orderkey)::bigint,
-            (all_nations.tp_o_orderkey)::bigint,
-            (all_nations.tp_c_custkey)::bigint,
-            (all_nations.tp_n_nationkey)::bigint,
-            (all_nations.tp_n_nationkey_1)::bigint,
-            (all_nations.tp_r_regionkey)::bigint
-        ) AS mapped_agg
+            (all_nations.tp_p_partkey),
+            (all_nations.tp_s_suppkey),
+            (all_nations.tp_l_orderkey),
+            (all_nations.tp_o_orderkey),
+            (all_nations.tp_c_custkey),
+            (all_nations.tp_n_nationkey),
+            (all_nations.tp_n_nationkey_1),
+            (all_nations.tp_r_regionkey)
+        )
     )
 from
 	(

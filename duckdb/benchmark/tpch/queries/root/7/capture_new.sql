@@ -14,7 +14,7 @@ select
             (shipping.tp_c_custkey),
             (shipping.tp_n_nationkey),
             (shipping.tp_n_nationkey_1)
-        ) AS mapped_agg
+        )
     )
 from
     (

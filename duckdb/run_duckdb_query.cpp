@@ -258,14 +258,14 @@ extern "C" {
         std::vector<PerformQueryResult *> &agg_result
     ){
 
-        if (IS_SET(options.profile_out_path)){
-            DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
-            char profile_out[256] = {0};
-            sprintf(profile_out, options.profile_out_path.c_str(), iter);
-            char final_profile_out[256] = {0};
-            sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
-            DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
-        }
+        //if (IS_SET(options.profile_out_path)){
+        //    DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
+        //    char profile_out[256] = {0};
+        //    sprintf(profile_out, options.profile_out_path.c_str(), iter);
+        //    char final_profile_out[256] = {0};
+        //    sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+        //    DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
+        //}
 
         if (options.capture_lineage){
             DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_LINEAGE, "enable lineage");
@@ -278,6 +278,15 @@ extern "C" {
 
         if (options.min_layer_number){
             traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        }
+
+        if (IS_SET(options.profile_out_path)){
+            DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
+            char profile_out[256] = {0};
+            sprintf(profile_out, options.profile_out_path.c_str(), iter);
+            char final_profile_out[256] = {0};
+            sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+            DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
         }
 
         // Need to use both, the pending and the streaming API.
@@ -405,11 +414,12 @@ extern "C" {
         // auto function = setup_func();
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
         // std::cout << "ran register successfully!" << std::endl;
-        DUCKDB_RUN_SHORT_QUERY(con, "set disabled_optimizers='unnest_rewriter';", "run analyze;");
+        // DUCKDB_RUN_SHORT_QUERY(con, "set disabled_optimizers='unnest_rewriter';", "run analyze;");
          
         if (options.disable_column_optimizer){
-            DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
-        }
+		DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+		//DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
+	}
 
         DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
 

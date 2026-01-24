@@ -39,7 +39,7 @@ where
                             (
                                 select
                                     0.5 * sum(l_quantity) as summed,
-                                    traceprov_log_entry_volatile_3 (
+                                    traceprov_log_entry_volatile_2 (
                                         3,
                                         partsupp.rowid,
                                         traceprov_agg_key_parallel_offset_1 (2, lineitem.rowid)
