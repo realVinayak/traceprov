@@ -23,7 +23,7 @@ where
                 WHEN (
                     (lineitem.l_orderkey = orders.o_orderkey)
                     AND (lineitem.l_commitdate < lineitem.l_receiptdate)
-                ) THEN traceprov_log_entry_3 (1, (orders.rowid), (lineitem.rowid))
+                ) THEN traceprov_log_entry_2 (1, (orders.rowid), (lineitem.rowid))
                 ELSE false
             END
     )

@@ -38,7 +38,8 @@ where
                 select
                     min(ps_supplycost) as min_value,
                     traceprov_log_entry_volatile_2 (
-                        part.rowid,
+               		2,
+	       		part.rowid,
                         traceprov_agg_key_parallel_offset_4 (
                             1,
                             partsupp.rowid,

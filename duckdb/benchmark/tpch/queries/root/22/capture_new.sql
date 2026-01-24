@@ -49,7 +49,7 @@ from
             )
             and not exists (
                 select
-                    *
+                   1
                 from
                     orders
                 where
