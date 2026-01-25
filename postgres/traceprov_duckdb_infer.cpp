@@ -236,7 +236,7 @@ extern "C" {
     }
 
     // guts of all the inference.
-    TraceProvData *traceprov_perform_duckdb_inference(char *generated_sql){
+    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql){
         duckdb_database db;
         duckdb_connection con;
         char *error_msg;

@@ -47,6 +47,10 @@ class DuckDBDriverOptions(NamedTuple):
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
         ]
+        assert self.i is not None
+        with open(self.i) as f:
+            contents = f.read()
+        assert len(contents) > 0, f"Got no contents for {self.i}"
         return " ".join([*boolean_options, *key_value_options])
 
 

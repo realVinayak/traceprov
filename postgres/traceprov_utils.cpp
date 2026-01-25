@@ -106,6 +106,7 @@ extern "C" {
             }
             struct local_context *worker_local_context = (struct local_context *)ptr;
             worker_local_contexts->push_back(worker_local_context);
+            close(fd);
         }
         return worker_local_contexts;
     }
