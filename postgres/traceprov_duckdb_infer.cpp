@@ -17,6 +17,11 @@ extern "C" {
     #include <stdlib.h>
     #include "traceprov_infer_essentials.h"
 
+    struct traceprov_inference_context {
+        duckdb_database db;
+        duckdb_connection con;
+    };
+
     // This is a bit different from duckdb's global state.
     // We manage the lifecycle of this ourselves.
     typedef struct TraceProvDuckDbGlobalState {
@@ -28,11 +33,6 @@ extern "C" {
         .did_initialize = false,
         .worker_local_contexts = NULL
     };
-
-    void reinit_traceprov_infer_state(){
-        g_tp_duckdb_state.did_initialize = false;
-        g_tp_duckdb_state.worker_local_contexts = NULL;
-    }
 
     typedef struct TraceProvBindData {
         TraceProvRelationArgs rel_args;
@@ -48,6 +48,11 @@ extern "C" {
     typedef struct TraceProvInitData {
         uint64_t current;
     } TraceProvInitData;
+
+    void traceprov_duckdb_cleanup(struct traceprov_inference_context *p_ctxt){
+        duckdb_disconnect(&p_ctxt->con);
+        duckdb_close(&p_ctxt->db);
+    }
 
     void traceprov_duckdb_bind(duckdb_bind_info info) {
         if (duckdb_bind_get_parameter_count(info) != 2){
@@ -235,17 +240,28 @@ extern "C" {
         }
     }
 
-    // guts of all the inference.
-    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql){
+    void traceprov_duckdb_setup_context(
+        struct traceprov_inference_context **p_ctxt,
+        void (**p_cleanup)(struct traceprov_inference_context *)
+    ){
+        struct traceprov_inference_context *context = (struct traceprov_inference_context *) malloc(sizeof(struct traceprov_inference_context));
         duckdb_database db;
         duckdb_connection con;
         char *error_msg;
         PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(":memory:", &db, nullptr, &error_msg), error_msg);
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
+        context->db = db;
+        context->con = con;
+        *p_ctxt = context;
         auto function = setup_func();
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
         PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=12;", "setting threads");
+        *p_cleanup = traceprov_duckdb_cleanup;
+    }
 
+    // guts of all the inference.
+    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql, struct traceprov_inference_context *context){
+        duckdb_connection con = context->con;
         duckdb_prepared_statement stmt;
         duckdb_result final_result;
         PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, generated_sql, &stmt), duckdb_prepare_error(stmt));
@@ -260,8 +276,6 @@ extern "C" {
         }
 
         PG_DUCKDB_RUN_SHORT_QUERY(con, generated_sql, "inference query");
-        duckdb_disconnect(&con);
-        duckdb_close(&db);
         return traceprov_data;
     }
 }

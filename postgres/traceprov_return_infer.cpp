@@ -3376,6 +3376,10 @@ extern "C" {
         TraceProvParseContext *parsed_back_context = NULL;
         auto result_map = get_generic_derivation_spec(&parsed_back_context);
 
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context);
+        }
+
         auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvTopResult *>;
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
@@ -3384,7 +3388,7 @@ extern "C" {
             TraceProvData *data = nullptr;
             if (use_duckdb){
                 elog(INFO, "Used duckdb!");
-                data = traceprov_perform_duckdb_inference(sql);
+                data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);
             }else{
                 TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
                 eval_context->should_dump = false;
@@ -3414,6 +3418,9 @@ extern "C" {
         if (map_traceprov_shared_context(&context)){
             elog(ERROR, "Error mmaping shared context");
         }
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context);
+        }
         TraceProvParseContext *parse_context = NULL;
         auto result_map = get_generic_derivation_spec(&parse_context);
         std::string graph_str = "{";
@@ -3425,7 +3432,7 @@ extern "C" {
             const TraceProvLayerNumber idx = child.first;
             TraceProvNode *node = child.second;
             const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
-            TraceProvData *data = traceprov_perform_duckdb_inference(sql);
+            TraceProvData *data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);
             needs_sep = true;
             graph_str.append("{");
             graph_str.append("\"idx\": ");

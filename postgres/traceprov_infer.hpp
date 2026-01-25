@@ -136,7 +136,11 @@ typedef struct TraceProvToSQLContext {
 } TraceProvToSQLContext;
 
 extern "C" {
-    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql);
+    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql, struct traceprov_inference_context *context);
+    void traceprov_duckdb_setup_context(
+        struct traceprov_inference_context **p_ctxt,
+        void (**p_cleanup)(struct traceprov_inference_context *)
+    );
 }
 
 #endif

@@ -36,8 +36,6 @@ def traceprov_setup(
         traceprov_infer_set.exists()
     ), f"{traceprov_infer_set.as_posix()} should exist!"
 
-    # needs to be loaded first..
-
     with open(traceprov_infer_set.as_posix()) as f:
         infer_sql = f.read()
 
@@ -46,8 +44,8 @@ def traceprov_setup(
 
     combined_file = "/tmp/combined.sql"
     with open(combined_file, "w") as f:
-        f.write(infer_sql)
         f.write(base_sql)
+        f.write(infer_sql)
 
     assert (
         os.system(
