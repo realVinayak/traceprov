@@ -3,8 +3,7 @@
         tp_table_50.column_0,
         tp_table_50.column_1,
         tp_table_53.column_0,
-        tp_table_53.column_1,
-        tp_table_53.column_2
+        tp_table_53.column_1
     FROM
         (
             SELECT
@@ -29,10 +28,9 @@
             (
                 SELECT
                     log_read_to_append_tp_table_6.column_0::bigint,
-                    log_read_to_append_tp_table_6.column_1::bigint,
-                    log_read_to_append_tp_table_6.column_2::bigint
+                    log_read_to_append_tp_table_6.column_1::bigint
                 FROM
                     traceprov_read_worker_layer (1::bigint, 1::bigint) AS log_read_to_append_tp_table_6
             )
-        ) as tp_table_53 (column_0, column_1, column_2) ON (tp_table_50.column_1 = tp_table_53.column_0)
+        ) as tp_table_53 (column_0, column_1) ON (tp_table_50.column_1 = tp_table_53.column_0)
 )

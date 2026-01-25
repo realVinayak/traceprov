@@ -1,8 +1,7 @@
 (
     SELECT
         tp_table_12.column_0,
-        tp_table_13.column_1,
-        tp_table_13.column_2
+        tp_table_13.column_1
     FROM
         (
             SELECT
@@ -13,9 +12,8 @@
         JOIN (
             SELECT
                 intermediate_join_tp_table_3.column_0::bigint,
-                intermediate_join_tp_table_3.column_1::bigint,
-                intermediate_join_tp_table_3.column_2::bigint
+                intermediate_join_tp_table_3.column_1::bigint
             FROM
                 traceprov_read_worker_layer (1::bigint, 1::bigint) AS intermediate_join_tp_table_3
-        ) as tp_table_13 (column_0, column_1, column_2) ON (tp_table_12.column_0 = tp_table_13.column_0)
+        ) as tp_table_13 (column_0, column_1) ON (tp_table_12.column_0 = tp_table_13.column_0)
 )

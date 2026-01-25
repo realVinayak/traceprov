@@ -12,7 +12,7 @@ from
             left outer join orders on c_custkey = o_custkey
             and o_comment not like '%special%requests%'
         where
-            (c_custkey, coalesce(o_orderkey, 0)) in (
+            (customer.rowid, coalesce(orders.rowid, 0)) in (
                 select
                     column_1_1,
                     column_2

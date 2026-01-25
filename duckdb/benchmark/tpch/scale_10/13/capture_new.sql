@@ -11,7 +11,7 @@ from
         select
             c_custkey,
             count(o_orderkey),
-            traceprov_agg_key_parallel_offset_2 (1, customer.rowid, orders.rowid) as mapped_agg
+            traceprov_agg_key_parallel_offset_2 (1, customer.rowid, coalesce(orders.rowid, 0)) as mapped_agg
         from
             customer
             left outer join orders on c_custkey = o_custkey
