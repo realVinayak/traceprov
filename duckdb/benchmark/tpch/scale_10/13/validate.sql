@@ -10,7 +10,8 @@ from
         from
             customer
             left outer join orders on c_custkey = o_custkey
-        where
+	    and o_comment not like '%special%requests%'
+	where
             (c_custkey, coalesce(o_orderkey, 0)) in (
                 select
                     column_1_1,
