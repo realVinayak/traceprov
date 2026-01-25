@@ -22,7 +22,6 @@ PG_MODULE_MAGIC;
 
 int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
 int grow_layer_file(struct traceprov_aggregate_layer *);
-void reinit_traceprov_infer_state();
 uint32 traceprov_hashint8(int64);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
@@ -32,7 +31,9 @@ struct current_context traceprov_current = {
     .traceprov_shared_context_fd =  -1,
     .shared_context =               NULL,
     .local_context =                NULL,
-    .maximum_local_layer_used =     0
+    .maximum_local_layer_used =     0,
+    .infer_context =                NULL,
+    .cleanup_infer_context =        NULL
 };
 
 static inline void grow_if_full(struct traceprov_aggregate_layer *layer){
@@ -516,12 +517,13 @@ Datum reinit_state(PG_FUNCTION_ARGS){
         PRINT_ON_DEBUG("Error removing files: %d", rc);
     }
 
-    // #ifdef TRACEPROV_BUILD_WITH_DUCKDB
-    // // This is why traceprov return infer needs to be loaded before base.
-    // // It can be compiled arbitrarily, since linking doesn't happen yet.
-    // reinit_traceprov_infer_state();
-    // #endif
-
+    if (traceprov_current.infer_context){
+        if (traceprov_current.cleanup_infer_context == NULL)
+            elog(ERROR, "Expected cleanup to be set!");
+        traceprov_current.cleanup_infer_context(traceprov_current.infer_context);
+        traceprov_current.infer_context = NULL;
+        traceprov_current.cleanup_infer_context = NULL;
+    }
     PG_RETURN_INT32(rc);    
 }
 

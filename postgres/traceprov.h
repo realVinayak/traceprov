@@ -74,6 +74,7 @@ struct local_context;
 struct traceprov_aggregate_layer;
 struct traceprov_shared_context;
 struct current_context;
+struct traceprov_inference_context;
 
 int get_error_no();
 
@@ -209,7 +210,16 @@ struct current_context {
     struct local_context *local_context;
     // This is used during the logging of groups (to determine where the combiner layer goes.)
     uint32  maximum_local_layer_used;
+    // Private struct, just for inference.
+    struct traceprov_inference_context *infer_context;
+    // For cleaning up whatever is in the infer_context.
+    void (*cleanup_infer_context)(struct traceprov_inference_context *);
 };
+
+// This used to live only in traceprov.c file
+// But it is useful to expose this to inference too.
+// So that's why it lives here now.
+extern struct current_context traceprov_current;
 
 struct traceprov_agg_context {
     // Whether this aggregation was combined.
