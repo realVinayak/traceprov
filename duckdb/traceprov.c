@@ -222,7 +222,7 @@ duckdb_aggregate_function *traceprov_create_funcs(const uint32_t num_args){
 }
 
 void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckdb_vector output){
-    #if TRACEPROV_USE_HUGE_PAGE
+    #if TRACEPROV_USE_MMEM_PAGE
     if (traceprov_current.local_context != NULL){
         // cleanup mem stuff (unmapping)
         for (uint32_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){

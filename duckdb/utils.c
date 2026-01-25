@@ -299,14 +299,14 @@ int get_or_create_layer(
     }
 
     // Need to mmap the file.
-    #if TRACEPROV_USE_HUGE_PAGE
+    #if TRACEPROV_USE_MMEM_PAGE
     PRINT_ON_DEBUG("Mapping huge pages!");
     // Can make do with anonymous mapping.
     void *trace_ptr = mmap(
         NULL,
         TRACEPROV_PAGE_SIZE,
         PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB,
+        TRACEPROV_MMAP_FLAGS,
         0,
         0
     );
@@ -357,7 +357,7 @@ int get_or_create_layer(
     layer->size = 1;
     if (p_layer) *p_layer = layer;
 
-    #if TRACEPROV_USE_HUGE_PAGE
+    #if TRACEPROV_USE_MMEM_PAGE
     // Need to so some huge-page specific initialization.
     void **page_mapping = malloc(sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP);
     memset(page_mapping, 0, sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP); 
@@ -434,7 +434,7 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
         NULL,
         TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
         PROT_WRITE,
-        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB,
+        TRACEPROV_MMAP_FLAGS,
         0,
         0
     );
@@ -460,11 +460,11 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
 }
 
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
-    #if TRACEPROV_USE_HUGE_PAGE
+    #if TRACEPROV_USE_MMEM_PAGE
     if (current_layer->page_mapping != NULL){
         return grow_layer_file_huge(current_layer);
     }
-    #endif
+    #else
     int rc = 0;
     // In this case, we'd have to grow the file.
     const uint64_t initial_size = current_layer->size;
@@ -501,6 +501,7 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     // Also set the last mapping.
     current_layer->last_mapping = ptr;
     return rc;
+    #endif
 }
 
 int get_error_no(){
