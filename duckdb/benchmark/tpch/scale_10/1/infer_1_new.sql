@@ -1,8 +1,7 @@
 (
     SELECT
         tp_table_9.column_0,
-        tp_table_12.column_1,
-        tp_table_12.column_2
+        tp_table_12.column_1
     FROM
         (
             SELECT
@@ -28,11 +27,10 @@
         JOIN (
             SELECT
                 base_join_tp_table_1.column_0::bigint,
-                base_join_tp_table_1.column_1::bigint,
-                base_join_tp_table_1.column_2::bigint
+                base_join_tp_table_1.column_1::bigint
             FROM
                 traceprov_read_worker_layer (1::bigint, 1::bigint) AS base_join_tp_table_1
-        ) as tp_table_12 (column_0, column_1, column_2) ON (
+        ) as tp_table_12 (column_0, column_1) ON (
             tp_table_9.column_2 = tp_table_12.column_0
             AND tp_table_9.column_1 = 1
         )
@@ -41,8 +39,7 @@ UNION ALL
 (
     SELECT
         tp_table_14.column_0,
-        tp_table_15.column_1,
-        tp_table_15.column_2
+        tp_table_15.column_1
     FROM
         (
             SELECT
@@ -53,9 +50,8 @@ UNION ALL
         JOIN (
             SELECT
                 base_join_tp_table_1.column_0::bigint,
-                base_join_tp_table_1.column_1::bigint,
-                base_join_tp_table_1.column_2::bigint
+                base_join_tp_table_1.column_1::bigint
             FROM
                 traceprov_read_worker_layer (1::bigint, 1::bigint) AS base_join_tp_table_1
-        ) as tp_table_15 (column_0, column_1, column_2) ON (tp_table_14.column_0 = tp_table_15.column_0)
+        ) as tp_table_15 (column_0, column_1) ON (tp_table_14.column_0 = tp_table_15.column_0)
 )

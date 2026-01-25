@@ -60,7 +60,8 @@ def run_single(
     if validate:
         materialize_infer = True
     # if validating, assert not using optimized, for now...
-    assert not validate or not use_optimized
+    # NOTE: supports the below now.
+    # assert not validate or not use_optimized
 
     # bc those are postgres queries....
     base_sql = base_root / query_num / "base.sql"
@@ -112,8 +113,13 @@ def run_single(
     if run_inference:
         for element in spec_element["elements"]:
             element_idx = element["idx"]
-            infer_path = (query_dir / f"infer_{element_idx}.sql").as_posix()
+            if use_optimized:
+                infer_path = query_dir / f"infer_{element_idx}_new.sql"
+            else:
+                infer_path = query_dir / f"infer_{element_idx}.sql"
 
+            assert infer_path.exists()
+            infer_path = infer_path.as_posix()
             if materialize_infer:
                 contents = just_read(infer_path)
                 table_name = f"LAYER_{element_idx}"
@@ -149,7 +155,11 @@ def run_single(
         just_write(base_dump_query_path, base_dump_query)
 
         capture_dump_path = Path("/tmp/") / "capture_dump.csv"
-        validate_query = query_dir / "validate.sql"
+        if use_optimized:
+            validate_query = query_dir / "validate_new.sql"
+        else:
+            validate_query = query_dir / "validate.sql"
+        assert validate_query.exists()
         capture_dump_query_path = Path("/tmp/") / "capture_dump_query.sql"
         capture_dump_query = make_dump_query(
             just_read(validate_query), capture_dump_path.as_posix()

@@ -45,7 +45,7 @@ def run():
             materialize_infer=False,
             iters=run_time_options["repeat"] + run_time_options["throwaway"],
             pre_base=Path(pre_base) if pre_base is not None else None,
-            run_inference=not parsed.optimized,
+            run_inference=True,
         )
         assert query not in results
         results = {**results, query: dict(result=query_result)}
