@@ -37,10 +37,25 @@
 #define TRACEPROV_PAGE_SIZE_RAW 4096
 #endif
 
-#define TRACEPROV_USE_HUGE_PAGE 1
-
 #define TP_MAP_HUGE_1GB    (30 << MAP_HUGE_SHIFT)
 #define TP_MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
+
+// Whether to use 2 MB page
+#define TRACEPROV_USE_HUGE_PAGE 1
+// Whether to map memory page or not (otherwise file system is used)
+#define TRACEPROV_USE_MMEM_PAGE 1
+// Whether to map the memory page via huge page.
+#define TRACEPROV_MAP_HUGE_PAGE 1
+
+#if TRACEPROV_USE_MMEM_PAGE==0
+static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
+#endif
+
+#if TRACEPROV_MAP_HUGE_PAGE==1
+#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB )
+#else
+#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS )
+#endif
 
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
