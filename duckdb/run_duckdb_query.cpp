@@ -1,5 +1,9 @@
 // The source for running duckdb (smokedduck) queries.
-// This doesn't exist in Makefiles (because it gets compiled during setup)
+// This is referenced as smokedduck in bunch of places because
+// it was originally written as a smokedduck driver. The code ended up being
+// generic enough to be used as a general duckdb driver.
+// Some options don't make sense for a generic driver (like capture lineage)
+// TODO: Remove those options.
 
 #include <iostream>
 #include <string>
