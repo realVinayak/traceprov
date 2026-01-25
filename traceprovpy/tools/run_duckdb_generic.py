@@ -90,17 +90,20 @@ def run_single(
         time="/tmp/base_time.json",
         min_layer_number=min_layer_used,
         profile="/tmp/base_profile_%d.json",
+        settings="/tmp/base_settings.json",
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
     base_result_time = json_read_file(base_options.time)
     base_profile_out = json_read_iters(base_options.profile, base_options.repeat)
+    base_settings = json_read_file(base_options.settings)
 
     capture_options = base_options._replace(
         i=captured_sql.as_posix(),
         time="/tmp/capture_time.json",
         profile="/tmp/capture_profile_%d.json",
         disable_col_opt=disable_col_opt,
+        settings="/tmp/capture_settings.json",
     )
 
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
@@ -108,6 +111,7 @@ def run_single(
     capture_profile_out = json_read_iters(
         capture_options.profile, capture_options.repeat
     )
+    capture_settings = json_read_file(capture_options.settings)
 
     infer_results = []
     if run_inference:
@@ -138,11 +142,16 @@ def run_single(
                 time=f"/tmp/infer_out_{element_idx}.json",
                 min_layer_number=min_layer_used,
                 disable_col_opt=capture_options.disable_col_opt,
+                settings="/tmp/infer_settings.json",
             )
             traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
             infer_results = [
                 *infer_results,
-                dict(infer_id=element_idx, infer_out=json_read_file(infer_option.time)),
+                dict(
+                    infer_id=element_idx,
+                    infer_out=json_read_file(infer_option.time),
+                    settings=json_read_file(infer_option.settings),
+                ),
             ]
 
     if validate:
@@ -192,6 +201,8 @@ def run_single(
         capture_time=capture_result_time,
         capture_profile=capture_profile_out,
         infer_results=infer_results,
+        base_settings=base_settings,
+        capture_settings=capture_settings,
     )
     return final_result
 
