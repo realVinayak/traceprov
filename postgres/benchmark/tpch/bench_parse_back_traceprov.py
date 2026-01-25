@@ -61,7 +61,11 @@ def special_query(query_name: str, is_traceprov: bool):
                     strict_run=False,
                     preprocess=([MakeTraceProv()] if is_traceprov else []),
                 ),
-                TRACEPROV_CAPTURE_QUERY(),
+                *(
+                    [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
+                    if is_traceprov
+                    else []
+                ),
                 ExtraQuery(
                     label="15_post",
                     query="$INLINE-drop view revenue0;",

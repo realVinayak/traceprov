@@ -3425,6 +3425,7 @@ extern "C" {
             const TraceProvLayerNumber idx = child.first;
             TraceProvNode *node = child.second;
             const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
+            TraceProvData *data = traceprov_perform_duckdb_inference(sql);
             needs_sep = true;
             graph_str.append("{");
             graph_str.append("\"idx\": ");
@@ -3434,6 +3435,10 @@ extern "C" {
             graph_str.append("\"");
             graph_str.append(sql);
             graph_str.append("\"");
+            graph_str.append(",");
+            graph_str.append("\"width\": " + std::to_string(data->size()));
+            graph_str.append(",");
+            graph_str.append("\"rows\": " + std::to_string(data->at(0)->data->size()));
             graph_str.append("}");
         }
         graph_str.append("]");
