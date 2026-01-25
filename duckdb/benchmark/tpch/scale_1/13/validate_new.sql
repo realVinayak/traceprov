@@ -1,21 +1,24 @@
 -- using default substitutions
 select
     c_count,
-    count(*) as custdist,
-    traceprov_log_entry_1 (
-        3,
-        traceprov_agg_key_parallel_offset_1 (2, mapped_agg)
-    )
+    count(*) as custdist
 from
     (
         select
             c_custkey,
-            count(o_orderkey),
-            traceprov_agg_key_parallel_offset_2 (1, customer.rowid, coalesce(orders.rowid, 0)) as mapped_agg
+            count(o_orderkey)
         from
             customer
             left outer join orders on c_custkey = o_custkey
             and o_comment not like '%special%requests%'
+        where
+            (customer.rowid, coalesce(orders.rowid, 0)) in (
+                select
+                    column_1_1,
+                    column_2
+                from
+                    LAYER_1
+            )
         group by
             c_custkey
     ) as c_orders (c_custkey, c_count)
