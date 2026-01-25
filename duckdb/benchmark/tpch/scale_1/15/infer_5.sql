@@ -1,0 +1,5 @@
+SELECT
+    top_level_tp_table_0.column_0::bigint,
+    top_level_tp_table_0.column_1::bigint
+FROM
+    traceprov_read_worker_layer (1::bigint, 5::bigint) AS top_level_tp_table_0
