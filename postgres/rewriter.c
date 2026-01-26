@@ -460,8 +460,17 @@ Query *traceprov_perform_rewrite(
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
         if (list_length(rteFilter) == 0 || (traceprov_find_int_list(rteFilter, foreach_current_index(rteCell)+1))){
+            // If it is lateral, need to also push the current target list (per rte) to the stack.
+            // This is because we can ***correlation***.
+            // We don't reallyyy care till we see a sublink inside that RTE tho.....
+            // Maybe be more smart about it....
+            TraceProvParseContext *context_to_use = tp_context;
+            if (rte->lateral && targets_per_rte != NIL){
+                context_to_use = traceprov_shallow_copy_context(tp_context);
+                context_to_use->parent_targets = lappend(context_to_use->parent_targets, targets_per_rte);
+            }
             // TODO: hasAggs needs to also include distinct?
-            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tp_context, purePointerInParent);
+            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, context_to_use, purePointerInParent);
         }else{
             rteTargets = NIL;
         }

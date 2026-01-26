@@ -38,20 +38,24 @@ extern "C" {
         TraceProvRelationArgs rel_args;
         struct traceprov_aggregate_layer *col_layer_info;
         struct traceprov_aggregate_layer *row_layer_info;
-        void *col_layer_ptr;
-        void *row_layer_ptr;
-        uint64_t number_of_records;
         uint64_t column_width;
         uint64_t row_width;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData {
         uint64_t current;
+        void *col_layer_ptr;
+        void *row_layer_ptr;
+        uint64_t number_of_records;
     } TraceProvInitData;
 
     void traceprov_duckdb_cleanup(struct traceprov_inference_context *p_ctxt){
         duckdb_disconnect(&p_ctxt->con);
         duckdb_close(&p_ctxt->db);
+        g_tp_duckdb_state.did_initialize = false;
+        if (g_tp_duckdb_state.worker_local_contexts)
+            delete g_tp_duckdb_state.worker_local_contexts;
+        g_tp_duckdb_state.worker_local_contexts = nullptr;
     }
 
     void traceprov_duckdb_bind(duckdb_bind_info info) {
@@ -78,7 +82,7 @@ extern "C" {
             if (map_traceprov_shared_context(&shared_context))
                 elog(ERROR, "error maping shared context!");
 
-            g_tp_duckdb_state.did_initialize = false;
+            g_tp_duckdb_state.did_initialize = true;
             g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
         }
 
@@ -90,7 +94,7 @@ extern "C" {
             elog(ERROR, "Expected the layer number to be filled");
 
         my_bind_data->col_layer_info = current_layer;
-        map_layer_file(current_layer->layer_number, current_worker_id, &my_bind_data->col_layer_ptr, current_layer->size);
+
         uint64 column_count = current_layer->num_pk_records;
         my_bind_data->column_width = column_count;
         if (current_layer->rows_layer_number){
@@ -100,7 +104,6 @@ extern "C" {
             column_count += rows_layer->num_pk_records;
             my_bind_data->row_layer_info = rows_layer;
             my_bind_data->row_width = rows_layer->num_pk_records;
-            map_layer_file(rows_layer->layer_number, current_worker_id, &my_bind_data->row_layer_ptr, rows_layer->size);
         }
 
         for (uint64_t col_count = 0; col_count < column_count; col_count++){
@@ -110,17 +113,25 @@ extern "C" {
             duckdb_destroy_logical_type(&type);
         }
 
-        const void *final_ptr = get_final_ptr(my_bind_data->col_layer_ptr, current_layer);
-        // Ugh, TODO: This won't be the same when we'll have sorted-by-agg RLE.
-        my_bind_data->number_of_records = ((uint64)final_ptr - (uint64)my_bind_data->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
-
         duckdb_bind_set_bind_data(info, my_bind_data, free);
     }
 
     void traceprov_duckdb_init(duckdb_init_info info){
+        auto bind_data = (TraceProvBindData *) duckdb_init_get_bind_data(info);
 
         auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
         init_data_inst->current = 0;
+        const auto current_layer = bind_data->col_layer_info;
+        map_layer_file(bind_data->rel_args.layer_number, bind_data->rel_args.worker_id, &init_data_inst->col_layer_ptr, current_layer->size);
+        
+        if (bind_data->row_layer_info){
+            const auto rows_layer = bind_data->row_layer_info;
+            map_layer_file(rows_layer->layer_number, bind_data->rel_args.worker_id, &init_data_inst->row_layer_ptr, rows_layer->size);
+        }
+
+        const void *final_ptr = get_final_ptr(init_data_inst->col_layer_ptr, current_layer);
+        // Ugh, TODO: This won't be the same when we'll have sorted-by-agg RLE.
+        init_data_inst->number_of_records = ((uint64)final_ptr - (uint64)init_data_inst->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
@@ -160,9 +171,9 @@ extern "C" {
 
         auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
         auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
-        auto final_state = fillup_pointer(bind_data->col_layer_info, output, bind_data->col_layer_ptr, init_data->current, bind_data->number_of_records, 0, bind_data->column_width, &bind_data->col_layer_ptr);
+        auto final_state = fillup_pointer(bind_data->col_layer_info, output, init_data->col_layer_ptr, init_data->current, init_data->number_of_records, 0, bind_data->column_width, &init_data->col_layer_ptr);
         if (bind_data->row_layer_info){
-            fillup_pointer(bind_data->row_layer_info, output, bind_data->row_layer_ptr, init_data->current, bind_data->number_of_records, bind_data->column_width, bind_data->row_width, &bind_data->row_layer_ptr);
+            fillup_pointer(bind_data->row_layer_info, output, init_data->row_layer_ptr, init_data->current, init_data->number_of_records, bind_data->column_width, bind_data->row_width, &init_data->row_layer_ptr);
         }
         init_data->current = final_state;
     }

@@ -2241,7 +2241,13 @@ extern "C" {
                 foreach(sublink_cursor, entry->sublinks){
                     TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
                     used_layer_numbers = lappend_int(used_layer_numbers, item->layer_number);
-                    depth_map->insert({item->layer_number, recursion_level});
+                    if (depth_map->find(item->layer_number) == depth_map->end()){
+                        depth_map->insert({item->layer_number, recursion_level});
+                    } else {
+                        // If we've seen this before, update it.
+                        depth_map->at(item->layer_number) = recursion_level;
+                    } 
+
                 }
             }else{
                 elog(ERROR, "Only handling pointer or base relation for now..");
