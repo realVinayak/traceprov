@@ -26,7 +26,7 @@
         21,
         22
     ],
-    "validate": false,
+    "validate": true,
     "subdirs": [
         "params_default"
     ],
@@ -39,7 +39,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 15,
+        "repeat": 3,
         "throwaway": 0
     },
     "q_config": {
