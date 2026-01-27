@@ -116,6 +116,7 @@ def run_single(
 
     infer_results = []
     if run_inference:
+        infer_paths = []
         for element in spec_element["elements"]:
             element_idx = element["idx"]
             if use_optimized:
@@ -133,27 +134,29 @@ def run_single(
                 ).as_posix()
                 mat_contents = f"create or replace table {table_name} AS ({contents});"
                 just_write(infer_path, mat_contents)
+            infer_paths = [*infer_paths, infer_path]
 
-            infer_option = DuckDBDriverOptions(
-                db=capture_options.db,
-                repeat=1,
-                threads=1,
-                i=captured_sql,
-                extra=infer_path,
-                time=f"/tmp/infer_out_{element_idx}.json",
-                min_layer_number=min_layer_used,
-                disable_col_opt=capture_options.disable_col_opt,
-                settings="/tmp/infer_settings.json",
-            )
-            traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
-            infer_results = [
-                *infer_results,
-                dict(
-                    infer_id=element_idx,
-                    infer_out=json_read_file(infer_option.time),
-                    settings=json_read_file(infer_option.settings),
-                ),
-            ]
+        infer_option = DuckDBDriverOptions(
+            db=capture_options.db,
+            repeat=1,
+            threads=1,
+            i=captured_sql,
+            # extra=infer_path,
+            time=f"/tmp/infer_out_{element_idx}.json",
+            min_layer_number=min_layer_used,
+            disable_col_opt=capture_options.disable_col_opt,
+            settings="/tmp/infer_settings.json",
+            extras=infer_paths,
+        )
+        traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
+        infer_results = [
+            *infer_results,
+            dict(
+                infer_id=element_idx,
+                infer_out=json_read_file(infer_option.time),
+                settings=json_read_file(infer_option.settings),
+            ),
+        ]
 
     if validate:
         # need to dump base and infer result on provenance, and compare both.

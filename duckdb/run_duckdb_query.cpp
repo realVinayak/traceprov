@@ -81,7 +81,8 @@ extern "C" {
         // via --min_layer_number
         uint32_t min_layer_number;
         // via --extra
-        std::string extra_query_path;
+        // vector because there can be multiple.
+        std::vector<std::string> *extra_query_paths;
         // via --disable_col_opt
         bool disable_column_optimizer;
     };
@@ -104,7 +105,7 @@ extern "C" {
             .dry_run = false,
             .no_reinit_state = false,
             .min_layer_number = 0,
-            .extra_query_path = "",
+            .extra_query_paths = new std::vector<std::string>,
             .disable_column_optimizer = false
         };
         for (int i = 1; i < argc; i++){
@@ -151,7 +152,8 @@ extern "C" {
                 options.min_layer_number = std::atoi(argv[++i]);
                 continue;
             } else if (IS_OPTION("--extra")){
-                options.extra_query_path = std::string(argv[++i]);
+                auto extra_path = std::string(argv[++i]);
+                options.extra_query_paths->push_back(extra_path);
                 continue;
             } else if (IS_OPTION("--disable_col_opt")){
                 options.disable_column_optimizer = true;
@@ -383,13 +385,16 @@ extern "C" {
         std::cout << "From file: " << in_sql << std::endl;
         std::vector<PerformQueryResult *> agg_result;
 
-        std::string extra_sql = "";
-        if (IS_SET(options.extra_query_path)){
-            std::ifstream extra_sql_stream(options.extra_query_path.c_str());
+        std::vector<std::string> extra_sqls;
+
+        for (auto extra_sql_path: *options.extra_query_paths){
+            std::string extra_sql = "";
+            std::ifstream extra_sql_stream(extra_sql_path.c_str());
             std::stringstream extra_buffer;
             extra_buffer << extra_sql_stream.rdbuf();
             extra_sql = extra_buffer.str();
             std::cout << "From file (extra): " << extra_sql << std::endl;
+            extra_sqls.push_back(extra_sql);
         }
 
         duckdb_database db;
@@ -446,9 +451,9 @@ extern "C" {
 
         for (int i = 0; i < options.repeat; i++){
             perform_query(options, con, in_sql, i, agg_result);
-            Options new_options = options;
-            new_options.no_reinit_state = true;
-            if (IS_SET(extra_sql)){
+            for (auto extra_sql: extra_sqls){
+                Options new_options = options;
+                new_options.no_reinit_state = true;
                 perform_query(new_options, con, extra_sql, i, agg_result);
             }
         }
