@@ -14,6 +14,7 @@
 #include <chrono>
 #include <vector>
 
+#include "traceprov_duckdb_infer.hpp"
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
@@ -371,8 +372,6 @@ extern "C" {
         }
 
     }
-
-    duckdb_table_function traceprov_create_table_func();
 
     int main(int argc, char **argv){
         struct Options options = parse_args(argc, argv);
