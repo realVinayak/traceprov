@@ -44,8 +44,8 @@ extern "C" {
         void *row_count_layer_ptr;
         uint64_t num_rows;
         uint64_t column_width;
-        struct traceprov_aggregate_layer *col_layer;
-        struct traceprov_aggregate_layer *row_layer;
+        const struct traceprov_aggregate_layer *col_layer;
+        const struct traceprov_aggregate_layer *row_layer;
         bool is_dummy;
         // how many chunks can fit in the first page.
         uint64_t first_page_element_count;
@@ -63,6 +63,7 @@ extern "C" {
         bool is_single;
         uint64_t current;
         uint64_t offset_in_chunk;
+        void *col_layer_ptr;
     } TraceProvInitData;
 
     static uint64_t get_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t idx);
@@ -279,25 +280,19 @@ extern "C" {
         duckdb_bind_set_bind_data(info, my_bind_data, free);
     }
 
-    void bp(){
-
-    }
-
     void traceprov_duckdb_init(duckdb_init_info info){
         auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
         auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
         init_data_inst->current = bind_data->start_offset;
         init_data_inst->is_single = (bind_data->rel_args.offset != -1);
-        if (init_data_inst->is_single){
-            bp();
-        }
         init_data_inst->offset_in_chunk = bind_data->offset_in_chunk;
+        init_data_inst->col_layer_ptr = bind_data->col_layer_ptr;
         elog(INFO, "Using %ld as the start offset!", bind_data->start_offset);
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
     uint64_t fillup_pointer(
-        struct traceprov_aggregate_layer *layer,
+        const struct traceprov_aggregate_layer *layer,
         duckdb_data_chunk chunk,
         void *source_ptr,
         uint64_t current_pos,
@@ -330,7 +325,7 @@ extern "C" {
     }
 
     uint64_t fillup_pointer_huge(
-        struct traceprov_aggregate_layer *layer,
+        const struct traceprov_aggregate_layer *layer,
         duckdb_data_chunk chunk,
         uint64_t current_pos,
         TraceProvBindData *bind_data,
@@ -480,7 +475,7 @@ extern "C" {
             return;
         }
         // The row case.
-        init_data->current = fillup_pointer(bind_data->col_layer, output, bind_data->col_layer_ptr, init_data->current, bind_data->num_rows, bind_data->column_width, &bind_data->col_layer_ptr);
+        init_data->current = fillup_pointer(bind_data->col_layer, output, init_data->col_layer_ptr, init_data->current, bind_data->num_rows, bind_data->column_width, &init_data->col_layer_ptr);
     }
 
     duckdb_table_function traceprov_create_table_func(){
