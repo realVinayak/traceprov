@@ -55,11 +55,14 @@ extern "C" {
         uint64_t row_first_page_element_count;
         uint64_t row_incr_page_element_count;
         bool is_strict_rows;
+        uint64_t start_offset;
+        int64_t offset_in_chunk;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData {
+        bool is_single;
         uint64_t current;
-        uint64_t current_page;
+        uint64_t offset_in_chunk;
     } TraceProvInitData;
 
     static uint64_t get_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t idx);
@@ -91,7 +94,7 @@ extern "C" {
 
 
     void traceprov_duckdb_bind(duckdb_bind_info info){
-        if (duckdb_bind_get_parameter_count(info) != 2 || duckdb_bind_get_parameter_count(info) != 3){
+        if (duckdb_bind_get_parameter_count(info) != 2 && duckdb_bind_get_parameter_count(info) != 3){
             elog(ERROR, "Expected 2 or 3 params!");
         }
 
@@ -106,14 +109,14 @@ extern "C" {
         const uint64_t layer_number = duckdb_get_int64(param_2);
         duckdb_destroy_value(&param_2);
 
+        int64_t log_offset = -1;
         if (duckdb_bind_get_parameter_count(info) == 3){
             auto param_3 = duckdb_bind_get_parameter(info, 2);
-            const int64_t log_offset = duckdb_get_int64(param_3);
+            log_offset = duckdb_get_int64(param_3);
             duckdb_destroy_value(&param_3);
-            my_bind_data->rel_args.offset = log_offset;
-        }else{
-            my_bind_data->rel_args.offset = -1;
         }
+        my_bind_data->rel_args.offset = log_offset;
+        my_bind_data->offset_in_chunk = -1;
 
         my_bind_data->rel_args.worker_id = current_worker_id;
         my_bind_data->rel_args.layer_number = layer_number;
@@ -185,7 +188,6 @@ extern "C" {
                 my_bind_data->row_first_page_element_count = (TRACEPROV_PAGE_SIZE / logged_chunk_size);
                 my_bind_data->row_incr_page_element_count = ((TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG) / logged_chunk_size);
             }
-
             chunk_count = rows_layer->num_rows;
             // move past the first page.
             if (((current_layer->num_pk_records)*TP_STD_VECTOR_SIZE) > TRACEPROV_PAGE_SIZE)
@@ -208,14 +210,89 @@ extern "C" {
             duckdb_destroy_logical_type(&type);
         }
 
+        if  (log_offset != -1){
+            // In this case, need to determine the chunk that contains the offset.
+            // If world was a nice place, this would have been easy.
+            // But, need to consult the chunk sizes (in row col ptr.)
+            if(my_bind_data->is_strict_rows){
+                elog(ERROR, "Unexpected. Doesn't need handling");
+            }
+            if (my_bind_data->row_layer->page_mapping){
+                // In this case, the layers are in memory, so need to consult the row layer
+                // mapping to determine the chunk
+                uint64_t start_idx = 0;
+                int64_t size_seen = 0;
+                int64_t offset_in_chunk = 0;
+                while (start_idx < my_bind_data->num_rows){
+                    const uint64_t row_page_idx = get_idx(
+                        my_bind_data->row_first_page_element_count,
+                        my_bind_data->row_incr_page_element_count,
+                        start_idx
+                    );
+                    const uint64_t idx_in_row_page = get_local_idx(
+                        my_bind_data->row_first_page_element_count,
+                        my_bind_data->row_incr_page_element_count,
+                        row_page_idx,
+                        start_idx
+                    );
+                    const uint64_t num_rows = ((uint64_t *)my_bind_data->row_layer->page_mapping[row_page_idx])[idx_in_row_page];
+                    const int64_t current_size = size_seen;
+                    size_seen += num_rows;
+                    if (log_offset < size_seen){
+                        offset_in_chunk = (log_offset - current_size);
+                        break;
+                    }
+                    start_idx++;
+                }
+                if (start_idx == my_bind_data->num_rows){
+                    elog(ERROR, "Expected to the find a belonging chunk!");
+                }
+                my_bind_data->start_offset = start_idx;
+                my_bind_data->offset_in_chunk = offset_in_chunk;
+            }else{
+                // In this case, the layers are in file.
+                // Still need to look at row layer, BUT, don't need to look at the indirect page mapping.
+                if (my_bind_data->row_count_layer_ptr == NULL)
+                    elog(ERROR, "Expected the row count to be filled!");
+                uint64_t start_idx = 0;
+                int64_t size_seen = 0;
+                int64_t offset_in_chunk = 0;
+                while (start_idx < my_bind_data->num_rows){
+                    const uint64_t num_rows = ((uint64_t *)my_bind_data->row_count_layer_ptr)[start_idx];
+                    const int64_t current_size = size_seen;
+                    size_seen += num_rows;
+                    if (log_offset < size_seen){
+                        offset_in_chunk = (log_offset - current_size);
+                        break;
+                    }
+                    start_idx++;
+                }
+                if (start_idx == my_bind_data->num_rows){
+                    elog(ERROR, "Expected to the find a belonging chunk!");
+                }
+                my_bind_data->start_offset = start_idx;
+                my_bind_data->offset_in_chunk = offset_in_chunk;
+            }
+        }
+
         my_bind_data->is_dummy = is_dummy;
         duckdb_bind_set_bind_data(info, my_bind_data, free);
     }
 
+    void bp(){
+
+    }
+
     void traceprov_duckdb_init(duckdb_init_info info){
+        auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
         auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
-        init_data_inst->current = 0;
-        init_data_inst->current_page = 0;
+        init_data_inst->current = bind_data->start_offset;
+        init_data_inst->is_single = (bind_data->rel_args.offset != -1);
+        if (init_data_inst->is_single){
+            bp();
+        }
+        init_data_inst->offset_in_chunk = bind_data->offset_in_chunk;
+        elog(INFO, "Using %ld as the start offset!", bind_data->start_offset);
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
@@ -329,16 +406,28 @@ extern "C" {
                 // This is the local idx in that page where the chunk is.
                 const uint64_t idx_in_col_page = get_local_idx(bind_data->first_page_element_count, bind_data->incr_page_element_count, col_page_idx, init_data->current);
                 void *chunk_data_ptr = (void *)&((uint8_t*)bind_data->col_layer->page_mapping[col_page_idx])[idx_in_col_page*(sizeof(uint64_t)*bind_data->column_width*TP_STD_VECTOR_SIZE)];
-                const uint64_t row_page_idx = get_idx(bind_data->row_first_page_element_count, bind_data->row_incr_page_element_count, init_data->current);
-                const uint64_t idx_in_row_page = get_local_idx(bind_data->row_first_page_element_count, bind_data->row_incr_page_element_count, row_page_idx, init_data->current);
-                uint64_t num_rows = ((uint64_t *)bind_data->row_layer->page_mapping[row_page_idx])[idx_in_row_page];
-                for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
-                    uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                    const uint64_t *source_ptr = &((uint64_t *)chunk_data_ptr)[col_idx*TP_STD_VECTOR_SIZE];
-                    memcpy(dest_ptr, source_ptr, num_rows *sizeof(uint64_t));
+                if (init_data->is_single){
+                    // the current chunk pointer will pointer to all the entries (organized by column first).
+                    // Need to only output the 1 for the selected offset_in_chunk.
+                    for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        dest_ptr[0] = (((uint64_t*)chunk_data_ptr)[init_data->offset_in_chunk]);
+                    }
+                    chunk_size = 1;
+                    // This way, the next call will be the last.
+                    init_data->current = bind_data->num_rows;
+                }else{
+                    const uint64_t row_page_idx = get_idx(bind_data->row_first_page_element_count, bind_data->row_incr_page_element_count, init_data->current);
+                    const uint64_t idx_in_row_page = get_local_idx(bind_data->row_first_page_element_count, bind_data->row_incr_page_element_count, row_page_idx, init_data->current);
+                    const uint64_t num_rows = ((uint64_t *)bind_data->row_layer->page_mapping[row_page_idx])[idx_in_row_page];
+                    for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        const uint64_t *source_ptr = &((uint64_t *)chunk_data_ptr)[col_idx*TP_STD_VECTOR_SIZE];
+                        memcpy(dest_ptr, source_ptr, num_rows *sizeof(uint64_t));
+                    }
+                    init_data->current++;
+                    chunk_size = num_rows;
                 }
-                init_data->current++;
-                chunk_size = num_rows;
             }
             duckdb_data_chunk_set_size(output, chunk_size);
             return;
@@ -374,10 +463,18 @@ extern "C" {
                 for (idx_t col_idx = 0; col_idx < col_width; col_idx++){
                     uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
                     const uint64_t *source_ptr = &(((uint64_t *)(bind_data->col_layer_ptr))[(((init_data->current * col_width) + col_idx) * TP_STD_VECTOR_SIZE)]);
-                    memcpy(dest_ptr, source_ptr, num_rows * sizeof(uint64_t));
+                    if (init_data->is_single){
+                        dest_ptr[0] = source_ptr[init_data->offset_in_chunk];
+                    }else{
+                        memcpy(dest_ptr, source_ptr, num_rows * sizeof(uint64_t));
+                    }
                 }
                 init_data->current++;
                 chunk_size = num_rows;
+                if (init_data->is_single){
+                    init_data->current = bind_data->num_rows;
+                    chunk_size = 1;
+                }
             }
             duckdb_data_chunk_set_size(output, chunk_size);
             return;

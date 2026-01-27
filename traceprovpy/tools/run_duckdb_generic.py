@@ -4,6 +4,7 @@
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
@@ -232,6 +233,10 @@ def main():
     # Stuff to run just before the base..
     # Maybe handle this more nicely (as done in Postgres implementation)
     base_parser.add_argument("--pre_base", required=False)
+    base_parser.add_argument(
+        "--run_infer", action=argparse.BooleanOptionalAction, default=True
+    )
+    base_parser.add_argument("--out_path", required=True)
     parsed = base_parser.parse_args()
     result = run_single(
         exe=Path(parsed.exe),
@@ -247,8 +252,11 @@ def main():
         # temp...
         iters=3,
         pre_base=Path(parsed.pre_base) if parsed.pre_base is not None else None,
+        run_inference=parsed.run_infer,
     )
-    with open("playground/out.json", "w") as f:
+    out_path = Path(parsed.out_path)
+    os.makedirs(out_path.parent, exist_ok=True)
+    with open(out_path, "w") as f:
         f.write(json.dumps(result, indent=4))
 
 
