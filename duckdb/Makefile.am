@@ -9,3 +9,7 @@ bin_PROGRAMS = run_smokedduck
 run_smokedduck_SOURCES = run_duckdb_query.cpp
 run_smokedduck_LDADD = -lduckdb libtraceprov.la
 run_smokedduck_LDFLAGS = -L${SMOKEDDUCK_PATH} -Wl,-rpath,${SMOKEDDUCK_PATH}
+if ENABLE_SD_MODE
+AM_CFLAGS += -DTRACEPROV_SD_MODE=1
+AM_CPPFLAGS += -DTRACEPROV_SD_MODE=1
+endif

@@ -3,6 +3,7 @@
 
 
 import argparse
+from itertools import product
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,8 @@ from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
+
+TP_OFFSET_TICKER = "__TP_OFFSET__"
 
 
 # misc wrappers to simplify stuff.
@@ -37,10 +40,252 @@ def json_read_iters(file: str, iters: int):
     return [json_read_file(file.replace("%d", iter)) for iter in map(str, range(iters))]
 
 
+def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]):
+    assert "%d_%d" in file
+    return [
+        json_read_file(file.replace("%d_%d", f"{a}_{b}"))
+        for a, b in product(first_iter, second_iter)
+    ]
+
+
 def make_dump_query(in_query: str, out_path: str):
     in_query = in_query.replace(";", "")
     dump_query = f"copy (select * from ({in_query}) f order by all) to '{out_path}' (header false)"
     return dump_query
+
+
+def run_sample_inference(
+    exec: Path,
+    db: Path,
+    query_num: str,
+    root: Path,
+    spec_element: dict,
+    samples: list[int],
+    use_optimized: bool = False,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+    pre_base: Path | None = None,
+    disable_col_opt: bool = False,
+    profile: bool = True,
+    settings: bool = True,
+):
+    query_dir = root / query_num
+    if use_optimized:
+        captured_sql = query_dir / "capture_new.sql"
+    else:
+        captured_sql = query_dir / "capture.sql"
+    min_layer_used = spec_element["min_local_used"]
+    exec_str = exec.as_posix()
+    if pre_base:
+        pre_base_options = DuckDBDriverOptions(
+            db=db.as_posix(), repeat=1, threads=1, i=(query_dir / pre_base).as_posix()
+        )
+        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+
+    sample_q_dir = Path("/tmp/")
+    extra_sqls = []
+    sql_spec_map = []
+    for idx, element in enumerate(spec_element["elements"]):
+        element_idx = element["idx"]
+        if use_optimized:
+            infer_path = query_dir / f"infer_{element_idx}_new_offset.sql"
+        else:
+            infer_path = query_dir / f"infer_{element_idx}_offset.sql"
+
+        assert infer_path.exists()
+        infer_query = just_read(infer_path)
+        assert TP_OFFSET_TICKER in infer_query
+        sample_element_q_dir = sample_q_dir / str(idx)
+        os.makedirs(sample_element_q_dir, exist_ok=True)
+        for sample_id, out_id in enumerate(samples):
+            infer_with_offset = infer_query.replace(TP_OFFSET_TICKER, str(out_id))
+            final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
+            just_write(final_q_path, infer_with_offset)
+            extra_sqls.append(final_q_path.as_posix())
+            sql_spec_map.append((element_idx, sample_id, out_id))
+
+    just_write("/tmp/extra_file.txt", "\n".join(extra_sqls))
+    sql_spec_map = product(sql_spec_map, range(iters))
+    sql_spec_map = [("capture", 0), *sql_spec_map]
+
+    capture_options = DuckDBDriverOptions(
+        db=db.as_posix(),
+        repeat=iters,
+        threads=1,
+        i=captured_sql.as_posix(),
+        time="/tmp/infer_time.json",
+        min_layer_number=min_layer_used,
+        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
+        settings=("/tmp/capture_settings.json" if settings else None),
+        disable_col_opt=disable_col_opt,
+        extra_file="/tmp/extra_file.txt",
+        main_once_extra_all=True,
+    )
+
+    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    capture_result_time = json_read_file(capture_options.time)
+    if capture_options.profile:
+        capture_profile_out = json_read_two_iters(
+            capture_options.profile,
+            range(1, len(extra_sqls) + 1),
+            range(capture_options.repeat),
+        )
+    else:
+        capture_profile_out = None
+    if capture_options.settings:
+        capture_settings = json_read_file(capture_options.settings)
+    else:
+        capture_settings = None
+
+    assert len(capture_result_time) == len(sql_spec_map)
+    return dict(
+        result_time=capture_result_time,
+        profile=capture_profile_out,
+        settings=capture_settings,
+        sql_spec_map=sql_spec_map,
+    )
+
+
+def run_single_smokedduck(
+    exe: Path,
+    db: Path,
+    query_num: str,
+    base_root: Path,
+    root: Path,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+    pre_base: Path | None = None,
+):
+    base_dir = base_root / query_num
+    base_sql = base_dir / "base.sql"
+    exec_str = exe.as_posix()
+    if pre_base:
+        pre_base_options = DuckDBDriverOptions(
+            db=db.as_posix(),
+            repeat=1,
+            threads=1,
+            i=(root / query_num / pre_base).as_posix(),
+        )
+        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+
+    base_options = DuckDBDriverOptions(
+        db=db.as_posix(),
+        repeat=iters,
+        threads=1,
+        i=base_sql.as_posix(),
+        time="/tmp/base_time.json",
+        profile="/tmp/base_profile_%d.json",
+        settings="/tmp/base_settings.json",
+    )
+    traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
+    base_result_time = json_read_file(base_options.time)
+    base_profile_out = json_read_iters(base_options.profile, base_options.repeat)
+    base_settings = json_read_file(base_options.settings)
+
+    capture_options = base_options._replace(
+        time="/tmp/capture_time.json",
+        profile="/tmp/capture_profile_%d.json",
+        settings="/tmp/capture_settings.json",
+        stats="/tmp/capture_sd_stats_%d.json",
+        lineage=True,
+    )
+    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    capture_result_time = json_read_file(capture_options.time)
+    capture_profile_out = json_read_iters(
+        capture_options.profile, capture_options.repeat
+    )
+    capture_settings = json_read_file(capture_options.settings)
+    capture_stats = json_read_iters(capture_options.stats, capture_options.repeat)
+    final_result = dict(
+        base_time=base_result_time,
+        base_profile=base_profile_out,
+        capture_time=capture_result_time,
+        capture_profile=capture_profile_out,
+        base_settings=base_settings,
+        capture_settings=capture_settings,
+        capture_stats=capture_stats,
+    )
+    return final_result
+
+
+def run_sample_inference_smokedduck(
+    exec: Path,
+    db: Path,
+    query_num: str,
+    base_root: Path,
+    root: Path,
+    samples: list[int],
+    query_id: int,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+    pre_base: Path | None = None,
+    profile: bool = True,
+    settings: bool = True,
+):
+    base_dir = base_root / query_num
+    base_sql = base_dir / "base.sql"
+    exec_str = exec.as_posix()
+    if pre_base:
+        pre_base_options = DuckDBDriverOptions(
+            db=db.as_posix(),
+            repeat=1,
+            threads=1,
+            i=(root / query_num / pre_base).as_posix(),
+        )
+        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+
+    sample_q_dir = Path("/tmp/sd_infer/") / query_num
+    os.makedirs(sample_q_dir, exist_ok=True)
+    extra_sqls = []
+    sql_spec_map = []
+    for sample_id, out_id in enumerate(samples):
+        final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
+        infer_with_offset = (
+            f"""select *  from lineage_query(1, 100, {out_id}::UINTEGER);"""
+        )
+        just_write(final_q_path, infer_with_offset)
+        extra_sqls.append(final_q_path.as_posix())
+        sql_spec_map.append((sample_id, out_id))
+
+    sql_spec_map = [
+        ("capture", 0),
+        *product(sql_spec_map, range(iters)),
+    ]
+    just_write("/tmp/extra_file.txt", "\n".join(extra_sqls))
+
+    capture_options = DuckDBDriverOptions(
+        db=db.as_posix(),
+        repeat=iters,
+        threads=1,
+        i=base_sql.as_posix(),
+        time="/tmp/infer_time.json",
+        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
+        settings=("/tmp/capture_settings.json" if settings else None),
+        extra_file="/tmp/extra_file.txt",
+        stats="/tmp/capture_sd_stats_%d.json",
+        lineage=True,
+        main_once_extra_all=True,
+    )
+
+    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    capture_result_time = json_read_file(capture_options.time)
+    if capture_options.profile:
+        capture_profile_out = json_read_two_iters(
+            capture_options.profile,
+            range(1, len(extra_sqls) + 1),
+            range(capture_options.repeat),
+        )
+    else:
+        capture_profile_out = None
+    if capture_options.settings:
+        capture_settings = json_read_file(capture_options.settings)
+    else:
+        capture_settings = None
+
+    assert len(capture_result_time) == len(sql_spec_map)
+    return dict(
+        result_time=capture_result_time,
+        profile=capture_profile_out,
+        settings=capture_settings,
+        sql_spec_map=sql_spec_map,
+    )
 
 
 def run_single(

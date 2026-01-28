@@ -1,4 +1,8 @@
 # This makes things more organized.
+from datetime import datetime
+import json
+from pathlib import Path
+from typing import Any
 from traceprovpy.tools.benchmark import ExtraQuery
 from traceprovpy.tools.run_with_timeout import MakeTraceProv
 import os
@@ -90,3 +94,12 @@ TRACEPROV_GET_GENERIC_DERIVATION_SPEC = lambda: ExtraQuery(
     strict_run=True,
     capture_output=True,
 )
+
+
+def traceprov_dump_safe_results(suff: str, results: Any):
+    current_timestamp = datetime.now()
+    datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
+    result_dir = Path(f"results/{suff}_{datetime_string}/")
+    os.makedirs(result_dir, exist_ok=True)
+    with open(result_dir / "result.json", "w") as f:
+        f.write(json.dumps(results))

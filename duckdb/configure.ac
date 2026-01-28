@@ -18,9 +18,15 @@ AC_ARG_WITH([smokedduck],
     [smokedduck="$withval"],
     [smokedduck=""]
 )
+AC_ARG_ENABLE([sd_mode],
+  AS_HELP_STRING([--enable-sd_mode], [enable foo support]),
+  [sd_mode=$enableval],
+  [sd_mode=no]
+)
 AC_SUBST([SMOKEDDUCK_INCUDE_PATH], ["$smokedduck_include_path"])
 AC_SUBST([SMOKEDDUCK_PATH], ["$smokedduck"])
 AC_SUBST([TRACEPROV_PG_INCLUDE_DIR])
 AC_SUBST([TRACEPROV_PAGE_SIZE])
 AC_SUBST([TRACEPROV_CUR_DIR])
+AM_CONDITIONAL([ENABLE_SD_MODE], [test "x$sd_mode" = "xyes"])
 AC_OUTPUT

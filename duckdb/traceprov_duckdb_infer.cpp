@@ -1,6 +1,6 @@
 // implements table scan functions, for duckdb-based traceprov files.
 
-
+#if TRACEPROV_SD_MODE==0
 #include <stdlib.h>
 #include <vector>
 
@@ -246,7 +246,8 @@ extern "C" {
                     start_idx++;
                 }
                 if (start_idx == my_bind_data->num_rows){
-                    elog(ERROR, "Expected to the find a belonging chunk!");
+                    is_dummy = true;
+                    // elog(ERROR, "Expected to the find a belonging chunk!");
                 }
                 my_bind_data->start_offset = start_idx;
                 my_bind_data->offset_in_chunk = offset_in_chunk;
@@ -269,7 +270,8 @@ extern "C" {
                     start_idx++;
                 }
                 if (start_idx == my_bind_data->num_rows){
-                    elog(ERROR, "Expected to the find a belonging chunk!");
+                    is_dummy = true;
+                    // elog(INFO, "Expected to the find a belonging chunk!");
                 }
                 my_bind_data->start_offset = start_idx;
                 my_bind_data->offset_in_chunk = offset_in_chunk;
@@ -501,3 +503,4 @@ extern "C" {
         return function;
     }
 }
+#endif

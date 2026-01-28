@@ -1,3 +1,4 @@
+
 #include "traceprov.h"
 #include "utils.h"
 #include "duckdb.h"
@@ -11,6 +12,7 @@ struct current_context traceprov_current = {.my_worker_id = 0,
                                             .local_context = NULL,
                                             .maximum_local_layer_used = 0};
 
+#if TRACEPROV_SD_MODE==0
 static void bp(){
 
 }
@@ -334,3 +336,4 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
     }
     return funcs;
 }
+#endif
