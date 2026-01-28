@@ -34,9 +34,17 @@ class DuckDBDriverOptions(NamedTuple):
     extra: str = None
     disable_col_opt: bool = None
     extras: list[str] = []
+    main_once_extra_all: bool = False
+    extra_file: str = None
 
     def _boolean_options(self):
-        return {"lineage", "pending", "no_reinit", "disable_col_opt"}
+        return {
+            "lineage",
+            "pending",
+            "no_reinit",
+            "disable_col_opt",
+            "main_once_extra_all",
+        }
 
     def serialize(self) -> str:
         options = self._asdict()

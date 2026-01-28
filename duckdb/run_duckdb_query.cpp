@@ -85,6 +85,12 @@ extern "C" {
         std::vector<std::string> *extra_query_paths;
         // via --disable_col_opt
         bool disable_column_optimizer;
+        // via --main_once_extra_all
+        // In some cases, for the sake of timing,
+        // need to run the extra queries together.
+        bool main_once_extra_all;
+        // via --extra_file
+        std::string extra_file;
     };
 
     #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -106,7 +112,9 @@ extern "C" {
             .no_reinit_state = false,
             .min_layer_number = 0,
             .extra_query_paths = new std::vector<std::string>,
-            .disable_column_optimizer = false
+            .disable_column_optimizer = false,
+            .main_once_extra_all = false,
+            .extra_file = ""
         };
         for (int i = 1; i < argc; i++){
             if (IS_OPTION("--lineage")){
@@ -157,6 +165,23 @@ extern "C" {
                 continue;
             } else if (IS_OPTION("--disable_col_opt")){
                 options.disable_column_optimizer = true;
+                continue;
+            } else if (IS_OPTION("--main_once_extra_all")){
+                options.main_once_extra_all = true;
+                continue;
+            } else if (IS_OPTION("--extra_file")){
+                auto extra_path = std::string(argv[++i]);
+                std::ifstream extra_file_stream(extra_path.c_str());
+                uint64_t added = 0;
+                for (std::string extra_file_path; std::getline(extra_file_stream, extra_file_path);){
+                    if (extra_file_path.size() > 0){
+                        options.extra_query_paths->push_back(extra_file_path);
+                        added++;
+                    }
+                }
+                if (added == 0){
+                    elog(ERROR, "Expected some files to be added!");
+                }
                 continue;
             }
 
@@ -260,41 +285,35 @@ extern "C" {
     void perform_query(
         struct Options &options, 
         duckdb_connection &con, 
-        std::string &in_sql, 
-        int iter,
-        std::vector<PerformQueryResult *> &agg_result
+        std::string &in_sql,
+        std::vector<PerformQueryResult *> &agg_result,
+        const char *final_profile_out,
+        const char *final_stats_query
     ){
 
-        //if (IS_SET(options.profile_out_path)){
-        //    DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
-        //    char profile_out[256] = {0};
-        //    sprintf(profile_out, options.profile_out_path.c_str(), iter);
-        //    char final_profile_out[256] = {0};
-        //    sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
-        //    DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
-        //}
+        #if TRACEPROV_SD_MODE==0
+        if (!options.no_reinit_state){
+            DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+        }
+        #endif
+
+        if (options.min_layer_number){
+            traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        }
+
 
         if (options.capture_lineage){
             DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_LINEAGE, "enable lineage");
             DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
         }
 
-        if (!options.no_reinit_state){
-            DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
-        }
-
-        if (options.min_layer_number){
-            traceprov_current.maximum_local_layer_used = options.min_layer_number;
-        }
-
         if (IS_SET(options.profile_out_path)){
+            if (final_profile_out == NULL)
+                elog(ERROR, "Expected profile out to be set!");
             DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
-            char profile_out[256] = {0};
-            sprintf(profile_out, options.profile_out_path.c_str(), iter);
-            char final_profile_out[256] = {0};
-            sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
             DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
         }
+
 
         // Need to use both, the pending and the streaming API.
         duckdb_prepared_statement stmt;
@@ -351,7 +370,7 @@ extern "C" {
 
         // This needs to run before anything else bc of overwrites.
         DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
-        
+
         if (options.capture_lineage){
             DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_LINEAGE, "disable lineage");
         }
@@ -359,11 +378,9 @@ extern "C" {
         std::cout << "Chunks: " << chunk_count;
 
         if (IS_SET(options.stats_path)){
-            char stats_query[256] = { 0 };
-            char final_stats_query[256] = { 0 };
-            sprintf(stats_query,  options.stats_path.c_str(), iter);
-            sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
-            std::cout << "STATS QUERY: " << final_stats_query << std::endl;
+            if (final_stats_query == NULL)
+                elog(ERROR, "Expected final stats query to be set!");
+
             if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
                 std::cout << duckdb_prepare_error(stmt) << std::endl;
             }
@@ -393,7 +410,7 @@ extern "C" {
             std::stringstream extra_buffer;
             extra_buffer << extra_sql_stream.rdbuf();
             extra_sql = extra_buffer.str();
-            std::cout << "From file (extra): " << extra_sql << std::endl;
+            // std::cout << "From file (extra): " << extra_sql << std::endl;
             extra_sqls.push_back(extra_sql);
         }
 
@@ -403,6 +420,7 @@ extern "C" {
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
         DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
+        #if TRACEPROV_SD_MODE==0
         const uint32_t num_args = 12;
         duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
         duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
@@ -421,6 +439,7 @@ extern "C" {
         DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
         duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
+        #endif
          
         if (options.disable_column_optimizer){
 		DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
@@ -429,9 +448,11 @@ extern "C" {
 
         DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
 
+        #if TRACEPROV_SD_MODE==0
         if (!options.no_reinit_state){
             DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         }
+        #endif
 
         if (options.min_layer_number){
             traceprov_current.maximum_local_layer_used = options.min_layer_number;
@@ -449,12 +470,61 @@ extern "C" {
             DUCKDB_RUN_SHORT_QUERY(con, indx_set_query.c_str(), "setting index scan percent");
         }
 
-        for (int i = 0; i < options.repeat; i++){
-            perform_query(options, con, in_sql, i, agg_result);
-            for (auto extra_sql: extra_sqls){
+        if (!options.main_once_extra_all){
+            for (int i = 0; i < options.repeat; i++){
+                char final_profile_out[256] = {0};
+                char final_stats_query[256] = {0};
+                if (IS_SET(options.profile_out_path)){
+                    char profile_out[256] = {0};
+                    sprintf(profile_out, options.profile_out_path.c_str(), i);
+                    sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+                }
+
+                if (IS_SET(options.stats_path)){
+                    char stats_query[256] = {0};
+                    sprintf(stats_query,  options.stats_path.c_str(), i);
+                    sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
+                    std::cout << "STATS QUERY: " << final_stats_query << std::endl;
+                }
+                
+                perform_query(options, con, in_sql, agg_result, final_profile_out, final_stats_query);
+                for (auto extra_sql: extra_sqls){
+                    Options new_options = options;
+                    new_options.no_reinit_state = true;
+                    perform_query(new_options, con, extra_sql, agg_result, NULL, NULL);
+                }
+            }
+        }else{
+            // run main once.
+            {
                 Options new_options = options;
-                new_options.no_reinit_state = true;
-                perform_query(new_options, con, extra_sql, i, agg_result);
+                new_options.profile_out_path = "";
+                char final_stats_query[256] = {0};
+                if (IS_SET(new_options.stats_path)){
+                    char stats_query[256] = {0};
+                    sprintf(stats_query,  new_options.stats_path.c_str(), 0);
+                    sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
+                    std::cout << "STATS QUERY: " << final_stats_query << std::endl;
+                }
+                perform_query(new_options, con, in_sql, agg_result, NULL, final_stats_query);
+            }
+            int extra_sql_idx = 0;
+            // Run extra all ;)
+            for (auto extra_sql: extra_sqls){
+                extra_sql_idx++;
+                Options extra_options = options;
+                extra_options.no_reinit_state = true;
+                extra_options.capture_lineage = false;
+                extra_options.stats_path = "";
+                char final_profile_out[256] = {0};
+                for (int i = 0; i < extra_options.repeat; i++){
+                    if (IS_SET(extra_options.profile_out_path)){
+                        char profile_out[256] = {0};
+                        sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
+                        sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+                    }
+                    perform_query(extra_options, con, extra_sql, agg_result, final_profile_out, NULL);
+                }
             }
         }
 
@@ -473,12 +543,17 @@ extern "C" {
             for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
                 auto current = agg_result.at(computed_time_idx);
                 if (computed_time_idx > 0) time_out_json += ",";
+                const uint64_t width = (current->data->size());
+                uint64_t row_count = 0;
+                if (width > 0){
+                    row_count = (current->data->at(0)->data->size());
+                }
                 time_out_json += "{";
                 time_out_json += "\"time\":" + std::to_string(current->computed_time);
                 time_out_json += ",";
-                time_out_json += "\"width\":" + std::to_string(current->data->size());
+                time_out_json += "\"width\":" + std::to_string(width);
                 time_out_json += ",";
-                time_out_json += "\"row_count\": " + std::to_string(current->data->at(0)->data->size());
+                time_out_json += "\"row_count\": " + std::to_string(row_count);
                 time_out_json += "}";
             }
             time_out_json += "]";
