@@ -2227,36 +2227,60 @@ extern "C" {
     static List *get_used_sublinks_in_dependency(
         const TraceProvDependency *dependency,
         TraceProvDepthMap *depth_map,
-        const uint32 recursion_level
+        const uint32 recursion_level,
+        TraceProvParseContext *tp_context
     ){
         List *used_layer_numbers = NIL;
         ListCell *cursor;
+        // Perform everything on the child first.
+        // We can, absolutely, do this in 1 shot.
+        // But, doing it this way simplifies code.
         foreach(cursor, dependency->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
             if (entry->kind == TP_ENTRY_KIND_POINTER){
                 const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(dependency->children, foreach_current_index(cursor));
-                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph, depth_map, recursion_level + 1));
-            }else if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
+                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph, depth_map, recursion_level + 1, tp_context));
+            }
+        }
+        foreach(cursor, dependency->entries){
+            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
                 ListCell *sublink_cursor;
                 foreach(sublink_cursor, entry->sublinks){
                     TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
-                    used_layer_numbers = lappend_int(used_layer_numbers, item->layer_number);
+                    const TraceProvLayerNumber sublink_number = item->layer_number;
+                    // This WON'T happen for at a single level. But, can happen if there are other RTEs that referred the same sublink.
+                    // In that case, we don't really gain anything by bothering to process it again...
+                    if(traceprov_find_int_list(used_layer_numbers, sublink_number)) continue;
+                    used_layer_numbers = lappend_int(used_layer_numbers, sublink_number);
+                    // Derive everyything on this sublink.
+                    const TraceProvDependency *sublink_graph = tp_get_sublink_graph(tp_context, sublink_number);
+                    auto child_depth_map = new TraceProvDepthMap;
+                    List *indirect_sublinks = get_used_sublinks_in_dependency(sublink_graph, child_depth_map, recursion_level, tp_context);
+                    used_layer_numbers = list_concat(used_layer_numbers, indirect_sublinks);
                     if (depth_map->find(item->layer_number) == depth_map->end()){
                         depth_map->insert({item->layer_number, recursion_level});
-                    } else {
-                        // If we've seen this before, update it.
-                        depth_map->at(item->layer_number) = recursion_level;
-                    } 
-
+                    }else{
+                        uint32 old_level = depth_map->at(item->layer_number);
+                        // This is the only case where we'd be "interested" in updating the level.
+                        // But, this can never happen.
+                        if (old_level < recursion_level)
+                            elog(ERROR, "found the current recursion level to be less than the old value. Should never happen!");
+                    }
+                    for (auto entry: *child_depth_map){
+                        if (depth_map->find(entry.first) == depth_map->end()){
+                            depth_map->insert({entry.first, entry.second});
+                        }else{
+                            elog(ERROR, "Should never find the newer graphs!");
+                        }
+                    }
                 }
-            }else{
-                elog(ERROR, "Only handling pointer or base relation for now..");
             }
         }
         return used_layer_numbers;
     }
 
-    static List* get_used_sublinks(List *graphs, List **p_sublink_depth_map){
+    static List* get_used_sublinks(List *graphs, List **p_sublink_depth_map, TraceProvParseContext *tp_context){
         // Sublinks can refer to other sublinks.
         // So, discover those cases too.
         List *used_sublinks = NIL;
@@ -2269,7 +2293,8 @@ extern "C" {
                 get_used_sublinks_in_dependency(
                     (TraceProvDependency *)lfirst(graph_cursor),
                     depth_map,
-                    0
+                    0,
+                    tp_context
                 )
             );
             depth_maps = lappend(depth_maps, depth_map);
@@ -2283,16 +2308,18 @@ extern "C" {
         char **derivation_spec,
         TraceProvEvaluateNodeContext *eval_context
     ){
+        // TODO: Get rid of this.
         #define PERFORM_IF_USED(X) if (derivation_spec != NULL) X
+
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
-        struct traceprov_shared_context shared_context;
 
+        struct traceprov_shared_context shared_context;
         // NOTE: Shared context is used just to get the total number of workers.
         if (map_traceprov_shared_context(&shared_context))
             elog(ERROR, "Error mapping the shared context");
 
-        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublinkMap), NULL);
+        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublinkMap), NULL, parsed_back_context);
 
         const uint8 worker_count = shared_context.worker_count;
         ListCell *graph_cursor;
@@ -3040,7 +3067,6 @@ extern "C" {
         auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
         ListCell *entry_cursor;
         List *sublinks_to_commit = NIL;
-        auto added_sublink_map = new std::unordered_map<TraceProvLayerNumber, uint32>();
         // Bitmapset *added_sublinks = NULL;
         foreach(entry_cursor, graph->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
@@ -3055,17 +3081,14 @@ extern "C" {
                 }else{
                     recurse_pack.pending_sublinks->insert({item->layer_number, NIL});
                 }
-                if (added_sublink_map->find(item->layer_number) == added_sublink_map->end())
-                    added_sublink_map->insert({item->layer_number, 0});
                 
-                const uint32 insert_idx = added_sublink_map->at(item->layer_number);
+                const uint32 insert_idx = item->offset_in_key;
                 // All indexes are 1-indexed.
                 uint32 entry_idx = idx_start + foreach_current_index(entry_cursor) + 1;
 
-                pending_entries = list_insert_nth_int(pending_entries, insert_idx, entry_idx);
+                pending_entries = traceprov_set_at_offset_int(pending_entries, insert_idx, entry_idx);
 
                 recurse_pack.pending_sublinks->at(item->layer_number) = pending_entries;
-                added_sublink_map->at(item->layer_number) = (insert_idx + 1);
 
                 if (max_level == recurse_pack.level){
                     // If it is the level when we're at the bottom,
@@ -3317,8 +3340,8 @@ extern "C" {
         auto worker_local_contexts = traceprov_get_local_contexts(worker_count);
         List *base_graph_depth_map = NIL;
         List *sublink_used_sublink_map = NIL;
-        List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map);
-        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublinkMap, &sublink_used_sublink_map);
+        List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map, parsed_back_context);
+        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublinkMap, &sublink_used_sublink_map, parsed_back_context);
         List *get_all_used_sublinks = list_concat_copy(base_used_sublinks, sublink_used_sublinks);
         traceprov_assert_equal_length(list_make2(base_graph_depth_map, graphs));
         auto top_tree = makeTraceProvInferAbstractTree(0);

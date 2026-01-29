@@ -120,4 +120,14 @@ extern "C" {
         return final_row;
     }
 
+
+    // Inserts at a list's offset.
+    // The offset is 0-indexed.
+    List *traceprov_set_at_offset_int(List *input_list, const uint32 offset, const int value){
+        while (list_length(input_list) <= offset){
+            input_list = lappend_int(input_list, 0);
+        }
+        input_list->elements[offset].int_value = value;
+        return input_list;
+    }
 }
