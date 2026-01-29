@@ -1,0 +1,1 @@
+./configure --with-smokedduck_include=/home/realvinayak123/projects/sd_benchmark/sd_smokedduck_2025_f/sd/src/include --prefix=/home/realvinayak123/projects/traceprov/duckdb/bld --with-smokedduck=/home/realvinayak123/projects/sd_benchmark/sd_smokedduck_2025_f/bld_optimized_v03/src --enable-sd_mode

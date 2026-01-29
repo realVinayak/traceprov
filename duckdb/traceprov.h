@@ -45,7 +45,7 @@
 // Whether to map memory page or not (otherwise file system is used)
 #define TRACEPROV_USE_MMEM_PAGE 1
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 1
+#define TRACEPROV_MAP_HUGE_PAGE 0
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
@@ -285,6 +285,7 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64_t)*layer->num_pk_records))
 
+#if TRACEPROV_SD_MODE==0
 void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state state);
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
 void traceprov_combine(
@@ -300,6 +301,7 @@ idx_t traceprov_get_state_size(duckdb_function_info info);
 duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
+#endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)

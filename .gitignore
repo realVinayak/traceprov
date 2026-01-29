@@ -89,3 +89,5 @@ duckdb/benchmark/tpch/queries/root/*/capture_spec.json
 duckdb/benchmark/tpch/queries/root/*/infer_spec*.json
 duckdb/benchmark/tpch/queries/root/*/*_count.sql
 duckdb/benchmark/tpch/queries/root/*/*_csv.sql
+*.shm
+*.tp
