@@ -33,9 +33,18 @@ class DuckDBDriverOptions(NamedTuple):
     min_layer_number: int = None
     extra: str = None
     disable_col_opt: bool = None
+    extras: list[str] = []
+    main_once_extra_all: bool = False
+    extra_file: str = None
 
     def _boolean_options(self):
-        return {"lineage", "pending", "no_reinit", "disable_col_opt"}
+        return {
+            "lineage",
+            "pending",
+            "no_reinit",
+            "disable_col_opt",
+            "main_once_extra_all",
+        }
 
     def serialize(self) -> str:
         options = self._asdict()
@@ -46,7 +55,10 @@ class DuckDBDriverOptions(NamedTuple):
             f"--{key} {value}"
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
+            and (key not in ["extra", "extras"])
         ]
+        all_extras = [*([self.extra] if self.extra is not None else []), *self.extras]
+        key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
         assert self.i is not None
         with open(self.i) as f:
             contents = f.read()
