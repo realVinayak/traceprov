@@ -3,7 +3,7 @@
 #include <vector>
 #include "traceprov_parse_context.h"
 #include <unordered_map>
-#include "traceprov_infer_essentials.h"
+#include "traceprov_infer_essentials.hpp"
 
 // There are two versions because in some (rare-ish) cases multiple keys form the primary key.
 // Usually, that won't happen, so having a separate map is useful to not construct redundant single element vectors
@@ -17,7 +17,8 @@ typedef std::pair<uint64, uint64> TraceProvColumn;
 enum TraceProvNodeKind {
     T_TP_RELATION,
     T_TP_JOIN,
-    T_TP_APPEND
+    T_TP_APPEND,
+    T_TP_WINDOW_READ
 };
 
 typedef struct TraceProvDescriptor {
@@ -85,6 +86,19 @@ typedef struct TraceProvAppend {
     bool is_lazy;
 } TraceProvAppender;
 
+// Describes window log read.
+typedef struct TraceProvWindowRead {
+    TraceProvNodeKind tag;
+    char *alias_name;
+    TraceProvRelationArgs *rel_args;
+    uint64 frame_start_idx;
+    uint64 frame_end_idx;
+    // This could _technically_ be infered each time.
+    // but caching ftw.
+    uint64 column_count;
+    TraceProvNode *child_node;
+} TraceProvWindowRead;
+
 typedef struct TraceProvDerivation {
     TraceProvSingleDerivation single_derivation;
     TraceProvMultipleDerivation multiple_derivation;
@@ -106,6 +120,7 @@ typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSub
 // This gets used to determine whether we're done processing everything we need for a sublink.
 // It is possible that multiple paths exist to a sublink. So, that's why each graph gets a map to sublink.
 typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
+typedef std::unordered_map<uint32, std::vector<TraceProvLayerNumber> *> TraceProvSizeLayers;
 
 typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
 // Just so they can be processed together
@@ -115,6 +130,7 @@ typedef struct TraceProvRecursePack {
     // If the level for a sublink has not been reached,
     // the pending are stored in pending sublinks.
     TraceProvPendingSublinks *pending_sublinks;
+    TraceProvSizeLayers *size_layer_map;
 } TraceProvRecursePack;
 
 // the abstract tree for join computation.
@@ -133,13 +149,21 @@ typedef struct TraceProvInferAbstractTree {
 typedef struct TraceProvToSQLContext {
     TraceProvParseContext *context;
     bool use_table_def;
+    TraceProvSizeLayers *size_layer_map;
 } TraceProvToSQLContext;
+
+typedef struct TraceProvInferSetupExtra {
+    uint32 worker_count;
+    TraceProvSizeLayers *size_layer_map;
+} TraceProvInferSetupExtra;
+
 
 extern "C" {
     TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql, struct traceprov_inference_context *context);
     void traceprov_duckdb_setup_context(
         struct traceprov_inference_context **p_ctxt,
-        void (**p_cleanup)(struct traceprov_inference_context *)
+        void (**p_cleanup)(struct traceprov_inference_context *),
+        TraceProvInferSetupExtra *setup_extra
     );
 }
 

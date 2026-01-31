@@ -73,12 +73,13 @@ bool traceprov_find_int_list(List *, int);
 bool traceprov_find_oid_list(List *, Oid);
 
 TraceProvLayerNumber traceprov_aggregate_rewrite(
-    const List *,
-    List **,
-    TraceProvParseContext *,
-    bool,
-    WindowDef *,
-    Node **
+    const List *targetEntriesToLog,
+    List **pCreatedTargets,
+    TraceProvParseContext *tpContext,
+    bool parentHasAggs,
+    WindowDef *over,
+    Node **fc_node,
+    bool is_for_window
 );
 
 Node *traceprov_get_function_call_node(const char *, List *, WindowDef *);

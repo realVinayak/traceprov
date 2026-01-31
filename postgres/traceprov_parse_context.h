@@ -59,6 +59,7 @@ typedef struct TraceProvEntry {
     int setNumber;
     List *sublinks;
     TraceProvWindowFrameEntry window_entry;
+    bool is_pointer_for_window;
 } TraceProvEntry;
 
 // Dependency stores which layers give information about the next ones.
@@ -141,6 +142,10 @@ typedef struct TraceProvTarget {
     List *sublinks;
     // The window entry this target refers to.
     TraceProvWindowFrameEntry *window_entry;
+    // Whether this agg is for a window.
+    // In that case, while we want to propagate it,
+    // we don't gain anything from deriving on it.
+    bool is_pointer_for_window;
 } TraceProvTarget;
 
 TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);
@@ -154,6 +159,7 @@ void tp_add_set_padding_item(TraceProvParseContext *, int, int);
 void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
 void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
 TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number);
+TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph, TraceProvLayerNumber graph_number);
 void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, TraceProvLayerNumber);
 
 TraceProvEntry *makeTraceProvEntry();
@@ -178,7 +184,8 @@ TraceProvTarget *makeTraceProvTarget(
     bool isSetPointer,
     // List of TraceProvTargetSublinkItem.
     List *sublinks,
-    TraceProvWindowFrameEntry *window_entry
+    TraceProvWindowFrameEntry *window_entry,
+    bool is_pointer_for_window
 );
 
 TraceProvWindowFrameEntry *traceprov_make_window_frame_entry(

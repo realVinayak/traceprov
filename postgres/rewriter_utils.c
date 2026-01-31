@@ -468,7 +468,8 @@ List *traceprov_aggregate_on_set(
         context,
         aggregatedInParent,
         NULL,
-        NULL
+        NULL,
+        false
     );
     query->hasAggs = true;
     query->targetList = traceprov_append_targets(aggregated, query->targetList);
@@ -500,6 +501,10 @@ Node *traceprov_get_function_call_node(
     List *func_name_list = list_make1(makeString(pstrdup(func_name)));
     FuncCall *fc = makeFuncCall(func_name_list, argVars, COERCE_EXPLICIT_CALL, -1);
     fc->over = over;
+    if (over){
+        // We know we're valid. Tell Postgres that.
+        dummyParseState->p_expr_kind = EXPR_KIND_OTHER;
+    }
     Node *fcNode =  ParseFuncOrColumn(
         dummyParseState,
         func_name_list,
@@ -540,7 +545,8 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
     WindowDef *over,
     // Useful because in some places (window rewrites)
     // we need to have a reference to the function node.
-    Node **fc_node
+    Node **fc_node,
+    bool is_for_window
 ){
     // Need to add the exprs from the targets.
     ListCell *target_entry_cursor;
@@ -585,7 +591,8 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
             0,
             false,
             NIL,
-            NULL
+            NULL,
+            is_for_window
         )
     );
     GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs = lappend_oid(GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
@@ -628,7 +635,8 @@ List *traceprov_propagate_child_targets(List *childTargets, Index rteIndex){
                 tpTarget->setNumber,
                 tpTarget->isSetPointer,
                 tpTarget->sublinks,
-                tpTarget->window_entry
+                tpTarget->window_entry,
+                tpTarget->is_pointer_for_window
             )
         );
     }
@@ -677,6 +685,7 @@ char *tracprov_parse_back_query(Query *query){
 // Then, looks at the SQL body of the function.
 // It just, then, calls the existing postgres utility to parse back.
 char *tracprov_parse_back_query(Query *query){
+    Query *cloned = copyObject(query);
     ObjectAddress created = ProcedureCreate(
         pstrdup("traceprovquery"),
         PG_PUBLIC_NAMESPACE,
@@ -688,7 +697,7 @@ char *tracprov_parse_back_query(Query *query){
         InvalidOid,
         "traceprov_dummy",
         NULL,
-        (Node*)query,
+        (Node*)cloned,
         PROKIND_FUNCTION,
         false,
         false,

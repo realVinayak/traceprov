@@ -115,7 +115,8 @@ List *traceprov_adjust_union(
                     isSetPointer,
                     // These have trivially no sublinks.
                     NIL,
-                    NULL
+                    NULL,
+                    false
                 )
             );
         }
@@ -149,7 +150,8 @@ List *traceprov_adjust_union(
                     setNumber,
                     tpTarget->isSetPointer,
                     tpTarget->sublinks,
-                    tpTarget->window_entry
+                    tpTarget->window_entry,
+                    tpTarget->is_pointer_for_window
                 );
 
             extraTargetsTyped = lappend(
@@ -521,7 +523,8 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     context,
                     true,
                     window_def,
-                    NULL
+                    NULL,
+                    false
                 );
                 TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
                 Node *traceprov_log_node = (Node*)traceprov_log_te->expr;

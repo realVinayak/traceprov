@@ -99,5 +99,9 @@ OR REPLACE FUNCTION traceprov_perform_generic_derivation (BIGINT) RETURNS SETOF 
 'traceprov_perform_generic_derivation' LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE
-OR REPLACE FUNCTION traceprov_get_generic_derivation_spec () RETURNS text AS '$libdir/__FILE__',
+OR REPLACE FUNCTION traceprov_get_generic_derivation_spec (BOOLEAN) RETURNS text AS '$libdir/__FILE__',
 'traceprov_get_generic_derivation_spec' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_run_duckdb_query (cstring) RETURNS SETOF record AS '$libdir/__FILE__',
+'traceprov_run_duckdb_query' LANGUAGE C STRICT PARALLEL SAFE;

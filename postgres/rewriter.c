@@ -495,7 +495,8 @@ Query *traceprov_perform_rewrite(
             tp_context,
             parentHasAggs,
             NULL,
-            NULL
+            NULL,
+            false
         );
     }
 
@@ -615,7 +616,7 @@ void rteRewrite(
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
                     // Also why there's no sublinks (yet)
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL));
+                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL, false));
                 }
             }
             ReleaseSysCache(indexTuple);
