@@ -433,12 +433,18 @@ extern "C" {
             DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, volatile_log_funcs[farg_idx]));
             std::cout << "ran top-level volatile log register successfully!" << std::endl;
         }
+
         duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
+
         duckdb_table_function tp_read_func = traceprov_create_table_func();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
+
         duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
+        
+        duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2);
+        DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
         #endif
          
         if (options.disable_column_optimizer){

@@ -8,6 +8,7 @@
 #include <sys/mman.h>
 
 #include <string>
+#include <unordered_map>
 
 extern "C" {
 
@@ -15,6 +16,7 @@ extern "C" {
     #include "duckdb.h"
     #include "utils.h"
     #include "file_utils.h"
+#include <cmath>
 
     typedef struct TraceProvDuckDbGlobalState {
         bool did_initialize;
@@ -25,11 +27,6 @@ extern "C" {
         .did_initialize = false,
         .worker_local_contexts = NULL
     };
-
-    // void reinit_traceprov_infer_state(){
-    //     g_tp_duckdb_state.did_initialize = false;
-    //     g_tp_duckdb_state.worker_local_contexts = NULL;
-    // }
 
     typedef struct TraceProvRelationArgs {
         uint64_t worker_id;
@@ -93,33 +90,91 @@ extern "C" {
         return worker_local_contexts;
     }
 
-
-    void traceprov_duckdb_bind(duckdb_bind_info info){
-        if (duckdb_bind_get_parameter_count(info) != 2 && duckdb_bind_get_parameter_count(info) != 3){
-            elog(ERROR, "Expected 2 or 3 params!");
+    static void populate_bind_offsets(
+        const int64_t log_offset,
+        TraceProvBindData *bind_data,
+        const bool allow_dummy
+    ){
+        // In this case, need to determine the chunk that contains the offset.
+        // If world was a nice place, this would have been easy.
+        // But, need to consult the chunk sizes (in row col ptr.)
+        if(bind_data->is_strict_rows){
+            elog(ERROR, "Unexpected. Doesn't need handling");
         }
+        if (bind_data->row_layer->page_mapping){
+            // In this case, the layers are in memory, so need to consult the row layer
+            // mapping to determine the chunk
+            uint64_t start_idx = 0;
+            int64_t size_seen = 0;
+            int64_t offset_in_chunk = 0;
+            while (start_idx < bind_data->num_rows){
+                const uint64_t row_page_idx = get_idx(
+                    bind_data->row_first_page_element_count,
+                    bind_data->row_incr_page_element_count,
+                    start_idx
+                );
+                const uint64_t idx_in_row_page = get_local_idx(
+                    bind_data->row_first_page_element_count,
+                    bind_data->row_incr_page_element_count,
+                    row_page_idx,
+                    start_idx
+                );
+                const uint64_t num_rows = ((uint64_t *)bind_data->row_layer->page_mapping[row_page_idx])[idx_in_row_page];
+                const int64_t current_size = size_seen;
+                size_seen += num_rows;
+                if (log_offset < size_seen){
+                    offset_in_chunk = (log_offset - current_size);
+                    break;
+                }
+                start_idx++;
+            }
+            if (start_idx == bind_data->num_rows){
+                if (!allow_dummy)
+                    elog(ERROR, "Expected to the find a belonging chunk!");
+                bind_data->is_dummy = true;
+            }
+            bind_data->start_offset = start_idx;
+            bind_data->offset_in_chunk = offset_in_chunk;
+        }else{
+            // In this case, the layers are in file.
+            // Still need to look at row layer, BUT, don't need to look at the indirect page mapping.
+            if (bind_data->row_count_layer_ptr == NULL)
+                elog(ERROR, "Expected the row count to be filled!");
+            uint64_t start_idx = 0;
+            int64_t size_seen = 0;
+            int64_t offset_in_chunk = 0;
+            while (start_idx < bind_data->num_rows){
+                const uint64_t num_rows = ((uint64_t *)bind_data->row_count_layer_ptr)[start_idx];
+                const int64_t current_size = size_seen;
+                size_seen += num_rows;
+                if (log_offset < size_seen){
+                    offset_in_chunk = (log_offset - current_size);
+                    break;
+                }
+                start_idx++;
+            }
+            if (start_idx == bind_data->num_rows){
+                if (!allow_dummy)
+                    elog(ERROR, "Expected to the find a belonging chunk!");
+                bind_data->is_dummy = true;
+            }
+            bind_data->start_offset = start_idx;
+            bind_data->offset_in_chunk = offset_in_chunk;
+        }
+    }
 
+    static TraceProvBindData *setup_layers(
+        const uint64_t worker_id,
+        const uint64_t layer_number,
+        const int64_t log_offset
+    ){
         auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
         memset(my_bind_data, 0, sizeof(TraceProvBindData));
-
-        auto param_1 = duckdb_bind_get_parameter(info, 0);
-        uint64_t current_worker_id = duckdb_get_int64(param_1);
-        duckdb_destroy_value(&param_1);
-
-        auto param_2 = duckdb_bind_get_parameter(info, 1);
-        const uint64_t layer_number = duckdb_get_int64(param_2);
-        duckdb_destroy_value(&param_2);
-
-        int64_t log_offset = -1;
-        if (duckdb_bind_get_parameter_count(info) == 3){
-            auto param_3 = duckdb_bind_get_parameter(info, 2);
-            log_offset = duckdb_get_int64(param_3);
-            duckdb_destroy_value(&param_3);
-        }
         my_bind_data->rel_args.offset = log_offset;
         my_bind_data->offset_in_chunk = -1;
 
-        my_bind_data->rel_args.worker_id = current_worker_id;
+        my_bind_data->rel_args.worker_id = worker_id;
+        uint64_t current_worker_id = worker_id;
         my_bind_data->rel_args.layer_number = layer_number;
 
         if (!g_tp_duckdb_state.did_initialize){
@@ -134,6 +189,7 @@ extern "C" {
         if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size()){
             current_worker_id = 1;
             is_dummy = true;
+            elog(ERROR, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.")
         }
 
         auto current_local_context =  g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
@@ -202,83 +258,42 @@ extern "C" {
 
         my_bind_data->column_width = column_count;
         my_bind_data->num_rows = chunk_count;
+        my_bind_data->is_dummy = is_dummy;
 
+        if (log_offset != -1){
+            populate_bind_offsets(log_offset, my_bind_data, true);
+        }
 
-        for (uint64_t col_count = 0; col_count < column_count; col_count++){
+        return my_bind_data;
+    }
+
+    void traceprov_duckdb_bind(duckdb_bind_info info){
+        if (duckdb_bind_get_parameter_count(info) != 2 && duckdb_bind_get_parameter_count(info) != 3){
+            elog(ERROR, "Expected 2 or 3 params!");
+        }
+
+        auto param_1 = duckdb_bind_get_parameter(info, 0);
+        const uint64_t current_worker_id = duckdb_get_int64(param_1);
+        duckdb_destroy_value(&param_1);
+
+        auto param_2 = duckdb_bind_get_parameter(info, 1);
+        const uint64_t layer_number = duckdb_get_int64(param_2);
+        duckdb_destroy_value(&param_2);
+
+        int64_t log_offset = -1;
+        if (duckdb_bind_get_parameter_count(info) == 3){
+            auto param_3 = duckdb_bind_get_parameter(info, 2);
+            log_offset = duckdb_get_int64(param_3);
+            duckdb_destroy_value(&param_3);
+        }
+
+        auto my_bind_data = setup_layers(current_worker_id, layer_number, log_offset);
+        for (uint64_t col_count = 0; col_count < my_bind_data->column_width; col_count++){
             const std::string param = std::string("column_") + std::to_string(col_count);
             duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
             duckdb_bind_add_result_column(info, param.c_str(), type);
             duckdb_destroy_logical_type(&type);
         }
-
-        if  (log_offset != -1){
-            // In this case, need to determine the chunk that contains the offset.
-            // If world was a nice place, this would have been easy.
-            // But, need to consult the chunk sizes (in row col ptr.)
-            if(my_bind_data->is_strict_rows){
-                elog(ERROR, "Unexpected. Doesn't need handling");
-            }
-            if (my_bind_data->row_layer->page_mapping){
-                // In this case, the layers are in memory, so need to consult the row layer
-                // mapping to determine the chunk
-                uint64_t start_idx = 0;
-                int64_t size_seen = 0;
-                int64_t offset_in_chunk = 0;
-                while (start_idx < my_bind_data->num_rows){
-                    const uint64_t row_page_idx = get_idx(
-                        my_bind_data->row_first_page_element_count,
-                        my_bind_data->row_incr_page_element_count,
-                        start_idx
-                    );
-                    const uint64_t idx_in_row_page = get_local_idx(
-                        my_bind_data->row_first_page_element_count,
-                        my_bind_data->row_incr_page_element_count,
-                        row_page_idx,
-                        start_idx
-                    );
-                    const uint64_t num_rows = ((uint64_t *)my_bind_data->row_layer->page_mapping[row_page_idx])[idx_in_row_page];
-                    const int64_t current_size = size_seen;
-                    size_seen += num_rows;
-                    if (log_offset < size_seen){
-                        offset_in_chunk = (log_offset - current_size);
-                        break;
-                    }
-                    start_idx++;
-                }
-                if (start_idx == my_bind_data->num_rows){
-                    is_dummy = true;
-                    // elog(ERROR, "Expected to the find a belonging chunk!");
-                }
-                my_bind_data->start_offset = start_idx;
-                my_bind_data->offset_in_chunk = offset_in_chunk;
-            }else{
-                // In this case, the layers are in file.
-                // Still need to look at row layer, BUT, don't need to look at the indirect page mapping.
-                if (my_bind_data->row_count_layer_ptr == NULL)
-                    elog(ERROR, "Expected the row count to be filled!");
-                uint64_t start_idx = 0;
-                int64_t size_seen = 0;
-                int64_t offset_in_chunk = 0;
-                while (start_idx < my_bind_data->num_rows){
-                    const uint64_t num_rows = ((uint64_t *)my_bind_data->row_count_layer_ptr)[start_idx];
-                    const int64_t current_size = size_seen;
-                    size_seen += num_rows;
-                    if (log_offset < size_seen){
-                        offset_in_chunk = (log_offset - current_size);
-                        break;
-                    }
-                    start_idx++;
-                }
-                if (start_idx == my_bind_data->num_rows){
-                    is_dummy = true;
-                    // elog(INFO, "Expected to the find a belonging chunk!");
-                }
-                my_bind_data->start_offset = start_idx;
-                my_bind_data->offset_in_chunk = offset_in_chunk;
-            }
-        }
-
-        my_bind_data->is_dummy = is_dummy;
         duckdb_bind_set_bind_data(info, my_bind_data, free);
     }
 
@@ -408,7 +423,7 @@ extern "C" {
                     // Need to only output the 1 for the selected offset_in_chunk.
                     for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
                         uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                        dest_ptr[0] = (((uint64_t*)chunk_data_ptr)[init_data->offset_in_chunk]);
+                        dest_ptr[0] = (((uint64_t*)chunk_data_ptr)[col_idx*TP_STD_VECTOR_SIZE + init_data->offset_in_chunk]);
                     }
                     chunk_size = 1;
                     // This way, the next call will be the last.
@@ -501,6 +516,183 @@ extern "C" {
         duckdb_table_function_add_parameter(function, offset_type);
         duckdb_destroy_logical_type(&offset_type);
         return function;
+    }
+
+    // Worker and Layer will fit in uint32_t. Two of them are unique enough to distinguish any combination.
+    // So they are combined here togther to form a key into the context map of layers.
+    // Doesn't really matter which one comes first, as long as we're consistent about it...
+    #define TRACEPROV_MAKE_WORKER_LAYER_KEY(X, Y) ((uint64_t)(((uint64_t)X << 32) | (uint64_t)Y))
+
+    typedef struct TraceProvWindowFuncExtra {
+        std::unordered_map<uint64_t, TraceProvBindData *> *key_bind_map;
+        uint64_t num_cols;
+    } TraceProvWindowFuncExtra;
+
+    // Writes a entry based off info in bind_data to the dest.
+    // TODO: Use this in other places, where we currently rely on bind_data->is_single...
+    static uint64_t get_col_value_at_offset(const uint64_t col_idx, TraceProvBindData *bind_data){
+        uint64_t final_value = 0;
+        if (bind_data->col_layer->page_mapping != NULL){
+            const uint64_t col_page_idx = get_idx(
+                bind_data->first_page_element_count,
+                bind_data->incr_page_element_count,
+                bind_data->start_offset
+            );
+            const uint64_t idx_in_col_page = get_local_idx(
+                bind_data->first_page_element_count,
+                bind_data->incr_page_element_count,
+                col_page_idx,
+                bind_data->start_offset
+            );
+            void *chunk_data_ptr = (void *)&((uint8_t*)bind_data->col_layer->page_mapping[col_page_idx])[
+                idx_in_col_page*(sizeof(uint64_t)*bind_data->column_width*TP_STD_VECTOR_SIZE)
+            ];
+            return (((uint64_t*)chunk_data_ptr)[col_idx*TP_STD_VECTOR_SIZE + bind_data->offset_in_chunk]);
+        }
+        if (bind_data->row_count_layer_ptr != NULL)
+            elog(ERROR, "Invalid state, expected row count layer ptr to be filled!");
+
+        const uint64_t col_width = bind_data->column_width;
+        const uint64_t *source_ptr = &(((uint64_t *)(bind_data->col_layer_ptr))[(((bind_data->start_offset * col_width) + col_idx) * TP_STD_VECTOR_SIZE)]);   
+        return source_ptr[bind_data->offset_in_chunk];
+    }
+
+    void traceprov_window_func(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
+        TraceProvWindowFuncExtra *window_extra = (TraceProvWindowFuncExtra *)duckdb_scalar_function_get_extra_info(info);
+        if (unlikely(window_extra == NULL)){
+            elog(ERROR, "Expected window func extra to be set!");
+        }
+        duckdb_vector worker_id_vector = duckdb_data_chunk_get_vector(input, 0);
+        uint32_t *worker_id_data = (uint32_t *)duckdb_vector_get_data(worker_id_vector);
+        
+        duckdb_vector layer_number_vector = duckdb_data_chunk_get_vector(input, 1);
+        uint32_t *layer_number_data = (uint32_t *)duckdb_vector_get_data(layer_number_vector);
+        
+        duckdb_vector frame_start_vector = duckdb_data_chunk_get_vector(input, 2);
+        uint64_t *frame_start_data = (uint64_t *)duckdb_vector_get_data(frame_start_vector);
+
+        duckdb_vector frame_end_vector = duckdb_data_chunk_get_vector(input, 3);
+        uint64_t *frame_end_data = (uint64_t *)duckdb_vector_get_data(frame_end_vector);
+
+        const idx_t row_count = duckdb_data_chunk_get_size(input);
+
+        idx_t expected_size = 0;
+        for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
+            if (unlikely(frame_end_data[row_idx] < frame_start_data[row_idx])){
+                elog(ERROR, "Expected end to never be less than start!");
+            }
+            // Since a frame always includes the current row, also need to add 1.
+            // This could be an upper bound in the cases where the worker is simply not present..
+            expected_size += (frame_end_data[row_idx] - frame_start_data[row_idx]) + 1;
+        }
+            
+        if(duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
+            elog(ERROR, "Error reserving!");
+        }
+        
+        if(duckdb_list_vector_set_size(output, expected_size) == DuckDBError){
+            elog(ERROR, "Error setting size!");
+        }
+
+        auto entries = (duckdb_list_entry *)duckdb_vector_get_data(output);
+
+        duckdb_vector child_structs = duckdb_list_vector_get_child(output);
+        uint64_t generic_idx = 0;
+        for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+            const uint32_t worker_id = worker_id_data[row_idx];
+            const uint32_t layer_number = layer_number_data[row_idx];
+            TraceProvBindData *curr_bind_data = window_extra->key_bind_map->at(TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number));
+
+            const uint64_t frame_start = frame_start_data[row_idx];
+            const uint64_t frame_end = frame_end_data[row_idx];
+            const idx_t generic_start_idx = generic_idx;
+            for (uint64_t row_to_return = frame_start; row_to_return < frame_end + 1; row_to_return++, generic_idx++){
+                const int64_t logged_row_idx = row_to_return - 1;
+                if (unlikely(logged_row_idx < 0))
+                    elog(ERROR, "any idx can never be < 0!");
+                // This already does the core work of setting the current page chunk and the offset.
+                populate_bind_offsets(logged_row_idx, curr_bind_data, false);
+                for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
+                    duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
+                    uint64_t *child_data = (uint64_t*) duckdb_vector_get_data(member_data);
+                    child_data[generic_idx] = get_col_value_at_offset(col_idx, curr_bind_data);
+                }
+            }
+            const uint64_t generic_end_idx = generic_idx;
+            entries[row_idx].offset = generic_start_idx;
+            entries[row_idx].length = generic_end_idx - generic_start_idx;
+        }
+        // for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
+        //     duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
+        //     uint64_t *child_data = (uint64_t*) duckdb_vector_get_data(member_data);
+        //     idx_t generic_idx = 0;
+        //     for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
+        //         const uint64_t frame_start = frame_start_data[row_idx];
+        //         const uint64_t frame_end = frame_end_data[row_idx];
+        //         const idx_t generic_start_idx = generic_idx;
+        //         for (idx_t value_start = frame_start; value_start < frame_end + 1; value_start++, generic_idx++){
+        //             child_data[generic_idx] = value_start + (10*col_idx);
+        //         }
+        //         const idx_t generic_end_idx = generic_idx;
+        //         if (col_idx == 0){
+        //             entries[row_idx].offset = generic_start_idx;
+        //             entries[row_idx].length = generic_end_idx - generic_start_idx;
+        //         }
+        //     }
+        // }
+    }
+
+    // Creates a window function, returning num_args in the struct.
+    duckdb_scalar_function traceprov_create_table_window_func(
+        const uint64_t num_args,
+        // The layer numbers that'll contain this many number of args.
+        // This is done this way so we don't need to any strict checks later...
+        const uint32_t worker_count,
+        std::vector<uint32_t> *expected_layers
+    ){
+        duckdb_scalar_function func = duckdb_create_scalar_function();
+        std::string *func_name = new std::string(("traceprov_window_func" + std::to_string(num_args)).c_str());
+        duckdb_scalar_function_set_name(func, func_name->c_str());
+        duckdb_logical_type basic_arg_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+        duckdb_logical_type arg_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        // Worker id.
+        duckdb_scalar_function_add_parameter(func, basic_arg_type);
+        // Layer id.
+        duckdb_scalar_function_add_parameter(func, basic_arg_type);
+        // Frame start
+        duckdb_scalar_function_add_parameter(func, arg_type);
+        // Frame end.
+        duckdb_scalar_function_add_parameter(func, arg_type);
+
+        duckdb_logical_type *struct_member_types = (duckdb_logical_type *)malloc(sizeof(duckdb_logical_type)*num_args);
+        const char **member_names = (const char **)malloc(sizeof(char *)*num_args);
+        for (uint64_t col_idx = 0; col_idx < num_args; col_idx++){
+            std::string *column_str = new std::string((std::string("column_") + std::to_string(col_idx)).c_str());
+            member_names[col_idx] = column_str->c_str();
+            struct_member_types[col_idx] = arg_type;
+        }
+        duckdb_logical_type struct_type = duckdb_create_struct_type(struct_member_types, member_names, num_args);
+        duckdb_logical_type list_type = duckdb_create_list_type(struct_type);
+        duckdb_scalar_function_set_return_type(func, list_type);
+        duckdb_destroy_logical_type(&list_type);
+        duckdb_scalar_function_set_function(func, traceprov_window_func);
+        duckdb_destroy_logical_type(&arg_type);
+
+        auto window_extra = new TraceProvWindowFuncExtra;
+        window_extra->key_bind_map = new std::unordered_map<uint64_t, TraceProvBindData *>;
+
+        for (uint32_t worker_id = 1; worker_id < worker_count + 1; worker_id++){
+            for (auto layer_number: *expected_layers){
+                const uint64_t worker_layer_key = TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number);
+                if (unlikely(window_extra->key_bind_map->find(worker_layer_key) != window_extra->key_bind_map->end())){
+                    elog(ERROR, "Expected the key to not be present!");
+                }
+                window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1)});
+            }
+        }
+        window_extra->num_cols = num_args;
+        duckdb_scalar_function_set_extra_info(func, window_extra, nullptr);
+        return func;
     }
 }
 #endif
