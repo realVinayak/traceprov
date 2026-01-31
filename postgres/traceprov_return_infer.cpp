@@ -2376,7 +2376,7 @@ extern "C" {
         if (map_traceprov_shared_context(&shared_context))
             elog(ERROR, "Error mapping the shared context");
 
-        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublinkMap), NULL, parsed_back_context);
+        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublink_map), NULL, parsed_back_context);
 
         const uint8 worker_count = shared_context.worker_count;
         ListCell *graph_cursor;
@@ -2392,7 +2392,7 @@ extern "C" {
             perform_derive_from_log(graph, worker_count, derivation, parsed_back_context, worker_local_contexts, true);
         }
         ListCell *sublink_cursor;
-        foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
+        foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
             TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
             if (traceprov_find_int_list(used_sublinks, child_sublink->headNumber)) continue;
             // Sublinks without any correlation can also exist.
@@ -3515,7 +3515,7 @@ extern "C" {
         List *base_graph_depth_map = NIL;
         List *sublink_used_sublink_map = NIL;
         List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map, parsed_back_context);
-        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublinkMap, &sublink_used_sublink_map, parsed_back_context);
+        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublink_map, &sublink_used_sublink_map, parsed_back_context);
         List *get_all_used_sublinks = list_concat_copy(base_used_sublinks, sublink_used_sublinks);
         traceprov_assert_equal_length(list_make2(base_graph_depth_map, graphs));
         auto top_tree = makeTraceProvInferAbstractTree(0);
@@ -3548,7 +3548,7 @@ extern "C" {
             );
         }
         ListCell *sublink_cursor;
-        foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
+        foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
             TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
             // If a sublink is being used, don't derive it.
             // It should be automatically be derived as part of generic handling.

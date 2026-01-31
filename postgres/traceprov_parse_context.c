@@ -20,9 +20,9 @@ void tp_parse_initialize_context(TraceProvParseContext *context){
     context->unique_idx = 0;
     context->simple_incrementor = 0;
     context->properties = palloc0_object(TraceProvParseGraphProperties);
-    context->properties->setPaddingMap = NIL;
-    context->properties->setGraphMap = NIL;
-    context->properties->sublinkMap = NIL;
+    context->properties->set_padding_map = NIL;
+    context->properties->set_graph_map = NIL;
+    context->properties->sublink_map = NIL;
     context->parent_targets = NIL;
 }
 
@@ -40,14 +40,14 @@ void tp_add_set_padding_item(TraceProvParseContext *context, int setNumber, int 
     TraceProvSetPaddingMapItem *mapItem = palloc0_object(TraceProvSetPaddingMapItem);
     mapItem->setNumber = setNumber;
     mapItem->padding = padding;
-    GET_ROOT_CONTEXT(context)->properties->setPaddingMap = lappend(GET_ROOT_CONTEXT(context)->properties->setPaddingMap, mapItem);
+    GET_ROOT_CONTEXT(context)->properties->set_padding_map = lappend(GET_ROOT_CONTEXT(context)->properties->set_padding_map, mapItem);
 }
 
 void tp_add_set_graph_item(TraceProvParseContext *context, int setNumber, TraceProvDependency*graph){
     TraceProvSetGraphMapItem *setGraphMapItem = palloc0_object(TraceProvSetGraphMapItem);
     setGraphMapItem->graph = graph;
     setGraphMapItem->setNumber = setNumber;
-    GET_ROOT_CONTEXT(context)->properties->setGraphMap = lappend(GET_ROOT_CONTEXT(context)->properties->setGraphMap, setGraphMapItem);
+    GET_ROOT_CONTEXT(context)->properties->set_graph_map = lappend(GET_ROOT_CONTEXT(context)->properties->set_graph_map, setGraphMapItem);
 }
 
 TraceProvTargetSublinkItem *makeTraceProvTargetSublinkItem(
@@ -80,7 +80,7 @@ void tp_add_sublink_map_item(
         child_graphs,
         entries
     );
-    GET_ROOT_CONTEXT(context)->properties->sublinkMap = lappend(GET_ROOT_CONTEXT(context)->properties->sublinkMap, (TraceProvDependency*)graph);
+    GET_ROOT_CONTEXT(context)->properties->sublink_map = lappend(GET_ROOT_CONTEXT(context)->properties->sublink_map, (TraceProvDependency*)graph);
     target_entry_cursor = NULL;
     foreach(target_entry_cursor, key_traceprov_targets){
         TraceProvTarget *target = (TraceProvTarget *)(lfirst(target_entry_cursor));
@@ -293,7 +293,7 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
     appendStringInfo(&buf, ",");
     ListCell *setPaddingMapItemCursor;
     appendStringInfo(&buf, "\"setPaddingMap\": [");
-    foreach(setPaddingMapItemCursor, context->properties->setPaddingMap){
+    foreach(setPaddingMapItemCursor, context->properties->set_padding_map){
         if (NEED_SEP(setPaddingMapItemCursor)){
             appendStringInfo(&buf, ",");
         }
@@ -304,7 +304,7 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"setGraphMap\": [");
     ListCell *setGraphMapItemCursor;
-    foreach(setGraphMapItemCursor, context->properties->setGraphMap){
+    foreach(setGraphMapItemCursor, context->properties->set_graph_map){
         if (NEED_SEP(setGraphMapItemCursor)){
             appendStringInfo(&buf, ",");
         }
@@ -315,7 +315,7 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"sublinks\": [");
     ListCell *sublinkGraphCursor;
-    foreach(sublinkGraphCursor, context->properties->sublinkMap){
+    foreach(sublinkGraphCursor, context->properties->sublink_map){
         if(NEED_SEP(sublinkGraphCursor)){
             appendStringInfo(&buf, ",");
         }
@@ -487,9 +487,9 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context, c
     TraceProvDependencyMetaHeader meta_header;
     meta_header.max_layer_number = context->global_layer_number;
     meta_header.num_graphs = list_length(graphs);
-    meta_header.num_set_padding_map_items = list_length(context->properties->setPaddingMap);
-    meta_header.num_set_graph_map_items = list_length(context->properties->setGraphMap);
-    meta_header.num_sublink_items = list_length(context->properties->sublinkMap);
+    meta_header.num_set_padding_map_items = list_length(context->properties->set_padding_map);
+    meta_header.num_set_graph_map_items = list_length(context->properties->set_graph_map);
+    meta_header.num_sublink_items = list_length(context->properties->sublink_map);
     failSafeWrite(fptr, &meta_header, sizeof(TraceProvDependencyMetaHeader));
     _serializeContext(context, fptr);
     foreach(graphCursor, graphs){
@@ -573,13 +573,13 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
 // Dumps the properties in the file.
 void _serializeContext(const TraceProvParseContext* context, FILE* file){
     ListCell *paddingMapItemCursor;
-    foreach(paddingMapItemCursor, context->properties->setPaddingMap){
+    foreach(paddingMapItemCursor, context->properties->set_padding_map){
         TraceProvSetPaddingMapItem *paddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(paddingMapItemCursor);
         failSafeWrite(file, paddingMapItem, sizeof(TraceProvSetPaddingMapItem));
     }
 
     ListCell *graphMapItemCursor;
-    foreach(graphMapItemCursor, context->properties->setGraphMap){
+    foreach(graphMapItemCursor, context->properties->set_graph_map){
         TraceProvSetGraphMapItem *graphMapItem = (TraceProvSetGraphMapItem *)lfirst(graphMapItemCursor);
         // To make serialization easier, it gets wrapped in one graph.
         // During deserialization, it gets unwrapped.
@@ -588,7 +588,7 @@ void _serializeContext(const TraceProvParseContext* context, FILE* file){
         _serializeTraceProvDepedency(wrapperDependency, file);
     }
     ListCell *sublinkMapItemCursor;
-    foreach(sublinkMapItemCursor, context->properties->sublinkMap){
+    foreach(sublinkMapItemCursor, context->properties->sublink_map){
         const TraceProvDependency *sublinkGraph = (TraceProvDependency *)lfirst(sublinkMapItemCursor);
         _serializeTraceProvDepedency(sublinkGraph, file);
     }
@@ -665,7 +665,7 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
     for (uint32 i = 0; i < metaHeader->num_set_padding_map_items; i++){
         TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
         failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
-        context->properties->setPaddingMap = lappend(context->properties->setPaddingMap, setPaddingMapItem);
+        context->properties->set_padding_map = lappend(context->properties->set_padding_map, setPaddingMapItem);
     }
 
     for (uint32 i = 0; i < metaHeader->num_set_graph_map_items; i++){
@@ -673,11 +673,11 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
         failSafeRead(file, setGraphMapItem, sizeof(TraceProvSetGraphMapItem));
         TraceProvDependency *wrapper = _deserializeTraceProvDependency(file);
         setGraphMapItem->graph = wrapper;
-        context->properties->setGraphMap = lappend(context->properties->setGraphMap, setGraphMapItem);
+        context->properties->set_graph_map = lappend(context->properties->set_graph_map, setGraphMapItem);
     }
     for (uint32 i = 0; i < metaHeader->num_sublink_items; i++){
         TraceProvDependency *graph = _deserializeTraceProvDependency(file);
-        context->properties->sublinkMap = lappend(context->properties->sublinkMap, graph);
+        context->properties->sublink_map = lappend(context->properties->sublink_map, graph);
     }
     context->root_context = context;
     return context;
@@ -730,7 +730,7 @@ void tp_add_aggregate_property(const TraceProvParseContext *context, const Agg *
 
 TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number){
     ListCell *graph_cursor;
-    foreach(graph_cursor, GET_ROOT_CONTEXT(parsed_context)->properties->sublinkMap){
+    foreach(graph_cursor, GET_ROOT_CONTEXT(parsed_context)->properties->sublink_map){
         TraceProvDependency *dependency = (TraceProvDependency *)lfirst(graph_cursor);
         if (dependency->headNumber == graph_number)
             return dependency;
