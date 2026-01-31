@@ -105,7 +105,8 @@ TraceProvTarget *makeTraceProvTarget(
     int setNumber,
     bool isSetPointer,
     List *sublinks,
-    TraceProvWindowFrameEntry *window_entry
+    TraceProvWindowFrameEntry *window_entry,
+    bool is_pointer_for_window
 ){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
@@ -115,6 +116,7 @@ TraceProvTarget *makeTraceProvTarget(
     tpTarget->isSetPointer = isSetPointer;
     tpTarget->sublinks = sublinks;
     tpTarget->window_entry = window_entry;
+    tpTarget->is_pointer_for_window = is_pointer_for_window;
     return tpTarget;
 }
 
@@ -152,12 +154,15 @@ TraceProvEntry *traceprov_resolve_entry(
                 elog(ERROR, "Got invalid window entry kind!");
 
             tp_entry->kind = tp_target->window_entry->kind;
+            // TODO: This is redundant...
+            tp_entry->window_entry.kind = tp_target->window_entry->kind;
             tp_entry->window_entry.log_layer_number = tp_target->window_entry->log_layer_number;
         } else if (graph != NULL){
             if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
                 elog(ERROR, "Expected no table info to for the pointer node");
             }
             tp_entry->kind = TP_ENTRY_KIND_POINTER;
+            tp_entry->is_pointer_for_window = tp_target->is_pointer_for_window;
         }else{
             tp_entry->kind = TP_ENTRY_KIND_BASE_RELATION;
             tp_entry->relId = target->resorigtbl;
@@ -257,14 +262,15 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
 
     appendStringInfo(
         &buf, 
-        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s, window: %s)]",
+        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s, window: %s, is_ptr_for_window: %d)]",
         kindStr,
         entry->relId,
         entry->resNo,
         entry->attrNumber,
         entry->setNumber,
         tp_entry_serialize_sublinks(entry->sublinks),
-        tp_entry_serialize_window(&entry->window_entry)
+        tp_entry_serialize_window(&entry->window_entry),
+        entry->is_pointer_for_window
     );
     return buf.data;
 }
@@ -730,5 +736,18 @@ TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_co
             return dependency;
     }
     elog(ERROR, "Expected to always find the sublink!");
+    return NULL;
+}
+
+// Finds a graph in the children of a graph.
+// Not recursive..
+TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph, const TraceProvLayerNumber graph_number){
+    ListCell *graph_cursor;
+    foreach(graph_cursor, graph->children){
+        TraceProvDependency *dependency = (TraceProvDependency *)lfirst(graph_cursor);
+        if (dependency->headNumber == graph_number)
+            return dependency;
+    }
+    elog(ERROR, "Expected to always find the graph in children!");
     return NULL;
 }

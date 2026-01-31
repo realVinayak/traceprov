@@ -2,6 +2,7 @@
 #include <string>
 #include "traceprov_ext_utils.hpp"  
 #include "traceprov_infer.hpp"
+#include "traceprov_infer_essentials.hpp"
 
 // Duckdb integration for inference.
 // Duckdb doesn't technically do anything smart (just runs the query)
@@ -15,7 +16,7 @@
 extern "C" {
     #include "duckdb.h"
     #include <stdlib.h>
-    #include "traceprov_infer_essentials.h"
+
 
     struct traceprov_inference_context {
         duckdb_database db;
@@ -49,6 +50,8 @@ extern "C" {
         uint64_t number_of_records;
     } TraceProvInitData;
 
+    #define TRACEPROV_MAKE_WORKER_LAYER_KEY(X, Y) ((uint64_t)(((uint64_t)X << 32) | (uint64_t)Y))
+    
     void traceprov_duckdb_cleanup(struct traceprov_inference_context *p_ctxt){
         duckdb_disconnect(&p_ctxt->con);
         duckdb_close(&p_ctxt->db);
@@ -58,23 +61,14 @@ extern "C" {
         g_tp_duckdb_state.worker_local_contexts = nullptr;
     }
 
-    void traceprov_duckdb_bind(duckdb_bind_info info) {
-        if (duckdb_bind_get_parameter_count(info) != 2){
-            elog(ERROR, "Expected 2 params!");
-        }
-
-        auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
-        memset(my_bind_data, 0, sizeof(TraceProvBindData));
-        auto param_1 = duckdb_bind_get_parameter(info, 0);
-        const uint64_t current_worker_id = duckdb_get_int64(param_1);
-        auto param_2 = duckdb_bind_get_parameter(info, 1);
-        const uint64_t layer_number = duckdb_get_int64(param_2);
-
-        duckdb_destroy_value(&param_1);
-        duckdb_destroy_value(&param_2);
-
-        my_bind_data->rel_args.worker_id = current_worker_id; 
-        my_bind_data->rel_args.layer_number = layer_number;
+    bool traceprov_populate_bind_data(
+        const uint32 worker_id,
+        const uint32 layer_number,
+        TraceProvBindData *bind_data,
+        const bool expect_present
+    ){
+        bind_data->rel_args.worker_id = worker_id; 
+        bind_data->rel_args.layer_number = layer_number;
 
         // Need to figure out the number of columns and everything here.
         if (!g_tp_duckdb_state.did_initialize){
@@ -86,40 +80,35 @@ extern "C" {
             g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
         }
 
-        auto current_local_context =  g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
+        auto current_local_context = g_tp_duckdb_state.worker_local_contexts->at(worker_id - 1);
         auto current_layer = &current_local_context->cached_layers[layer_number - 1];
 
         // We should always crash here (because the top-level should have detected this case...)
-        if (current_layer->layer_number != layer_number)
-            elog(ERROR, "Expected the layer number to be filled");
+        if (current_layer->layer_number != layer_number){
+            if (current_layer->layer_number != 0)
+                elog(ERROR, "Invalid state!");
+            
+                
+            if (expect_present){
+                elog(ERROR, "Expected the layer number to be filled");
+            }
+            return false;
+        }
 
-        my_bind_data->col_layer_info = current_layer;
+        bind_data->col_layer_info = current_layer;
 
-        uint64 column_count = current_layer->num_pk_records;
-        my_bind_data->column_width = column_count;
+        bind_data->column_width = current_layer->num_pk_records;
         if (current_layer->rows_layer_number){
             auto rows_layer = &current_local_context->cached_layers[current_layer->rows_layer_number - 1];
             if (rows_layer->layer_number != current_layer->rows_layer_number)
                 elog(ERROR, "Expected the layer number to be filled");
-            column_count += rows_layer->num_pk_records;
-            my_bind_data->row_layer_info = rows_layer;
-            my_bind_data->row_width = rows_layer->num_pk_records;
+            bind_data->row_layer_info = rows_layer;
+            bind_data->row_width = rows_layer->num_pk_records;
         }
-
-        for (uint64_t col_count = 0; col_count < column_count; col_count++){
-            const std::string param = std::string("column_") + std::to_string(col_count);
-            duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
-            duckdb_bind_add_result_column(info, param.c_str(), type);
-            duckdb_destroy_logical_type(&type);
-        }
-
-        duckdb_bind_set_bind_data(info, my_bind_data, free);
+        return true;
     }
 
-    void traceprov_duckdb_init(duckdb_init_info info){
-        auto bind_data = (TraceProvBindData *) duckdb_init_get_bind_data(info);
-
-        auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
+    void traceprov_populate_init_data(TraceProvBindData *bind_data, TraceProvInitData *init_data_inst){
         init_data_inst->current = 0;
         const auto current_layer = bind_data->col_layer_info;
         map_layer_file(bind_data->rel_args.layer_number, bind_data->rel_args.worker_id, &init_data_inst->col_layer_ptr, current_layer->size);
@@ -132,8 +121,45 @@ extern "C" {
         const void *final_ptr = get_final_ptr(init_data_inst->col_layer_ptr, current_layer);
         // Ugh, TODO: This won't be the same when we'll have sorted-by-agg RLE.
         init_data_inst->number_of_records = ((uint64)final_ptr - (uint64)init_data_inst->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+    }
+
+    void traceprov_duckdb_bind(duckdb_bind_info info) {
+        if (duckdb_bind_get_parameter_count(info) != 2){
+            elog(ERROR, "Expected 2 params!");
+        }
+
+        auto param_1 = duckdb_bind_get_parameter(info, 0);
+        const uint32_t current_worker_id = duckdb_get_int64(param_1);
+        auto param_2 = duckdb_bind_get_parameter(info, 1);
+        const uint32_t layer_number = duckdb_get_int64(param_2);
+
+        duckdb_destroy_value(&param_1);
+        duckdb_destroy_value(&param_2);
+
+        auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
+        memset(my_bind_data, 0, sizeof(TraceProvBindData));
+        traceprov_populate_bind_data(current_worker_id, layer_number, my_bind_data, true);
+
+        for (uint64_t col_count = 0; col_count <  my_bind_data->column_width + my_bind_data->row_width; col_count++){
+            const std::string param = std::string("column_") + std::to_string(col_count);
+            duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+            duckdb_bind_add_result_column(info, param.c_str(), type);
+            duckdb_destroy_logical_type(&type);
+        }
+
+        duckdb_bind_set_bind_data(info, my_bind_data, free);
+    }
+
+    void traceprov_duckdb_init(duckdb_init_info info){
+        auto bind_data = (TraceProvBindData *) duckdb_init_get_bind_data(info);
+        auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
+        memset(init_data_inst, 0, sizeof(TraceProvInitData));
+
+        traceprov_populate_init_data(bind_data, init_data_inst);
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
+
+
 
     uint64 fillup_pointer(
         struct traceprov_aggregate_layer *layer,
@@ -165,7 +191,6 @@ extern "C" {
         *final_ptr = source_ptr;
         return current_pos;
     }
-
 
     void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
 
@@ -206,10 +231,145 @@ extern "C" {
     } \
 
 
+    void traceprov_window_func(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
+        TraceProvWindowFuncExtra *window_extra = (TraceProvWindowFuncExtra *)duckdb_scalar_function_get_extra_info(info);
+        if (unlikely(window_extra == NULL)){
+            elog(ERROR, "Expected window func extra to be set!");
+        }
+        duckdb_vector worker_id_vector = duckdb_data_chunk_get_vector(input, 0);
+        uint32_t *worker_id_data = (uint32_t *)duckdb_vector_get_data(worker_id_vector);
+        
+        duckdb_vector layer_number_vector = duckdb_data_chunk_get_vector(input, 1);
+        uint32_t *layer_number_data = (uint32_t *)duckdb_vector_get_data(layer_number_vector);
+        
+        duckdb_vector frame_start_vector = duckdb_data_chunk_get_vector(input, 2);
+        uint64_t *frame_start_data = (uint64_t *)duckdb_vector_get_data(frame_start_vector);
+
+        duckdb_vector frame_end_vector = duckdb_data_chunk_get_vector(input, 3);
+        uint64_t *frame_end_data = (uint64_t *)duckdb_vector_get_data(frame_end_vector);
+
+        const idx_t row_count = duckdb_data_chunk_get_size(input);
+
+        idx_t expected_size = 0;
+        for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
+            if (unlikely(frame_end_data[row_idx] < frame_start_data[row_idx])){
+                elog(ERROR, "Expected end to never be less than start!");
+            }
+            // Since a frame always includes the current row, also need to add 1.
+            // This could be an upper bound in the cases where the worker is simply not present..
+            expected_size += (frame_end_data[row_idx] - frame_start_data[row_idx]) + 1;
+        }
+            
+        if(duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
+            elog(ERROR, "Error reserving!");
+        }
+        
+        if(duckdb_list_vector_set_size(output, expected_size) == DuckDBError){
+            elog(ERROR, "Error setting size!");
+        }
+
+        auto entries = (duckdb_list_entry *)duckdb_vector_get_data(output);
+
+        duckdb_vector child_structs = duckdb_list_vector_get_child(output);
+        uint64_t generic_idx = 0;
+        for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+            const uint32_t worker_id = worker_id_data[row_idx];
+            const uint32_t layer_number = layer_number_data[row_idx];
+            TraceProvWindowPack *window_pack = window_extra->key_bind_map->at(TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number));
+
+            const uint64_t frame_start = frame_start_data[row_idx];
+            const uint64_t frame_end = frame_end_data[row_idx];
+            const uint64_t generic_start_idx = generic_idx;
+            for (uint64_t row_to_return = frame_start; row_to_return < (frame_end + 1); row_to_return++, generic_idx++){
+                const int64_t logged_row_idx = row_to_return - 1;
+                if (unlikely(logged_row_idx < 0))
+                    elog(ERROR, "any idx can never be < 0!");
+                for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
+                    duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
+                    uint64_t *child_data = (uint64_t *)duckdb_vector_get_data(member_data);
+                    traceprov_aggregate_layer *curr_layer = window_pack->bind_data->row_layer_info;;
+                    void *data_ptr = window_pack->init_data->row_layer_ptr;
+                    child_data[generic_idx] = ((uint64_t*)(&(((uint8_t*)data_ptr)[(TRACEPROV_GET_RECORD_SIZE(curr_layer)*logged_row_idx) + (curr_layer->record_padding)])))[col_idx];
+                }
+            }
+            const uint64_t generic_end_idx = generic_idx;
+            // TODO: get rid of extra vars.
+            // Helpful for readability ig.
+            entries[row_idx].offset = generic_start_idx;
+            entries[row_idx].length = generic_end_idx - generic_start_idx;
+        }
+    }
+
+    static duckdb_scalar_function traceprov_create_read_window_func(
+        const uint64_t num_args,
+        const uint32_t worker_count,
+        std::vector<uint32_t> *expected_layers
+    ){
+        duckdb_scalar_function func = duckdb_create_scalar_function();
+        std::string *func_name = new std::string(("traceprov_read_window_" + std::to_string(num_args)).c_str());
+        duckdb_scalar_function_set_name(func, func_name->c_str());
+        duckdb_logical_type basic_arg_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+        duckdb_logical_type arg_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        // Worker id.
+        duckdb_scalar_function_add_parameter(func, basic_arg_type);
+        // Layer id.
+        duckdb_scalar_function_add_parameter(func, basic_arg_type);
+        // Frame start
+        duckdb_scalar_function_add_parameter(func, arg_type);
+        // Frame end.
+        duckdb_scalar_function_add_parameter(func, arg_type);
+
+        duckdb_logical_type *struct_member_types = (duckdb_logical_type *)malloc(sizeof(duckdb_logical_type)*num_args);
+        const char **member_names = (const char **)malloc(sizeof(char *)*num_args);
+        for (uint64_t col_idx = 0; col_idx < num_args; col_idx++){
+            std::string *column_str = new std::string((std::string("column_") + std::to_string(col_idx)).c_str());
+            member_names[col_idx] = column_str->c_str();
+            struct_member_types[col_idx] = arg_type;
+        }
+        duckdb_logical_type struct_type = duckdb_create_struct_type(struct_member_types, member_names, num_args);
+        duckdb_logical_type list_type = duckdb_create_list_type(struct_type);
+        duckdb_scalar_function_set_return_type(func, list_type);
+        duckdb_destroy_logical_type(&list_type);
+        duckdb_scalar_function_set_function(func, traceprov_window_func);
+        duckdb_destroy_logical_type(&arg_type);
+
+        auto window_extra = new TraceProvWindowFuncExtra;
+        window_extra->key_bind_map = new std::unordered_map<uint64_t, TraceProvWindowPack *>;
+
+        for (uint32_t worker_id = 1; worker_id < worker_count + 1; worker_id++){
+            for (auto layer_number: *expected_layers){
+                const uint64_t worker_layer_key = TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number);
+                if (unlikely(window_extra->key_bind_map->find(worker_layer_key) != window_extra->key_bind_map->end())){
+                    elog(ERROR, "Expected the key to not be present!");
+                }
+                TraceProvBindData *bind_data = new TraceProvBindData;
+                TraceProvInitData *init_data = new TraceProvInitData;
+                memset(bind_data, 0, sizeof(TraceProvBindData));
+                memset(init_data, 0, sizeof(TraceProvInitData));
+                TraceProvWindowPack *window_pack = nullptr;
+                // In the case where we dont' find it, it'll just be null.
+                // This simplifies checking for it later, or at least makes the code more readable.
+                if(traceprov_populate_bind_data(worker_id, layer_number, bind_data, false)){
+                    window_pack = new TraceProvWindowPack;
+                    window_pack->bind_data = bind_data;
+                    window_pack->init_data = init_data;
+                    traceprov_populate_init_data(bind_data, init_data);
+                }
+                window_extra->key_bind_map->insert({worker_layer_key, window_pack});
+            }
+        }
+        window_extra->num_cols = num_args;
+        // We don't care about the extra being "regenerated".
+        // This is becuase the input layers are always disjoint.
+        // So, the same worker+layer will never occur again, across the calls.
+        duckdb_scalar_function_set_extra_info(func, window_extra, nullptr);
+        return func;
+    }
+
     static duckdb_table_function setup_func(){
         auto function = duckdb_create_table_function();
         duckdb_table_function_set_name(function, "traceprov_read_worker_layer");
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
         duckdb_table_function_add_parameter(function, type);
         duckdb_table_function_add_parameter(function, type);
         duckdb_destroy_logical_type(&type);
@@ -253,7 +413,8 @@ extern "C" {
 
     void traceprov_duckdb_setup_context(
         struct traceprov_inference_context **p_ctxt,
-        void (**p_cleanup)(struct traceprov_inference_context *)
+        void (**p_cleanup)(struct traceprov_inference_context *),
+        TraceProvInferSetupExtra *setup_extra
     ){
         struct traceprov_inference_context *context = (struct traceprov_inference_context *) malloc(sizeof(struct traceprov_inference_context));
         duckdb_database db;
@@ -264,18 +425,29 @@ extern "C" {
         context->db = db;
         context->con = con;
         *p_ctxt = context;
+        
+        for (auto entry: *setup_extra->size_layer_map){
+            duckdb_scalar_function read_window_func = traceprov_create_read_window_func(entry.first, setup_extra->worker_count, entry.second);
+            PG_DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, read_window_func));
+        }
+        
         auto function = setup_func();
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
-        PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=12;", "setting threads");
+        PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "setting threads");
         *p_cleanup = traceprov_duckdb_cleanup;
     }
 
     // guts of all the inference.
-    TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql, struct traceprov_inference_context *context){
+    TraceProvData *traceprov_perform_duckdb_inference(
+        const char *generated_sql,
+        struct traceprov_inference_context *context
+    ){
         duckdb_connection con = context->con;
         duckdb_prepared_statement stmt;
         duckdb_result final_result;
-        PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, generated_sql, &stmt), duckdb_prepare_error(stmt));
+        std::string final_sql_str = std::string(generated_sql);
+        // final_sql_str = "copy (" + final_sql_str + ") to '/tmp/temp.csv'";
+        PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, final_sql_str.c_str(), &stmt), duckdb_prepare_error(stmt));
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
 
         uint64_t total_chunk_count = duckdb_result_chunk_count(final_result);
@@ -286,7 +458,7 @@ extern "C" {
             duckdb_destroy_data_chunk(&data_chunk);
         }
 
-        PG_DUCKDB_RUN_SHORT_QUERY(con, generated_sql, "inference query");
+        // PG_DUCKDB_RUN_SHORT_QUERY(con, generated_sql, "inference query");
         return traceprov_data;
     }
 }
