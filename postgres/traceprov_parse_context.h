@@ -104,11 +104,11 @@ typedef struct TraceProvAggregateProperty {
 // In the graph file, this also gets later stored.
 typedef struct TraceProvParseGraphProperties {
     // List of TraceProvSetPaddingMapItem.
-    List *setPaddingMap;
+    List *set_padding_map;
     // List of TraceProvSetGraphMapItem.
-    List *setGraphMap;
+    List *set_graph_map;
     // List of TraceProvDependency (sublinks).
-    List *sublinkMap;
+    List *sublink_map;
     // Used to identify which functions are traceprov ones, during plan analysis.
     List *traceprov_funcs;
     // The strategy inferred from the plan. List of TraceProvAggregateProperty.
