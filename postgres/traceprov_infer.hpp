@@ -18,7 +18,8 @@ enum TraceProvNodeKind {
     T_TP_RELATION,
     T_TP_JOIN,
     T_TP_APPEND,
-    T_TP_WINDOW_READ
+    T_TP_WINDOW_READ,
+    T_TP_FILTER
 };
 
 typedef struct TraceProvDescriptor {
@@ -98,6 +99,17 @@ typedef struct TraceProvWindowRead {
     uint64 column_count;
     TraceProvNode *child_node;
 } TraceProvWindowRead;
+
+// Describes a filter on the child node.
+// Doesn't, trivially, affect the width.
+typedef struct TraceProvFilter {
+    TraceProvNodeKind tag;
+    char *alias_name;
+    // Currently only const join conditions are supported.
+    // We don't need any thing more.....yet
+    TraceProvConstJoinPairs *const_join_condition;
+    TraceProvNode *child_node;
+} TraceProvFilter;
 
 typedef struct TraceProvDerivation {
     TraceProvSingleDerivation single_derivation;

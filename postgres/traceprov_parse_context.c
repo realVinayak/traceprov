@@ -23,6 +23,7 @@ void tp_parse_initialize_context(TraceProvParseContext *context){
     context->properties->set_padding_map = NIL;
     context->properties->set_graph_map = NIL;
     context->properties->sublink_map = NIL;
+    context->properties->set_pointer_map = NIL;
     context->parent_targets = NIL;
 }
 
@@ -158,9 +159,7 @@ TraceProvEntry *traceprov_resolve_entry(
             tp_entry->window_entry.kind = tp_target->window_entry->kind;
             tp_entry->window_entry.log_layer_number = tp_target->window_entry->log_layer_number;
         } else if (graph != NULL){
-            if (target->resorigtbl != InvalidOid || target->resorigcol != 0){
-                elog(ERROR, "Expected no table info to for the pointer node");
-            }
+            _assertIsArtificial(tp_target->targetEntry);
             tp_entry->kind = TP_ENTRY_KIND_POINTER;
             tp_entry->is_pointer_for_window = tp_target->is_pointer_for_window;
         }else{
@@ -291,35 +290,56 @@ char *traceProvParseContextToJson(const TraceProvParseContext *context){
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"simple_incrementor\": %d", context->simple_incrementor);
     appendStringInfo(&buf, ",");
-    ListCell *setPaddingMapItemCursor;
+    ListCell *set_padding_map_item_cursor;
     appendStringInfo(&buf, "\"setPaddingMap\": [");
-    foreach(setPaddingMapItemCursor, context->properties->set_padding_map){
-        if (NEED_SEP(setPaddingMapItemCursor)){
+    foreach(set_padding_map_item_cursor, context->properties->set_padding_map){
+        if (NEED_SEP(set_padding_map_item_cursor)){
             appendStringInfo(&buf, ",");
         }
-        const TraceProvSetPaddingMapItem *setPaddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(setPaddingMapItemCursor);
+        const TraceProvSetPaddingMapItem *setPaddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(set_padding_map_item_cursor);
         appendStringInfo(&buf, "{\"setNumber\": %d, \"padding\": %d}", setPaddingMapItem->setNumber, setPaddingMapItem->padding);
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"setGraphMap\": [");
-    ListCell *setGraphMapItemCursor;
-    foreach(setGraphMapItemCursor, context->properties->set_graph_map){
-        if (NEED_SEP(setGraphMapItemCursor)){
+    ListCell *set_graph_map_item_cursor;
+    foreach(set_graph_map_item_cursor, context->properties->set_graph_map){
+        if (NEED_SEP(set_graph_map_item_cursor)){
             appendStringInfo(&buf, ",");
         }
-        const TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem *)lfirst(setGraphMapItemCursor);
+        const TraceProvSetGraphMapItem *setGraphMapItem = (TraceProvSetGraphMapItem *)lfirst(set_graph_map_item_cursor);
         appendStringInfo(&buf, "{\"setNumber\": %d, \"graph\": %s}", setGraphMapItem->setNumber, traceProvDependencyToJson(setGraphMapItem->graph));
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, ",");
     appendStringInfo(&buf, "\"sublinks\": [");
-    ListCell *sublinkGraphCursor;
-    foreach(sublinkGraphCursor, context->properties->sublink_map){
-        if(NEED_SEP(sublinkGraphCursor)){
+    ListCell *sublink_graph_cursor;
+    foreach(sublink_graph_cursor, context->properties->sublink_map){
+        if(NEED_SEP(sublink_graph_cursor)){
             appendStringInfo(&buf, ",");
         }
-        appendStringInfo(&buf, "%s", traceProvDependencyToJson((TraceProvDependency *)lfirst(sublinkGraphCursor)));
+        appendStringInfo(&buf, "%s", traceProvDependencyToJson((TraceProvDependency *)lfirst(sublink_graph_cursor)));
+    }
+    appendStringInfo(&buf, "]");
+    appendStringInfo(&buf, ",");
+    appendStringInfo(&buf, "\"set_pointer_item\": [");
+    ListCell *set_pointer_item_cursor;
+    foreach(set_pointer_item_cursor, context->properties->set_pointer_map){
+        if (NEED_SEP(set_pointer_item_cursor))
+            appendStringInfo(&buf, ",");
+        const TraceProvSetPointerItem *item = (TraceProvSetPointerItem *)lfirst(set_pointer_item_cursor);
+        appendStringInfo(&buf, "{");
+        appendStringInfo(&buf, "\"set_pointer\": %d", item->set_pointer);
+        appendStringInfo(&buf, ",");
+        appendStringInfo(&buf, "\"refs\": [");
+        ListCell *ref_cursor;
+        foreach(ref_cursor, item->refs){
+            if (NEED_SEP(ref_cursor))
+                appendStringInfo(&buf, ",");
+            appendStringInfo(&buf, "%d", lfirst_int(ref_cursor));
+        }
+        appendStringInfo(&buf, "]");
+        appendStringInfo(&buf, "}");
     }
     appendStringInfo(&buf, "]");
     appendStringInfo(&buf, "}");
@@ -437,9 +457,10 @@ typedef struct TraceProvDependencyMetaHeader {
     uint32 num_set_padding_map_items;
     uint32 num_set_graph_map_items;
     uint32 num_sublink_items;
+    uint32 num_set_pointer_map;
 } TraceProvDependencyMetaHeader;
 
-static_assert(sizeof(TraceProvDependencyMetaHeader) == 20);
+static_assert(sizeof(TraceProvDependencyMetaHeader) == 24);
 
 // This is not in the header for a reason, nothing outside of this file
 // should know that this even exists.
@@ -456,6 +477,14 @@ void failSafeWrite(FILE *file, const void *buff, size_t length){
         elog(ERROR, "Error dumping the graph!");
     }
 }
+
+#define FAIL_SAFE_WRITE_INT(FILE, VALUE, TYPE) do { \
+    int32 value = VALUE; \
+    if (sizeof(TYPE) != sizeof(int32)) {  \
+        elog(ERROR, "macro only for int!"); \
+    } \
+    failSafeWrite(FILE, &value, sizeof(int32)); \
+} while(0); \
 
 void failSafeRead(FILE *file, void *buff, size_t length){
     const size_t readValues = fread(buff, length, 1, file);
@@ -490,6 +519,7 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context, c
     meta_header.num_set_padding_map_items = list_length(context->properties->set_padding_map);
     meta_header.num_set_graph_map_items = list_length(context->properties->set_graph_map);
     meta_header.num_sublink_items = list_length(context->properties->sublink_map);
+    meta_header.num_set_pointer_map = list_length(context->properties->set_pointer_map);
     failSafeWrite(fptr, &meta_header, sizeof(TraceProvDependencyMetaHeader));
     _serializeContext(context, fptr);
     foreach(graphCursor, graphs){
@@ -572,26 +602,38 @@ void _serializeTraceProvDepedency(const TraceProvDependency *graph, FILE *output
 
 // Dumps the properties in the file.
 void _serializeContext(const TraceProvParseContext* context, FILE* file){
-    ListCell *paddingMapItemCursor;
-    foreach(paddingMapItemCursor, context->properties->set_padding_map){
-        TraceProvSetPaddingMapItem *paddingMapItem = (TraceProvSetPaddingMapItem *)lfirst(paddingMapItemCursor);
-        failSafeWrite(file, paddingMapItem, sizeof(TraceProvSetPaddingMapItem));
+    ListCell *padding_map_item_cursor;
+    foreach(padding_map_item_cursor, context->properties->set_padding_map){
+        TraceProvSetPaddingMapItem *padding_map_item = (TraceProvSetPaddingMapItem *)lfirst(padding_map_item_cursor);
+        failSafeWrite(file, padding_map_item, sizeof(TraceProvSetPaddingMapItem));
     }
 
-    ListCell *graphMapItemCursor;
-    foreach(graphMapItemCursor, context->properties->set_graph_map){
-        TraceProvSetGraphMapItem *graphMapItem = (TraceProvSetGraphMapItem *)lfirst(graphMapItemCursor);
+    ListCell *graph_map_item_cursor;
+    foreach(graph_map_item_cursor, context->properties->set_graph_map){
+        TraceProvSetGraphMapItem *graph_map_item = (TraceProvSetGraphMapItem *)lfirst(graph_map_item_cursor);
         // To make serialization easier, it gets wrapped in one graph.
         // During deserialization, it gets unwrapped.
-        const TraceProvDependency *wrapperDependency = graphMapItem->graph;
-        failSafeWrite(file, graphMapItem, sizeof(TraceProvSetGraphMapItem));
+        const TraceProvDependency *wrapperDependency = graph_map_item->graph;
+        failSafeWrite(file, graph_map_item, sizeof(TraceProvSetGraphMapItem));
         _serializeTraceProvDepedency(wrapperDependency, file);
     }
-    ListCell *sublinkMapItemCursor;
-    foreach(sublinkMapItemCursor, context->properties->sublink_map){
-        const TraceProvDependency *sublinkGraph = (TraceProvDependency *)lfirst(sublinkMapItemCursor);
-        _serializeTraceProvDepedency(sublinkGraph, file);
+    ListCell *sublink_map_item_cursor;
+    foreach(sublink_map_item_cursor, context->properties->sublink_map){
+        const TraceProvDependency *sublink_graph = (TraceProvDependency *)lfirst(sublink_map_item_cursor);
+        _serializeTraceProvDepedency(sublink_graph, file);
     }
+    
+    ListCell *set_pointer_cursor;
+    foreach(set_pointer_cursor, context->properties->set_pointer_map){
+        const TraceProvSetPointerItem *set_pointer_item = (TraceProvSetPointerItem *)lfirst(set_pointer_cursor);
+        FAIL_SAFE_WRITE_INT(file, set_pointer_item->set_pointer, int32);
+        FAIL_SAFE_WRITE_INT(file, list_length(set_pointer_item->refs), int);
+        ListCell *ref_cursor;
+        foreach(ref_cursor, set_pointer_item->refs){
+            FAIL_SAFE_WRITE_INT(file, lfirst_int(ref_cursor), int);
+        }
+    }
+
 }
 
 // Returns list of deserialized graphs.
@@ -662,6 +704,7 @@ TraceProvDependency *_deserializeTraceProvDependency(FILE *file){
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDependencyMetaHeader* metaHeader){
     TraceProvParseContext *context = palloc0_object(TraceProvParseContext);
     tp_parse_initialize_context(context);
+    context->root_context = context;
     for (uint32 i = 0; i < metaHeader->num_set_padding_map_items; i++){
         TraceProvSetPaddingMapItem *setPaddingMapItem = palloc0_object(TraceProvSetPaddingMapItem);
         failSafeRead(file, setPaddingMapItem, sizeof(TraceProvSetPaddingMapItem));
@@ -679,7 +722,18 @@ TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, TraceProvDe
         TraceProvDependency *graph = _deserializeTraceProvDependency(file);
         context->properties->sublink_map = lappend(context->properties->sublink_map, graph);
     }
-    context->root_context = context;
+    for (uint32 i = 0; i < metaHeader->num_set_pointer_map; i++){
+        uint32 set_pointer_value = 0;
+        failSafeRead(file, &set_pointer_value, sizeof(int32));
+        uint32 set_ref_length = 0;
+        failSafeRead(file, &set_ref_length, sizeof(int));
+        for (uint32 ref_idx = 0; ref_idx < set_ref_length; ref_idx++){
+            uint32 ref_value = 0;
+            failSafeRead(file, &ref_value, sizeof(int));
+            tp_add_set_pointer_property(context, set_pointer_value, ref_value);
+        }
+    }
+
     return context;
 }
 
@@ -739,6 +793,17 @@ TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_co
     return NULL;
 }
 
+TraceProvDependency *tp_get_set_graph(const TraceProvParseContext *parsed_context, const int set_number){
+    ListCell *graph_cursor;
+    foreach(graph_cursor, GET_ROOT_CONTEXT(parsed_context)->properties->set_graph_map){
+        TraceProvSetGraphMapItem *set_graph_map_item = (TraceProvSetGraphMapItem *)lfirst(graph_cursor);
+        if (set_graph_map_item->setNumber == set_number)
+            return set_graph_map_item->graph;
+    }
+    elog(ERROR, "Expected to always find the set graph!");
+    return NULL;
+}
+
 // Finds a graph in the children of a graph.
 // Not recursive..
 TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph, const TraceProvLayerNumber graph_number){
@@ -750,4 +815,36 @@ TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph
     }
     elog(ERROR, "Expected to always find the graph in children!");
     return NULL;
+}
+
+void tp_add_set_pointer_property(TraceProvParseContext *context, const uint32 pointer, const uint32 ref){
+    if (pointer == 0 || ref == 0)
+        elog(ERROR, "Invalid args: %d, %d", pointer, ref);
+    TraceProvParseContext *real_context = GET_ROOT_CONTEXT(context);
+    ListCell *cursor = NULL;
+    foreach(cursor, real_context->properties->set_pointer_map){
+        TraceProvSetPointerItem *item = (TraceProvSetPointerItem *)lfirst(cursor);
+        if (item->set_pointer == pointer)
+            break;
+    }
+    TraceProvSetPointerItem *item = NULL;
+    if (cursor == NULL){
+        item = palloc0_object(TraceProvSetPointerItem);
+        item->set_pointer = pointer;
+        item->refs = NIL;
+        real_context->properties->set_pointer_map = lappend(real_context->properties->set_pointer_map, item);
+    }else{
+        item = (TraceProvSetPointerItem *)lfirst(cursor);
+    }
+    item->refs = list_append_unique_int(item->refs, ref);
+}
+
+List *tp_get_set_pointer_property(TraceProvParseContext *context, const uint32 pointer){
+    ListCell *cursor;
+    foreach(cursor, GET_ROOT_CONTEXT(context)->properties->set_pointer_map){
+        TraceProvSetPointerItem *item = (TraceProvSetPointerItem *)lfirst(cursor);
+        if (item->set_pointer == pointer)
+            return item->refs;
+    }
+    return NIL;
 }

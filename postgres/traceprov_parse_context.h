@@ -100,6 +100,13 @@ typedef struct TraceProvAggregateProperty {
     int combine_strategy;
 } TraceProvAggregateProperty;
 
+// To prune some of the trees for the inference in UNION,
+// need to store the possible values a set pointer can take.
+typedef struct TraceProvSetPointerItem {
+    uint32 set_pointer;
+    List *refs;
+} TraceProvSetPointerItem;
+
 // Some properties get stored directly in the context.
 // In the graph file, this also gets later stored.
 typedef struct TraceProvParseGraphProperties {
@@ -113,6 +120,8 @@ typedef struct TraceProvParseGraphProperties {
     List *traceprov_funcs;
     // The strategy inferred from the plan. List of TraceProvAggregateProperty.
     List *aggregate_properties;
+    // The list of TraceProvSetPointerItem.
+    List *set_pointer_map;
 } TraceProvParseGraphProperties;
 
 typedef struct TraceProvParseContext {
@@ -159,8 +168,11 @@ void tp_add_set_padding_item(TraceProvParseContext *, int, int);
 void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
 void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
 TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number);
+TraceProvDependency *tp_get_set_graph(const TraceProvParseContext *parsed_context, const int set_number);
 TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph, TraceProvLayerNumber graph_number);
 void tp_add_aggregate_property(const TraceProvParseContext *, const Agg *, TraceProvLayerNumber);
+void tp_add_set_pointer_property(TraceProvParseContext *context, const uint32 pointer, const uint32 ref);
+List *tp_get_set_pointer_property(TraceProvParseContext *context, const uint32 pointer);
 
 TraceProvEntry *makeTraceProvEntry();
 

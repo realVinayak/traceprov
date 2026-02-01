@@ -121,6 +121,8 @@ extern "C" {
         return relation;
     }
 
+    static int find_first_set_number_entry(const List *entries, int set_number);
+
     struct infer_result {
         size_t width;
         std::vector<uint64> **ids;
@@ -819,6 +821,16 @@ extern "C" {
         tp_window_read->column_count = column_count;
         tp_window_read->child_node = child_node;
         return tp_window_read;
+    }
+
+    TraceProvFilter *make_traceprov_filter(
+        TraceProvNode *child_node
+    ){
+        auto tp_filter_node = palloc0_object(TraceProvFilter);
+        tp_filter_node->tag = T_TP_FILTER;
+        tp_filter_node->const_join_condition = new TraceProvConstJoinPairs;
+        tp_filter_node->child_node = child_node;
+        return tp_filter_node;
     }
 
     static void traceprov_assert_is_in_range(const uint64 column_count, TraceProvColumn *column){
@@ -1905,6 +1917,9 @@ extern "C" {
         } else if (node->tag == T_TP_WINDOW_READ){
             TraceProvWindowRead *window_read = (TraceProvWindowRead *)node;
             return window_read->column_count; 
+        } else if (node->tag == T_TP_FILTER){
+            TraceProvFilter *filter = (TraceProvFilter *)node;
+            return traceprov_get_node_column_count(filter->child_node);
         }
         elog(ERROR, "Got unexepected node: %d", node->tag);
         return 0;
@@ -1962,6 +1977,8 @@ extern "C" {
             return result;
         } else if (node->tag == T_TP_WINDOW_READ){
             elog(ERROR, "Nope, too complicated to in-line handle window func read. Use duckdb inference instead!");
+        } else if (node->tag == T_TP_FILTER){
+            elog(ERROR, "Not supported in-line for now..");
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
@@ -2262,6 +2279,35 @@ extern "C" {
         return append_repr.data;
     }
 
+    static char *traceprov_filter_to_sql(TraceProvFilter *filter, TraceProvToSQLContext context){
+        char *child_raw_sql = traceprov_node_to_sql(filter->child_node, context);
+        char *child_alias = filter->child_node->alias_name;
+        const uint64 child_col_count = traceprov_get_node_column_count(filter->child_node);
+        char *child_alias_expanded = expand_alias(child_alias, child_col_count);
+        char *child_node_sql = psprintf("(%s) as %s", child_raw_sql, child_alias_expanded);
+
+        StringInfoData where_repr;
+        initStringInfo(&where_repr);
+        bool did_add_in_join = false;
+        for(auto join_pair: *filter->const_join_condition){
+            if (did_add_in_join)
+                appendStringInfoString(&where_repr, " AND ");
+            did_add_in_join = true;
+            appendStringInfo(
+                &where_repr,
+                "(%s=%ld)",
+                traceprov_get_column_name_idx(child_alias, join_pair->first->second - 1),
+                join_pair->second
+            );
+        }
+
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        appendStringInfo(&sql_repr, "SELECT * FROM %s WHERE (%s)", child_node_sql, where_repr.data);
+        return sql_repr.data;
+    }
+
+
     static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
         if (node->tag == T_TP_RELATION){
             node->alias_name = tp_parse_get_unique_alias(context.context);
@@ -2277,6 +2323,10 @@ extern "C" {
         if (node->tag == T_TP_WINDOW_READ){
             node->alias_name = tp_parse_get_unique_alias(context.context);
             return traceprov_window_read_to_sql((TraceProvWindowRead *)node, context);
+        }
+        if (node->tag == T_TP_FILTER){
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_filter_to_sql((TraceProvFilter *)node, context);
         }
         elog(ERROR, "Found handling invalid node: %d", node->tag);
     }
@@ -3159,6 +3209,47 @@ extern "C" {
         return current_tree;
     }
 
+    static TraceProvInferAbstractTree *derive_set_on_node(
+        TraceProvNode *reference_node,
+        TraceProvDependency *curr_graph,
+        const uint32 idx_start,
+        const int set_number,
+        const uint32 set_idx,
+        const struct local_context *current_local_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        TraceProvParseContext *parse_context,
+        const TraceProvRecursePack recurse_pack
+    ){
+        const int set_start_idx = find_first_set_number_entry(curr_graph->entries, set_number);
+        auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
+
+        if (set_start_idx == -1)
+            return current_tree;
+
+        const List *possible_candidates = tp_get_set_pointer_property(parse_context, set_number);
+
+        ListCell *candidate;
+        foreach(candidate, possible_candidates){
+            const int curr_set_number = lfirst_int(candidate);
+            auto tp_filter = make_traceprov_filter(reference_node);
+            tp_filter->const_join_condition->push_back(new TraceProvConstJoinPair(new TraceProvColumn(1, set_idx + idx_start + 1), (uint64)curr_set_number));
+            
+            current_tree->children->push_back(
+                derive_on_node(
+                    (TraceProvNode *)tp_filter,
+                    tp_get_set_graph(parse_context, curr_set_number),
+                    idx_start + set_start_idx,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                )
+            );
+        }
+
+        return current_tree;
+    }
+
     static TraceProvInferAbstractTree *derive_window_on_node(
         TraceProvNode *reference_node,
         const uint32 frame_start_idx,
@@ -3315,6 +3406,24 @@ extern "C" {
         bool did_append_self = false;
         foreach(entry_cursor, graph->entries){
             const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+            if (te->kind == TP_ENTRY_SET_POINTER){
+                // The set pointer case.
+                // Need to derive from this.
+                const int current_set_number = te->setNumber;
+                current_tree->children->push_back(
+                    derive_set_on_node(
+                        node,
+                        graph,
+                        idx_start,
+                        current_set_number,
+                        foreach_current_index(entry_cursor),
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        recurse_pack
+                    )
+                );
+            }
             if (te->kind == TP_ENTRY_KIND_BASE_RELATION){
                 if (!did_append_self){
                     current_tree->nodes->push_back(node);
@@ -3364,6 +3473,21 @@ extern "C" {
             }
         }
         return current_tree;
+    }
+    
+    static int find_first_set_number_entry(const List *entries, int set_number){
+        ListCell *entry_cursor;
+        foreach(entry_cursor, entries){
+            const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+            if (te->setNumber == set_number){
+                if (te->kind == TP_ENTRY_SET_POINTER){
+                    return -1;
+                }
+                return foreach_current_index(entry_cursor);
+            }
+        }
+        elog(ERROR, "Didn't find the set entry!");
+        return -1;
     }
 
     static TraceProvNode *simple_read_from_log(
