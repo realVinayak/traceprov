@@ -119,6 +119,7 @@ List *traceprov_adjust_union(
                     // These have trivially no sublinks.
                     NIL,
                     NULL,
+                    false,
                     false
                 )
             );
@@ -159,7 +160,8 @@ List *traceprov_adjust_union(
                     tpTarget->isSetPointer,
                     tpTarget->sublinks,
                     tpTarget->window_entry,
-                    tpTarget->is_pointer_for_window
+                    tpTarget->is_pointer_for_window,
+                    tpTarget->is_nullable
                 );
 
             extraTargetsTyped = lappend(

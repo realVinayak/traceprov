@@ -162,6 +162,13 @@ struct traceprov_aggregate_layer {
     // All layers are stored in a columnar fashion.
     // This points to the rows (because we always index the columns directly)
     uint32 rows_layer_number;
+    // If this layer needs to store null values, we
+    // maintain another layer where we store the null map.
+    // We do this _only_ if we can guarantee that the values can be not-null.
+    // So, this happens rarely.
+    uint32 null_map_layer_number;
+    // The actual null map.
+    uint64 null_map;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);

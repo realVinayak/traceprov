@@ -30,9 +30,13 @@ typedef struct TraceProvDescriptor {
 typedef struct {
     TraceProvDescriptor *descriptor;
     std::vector<uint64> *data;
+    // Ugh, this makes me cry.
+    // TODO: Optimize optmize optimize.
+    std::vector<bool> *validity;
 } TraceProvColumnData;
 
 typedef std::vector<TraceProvColumnData*> TraceProvData;
+
 typedef struct TraceProvTopResult {
     bool is_lazy;
     List *pdata;

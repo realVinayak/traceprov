@@ -222,6 +222,7 @@ static Query *perform_window_clause_rewrite_inline(
                     false,
                     NIL,
                     traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number),
+                    false,
                     false
                 )
             );
@@ -236,6 +237,7 @@ static Query *perform_window_clause_rewrite_inline(
                     false,
                     NIL,
                     traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number),
+                    false,
                     false
                 )
             );
@@ -281,6 +283,7 @@ static Query *perform_window_clause_rewrite_inline(
                     false,
                     NIL,
                     traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log),
+                    false,
                     false
                 )
             );

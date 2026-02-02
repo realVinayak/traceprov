@@ -554,11 +554,15 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
     List *argVars = traceprov_prepare_arg_vars(tpContext, &layer_number);
     List *entries = NIL;
     List *childGraphs = NIL;
+    List *remainingArgVars = NIL;
     foreach(target_entry_cursor, targetEntriesToLog){
-        TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &childGraphs, &argVars);
+        TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &childGraphs, &remainingArgVars);
         entries = lappend(entries, tpEntry);
     }
 
+    const uint64 null_bit_map = get_null_entry_map(entries);
+    argVars = lappend(argVars, makeInt8Const(null_bit_map));
+    argVars = list_concat(argVars, remainingArgVars);
     // Need to make the func exprn.
     // Postgres' parser has all the logic already to determine functions,
     // and even adding type castes when types can be implicitly converted (like int->bigint)
@@ -568,7 +572,11 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
     // In this case, we might be able to reuse the pointers.
     // TODO: Re-use pointers, rather than relogging them.
     // Always use the offset version no matter what.
-    Node *funcCallNode = traceprov_get_function_call_node(TRACEPROV_AGG_OFFSETS_FUNC_NAME, argVars, over);
+    Node *funcCallNode = traceprov_get_function_call_node(
+        TRACEPROV_AGG_OFFSETS_FUNC_NAME,
+        argVars,
+        over
+    );
     if ((over == NULL && !IsA(funcCallNode, Aggref)) || (over != NULL && !IsA(funcCallNode, WindowFunc))){
         elog(ERROR, "Expected the function call node to be an aggref!");
     }
@@ -592,7 +600,8 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
             false,
             NIL,
             NULL,
-            is_for_window
+            is_for_window,
+            false
         )
     );
     GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs = lappend_oid(GET_ROOT_CONTEXT(tpContext)->properties->traceprov_funcs, ((Aggref *) funcCallNode)->aggfnoid);
@@ -636,7 +645,8 @@ List *traceprov_propagate_child_targets(List *childTargets, Index rteIndex){
                 tpTarget->isSetPointer,
                 tpTarget->sublinks,
                 tpTarget->window_entry,
-                tpTarget->is_pointer_for_window
+                tpTarget->is_pointer_for_window,
+                tpTarget->is_nullable
             )
         );
     }
@@ -851,4 +861,109 @@ List *traceprov_reverse_list(const List *original_list){
     if (list_length(reversed_list) != list_length(original_list))
         elog(ERROR, "Reversing creating list of different lengths!");
     return reversed_list;
+}
+
+
+static void
+markRelsAsNulledBy(List **nulling_rels, Node *n, int jindex);
+
+List *get_nulling_set(FromExpr *from_expr){
+    List *nulling_rels = NIL;
+    ListCell *join_cursor;
+    foreach(join_cursor, from_expr->fromlist){
+        const Node *curr_node = lfirst_node(Node, join_cursor);
+        if (IsA(curr_node, JoinExpr)){
+            const JoinExpr *j = castNode(JoinExpr, curr_node);
+            switch (j->jointype)
+            {
+                case JOIN_INNER:
+                    break;
+                case JOIN_LEFT:
+                    markRelsAsNulledBy(&nulling_rels, j->rarg, j->rtindex);
+                    break;
+                case JOIN_FULL:
+                    markRelsAsNulledBy(&nulling_rels, j->larg, j->rtindex);
+                    markRelsAsNulledBy(&nulling_rels, j->rarg, j->rtindex);
+                    break;
+                case JOIN_RIGHT:
+                    markRelsAsNulledBy(&nulling_rels, j->larg, j->rtindex);
+                    break;
+                default:
+                    /* shouldn't see any other types here */
+                    elog(ERROR, "unrecognized join type: %d",
+                            (int) j->jointype);
+                    break;
+            }
+        }
+    }
+    return nulling_rels;
+}
+
+/*
+ * markRelsAsNulledBy -
+ *      Mark the given jointree node and its children as nulled by join jindex
+ *  NOTE: Taken from Postgres. It's a static func unfortunately...
+ */
+static void
+markRelsAsNulledBy(List **nulling_rels, Node *n, int jindex)
+{
+    int            varno;
+    ListCell   *lc;
+
+    /* Note: we can't see FromExpr here */
+    if (IsA(n, RangeTblRef))
+    {
+        varno = ((RangeTblRef *) n)->rtindex;
+    }
+    else if (IsA(n, JoinExpr))
+    {
+        JoinExpr   *j = (JoinExpr *) n;
+
+        /* recurse to children */
+        markRelsAsNulledBy(nulling_rels, j->larg, jindex);
+        markRelsAsNulledBy(nulling_rels, j->rarg, jindex);
+        varno = j->rtindex;
+    }
+    else
+    {
+        elog(ERROR, "unrecognized node type: %d", (int) nodeTag(n));
+        varno = 0;                /* keep compiler quiet */
+    }
+
+    /*
+     * Now add jindex to the p_nullingrels set for relation varno.  Since we
+     * maintain the p_nullingrels list lazily, we might need to extend it to
+     * make the varno'th entry exist.
+     */
+    List *nulling_rels_copy = *nulling_rels;
+    while (list_length(nulling_rels_copy) < varno)
+        nulling_rels_copy = lappend(nulling_rels_copy, NULL);
+    lc = list_nth_cell(nulling_rels_copy, varno - 1);
+    lfirst(lc) = bms_add_member((Bitmapset *) lfirst(lc), jindex);
+    *nulling_rels = nulling_rels_copy;
+}
+
+uint64 get_null_entry_map(List *entries){
+    ListCell *entry_cursor;
+    uint64 null_bit_map = 0;
+    foreach(entry_cursor, entries){
+        TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
+        if (unlikely(entry->is_nullable)){
+            null_bit_map |= (foreach_current_index(entry_cursor) + 1);
+        }
+    }
+    return null_bit_map;
+}
+
+uint64 get_null_targets_map(List *entries){
+    ListCell *entry_cursor;
+    uint64 null_bit_map = 0;
+    foreach(entry_cursor, entries){
+        TraceProvTarget *entry = (TraceProvTarget *)lfirst(entry_cursor);
+        traceprov_target_set_nullable(entry);
+        if (unlikely(entry->is_nullable)){
+            null_bit_map |= (foreach_current_index(entry_cursor) + 1);
+        }
+    }
+    return null_bit_map;
 }
