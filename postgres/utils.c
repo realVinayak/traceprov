@@ -2,6 +2,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include "traceprov_settings.h"
 
 int get_error_no(){
     int err_no = errno;
@@ -35,7 +36,7 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     // In this case, we'd have to grow the file.
     const long int initial_size = current_layer->size;
     // Unmap previous allocation.
-    if ((rc = munmap(current_layer->last_mapping, TRACEPROV_SIZE_OF_ALLOCATION(initial_size) * TRACEPROV_PAGE_SIZE))){
+    if ((rc = munmap(current_layer->last_mapping, current_layer->last_allocation_size * TRACEPROV_PAGE_SIZE))){
         elog(ERROR, "Error unmaping");
     }
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
@@ -66,5 +67,6 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     current_layer->current_row = ptr;
     // Also set the last mapping.
     current_layer->last_mapping = ptr;
+    current_layer->last_allocation_size = TRACEPROV_INCREMENT_TRACE_BY_PG;
     return rc;
 }

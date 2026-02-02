@@ -58,7 +58,11 @@ OR REPLACE FUNCTION traceprov_layer_stat (
     OUT aggregate_strategy INT,
     OUT hash_buckets text,
     OUT combined_aggregate_layer_number INT,
-    OUT rows_layer_number INT
+    OUT rows_layer_number INT,
+    OUT null_map_layer_number INT,
+    OUT null_map BIGINT,
+    OUT last_allocation_size BIGINT,
+    OUT initial_allocation_size BIGINT
 ) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_layer_stat' LANGUAGE C STRICT PARALLEL SAFE;
 
