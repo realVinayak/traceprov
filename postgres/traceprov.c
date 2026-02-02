@@ -398,7 +398,9 @@ static int initialize_layer_file(
     // Specifies the length of the record, excluding keys.
     const uint32 record_length,
     const bool set_current_row, 
-    const Node *state
+    const Node *state,
+    const uint64 column_null_map,
+    const uint64 rows_null_map
 ){
 
     /**
@@ -418,14 +420,33 @@ static int initialize_layer_file(
 
     if (is_already_present) return 0;
 
-    uint32 record_layer_number = 0;
+    if (column_null_map && layer->null_map_layer_number == 0){
+        const uint32 null_map_layer_number = ++traceprov_current.maximum_local_layer_used;
+        if ((rc = get_or_create_layer(null_map_layer_number, NULL, 1, set_current_row, &is_already_present))){
+            elog(ERROR, "Error creating the layer null-map layer!");
+            return rc;
+        }
+        layer->null_map_layer_number = null_map_layer_number;
+        layer->null_map = column_null_map;
+    }
+
     if (record_length > 0 && layer->rows_layer_number == 0){
-        record_layer_number = ++traceprov_current.maximum_local_layer_used;
-        if ((rc = get_or_create_layer(record_layer_number, NULL, record_length, set_current_row, &is_already_present))){
+        const uint32 record_layer_number  = ++traceprov_current.maximum_local_layer_used;
+        struct traceprov_aggregate_layer *rows_layer = NULL;
+        if ((rc = get_or_create_layer(record_layer_number, &rows_layer, record_length, set_current_row, &is_already_present))){
             elog(ERROR, "Error creating the layer file (key)");
             return rc;
         }
         layer->rows_layer_number = record_layer_number;
+        if (rows_null_map && rows_layer->null_map_layer_number == 0){
+            const uint32 null_map_layer_number = ++traceprov_current.maximum_local_layer_used;
+            if ((rc = get_or_create_layer(null_map_layer_number, NULL, 1, set_current_row, &is_already_present))){
+                elog(ERROR, "Error creating the layer null-map layer!");
+                return rc;
+            }
+            rows_layer->null_map_layer_number = null_map_layer_number;
+            rows_layer->null_map = rows_null_map;
+        }
     }
 
     if (state != NULL){
@@ -439,7 +460,7 @@ static int initialize_layer_file(
             for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
                 const uint32 hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
                 layer->buckets[bucket_idx] = hash_bucket_layer_number;
-                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL)){
+                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL, column_null_map, rows_null_map)){
                     elog(ERROR, "Error initializing the hash buckets");
                 }
             }
@@ -456,7 +477,9 @@ static int initialize_local_and_layer(
     const uint32 key_length,
     const uint32 record_length,
     const bool set_current_row,
-    const Node *state
+    const Node *state,
+    const uint64 column_needs_null_map,
+    const uint64 rows_needs_null_map
 ){
     int rc = 0;
     if ((rc = initialize_local_context())){
@@ -468,7 +491,9 @@ static int initialize_local_and_layer(
         key_length,
         record_length,
         set_current_row,
-        state
+        state,
+        column_needs_null_map,
+        rows_needs_null_map
     ))){
         PRINT_ON_DEBUG("Error initializing layer file");
     }
@@ -491,7 +516,7 @@ PG_FUNCTION_INFO_V1(test_local_setup);
 Datum test_local_setup(PG_FUNCTION_ARGS){
     int rc = initialize_local_context();
     if (rc) PG_RETURN_INT32(rc);
-    rc = initialize_layer_file(PG_GETARG_INT32(0), 1, PG_GETARG_INT32(1), true, NULL);
+    rc = initialize_layer_file(PG_GETARG_INT32(0), 1, PG_GETARG_INT32(1), true, NULL, 0, 0);
     print_layer(get_layer(PG_GETARG_INT32(0)));
     PG_RETURN_INT32(rc);
 }
@@ -544,7 +569,8 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     int rc = 0;
     // Argument 0 is the internal state.
     const uint32 layer_number = PG_GETARG_UINT32(1);
-    const uint32 record_length = PG_NARGS() - 2; // 1 for layer number, 1 for internal state.
+    const uint64 null_bit_map = PG_GETARG_INT64(2);
+    const uint32 record_length = PG_NARGS() - 3; // 1 for layer number, 1 for internal state, 1 for null bitmap
     const bool is_init = PG_ARGISNULL(0);
 
     struct traceprov_agg_context *agg_context;
@@ -552,7 +578,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     if (!AggCheckCallContext(fcinfo, &agg_mem_context))
         elog(ERROR, "aggregate function called in non-aggregate context");
 
-    if ((rc = initialize_local_and_layer(layer_number, 1, record_length, true, (Node *)fcinfo->context))){
+    if ((rc = initialize_local_and_layer(layer_number, 1, record_length, true, (Node *)fcinfo->context, 0, null_bit_map))){
         PRINT_ON_DEBUG("Error setting up local or layer");
         elog(ERROR, "Error setting up local or layer");
         return 1;
@@ -630,11 +656,29 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
 
     int64 *pk_space = (int64*)(current_rows_layer->current_row);
 
-    for (int pk_id = 2; pk_id < PG_NARGS(); pk_id++, pk_space++){
+    for (int pk_id = 3; pk_id < PG_NARGS(); pk_id++, pk_space++){
         *pk_space = PG_GETARG_INT64(pk_id);
     }
 
     current_rows_layer->current_row = (void *)pk_space;
+
+    if (unlikely(null_bit_map != 0)){
+        struct traceprov_aggregate_layer *null_bm_layer = get_layer(current_rows_layer->null_map_layer_number);
+        grow_if_full(null_bm_layer);
+        // The value we'll log.
+        uint64 null_bit_set = 0;
+        for (int pk_id = 3; pk_id < PG_NARGS(); pk_id++) {
+            const int real_pk_id = pk_id - 3;
+            if ((null_bit_map & (((uint64)1) << (uint64)real_pk_id)) != 0){
+                // TODO (optimization): Compress this?
+                // Instead of using the real_pk_id, do it just for the ones that can be null.
+                null_bit_set |= ((uint64)PG_ARGISNULL(pk_id) << real_pk_id);
+            }
+        }
+        *((uint64*)null_bm_layer->current_row) = (null_bit_set);
+        null_bm_layer->current_row += sizeof(uint64);
+    }
+
     PG_RETURN_POINTER(agg_context);
 }
 
@@ -654,7 +698,7 @@ Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
     const int32 group_layer_number = agg_context->layer_number + 1;
     int rc = 0;
 
-    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 1, 0, false, (Node *)fcinfo->context))){
+    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 1, 0, false, (Node *)fcinfo->context, 0, 0))){
         PRINT_ON_DEBUG("Error setting up local or layer for group.");
         elog(ERROR, "Error setting up local or layer for group.");
         return 1;
@@ -736,7 +780,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
     // Here, we don't care about any layer file (it is not this function's responsibility)
     // So, we do the bare minimum, just setting up the local context (vars)
-    if ((rc = initialize_local_and_layer(combined_layer_number, 1, 2, true, (Node *)fcinfo->context))){
+    if ((rc = initialize_local_and_layer(combined_layer_number, 1, 2, true, (Node *)fcinfo->context, 0, 0))){
         PRINT_ON_DEBUG("Error setting up local or layer for combine");
         return rc;
     }
@@ -1091,10 +1135,11 @@ Datum traceprov_nop_deserialize(PG_FUNCTION_ARGS){
 uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
     int rc = 0;
     const uint32 layer_number = PG_GETARG_INT32(offset);
+    const uint64 null_bit_map = PG_GETARG_INT64(offset + 1);
     // if we're in simple append mode (return_pointer_version is false), don't need to perform any marks.
     // So, in that case, ask for 1 less than pointer version, because the group number will be then filled.
-    const int width = return_pointer_version ? PG_NARGS() - offset: PG_NARGS() - 1 - offset;
-    if ((rc = initialize_local_and_layer(layer_number, width, 0, true, NULL))){
+    const int width = return_pointer_version ? PG_NARGS() - offset - 1: PG_NARGS() - offset - 2;
+    if ((rc = initialize_local_and_layer(layer_number, width, 0, true, NULL, null_bit_map, 0))){
         PRINT_ON_DEBUG("Error setting up local or layer: %d", rc);
         elog(ERROR, "Error setting up local or layer: %d", rc);
     }
@@ -1110,7 +1155,8 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
     // Pad before.
     current_layer->current_row += current_layer->record_padding;    
     int64 *pk_space = (int64*)(current_layer->current_row);
-    for (int arg_idx = 1 + offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
+    const int32 start_offset = 2 + offset;
+    for (int arg_idx = start_offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
         // Don't bother writing, it is 0x0 (from truncate anyways)
         if (PG_ARGISNULL(arg_idx)) continue;
         *pk_space = PG_GETARG_INT64(arg_idx);
@@ -1120,6 +1166,19 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
         PG_RETURN_INT64(pk_space);
     }
     current_layer->current_row = pk_space;
+    if (unlikely(null_bit_map > 0)){
+        struct traceprov_aggregate_layer *null_bm_layer = get_layer(current_layer->null_map_layer_number);
+        grow_if_full(null_bm_layer);
+        uint64 null_bit_set = 0;
+        for (int arg_idx = start_offset; arg_idx < PG_NARGS(); arg_idx++){
+            const int real_pk_id = arg_idx - start_offset;
+            if ((null_bit_map & (((uint64)1) << ((uint64)real_pk_id))) != 0){
+                null_bit_set |= ((uint64)PG_ARGISNULL(arg_idx) << real_pk_id);
+            }
+        }
+        *((uint64*)null_bm_layer->current_row) = (null_bit_set);
+        null_bm_layer->current_row += sizeof(uint64);
+    }
     PG_RETURN_INT64(++current_layer->num_rows);
 }
 
@@ -1142,7 +1201,7 @@ Datum traceprov_log_entry(PG_FUNCTION_ARGS){
 PG_FUNCTION_INFO_V1(traceprov_log_entry_n);
 
 Datum traceprov_log_entry_n(PG_FUNCTION_ARGS){
-    const uint64 loop_count = PG_GETARG_INT64(1);
+    const uint64 loop_count = PG_GETARG_INT64(0);
     for (uint64 counter = 0; counter < loop_count; counter++){
         perform_log(fcinfo, false, 1);
     }

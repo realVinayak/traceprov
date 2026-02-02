@@ -99,6 +99,14 @@ TraceProvWindowFrameEntry *traceprov_make_window_frame_entry(
     return window_entry;
 }
 
+void traceprov_target_set_nullable(TraceProvTarget * target){
+    #if PG_MAJORVERSION_NUM >= 16
+    if (IsA(target->targetEntry->expr, Var)){
+        target->is_nullable |= (!bms_is_empty(((Var *)target->targetEntry->expr)->varnullingrels));
+    }
+    #endif
+}
+
 TraceProvTarget *makeTraceProvTarget(
     bool isPointer, 
     TargetEntry *targetEntry,
@@ -107,7 +115,10 @@ TraceProvTarget *makeTraceProvTarget(
     bool isSetPointer,
     List *sublinks,
     TraceProvWindowFrameEntry *window_entry,
-    bool is_pointer_for_window
+    bool is_pointer_for_window,
+    // In some cases, we can determine if the value is _inherently_
+    // nullable. This will, for example, 
+    bool is_nullable
 ){
     TraceProvTarget *tpTarget = palloc0_object(TraceProvTarget);
     tpTarget->isPointer = isPointer;
@@ -118,6 +129,8 @@ TraceProvTarget *makeTraceProvTarget(
     tpTarget->sublinks = sublinks;
     tpTarget->window_entry = window_entry;
     tpTarget->is_pointer_for_window = is_pointer_for_window;
+    tpTarget->is_nullable = is_nullable;
+    traceprov_target_set_nullable(tpTarget);
     return tpTarget;
 }
 
@@ -128,15 +141,17 @@ void _assertIsArtificial(const TargetEntry *target){
 }
 
 TraceProvEntry *traceprov_resolve_entry(
-    const TraceProvTarget * tp_target, 
+    TraceProvTarget *tp_target, 
     List **child_graphs,
     List **exprs
 ){
+    traceprov_target_set_nullable(tp_target);
     const TargetEntry *target = tp_target->targetEntry;
     if (exprs){
         *exprs = lappend(*exprs, target->expr);
     }
     TraceProvEntry *tp_entry = makeTraceProvEntry();
+    tp_entry->is_nullable = tp_target->is_nullable;
     TraceProvDependency *graph = tp_target->graph;
     if (tp_target->isSetPointer){
         tp_entry->kind = TP_ENTRY_SET_POINTER;
@@ -261,7 +276,7 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
 
     appendStringInfo(
         &buf, 
-        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s, window: %s, is_ptr_for_window: %d)]",
+        "[TraceProvEntry (kind: %s, relid: %d, resno: %d, attrNumber: %d, setNumber: %d, sublinks: %s, window: %s, is_ptr_for_window: %d, is_nullable: %d)]",
         kindStr,
         entry->relId,
         entry->resNo,
@@ -269,7 +284,8 @@ static char *serializeTraceProvEntry(TraceProvEntry *entry){
         entry->setNumber,
         tp_entry_serialize_sublinks(entry->sublinks),
         tp_entry_serialize_window(&entry->window_entry),
-        entry->is_pointer_for_window
+        entry->is_pointer_for_window,
+        entry->is_nullable
     );
     return buf.data;
 }

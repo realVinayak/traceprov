@@ -2548,8 +2548,10 @@ extern "C" {
         bool *nulls = palloc0_array(bool, num_attrs);
 
         for (uint64 row_idx = 0; row_idx < data->at(0)->data->size(); row_idx++){
+            memset(nulls, 0, sizeof(bool)*num_attrs);
             for (uint32 col_idx = 0; col_idx < num_attrs; col_idx++){
                 record[col_idx] = Int64GetDatum(data->at(col_idx)->data->at(row_idx));
+                nulls[col_idx] = !data->at(col_idx)->validity->at(row_idx);
             }
             tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }

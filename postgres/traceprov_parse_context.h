@@ -60,6 +60,7 @@ typedef struct TraceProvEntry {
     List *sublinks;
     TraceProvWindowFrameEntry window_entry;
     bool is_pointer_for_window;
+    bool is_nullable;
 } TraceProvEntry;
 
 // Dependency stores which layers give information about the next ones.
@@ -155,6 +156,7 @@ typedef struct TraceProvTarget {
     // In that case, while we want to propagate it,
     // we don't gain anything from deriving on it.
     bool is_pointer_for_window;
+    bool is_nullable;
 } TraceProvTarget;
 
 TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);
@@ -197,15 +199,21 @@ TraceProvTarget *makeTraceProvTarget(
     // List of TraceProvTargetSublinkItem.
     List *sublinks,
     TraceProvWindowFrameEntry *window_entry,
-    bool is_pointer_for_window
+    bool is_pointer_for_window,
+    bool is_nullable
 );
+
+// Does to reinitialize the nullable value.
+// The transition from false->true->false is never possible, so calling
+// it multiple times is safe.
+void traceprov_target_set_nullable(TraceProvTarget * target);
 
 TraceProvWindowFrameEntry *traceprov_make_window_frame_entry(
     TraceProvEntryKind kind,
     TraceProvLayerNumber log_layer_number
 );
 
-TraceProvEntry *traceprov_resolve_entry(const TraceProvTarget *, List **, List**);
+TraceProvEntry *traceprov_resolve_entry(TraceProvTarget *, List **, List**);
 
 char *traceProvDependencyToJson(const TraceProvDependency *);
 char *traceProvParseContextToJson(const TraceProvParseContext *);

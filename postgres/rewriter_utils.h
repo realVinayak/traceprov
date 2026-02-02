@@ -12,6 +12,7 @@
 #define TRACEPROV_MARK_LATER_VALUE_FUNC_NAME "mark_later_value"
 // in cases where aggregate is nested, we need to get the offsets directly.
 #define TRACEPROV_AGG_OFFSETS_FUNC_NAME "traceprov_agg_key_parallel_offset"
+#define TRACEPROV_AGG_OFFSETS_NULL_AWARE_FUNC_NAME "traceprov_agg_key_parallel_offset_null_aware"
 #define TRACEPROV_POINTER_TYPE_NAME "traceprov_ptr_type"
 
 // These are all the same as postgres' implementation.
@@ -23,11 +24,13 @@
 
 // Space to log entries.
 #define TRACEPROV_LOG_FUNC_NAME "traceprov_log_entry"
+#define TRACEPROV_LOG_NULL_AWARE_FUNC_NAME "traceprov_log_entry_null_aware"
 
 // volatile version of traceprov_log_entry.
 // This is used if we're in a sublink (where we'd want the side-effect of logging to be seen)
 // Basically, sublinks create a volatility "barrier" for logs (everything inside of this is always stable, until we hit another sublink)
 #define TRACEPROV_LOG_VOLATILE_FUNC_NAME "traceprov_log_entry_volatile"
+#define TRACEPROV_LOG_VOLATILE_NULL_AWARE_FUNC_NAME "traceprov_log_entry_volatile_null_aware"
 
 typedef struct TraceProvUsedRefNavigator {
     bool includeInternals;
@@ -110,4 +113,9 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec);
 FromExpr *traceprov_make_from_expr(RangeTblEntry *rte);
 List *traceprov_assert_all_vars(List *target_list);
 List *traceprov_reverse_list(const List *original_list);
+List *get_nulling_set(FromExpr *from_expr);
+// Bitset of entries that _could_ be null (but in no way are actually null)
+// If the value is 0, then no values can be null. We optimize for that case, because that's the most common one.
+uint64 get_null_entry_map(List *entries);
+uint64 get_null_targets_map(List *entries);
 #endif

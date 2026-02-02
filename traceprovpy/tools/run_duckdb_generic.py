@@ -30,9 +30,12 @@ def just_write(file: str | Path, contents: str):
 
 
 def json_read_file(file: str):
-    with open(file) as f:
-        json_content = json.loads(f.read())
-    return json_content
+    try:
+        with open(file) as f:
+            json_content = json.loads(f.read())
+        return json_content
+    except:
+        return just_read(file)
 
 
 def json_read_iters(file: str, iters: int):
