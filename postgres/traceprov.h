@@ -56,10 +56,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 32
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 32
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -169,6 +169,9 @@ struct traceprov_aggregate_layer {
     uint32 null_map_layer_number;
     // The actual null map.
     uint64 null_map;
+    uint64 last_allocation_size;
+    // For debugging.
+    uint64 initial_allocation_size;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -251,6 +254,8 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_SHOULD_HASH(state) (false)
 #define TRACEPROV_SHOULD_SORT(state) (false)
+
+#define TRACEPROV_AGG_ROW_COUNT(state) (IsA(state, AggState) ? (((AggState *)state)->ss.ps.plan->lefttree->plan_rows) : 0)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) ((uint8) (((uint64) X) >> 48))

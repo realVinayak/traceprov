@@ -642,6 +642,10 @@ extern "C" {
             buckets,
             combined_aggregate_layer_number,
             rows_layer_number,
+            null_map_layer_number,
+            null_map,
+            last_allocation_size,
+            initial_allocation_size,
 
             NUM_COLUMNS
         };
@@ -734,9 +738,14 @@ extern "C" {
                 for (int i = 0; i < TRACEPROV_BUCKET_COUNT - 1; i++){
                     graphStr = graphStr.append(psprintf("%d", layer.buckets[i]));
                 }
+                graphStr.append("]");
                 record[TRACEPROV_LAYER_STAT::buckets] = PointerGetDatum(cstring_to_text(graphStr.c_str()));
                 record[TRACEPROV_LAYER_STAT::combined_aggregate_layer_number] = Int32GetDatum(layer.combined_aggregate_layer_number);
                 record[TRACEPROV_LAYER_STAT::rows_layer_number] = Int32GetDatum(layer.rows_layer_number);
+                record[TRACEPROV_LAYER_STAT::null_map_layer_number] = Int32GetDatum(layer.null_map_layer_number);
+                record[TRACEPROV_LAYER_STAT::null_map] = Int64GetDatum(layer.null_map);
+                record[TRACEPROV_LAYER_STAT::last_allocation_size] = Int64GetDatum(layer.last_allocation_size);
+                record[TRACEPROV_LAYER_STAT::initial_allocation_size] = Int64GetDatum(layer.initial_allocation_size);
                 tuplestore_putvalues(tupstore, tupdesc, record, nulls);
                 }
         }
