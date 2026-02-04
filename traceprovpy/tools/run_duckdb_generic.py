@@ -576,7 +576,7 @@ def run_single(
 
         infer_option = DuckDBDriverOptions(
             db=capture_options.db,
-            repeat=1,
+            repeat=iters,
             threads=1,
             i=captured_sql,
             # extra=infer_path,
@@ -585,6 +585,7 @@ def run_single(
             disable_col_opt=capture_options.disable_col_opt,
             settings="/tmp/infer_settings.json",
             extras=infer_paths,
+            main_once_extra_all=True,
         )
         traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
         infer_results = [
