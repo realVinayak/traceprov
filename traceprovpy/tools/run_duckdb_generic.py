@@ -53,6 +53,10 @@ def json_read_file(file: str):
             return None
 
 
+def json_read_files(files: list[str]):
+    return list(map(json_read_file, files))
+
+
 @safe_file
 def json_read_iters(file: str, iters: int):
     assert "%d" in file
@@ -190,6 +194,8 @@ def run_single_smokedduck(
     pre_base: Path | None = None,
     sd_extension_path: Path = None,
     is_new_sd: bool = False,
+    run_inference: bool = True,
+    validate: bool = False,
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -226,6 +232,22 @@ def run_single_smokedduck(
         is_new_sd=is_new_sd,
         sd_extension_path=sd_extension_path,
     )
+
+    extras = []
+    if run_inference:
+        if is_new_sd:
+            infer_sql = "select * from read_block(0)"
+            if validate:
+                infer_sql = f"create or replace table LAYER_1 AS ({infer_sql})"
+
+            extras = [
+                just_write("/tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
+                just_write("/tmp/run_infer.sql", infer_sql),
+            ]
+        else:
+            assert 0, "not supported yet, use sample inference branch"
+
+    capture_options = capture_options._replace(extras=extras)
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
     capture_result_time = json_read_file(capture_options.time)
     capture_profile_out = json_read_iters(
@@ -233,6 +255,22 @@ def run_single_smokedduck(
     )
     capture_settings = json_read_file(capture_options.settings)
     capture_stats = json_read_iters(capture_options.stats, capture_options.repeat)
+
+    if validate:
+        if is_new_sd:
+            validate_query(
+                base_dir, "validate_new_sd.sql", capture_options.db, exec_str
+            )
+        else:
+            assert 0, "no validaton support in this call path for old smokedduck"
+
+    if run_inference:
+        capture_result_time, infer_results = extract_extras(
+            capture_result_time, capture_profile_out, capture_options
+        )
+    else:
+        infer_results = None
+
     final_result = dict(
         base_time=base_result_time,
         base_profile=base_profile_out,
@@ -241,6 +279,7 @@ def run_single_smokedduck(
         base_settings=base_settings,
         capture_settings=capture_settings,
         capture_stats=capture_stats,
+        infer_results=infer_results,
     )
     return final_result
 
@@ -481,6 +520,40 @@ def _run_sample_inference_smokedduck(
     )
 
 
+def extract_extras(
+    time_results: list, profile_results: list, driver_options: DuckDBDriverOptions
+):
+    # first will be the base.
+    # rest will be the extras.
+    assert driver_options.extra_file is None
+    assert driver_options.extra is None
+    collection_size = len(driver_options.extras) + 1
+    assert len(time_results) == (collection_size * driver_options.repeat)
+    # this should be correctly sized (just be the base repeat)
+    assert len(profile_results) == driver_options.repeat
+    infer_results = [
+        dict(
+            infer_id=extra_id,
+            profile=json_read_files(
+                f'{driver_options.profile.replace("%d", str(iter_id))}_{extra_id}_extra.json'
+                for iter_id in (range(driver_options.repeat))
+            ),
+            times=[
+                time_node
+                for time_idx, time_node in enumerate(time_results)
+                if (time_idx % collection_size) == extra_id
+            ],
+        )
+        for extra_id in range(1, len(driver_options.extras) + 1)
+    ]
+    capture_result_time = [
+        time_node
+        for time_idx, time_node in enumerate(time_results)
+        if (time_idx % collection_size) == 0
+    ]
+    return capture_result_time, infer_results
+
+
 def run_single(
     exe: Path,
     db: Path,
@@ -545,16 +618,8 @@ def run_single(
         settings="/tmp/capture_settings.json",
     )
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
-    capture_result_time = json_read_file(capture_options.time)
-    capture_profile_out = json_read_iters(
-        capture_options.profile, capture_options.repeat
-    )
-    capture_settings = json_read_file(capture_options.settings)
-
-    infer_results = []
+    infer_paths = []
     if run_inference:
-        infer_paths = []
         for element in spec_element["elements"]:
             element_idx = element["idx"]
             if use_optimized:
@@ -574,34 +639,22 @@ def run_single(
                 just_write(infer_path, mat_contents)
             infer_paths = [*infer_paths, infer_path]
 
-        infer_option = DuckDBDriverOptions(
-            db=capture_options.db,
-            repeat=iters,
-            threads=1,
-            i=captured_sql,
-            # extra=infer_path,
-            time=f"/tmp/infer_out_{element_idx}.json",
-            min_layer_number=min_layer_used,
-            disable_col_opt=capture_options.disable_col_opt,
-            settings="/tmp/infer_settings.json",
-            extras=infer_paths,
-            main_once_extra_all=True,
-            profile="/tmp/infer_profile_%d_%d.json",
+    if infer_paths:
+        capture_options = capture_options._replace(extras=infer_paths)
+
+    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    capture_result_time = json_read_file(capture_options.time)
+    capture_profile_out = json_read_iters(
+        capture_options.profile, capture_options.repeat
+    )
+    capture_settings = json_read_file(capture_options.settings)
+
+    if infer_paths:
+        capture_result_time, infer_results = extract_extras(
+            capture_result_time, capture_profile_out, capture_options
         )
-        traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
-        infer_results = [
-            *infer_results,
-            dict(
-                infer_id=element_idx,
-                infer_out=json_read_file(infer_option.time),
-                settings=json_read_file(infer_option.settings),
-                profile=json_read_two_iters(
-                    infer_option.profile,
-                    range(1, len(infer_option.extras) + 1),
-                    range(infer_option.repeat),
-                ),
-            ),
-        ]
+    else:
+        infer_results = None
 
     if validate:
         # need to dump base and infer result on provenance, and compare both.
