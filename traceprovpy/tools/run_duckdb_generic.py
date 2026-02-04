@@ -196,6 +196,7 @@ def run_single_smokedduck(
     is_new_sd: bool = False,
     run_inference: bool = True,
     validate: bool = False,
+    mat_infer: bool = False,
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -237,8 +238,13 @@ def run_single_smokedduck(
     if run_inference:
         if is_new_sd:
             infer_sql = "select * from read_block(0)"
-            if validate:
-                infer_sql = f"create or replace table LAYER_1 AS ({infer_sql})"
+            if mat_infer or validate:
+                if mat_infer:
+                    # so that it's easier to differniate them :)
+                    table = f"LAYER_1_{query_num}_new_sd"
+                else:
+                    table = f"LAYER_1"
+                infer_sql = f"create or replace table {table} AS ({infer_sql})"
 
             extras = [
                 just_write("/tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
@@ -259,7 +265,7 @@ def run_single_smokedduck(
     if validate:
         if is_new_sd:
             validate_query(
-                base_dir, "validate_new_sd.sql", capture_options.db, exec_str
+                root / query_num, "validate_new_sd.sql", capture_options.db, exec_str
             )
         else:
             assert 0, "no validaton support in this call path for old smokedduck"
@@ -317,80 +323,6 @@ def validate_query(base_dir: Path, validate_query_name: str, db: str, exec_str: 
 
     traceprov_assert_safe_run(
         f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
-    )
-
-
-def run_inference_new_smokedduck(
-    exec: Path,
-    db: Path,
-    query_num: str,
-    base_root: Path,
-    root: Path,
-    sd_extension_path: Path,
-    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
-    pre_base: Path | None = None,
-    profile: bool = True,
-    settings: bool = True,
-    validate: bool = False,
-):
-    base_dir = base_root / query_num
-    base_sql = base_dir / "base.sql"
-    exec_str = exec.as_posix()
-    if pre_base:
-        pre_base_options = DuckDBDriverOptions(
-            db=db.as_posix(),
-            repeat=1,
-            threads=1,
-            i=(root / query_num / pre_base).as_posix(),
-        )
-        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
-
-    infer_sql = "select * from read_block(0)"
-    if validate:
-        infer_sql = f"create or replace table LAYER_1 AS ({infer_sql})"
-
-    extras = [
-        just_write("/tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
-        just_write("/tmp/run_infer.sql", infer_sql),
-    ]
-    capture_options = DuckDBDriverOptions(
-        db=db.as_posix(),
-        repeat=iters,
-        threads=1,
-        i=base_sql.as_posix(),
-        time="/tmp/infer_time.json",
-        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
-        settings=("/tmp/capture_settings.json" if settings else None),
-        extras=extras,
-        stats="/tmp/capture_sd_stats_%d.json",
-        lineage=True,
-        main_once_extra_all=True,
-        is_new_sd=True,
-        sd_extension_path=sd_extension_path.as_posix(),
-    )
-
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
-    capture_result_time = json_read_file(capture_options.time)
-    if capture_options.profile:
-        capture_profile_out = json_read_two_iters(
-            capture_options.profile,
-            range(1, len(extras) + 1),
-            range(capture_options.repeat),
-        )
-    else:
-        capture_profile_out = None
-    if capture_options.settings:
-        capture_settings = json_read_file(capture_options.settings)
-    else:
-        capture_settings = None
-
-    if validate:
-        validate_query(base_dir, "validate_new_sd.sql", capture_options.db, exec_str)
-
-    return dict(
-        result_time=capture_result_time,
-        profile=capture_profile_out,
-        settings=capture_settings,
     )
 
 
@@ -681,9 +613,6 @@ def add_query_options(parser: argparse.ArgumentParser):
     parser.add_argument("--spec", required=True)
     parser.add_argument("--base_root", required=True)
     parser.add_argument("--root", required=True)
-    parser.add_argument(
-        "--optimized", action=argparse.BooleanOptionalAction, default=False
-    )
 
 
 def main():

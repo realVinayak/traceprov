@@ -26,16 +26,10 @@ def run():
     base_parser = make_duckdb_parse()
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
-    base_parser.add_argument("--suff", required=True)
-    base_parser.add_argument(
-        "--sample_inference", choices=["all", "sample"], default=False
-    )
-    base_parser.add_argument(
-        "--sd_mode", action=argparse.BooleanOptionalAction, default=False
-    )
+
     parsed = base_parser.parse_args()
     config: dict = json_read_file(parsed.config)
-    is_validate = config.get("validate", False)
+    is_validate = config.get("validate", False) or parsed.validate
 
     # for now...
     assert config["subdirs"] == ["params_default"]
@@ -52,14 +46,27 @@ def run():
         pre_base_path = Path(pre_base) if pre_base is not None else None
         sample_inference_result = None
         if parsed.sd_mode:
-            query_result = run_single_smokedduck(
-                Path(parsed.exe),
-                db=Path(parsed.db),
-                query_num=query,
-                base_root=Path(parsed.base_root),
-                root=Path(parsed.root),
-                iters=total_iters,
-                pre_base=pre_base_path,
+            is_new_sd = parsed.sd_mode == "new"
+            query_result = dict(
+                sd_type=parsed.sd_mode,
+                sd=run_single_smokedduck(
+                    Path(parsed.exe),
+                    db=Path(parsed.db),
+                    query_num=query,
+                    base_root=Path(parsed.base_root),
+                    root=Path(parsed.root),
+                    iters=total_iters,
+                    pre_base=pre_base_path,
+                    is_new_sd=is_new_sd,
+                    sd_extension_path=(
+                        None
+                        if parsed.sd_extension_path is None
+                        else Path(parsed.sd_extension_path)
+                    ),
+                    run_inference=is_new_sd,
+                    validate=parsed.validate and is_new_sd,
+                    mat_infer=parsed.mat_infer,
+                ),
             )
         else:
             disable_col_opt = query in NEEDS_DISABLE
