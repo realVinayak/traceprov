@@ -574,7 +574,8 @@ static void inline append_sorted_column(
     struct traceprov_aggregate_layer *column_layer
 ){
     grow_if_full(column_layer);
-    const uint64 hole_size = (rows_layer->current_row - rows_layer->last_mapping) + (rows_layer->size - 1)*TRACEPROV_PAGE_SIZE;
+    const void *final_ptr = get_final_ptr(NULL, rows_layer);
+    const uint64 hole_size = ((uint64)final_ptr - (uint64)NULL);
     *((uint64*)column_layer->current_row) = (hole_size / TRACEPROV_GET_RECORD_SIZE(rows_layer));
     column_layer->current_row += sizeof(uint64);
 }
