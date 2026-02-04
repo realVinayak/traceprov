@@ -37,11 +37,11 @@ def run():
     parsed = base_parser.parse_args()
     selectivity = int(parsed.num_groups * (parsed.sel / 100))
     print(f"Using: {selectivity}")
-    dirs = ["1_000_000", "5_000_000", "10_000_000"]
+    dirs = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
-    total_iters = 7
+    total_iters = 1 if parsed.validate else 15
     base_sql = just_read(Path("queries/base.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
     capture_new_sql = just_read(Path("queries/capture_new.sql"))
