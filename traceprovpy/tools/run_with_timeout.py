@@ -235,6 +235,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     cursor = connection.cursor()
     # print(connection, cursor)
+    computed_time = None
     try:
         if not options.strict_run:
             cursor.execute(timeout_stmt)
@@ -249,7 +250,6 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
         # print(flattend_sql_query)
         if options.capture_output or options.strict_run:
-            computed_time = None
             # Now, need to run the query again.
             cursor.execute(flattend_sql_query)
             try:
