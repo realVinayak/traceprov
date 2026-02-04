@@ -36,6 +36,8 @@ class DuckDBDriverOptions(NamedTuple):
     extras: list[str] = []
     main_once_extra_all: bool = False
     extra_file: str = None
+    is_new_sd: bool = False
+    sd_extension_path: str = None
 
     def _boolean_options(self):
         return {
@@ -44,6 +46,7 @@ class DuckDBDriverOptions(NamedTuple):
             "no_reinit",
             "disable_col_opt",
             "main_once_extra_all",
+            "is_new_sd",
         }
 
     def serialize(self) -> str:

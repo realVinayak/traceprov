@@ -43,7 +43,7 @@
 // Whether to use 2 MB page
 #define TRACEPROV_USE_HUGE_PAGE 1
 // Whether to map memory page or not (otherwise file system is used)
-#define TRACEPROV_USE_MMEM_PAGE 1
+#define TRACEPROV_USE_MMEM_PAGE 0
 // Whether to map the memory page via huge page.
 #define TRACEPROV_MAP_HUGE_PAGE 0
 

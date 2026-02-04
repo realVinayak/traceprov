@@ -16,6 +16,15 @@ from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 TP_OFFSET_TICKER = "__TP_OFFSET__"
 
 
+def safe_file(func):
+    def _func(file, *args, **kwargs):
+        if file is None:
+            return None
+        return func(file, *args, **kwargs)
+
+    return _func
+
+
 # misc wrappers to simplify stuff.
 # TODO: Put them somewhere more useful...
 def just_read(file: str | Path):
@@ -24,25 +33,33 @@ def just_read(file: str | Path):
     return result
 
 
+@safe_file
 def just_write(file: str | Path, contents: str):
     with open(file, "w") as f:
         f.write(contents)
+    return file
 
 
+@safe_file
 def json_read_file(file: str):
     try:
         with open(file) as f:
             json_content = json.loads(f.read())
         return json_content
     except:
-        return just_read(file)
+        try:
+            return just_read(file)
+        except:
+            return None
 
 
+@safe_file
 def json_read_iters(file: str, iters: int):
     assert "%d" in file
     return [json_read_file(file.replace("%d", iter)) for iter in map(str, range(iters))]
 
 
+@safe_file
 def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]):
     assert "%d_%d" in file
     return [
@@ -70,7 +87,12 @@ def run_sample_inference(
     disable_col_opt: bool = False,
     profile: bool = True,
     settings: bool = True,
+    validate: bool = False,
 ):
+
+    if validate:
+        iters = 1
+
     query_dir = root / query_num
     if use_optimized:
         captured_sql = query_dir / "capture_new.sql"
@@ -101,6 +123,13 @@ def run_sample_inference(
         os.makedirs(sample_element_q_dir, exist_ok=True)
         for sample_id, out_id in enumerate(samples):
             infer_with_offset = infer_query.replace(TP_OFFSET_TICKER, str(out_id))
+            if validate:
+                if sample_id == 0:
+                    infer_with_offset = f"create or replace table LAYER_{element_idx} AS ({infer_with_offset})"
+                else:
+                    infer_with_offset = (
+                        f"insert into LAYER_{element_idx} {infer_with_offset}"
+                    )
             final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
             just_write(final_q_path, infer_with_offset)
             extra_sqls.append(final_q_path.as_posix())
@@ -140,6 +169,9 @@ def run_sample_inference(
         capture_settings = None
 
     assert len(capture_result_time) == len(sql_spec_map)
+
+    if validate:
+        validate_query(query_dir, "validate.sql", capture_options.db, exec_str)
     return dict(
         result_time=capture_result_time,
         profile=capture_profile_out,
@@ -156,6 +188,8 @@ def run_single_smokedduck(
     root: Path,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
+    sd_extension_path: Path = None,
+    is_new_sd: bool = False,
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -189,6 +223,8 @@ def run_single_smokedduck(
         settings="/tmp/capture_settings.json",
         stats="/tmp/capture_sd_stats_%d.json",
         lineage=True,
+        is_new_sd=is_new_sd,
+        sd_extension_path=sd_extension_path,
     )
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
     capture_result_time = json_read_file(capture_options.time)
@@ -209,6 +245,116 @@ def run_single_smokedduck(
     return final_result
 
 
+def validate_query(base_dir: Path, validate_query_name: str, db: str, exec_str: str):
+    base_dump_path = Path("/tmp/") / "base_dump.csv"
+    capture_dump_path = Path("/tmp/") / "capture_dump.csv"
+
+    base_dump_query_path = Path("/tmp/") / "base_dump_query.sql"
+    base_dump_query = make_dump_query(
+        just_read(base_dir / "base.sql"), base_dump_path.as_posix()
+    )
+    just_write(base_dump_query_path, base_dump_query)
+
+    validate_query = base_dir / validate_query_name
+    capture_dump_query_path = Path("/tmp/") / "capture_dump_query.sql"
+    capture_dump_query = make_dump_query(
+        just_read(validate_query), capture_dump_path.as_posix()
+    )
+    just_write(capture_dump_query_path, capture_dump_query)
+    simple_option = lambda in_path: DuckDBDriverOptions(
+        db=db,
+        i=in_path.as_posix(),
+        repeat=1,
+    )
+    traceprov_assert_safe_run(
+        f"{exec_str} {simple_option(base_dump_query_path).serialize()}"
+    )
+    traceprov_assert_safe_run(
+        f"{exec_str} {simple_option(capture_dump_query_path).serialize()}"
+    )
+
+    print(base_dump_path, base_dump_path.stat().st_size)
+    print(capture_dump_path, capture_dump_path.stat().st_size)
+
+    traceprov_assert_safe_run(
+        f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
+    )
+
+
+def run_inference_new_smokedduck(
+    exec: Path,
+    db: Path,
+    query_num: str,
+    base_root: Path,
+    root: Path,
+    sd_extension_path: Path,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+    pre_base: Path | None = None,
+    profile: bool = True,
+    settings: bool = True,
+    validate: bool = False,
+):
+    base_dir = base_root / query_num
+    base_sql = base_dir / "base.sql"
+    exec_str = exec.as_posix()
+    if pre_base:
+        pre_base_options = DuckDBDriverOptions(
+            db=db.as_posix(),
+            repeat=1,
+            threads=1,
+            i=(root / query_num / pre_base).as_posix(),
+        )
+        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+
+    infer_sql = "select * from read_block(0)"
+    if validate:
+        infer_sql = f"create or replace table LAYER_1 AS ({infer_sql})"
+
+    extras = [
+        just_write("/tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
+        just_write("/tmp/run_infer.sql", infer_sql),
+    ]
+    capture_options = DuckDBDriverOptions(
+        db=db.as_posix(),
+        repeat=iters,
+        threads=1,
+        i=base_sql.as_posix(),
+        time="/tmp/infer_time.json",
+        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
+        settings=("/tmp/capture_settings.json" if settings else None),
+        extras=extras,
+        stats="/tmp/capture_sd_stats_%d.json",
+        lineage=True,
+        main_once_extra_all=True,
+        is_new_sd=True,
+        sd_extension_path=sd_extension_path.as_posix(),
+    )
+
+    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    capture_result_time = json_read_file(capture_options.time)
+    if capture_options.profile:
+        capture_profile_out = json_read_two_iters(
+            capture_options.profile,
+            range(1, len(extras) + 1),
+            range(capture_options.repeat),
+        )
+    else:
+        capture_profile_out = None
+    if capture_options.settings:
+        capture_settings = json_read_file(capture_options.settings)
+    else:
+        capture_settings = None
+
+    if validate:
+        validate_query(base_dir, "validate_new_sd.sql", capture_options.db, exec_str)
+
+    return dict(
+        result_time=capture_result_time,
+        profile=capture_profile_out,
+        settings=capture_settings,
+    )
+
+
 def run_sample_inference_smokedduck(
     exec: Path,
     db: Path,
@@ -221,10 +367,48 @@ def run_sample_inference_smokedduck(
     pre_base: Path | None = None,
     profile: bool = True,
     settings: bool = True,
+    validate: bool = False,
+):
+    _run_sample_inference_smokedduck(
+        exec,
+        db,
+        query_num,
+        base_root,
+        root,
+        samples,
+        query_id,
+        iters,
+        pre_base,
+        profile,
+        settings,
+        validate,
+    )
+
+    if validate:
+        validate_query(
+            base_root / query_num, "validate_sd.sql", db.as_posix(), exec.as_posix()
+        )
+
+
+def _run_sample_inference_smokedduck(
+    exec: Path,
+    db: Path,
+    query_num: str,
+    base_root: Path,
+    root: Path,
+    samples: list[int],
+    query_id: int,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+    pre_base: Path | None = None,
+    profile: bool = True,
+    settings: bool = True,
+    validate: bool = False,
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
     exec_str = exec.as_posix()
+    if validate:
+        iters = 1
     if pre_base:
         pre_base_options = DuckDBDriverOptions(
             db=db.as_posix(),
@@ -240,9 +424,15 @@ def run_sample_inference_smokedduck(
     sql_spec_map = []
     for sample_id, out_id in enumerate(samples):
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
-        infer_with_offset = (
-            f"""select *  from lineage_query(1, 100, {out_id}::UINTEGER);"""
-        )
+        infer_with_offset = f"select * from lineage_query(1, 100, {out_id}::UINTEGER)"
+        if validate:
+            if sample_id == 0:
+                infer_with_offset = (
+                    f"create or replace table LAYER_1_SD AS ({infer_with_offset})"
+                )
+            else:
+                infer_with_offset = f"insert into LAYER_1_SD ({infer_with_offset})"
+
         just_write(final_q_path, infer_with_offset)
         extra_sqls.append(final_q_path.as_posix())
         sql_spec_map.append((sample_id, out_id))
@@ -408,43 +598,11 @@ def run_single(
 
     if validate:
         # need to dump base and infer result on provenance, and compare both.
-        base_dump_path = Path("/tmp/") / "base_dump.csv"
-        base_dump_query_path = Path("/tmp/") / "base_dump_query.sql"
-        base_dump_query = make_dump_query(
-            just_read(base_options.i), base_dump_path.as_posix()
-        )
-        just_write(base_dump_query_path, base_dump_query)
-
-        capture_dump_path = Path("/tmp/") / "capture_dump.csv"
-        if use_optimized:
-            validate_query = query_dir / "validate_new.sql"
-        else:
-            validate_query = query_dir / "validate.sql"
-        assert validate_query.exists()
-        capture_dump_query_path = Path("/tmp/") / "capture_dump_query.sql"
-        capture_dump_query = make_dump_query(
-            just_read(validate_query), capture_dump_path.as_posix()
-        )
-        just_write(capture_dump_query_path, capture_dump_query)
-
-        simple_option = lambda in_path: DuckDBDriverOptions(
-            db=base_options.db,
-            i=in_path.as_posix(),
-            repeat=1,
-        )
-
-        traceprov_assert_safe_run(
-            f"{exec_str} {simple_option(base_dump_query_path).serialize()}"
-        )
-        traceprov_assert_safe_run(
-            f"{exec_str} {simple_option(capture_dump_query_path).serialize()}"
-        )
-
-        print(base_dump_path, base_dump_path.stat().st_size)
-        print(capture_dump_path, capture_dump_path.stat().st_size)
-
-        traceprov_assert_safe_run(
-            f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
+        validate_query(
+            query_dir,
+            ("validate_new.sql" if use_optimized else "validate.sql"),
+            base_options.db,
+            exec_str,
         )
 
     final_result = dict(

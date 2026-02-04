@@ -163,11 +163,24 @@ extern "C" {
         }
     }
 
+    void initialize_global_context(){
+        if (!g_tp_duckdb_state.did_initialize){
+            traceprov_shared_context shared_context;
+            if (map_traceprov_shared_context(&shared_context))
+                elog(ERROR, "error maping shared context!");
+
+            g_tp_duckdb_state.did_initialize = true;
+            g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
+        }
+    }
     static TraceProvBindData *setup_layers(
         const uint64_t worker_id,
         const uint64_t layer_number,
-        const int64_t log_offset
+        const int64_t log_offset,
+        const bool expect_present=true
     ){
+
+        initialize_global_context();
         auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
         memset(my_bind_data, 0, sizeof(TraceProvBindData));
         my_bind_data->rel_args.offset = log_offset;
@@ -177,14 +190,7 @@ extern "C" {
         uint64_t current_worker_id = worker_id;
         my_bind_data->rel_args.layer_number = layer_number;
 
-        if (!g_tp_duckdb_state.did_initialize){
-            traceprov_shared_context shared_context;
-            if (map_traceprov_shared_context(&shared_context))
-                elog(ERROR, "error maping shared context!");
 
-            g_tp_duckdb_state.did_initialize = true;
-            g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
-        }
         bool is_dummy = false;
         if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size()){
             current_worker_id = 1;
@@ -195,8 +201,18 @@ extern "C" {
         auto current_local_context =  g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
         auto current_layer = &current_local_context->cached_layers[layer_number - 1];
 
-        if (current_layer->layer_number != layer_number)
-            elog(ERROR, "Expected the layer number to be filled");
+        if (current_layer->layer_number != layer_number){
+            if (current_layer->layer_number != 0){
+                // This assertion should hold regardless of what caller expects.
+                elog(ERROR, "Expected layer to be 0!");
+            }
+            if (expect_present){
+                elog(ERROR, "Expected the layer number to be filled");
+            }else{
+                return NULL;
+            }
+        }
+
 
         uint64_t column_count = current_layer->num_pk_records;
 

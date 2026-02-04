@@ -20,12 +20,20 @@
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
 #define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
 
+// For OLD SmokedDuck.
 #define TP_ENABLE_LINEAGE "PRAGMA enable_lineage;"
 #define TP_DISABLE_LINEAGE "PRAGMA disable_lineage;"
 #define TP_CLEAR_LINEAGE "PRAGMA clear_lineage;"
 
+// For new SD.
+#define TP_ENABLE_LINEAGE_NEW "PRAGMA set_lineage(True)"
+#define TP_DISABLE_LINEAGE_NEW "PRAGMA set_lineage(False)"
+#define TP_CLEAR_LINEAGE_NEW TP_CLEAR_LINEAGE
+
 #define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
 #define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
+
+#define TP_SET_STATS_OUTPUT_NEW "copy (select * from pragma_latest_qid()) to '%s'"
 
 #undef sprintf
 
@@ -91,6 +99,10 @@ extern "C" {
         bool main_once_extra_all;
         // via --extra_file
         std::string extra_file;
+        // via --is_new_sd
+        bool is_new_sd;
+        // via --sd_extension_path
+        std::string sd_extension_path;
     };
 
     #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -114,7 +126,9 @@ extern "C" {
             .extra_query_paths = new std::vector<std::string>,
             .disable_column_optimizer = false,
             .main_once_extra_all = false,
-            .extra_file = ""
+            .extra_file = "",
+            .is_new_sd = false,
+            .sd_extension_path = ""
         };
         for (int i = 1; i < argc; i++){
             if (IS_OPTION("--lineage")){
@@ -183,8 +197,13 @@ extern "C" {
                     elog(ERROR, "Expected some files to be added!");
                 }
                 continue;
+            } else if (IS_OPTION("--is_new_sd")){
+                options.is_new_sd = true;
+                continue;
+            } else if (IS_OPTION("--sd_extension_path")){
+                options.sd_extension_path = std::string(argv[++i]);
+                continue;
             }
-
             std::cout << "Got unexpected option: " << argv[i] << std::endl;
             std::exit(1);
         }
@@ -303,8 +322,8 @@ extern "C" {
 
 
         if (options.capture_lineage){
-            DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_LINEAGE, "enable lineage");
-            DUCKDB_RUN_SHORT_QUERY(con, TP_CLEAR_LINEAGE, "clear lineage");
+            DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
+            DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
         }
 
         if (IS_SET(options.profile_out_path)){
@@ -372,7 +391,7 @@ extern "C" {
         DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
 
         if (options.capture_lineage){
-            DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_LINEAGE, "disable lineage");
+            DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
         }
 
         std::cout << "Chunks: " << chunk_count;
@@ -381,13 +400,17 @@ extern "C" {
             if (final_stats_query == NULL)
                 elog(ERROR, "Expected final stats query to be set!");
 
-            if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
-                std::cout << duckdb_prepare_error(stmt) << std::endl;
+            if (options.is_new_sd){
+                DUCKDB_RUN_SHORT_QUERY(con, final_stats_query, "new sd result dump");
+            }else{
+                if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
+                    std::cout << duckdb_prepare_error(stmt) << std::endl;
+                }
+                DUCKDB_EXIT_ON_ERROR(duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
+                DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
+                duckdb_destroy_result(&final_result);
+                duckdb_destroy_prepare(&stmt);
             }
-            DUCKDB_EXIT_ON_ERROR(duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
-            DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
-            duckdb_destroy_result(&final_result);
-            duckdb_destroy_prepare(&stmt);
         }
 
     }
@@ -417,8 +440,24 @@ extern "C" {
         duckdb_database db;
         duckdb_connection con;
         char *error_msg;
+        duckdb_config db_config;
+        DUCKDB_EXIT_ON_ERROR(duckdb_create_config(&db_config));
+        if (options.is_new_sd){
+            DUCKDB_EXIT_ON_ERROR(
+                duckdb_set_config(db_config, "allow_unsigned_extensions", "true")
+            );
+        }
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(options.db_path.c_str(), &db, nullptr, &error_msg), error_msg);
         DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
+
+        DUCKDB_RUN_SHORT_QUERY(con, "load JSON;", "load json");
+
+        if (options.is_new_sd){
+            if (!IS_SET(options.sd_extension_path))
+                elog(ERROR, "Expected extenstion path to be set!");
+            std::string load_str = "LOAD '" + options.sd_extension_path + "';";
+            DUCKDB_RUN_SHORT_QUERY(con, load_str.c_str(), "load new sd extension");
+        }
 
         #if TRACEPROV_SD_MODE==0
         const uint32_t num_args = 12;
@@ -443,7 +482,7 @@ extern "C" {
         duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
         DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
         
-        duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2);
+        duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
         #endif
          
@@ -489,7 +528,7 @@ extern "C" {
                 if (IS_SET(options.stats_path)){
                     char stats_query[256] = {0};
                     sprintf(stats_query,  options.stats_path.c_str(), i);
-                    sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
+                    sprintf(final_stats_query, (options.is_new_sd ? TP_SET_STATS_OUTPUT_NEW : TP_SET_STATS_OUTPUT), stats_query);
                     std::cout << "STATS QUERY: " << final_stats_query << std::endl;
                 }
                 
@@ -509,7 +548,7 @@ extern "C" {
                 if (IS_SET(new_options.stats_path)){
                     char stats_query[256] = {0};
                     sprintf(stats_query,  new_options.stats_path.c_str(), 0);
-                    sprintf(final_stats_query, TP_SET_STATS_OUTPUT, stats_query);
+                    sprintf(final_stats_query, (options.is_new_sd ? TP_SET_STATS_OUTPUT_NEW : TP_SET_STATS_OUTPUT), stats_query);
                     std::cout << "STATS QUERY: " << final_stats_query << std::endl;
                 }
                 perform_query(new_options, con, in_sql, agg_result, NULL, final_stats_query);
