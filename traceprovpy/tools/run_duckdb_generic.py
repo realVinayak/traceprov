@@ -586,6 +586,7 @@ def run_single(
             settings="/tmp/infer_settings.json",
             extras=infer_paths,
             main_once_extra_all=True,
+            profile="/tmp/infer_profile_%d_%d.json",
         )
         traceprov_assert_safe_run(f"{exec_str} {infer_option.serialize()}")
         infer_results = [
@@ -594,6 +595,11 @@ def run_single(
                 infer_id=element_idx,
                 infer_out=json_read_file(infer_option.time),
                 settings=json_read_file(infer_option.settings),
+                profile=json_read_two_iters(
+                    infer_option.profile,
+                    range(1, len(infer_option.extras) + 1),
+                    range(infer_option.repeat),
+                ),
             ),
         ]
 
