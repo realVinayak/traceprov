@@ -37,6 +37,7 @@
 #include "rewrite/rewriteHandler.h"
 
 #include "plan_analyzer.h"
+#include "traceprov_settings.h"
 
 PG_MODULE_MAGIC;
 
@@ -87,6 +88,54 @@ Query *traceprov_add_nested_query_log(
 static void adjustJoinAliasVars(List *, List *, List *, int, List **, List **);
 
 void _PG_init(){
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc",
+        "Whether to use prealloc at all.",
+        NULL,
+        &traceprov_use_prealloc,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc_log",
+        "Whether to use prealloc at top level.",
+        "No effect if use_prealloc is false. Currently not used.",
+        &traceprov_use_prealloc_log,
+        true,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc_intermediate",
+        "Whether to use prealloc at intermediate level.",
+        "No effect if use_prealloc is false. Currently not used.",
+        &traceprov_use_prealloc_intermediate,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_compressed_in_sort",
+        "Whether to use compresed representation in agg-by-sort",
+        "Uses derivative of run-length-encoding if enabled",
+        &traceprov_use_compressed_in_sort,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 

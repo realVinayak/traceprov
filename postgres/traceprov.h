@@ -6,6 +6,7 @@
 #include "errno.h"
 #include "utils/elog.h"
 #include "nodes/nodes.h"
+#include "traceprov_settings.h"
 
 #include <assert.h>
 
@@ -250,10 +251,10 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
 // #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
-// #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
+#define TRACEPROV_SHOULD_SORT(state) (traceprov_use_compressed_in_sort && (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED))
 
 #define TRACEPROV_SHOULD_HASH(state) (false)
-#define TRACEPROV_SHOULD_SORT(state) (false)
+// #define TRACEPROV_SHOULD_SORT(state) (false)
 
 #define TRACEPROV_AGG_ROW_COUNT(state) (IsA(state, AggState) ? (((AggState *)state)->ss.ps.plan->lefttree->plan_rows) : 0)
 

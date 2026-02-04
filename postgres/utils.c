@@ -70,3 +70,12 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     current_layer->last_allocation_size = TRACEPROV_INCREMENT_TRACE_BY_PG;
     return rc;
 }
+
+void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
+    const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
+    assert(gap >= 0);
+    // Now, figure out what the last mapped region will have been (or the starting address of it.)
+    const uint64 infered_gap = layer->size == layer->initial_allocation_size ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
+    void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
+    return final_row;
+}
