@@ -17,23 +17,9 @@ from traceprovpy.tools.run_duckdb_generic import (
 
 def run():
     base_parser = make_duckdb_parse()
-    base_parser.add_argument("--suff", required=True)
-    base_parser.add_argument("--sd_mode", choices=["old", "new"], default=None)
-    base_parser.add_argument(
-        "--optimized", action=argparse.BooleanOptionalAction, default=False
-    )
     base_parser.add_argument("--num_groups", required=True, type=int)
     base_parser.add_argument("--sel", required=True, type=float)
-    base_parser.add_argument("--sd_extension_path", required=False)
-    base_parser.add_argument(
-        "--sample_inference", choices=["all", "sample"], default=False
-    )
-    base_parser.add_argument(
-        "--mat_infer", action=argparse.BooleanOptionalAction, default=False
-    )
-    base_parser.add_argument(
-        "--validate", action=argparse.BooleanOptionalAction, default=False
-    )
+
     parsed = base_parser.parse_args()
     selectivity = int(parsed.num_groups * (parsed.sel / 100))
     print(f"Using: {selectivity}")
