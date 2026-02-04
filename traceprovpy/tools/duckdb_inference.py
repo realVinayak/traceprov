@@ -20,24 +20,24 @@ import os
 class DuckDBDriverOptions(NamedTuple):
     db: str
     i: str
-    lineage: bool = None
-    profile: str = None
-    pending: bool = None
-    threads: int = None
-    stats: str = None
+    lineage: bool | None = None
+    profile: str | None = None
+    pending: bool | None = None
+    threads: int | None = None
+    stats: str | None = None
     repeat: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY
-    settings: str = None
-    time: str = None
-    idx_scan_percent: str = None
-    no_reinit: bool = None
+    settings: str | None = None
+    time: str | None = None
+    idx_scan_percent: str | None = None
+    no_reinit: bool | None = None
     min_layer_number: int = None
-    extra: str = None
-    disable_col_opt: bool = None
+    extra: str | None = None
+    disable_col_opt: bool | None = None
     extras: list[str] = []
     main_once_extra_all: bool = False
-    extra_file: str = None
+    extra_file: str | None = None
     is_new_sd: bool = False
-    sd_extension_path: str = None
+    sd_extension_path: str | None = None
 
     def _boolean_options(self):
         return {

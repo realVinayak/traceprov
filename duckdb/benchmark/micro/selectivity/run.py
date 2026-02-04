@@ -37,7 +37,7 @@ def run():
     parsed = base_parser.parse_args()
     selectivity = int(parsed.num_groups * (parsed.sel / 100))
     print(f"Using: {selectivity}")
-    dirs = ["1_000_000"]
+    dirs = ["1_000_000", "5_000_000", "10_000_000"]
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
@@ -88,23 +88,13 @@ def run():
                         if parsed.sd_extension_path is None
                         else Path(parsed.sd_extension_path)
                     ),
+                    run_inference=is_new_sd,
+                    validate=parsed.validate and is_new_sd,
                 ),
             )
             if parsed.sample_inference:
                 assert not is_new_sd or parsed.sample_inference == "all"
-                if is_new_sd:
-                    query_result["infer_result"] = run_inference_new_smokedduck(
-                        Path(parsed.exe),
-                        db=Path(parsed.db),
-                        query_num="query",
-                        root=tmp,
-                        base_root=tmp,
-                        sd_extension_path=Path(parsed.sd_extension_path),
-                        iters=total_iters,
-                        pre_base=None,
-                        validate=parsed.validate,
-                    )
-                else:
+                if not is_new_sd:
                     # normal sd case.
                     out_ids = range(query_result["sd"]["base_time"][0]["row_count"])
                     query_id = query_result["sd"]["capture_stats"][0]["query_id"]
@@ -120,6 +110,10 @@ def run():
                         pre_base=None,
                         validate=parsed.validate,
                     )
+                else:
+                    assert (
+                        0
+                    ), "didn't expect sample inference on new SD, redundant with all inference!"
         else:
             spec_element = dict(min_local_used=3, elements=[dict(idx=1)])
             query_result = dict(

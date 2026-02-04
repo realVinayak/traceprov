@@ -313,6 +313,7 @@ extern "C" {
         #if TRACEPROV_SD_MODE==0
         if (!options.no_reinit_state){
             DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+            reset_global_context();
         }
         #endif
 
@@ -496,6 +497,7 @@ extern "C" {
         #if TRACEPROV_SD_MODE==0
         if (!options.no_reinit_state){
             DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
+            reset_global_context();
         }
         #endif
 
@@ -519,8 +521,8 @@ extern "C" {
             for (int i = 0; i < options.repeat; i++){
                 char final_profile_out[256] = {0};
                 char final_stats_query[256] = {0};
+                char profile_out[256] = {0};
                 if (IS_SET(options.profile_out_path)){
-                    char profile_out[256] = {0};
                     sprintf(profile_out, options.profile_out_path.c_str(), i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
@@ -533,10 +535,21 @@ extern "C" {
                 }
                 
                 perform_query(options, con, in_sql, agg_result, final_profile_out, final_stats_query);
+                uint32_t extra_idx = 0;
                 for (auto extra_sql: extra_sqls){
+                    extra_idx++;
                     Options new_options = options;
                     new_options.no_reinit_state = true;
-                    perform_query(new_options, con, extra_sql, agg_result, NULL, NULL);
+                    new_options.capture_lineage = false;
+                    new_options.stats_path = "";
+                    std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
+                    memset(final_profile_out, 0, sizeof(char)*256);
+                    sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());
+                    perform_query(
+                        new_options, con, extra_sql, agg_result, 
+                        final_profile_out,
+                        NULL
+                    );
                 }
             }
         }else{

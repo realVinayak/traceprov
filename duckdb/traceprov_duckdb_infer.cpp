@@ -9,6 +9,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <traceprov_duckdb_infer.hpp>
 
 extern "C" {
 
@@ -16,14 +17,9 @@ extern "C" {
     #include "duckdb.h"
     #include "utils.h"
     #include "file_utils.h"
-#include <cmath>
+    #include <cmath>
 
-    typedef struct TraceProvDuckDbGlobalState {
-        bool did_initialize;
-        std::vector<struct local_context *> *worker_local_contexts;
-    } TraceProvDuckDbGlobalState;
-
-    static TraceProvDuckDbGlobalState g_tp_duckdb_state {
+    TraceProvDuckDbGlobalState g_tp_duckdb_state {
         .did_initialize = false,
         .worker_local_contexts = NULL
     };
@@ -173,6 +169,12 @@ extern "C" {
             g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
         }
     }
+
+    void reset_global_context(){
+        g_tp_duckdb_state.did_initialize = false;
+        g_tp_duckdb_state.worker_local_contexts = nullptr;
+    }
+
     static TraceProvBindData *setup_layers(
         const uint64_t worker_id,
         const uint64_t layer_number,
