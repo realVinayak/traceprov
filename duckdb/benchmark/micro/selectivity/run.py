@@ -23,6 +23,7 @@ def run():
     parsed = base_parser.parse_args()
     selectivity = int(parsed.num_groups * (parsed.sel / 100))
     print(f"Using: {selectivity}")
+    #dirs = ["1_000_000"]
     dirs = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     result = []
     tmp = Path("./tmp/")
@@ -142,7 +143,7 @@ def run():
                     **query_result,
                     "sample_inference": sample_inference_result,
                 }
-        result.append(dict(dir=qdir, selectivity=selectivity, result=query_result))
+        result.append(dict(dir=qdir, selectivity=selectivity, result=query_result, optimized=parsed.optimized))
 
     traceprov_dump_safe_results(parsed.suff, dict(result=result))
 
