@@ -1,6 +1,6 @@
 {
     "_queries": [
-        11
+       14, 16, 19
     ],
     "queries": [
         1,
@@ -30,7 +30,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 3,
+        "repeat": 15,
         "throwaway": 0
     },
     "q_config": {
