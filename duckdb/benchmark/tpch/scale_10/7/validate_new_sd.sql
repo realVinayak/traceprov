@@ -37,12 +37,12 @@ from
                 n2.rowid
             ) in (
                 select
-                    opid_20_supplier,
-                    opid_12_lineitem,
+                    opid_19_supplier,
+                    opid_17_lineitem,
                     opid_14_orders,
-                    opid_16_customer,
-                    opid_22_nation,
-                    opid_18_nation
+                    opid_23_customer,
+                    opid_21_nation,
+                    opid_25_nation
                 from
                     LAYER_1
             )
