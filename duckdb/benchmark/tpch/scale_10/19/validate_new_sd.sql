@@ -8,8 +8,8 @@ where
     p_partkey = l_partkey
     and (lineitem.rowid, part.rowid) in (
         select
-            opid_6_lineitem,
-            opid_7_part
+            opid_8_lineitem,
+            opid_10_part
         FROM
             LAYER_1
     );

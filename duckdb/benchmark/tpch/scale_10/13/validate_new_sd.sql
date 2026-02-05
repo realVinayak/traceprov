@@ -14,8 +14,8 @@ from
         where
             (customer.rowid, coalesce(orders.rowid, 0)) in (
                 select
-                    opid_9_customer,
-                    opid_8_orders
+                    opid_12_customer,
+                    opid_10_orders
                 from
                     LAYER_1
             )

@@ -24,10 +24,10 @@ where
         nation.rowid
     ) in (
         select
-            opid_9_customer,
-            opid_11_orders,
-            opid_6_lineitem,
-            opid_10_nation
+            opid_14_customer,
+            opid_17_orders,
+            opid_8_lineitem,
+            opid_15_nation
         from
             LAYER_1
     )

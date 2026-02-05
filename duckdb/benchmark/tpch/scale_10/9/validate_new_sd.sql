@@ -36,12 +36,12 @@ from
                 nation.rowid
             ) in (
                 select
-                    opid_14_part,
-                    opid_20_supplier,
-                    opid_13_lineitem,
-                    opid_18_partsupp,
-                    opid_16_orders,
-                    opid_21_nation
+                    opid_15_part,
+                    opid_22_supplier,
+                    opid_14_lineitem,
+                    opid_20_partsupp,
+                    opid_17_orders,
+                    opid_23_nation
                 from
                     LAYER_1
             )
