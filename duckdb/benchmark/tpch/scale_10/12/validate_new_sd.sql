@@ -22,8 +22,8 @@ where
     o_orderkey = l_orderkey
     and (orders.rowid, lineitem.rowid) in (
         select
-            opid_8_orders,
-            opid_10_lineitem
+            opid_10_orders,
+            opid_13_lineitem
         FROM
             LAYER_1
     )
