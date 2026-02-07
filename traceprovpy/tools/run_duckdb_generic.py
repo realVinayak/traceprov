@@ -340,7 +340,7 @@ def run_sample_inference_smokedduck(
     settings: bool = True,
     validate: bool = False,
 ):
-    _run_sample_inference_smokedduck(
+    sample_results = _run_sample_inference_smokedduck(
         exec,
         db,
         query_num,
@@ -359,6 +359,7 @@ def run_sample_inference_smokedduck(
         validate_query(
             base_root / query_num, "validate_sd.sql", db.as_posix(), exec.as_posix()
         )
+    return sample_results
 
 
 def _run_sample_inference_smokedduck(
