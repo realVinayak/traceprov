@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "traceprov.h"
+#include "traceprov.hpp"
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>

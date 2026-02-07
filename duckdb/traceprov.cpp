@@ -1,9 +1,10 @@
 
-#include "traceprov.h"
-#include "utils.h"
-#include "duckdb.h"
+#include "traceprov.hpp"
+#include "utils.hpp"
+#include <unistd.h>
+#include "duckdb.hpp"
 #include <string.h>
-#include "file_utils.h"
+#include "file_utils.hpp"
 #include <sys/mman.h>
 
 struct current_context traceprov_current = {.my_worker_id = 0,
@@ -200,7 +201,7 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 }
 
 duckdb_aggregate_function *traceprov_create_funcs(const uint32_t num_args){
-    duckdb_aggregate_function *funcs = malloc(sizeof(duckdb_aggregate_function) *num_args);
+    duckdb_aggregate_function *funcs = (duckdb_aggregate_function *)malloc(sizeof(duckdb_aggregate_function) *num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
         char func_name[256] = {0};
         sprintf(func_name, "traceprov_agg_key_parallel_offset_%d", idx + 1);
@@ -249,7 +250,7 @@ void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckd
     traceprov_current.shared_context = NULL;
     traceprov_current.local_context = NULL;
     traceprov_current.maximum_local_layer_used = 0;
-    char *traceprov_data_dir = malloc(sizeof(char)*512);
+    char *traceprov_data_dir = (char *)malloc(sizeof(char)*512);
     memset(traceprov_data_dir, 0, sizeof(char)*512);
     sprintf(traceprov_data_dir, TRACE_PROV_DIR, DataDir);
     int rc = 0;
@@ -311,7 +312,7 @@ void traceprov_log(duckdb_function_info, duckdb_data_chunk input, duckdb_vector 
 #define TRACEPROV_DUCKDB_VOLATILE_LOG_FUNC_NAME "traceprov_log_entry_volatile_%d"
 
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile){
-    duckdb_scalar_function *funcs = malloc(sizeof(duckdb_scalar_function) * num_args);
+    duckdb_scalar_function *funcs = (duckdb_scalar_function *)malloc(sizeof(duckdb_scalar_function) * num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
         char func_name[256] = {0};
         sprintf(func_name, is_volatile ? TRACEPROV_DUCKDB_VOLATILE_LOG_FUNC_NAME : TRACEPROV_DUCKDB_LOG_FUNC_NAME, idx + 1);

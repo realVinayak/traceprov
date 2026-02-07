@@ -1,13 +1,13 @@
 // These are portable utils.
-#include "traceprov.h"
+#include "traceprov.hpp"
 #define __GNU_SOURCE
 #define __USE_MISC
 #define __USE_LARGEFILE64
 #include <sys/mman.h>
 #include <string.h>
 #include <stdio.h>
-#include "utils.h"
-#include "file_utils.h"
+#include "utils.hpp"
+#include "file_utils.hpp"
 #include <errno.h>
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
@@ -24,6 +24,7 @@ static inline int round_up(const int number){
 
 int initialize_file(int fd, const uint32_t *magic_word, size_t size){
     int rc = 0;
+    off_t moved = 0;
     // First, truncate the file to 0.
     if ((rc = ftruncate(fd, 0))){
         elog(INFO, "Error truncating file to 0.");
@@ -35,7 +36,7 @@ int initialize_file(int fd, const uint32_t *magic_word, size_t size){
         goto out;
     }
 
-    off_t moved = lseek(fd, 0, SEEK_SET);
+    moved = lseek(fd, 0, SEEK_SET);
     if (moved == -1){
         rc = 1;
         elog(INFO, "Error doing lseek to beginning on shared context file");
@@ -76,7 +77,14 @@ int initialize_local_context(){
     if (traceprov_current.my_worker_id != 0) return 0;
 
     int rc = 0, is_locked = 0, shared_context_fd = 0, worker_layer_map_fd = 0;
+    int32_t magic_word = 0;
+    uint32_t maximum_layer_used = 0;
     char shared_context_file_name[1024] = { 0 };
+    char buff[1024] = {0};
+    char buff_2[1024] = {0};
+
+    struct traceprov_shared_context *shared_context = NULL;
+
     sprintf(shared_context_file_name, TRACEPROV_SHARED_CONTEXT, DataDir);
 
     PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_file_name);
@@ -99,10 +107,8 @@ int initialize_local_context(){
     PRINT_ON_DEBUG("Locked share context file");
 
     is_locked = 1;
-
-    int32_t magic_word = 0;
     // ugh.
-    uint32_t maximum_layer_used = traceprov_current.maximum_local_layer_used;
+    maximum_layer_used = traceprov_current.maximum_local_layer_used;
 
     if(read(shared_context_fd, &magic_word, sizeof(int32_t)) == -1){
         PRINT_ON_DEBUG("Had error reading in magic word.");
@@ -114,7 +120,6 @@ int initialize_local_context(){
         if ((rc = initialize_file(shared_context_fd, &traceprov_shared_context_magic, TRACEPROV_SHARED_CONTEXT_SIZE))){
             goto exit_initialize_local_context;
         }
-        char buff[1024] = {0};
         sprintf(buff, TRACEPROV_GRAPH_FILE, DataDir);
         int graph_file_fd = open(buff, O_RDWR);
         if (graph_file_fd < 0){
@@ -128,10 +133,8 @@ int initialize_local_context(){
     }
 
     PRINT_ON_DEBUG("Mmaping the shared context file.");
-
-    struct traceprov_shared_context *shared_context = NULL;
     
-    if ((rc = fail_safe_mmap(shared_context_fd, TRACEPROV_SHARED_CONTEXT_SIZE, (void*)&shared_context))){
+    if ((rc = fail_safe_mmap(shared_context_fd, TRACEPROV_SHARED_CONTEXT_SIZE, (void**)&shared_context))){
         goto exit_initialize_local_context;
     }
 
@@ -150,7 +153,6 @@ int initialize_local_context(){
         goto exit_initialize_local_context;
     }
 
-    char buff_2[1024] = {0};
     sprintf(buff_2, TRACEPROV_WORKER_LAYER_MAP, DataDir, traceprov_current.my_worker_id);
     worker_layer_map_fd = open(buff_2, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
     if (worker_layer_map_fd < 0){
@@ -162,7 +164,7 @@ int initialize_local_context(){
     }
     // Set up the local context in a file.
     // This makes everything guaranteed to be on a different page.
-    if ((rc = fail_safe_mmap(worker_layer_map_fd, sizeof(struct local_context), (void*)&traceprov_current.local_context))){
+    if ((rc = fail_safe_mmap(worker_layer_map_fd, sizeof(struct local_context), (void**)&traceprov_current.local_context))){
         goto exit_initialize_local_context;
     }
     // Set up the current context. All this is local (so, not visible to other processes.)
@@ -352,14 +354,14 @@ int get_or_create_layer(
         elog(ERROR, "Found invalid padding");
         return 1;
     }
-    layer->end_of_memory_zone = TRACEPROV_PAGE_SIZE + trace_ptr;
+    layer->end_of_memory_zone = TRACEPROV_PAGE_SIZE + (char *)trace_ptr;
     layer->layer_fd = trace_file_fd;
     layer->size = 1;
     if (p_layer) *p_layer = layer;
 
     #if TRACEPROV_USE_MMEM_PAGE
     // Need to so some huge-page specific initialization.
-    void **page_mapping = malloc(sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP);
+    void **page_mapping = (void **)malloc(sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP);
     memset(page_mapping, 0, sizeof(void *)*TRACEPROV_PG_MAPPING_INCR_STEP); 
     layer->page_mapping = page_mapping;
     layer->page_mapping_capacity = TRACEPROV_PG_MAPPING_INCR_STEP;
@@ -444,7 +446,7 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
     // once every 4096...
     if (unlikely(current_layer->page_mapping_size == current_layer->page_mapping_capacity)){
         current_layer->page_mapping_capacity += TRACEPROV_PG_MAPPING_INCR_STEP;
-        current_layer->page_mapping = realloc(current_layer->page_mapping, sizeof(void *)*(current_layer->page_mapping_capacity));
+        current_layer->page_mapping = (void **)realloc(current_layer->page_mapping, sizeof(void *)*(current_layer->page_mapping_capacity));
         if (unlikely(current_layer->page_mapping == 0)){
             elog(ERROR, "failed realloc!");
         }
