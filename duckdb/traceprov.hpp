@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include "duckdb.h"
+#include "duckdb.hpp"
 #include <unistd.h>
 
 #define TP_STD_VECTOR_SIZE 2048

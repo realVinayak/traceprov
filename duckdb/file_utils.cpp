@@ -1,11 +1,11 @@
 #include <fcntl.h>
-#include "traceprov.h"
+#include "traceprov.hpp"
 #include <string.h>
 #include <sys/file.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include "file_utils.h"
+#include "file_utils.hpp"
 #include <stdio.h>
 
 int remove_if_exists(const char *file){
