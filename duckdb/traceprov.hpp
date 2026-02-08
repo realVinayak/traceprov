@@ -298,12 +298,17 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
-duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args);
+duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false);
+duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
 #endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+
+typedef struct TraceProvAggExtra {
+    bool ignore_gn;
+} TraceProvAggExtra;
 
 #endif
