@@ -89,7 +89,6 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
     // No need to do anything.
     // This needs to be checked here (because we need to look up the first row to get the layer number...)
     if (num_rows == 0) return;
-
     struct traceprov_agg_context **agg_contexts = (struct traceprov_agg_context **)states;
 
     duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0);
@@ -100,17 +99,25 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
         return;
     }
 
-    for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-        if (agg_contexts[row_idx]->layer_number == 0){
-            agg_contexts[row_idx]->layer_number = layer_number;
-            agg_contexts[row_idx]->group_cnt = (uint64_t)agg_contexts[row_idx];
+    if (likely(agg_contexts != NULL)){
+        for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+            if (agg_contexts[row_idx]->layer_number == 0){
+                agg_contexts[row_idx]->layer_number = layer_number;
+                agg_contexts[row_idx]->group_cnt = (uint64_t)agg_contexts[row_idx];
+            }
         }
     }
+
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
 
+    TraceProvAggExtra *extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info);
     TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + num_cols*sizeof(uint64_t)*TP_STD_VECTOR_SIZE) > main_layer->end_of_memory_zone));
-    memcpy(main_layer->current_row, agg_contexts, sizeof(uint64_t)*num_rows);
-    main_layer->current_row += sizeof(uint64_t)*TP_STD_VECTOR_SIZE;
+    if (likely(!extra->ignore_gn)){
+        if (likely(agg_contexts != NULL)){
+            memcpy(main_layer->current_row, agg_contexts, sizeof(uint64_t)*num_rows);
+        }
+        main_layer->current_row += sizeof(uint64_t)*TP_STD_VECTOR_SIZE;
+    }
 
     const idx_t true_column_count = duckdb_data_chunk_get_column_count(input);
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
@@ -200,15 +207,30 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
     }
 }
 
-duckdb_aggregate_function *traceprov_create_funcs(const uint32_t num_args){
+// Taken from duckdb src.
+duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function function) {
+    return reinterpret_cast<duckdb::AggregateFunction *>(function);
+}
+
+duckdb_aggregate_function *traceprov_create_funcs(
+    const uint32_t num_args,
+    const bool is_window,
+    const bool ignore_group_number
+){
     duckdb_aggregate_function *funcs = (duckdb_aggregate_function *)malloc(sizeof(duckdb_aggregate_function) *num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
-        char func_name[256] = {0};
-        sprintf(func_name, "traceprov_agg_key_parallel_offset_%d", idx + 1);
+        std::string func_name = "traceprov_agg_key_parallel_offset_";
+        if (is_window){
+            func_name += "window_";
+        }
+        if (ignore_group_number){
+            func_name += "ignore_gn_";
+        }
+        func_name += std::to_string(idx + 1);
         duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
         duckdb_aggregate_function func = (duckdb_aggregate_function) duckdb_create_aggregate_function();
-        PRINT_ON_DEBUG("name: %s", func_name);
-        duckdb_aggregate_function_set_name(func, func_name);
+        PRINT_ON_DEBUG("name: %s", func_name.c_str());
+        duckdb_aggregate_function_set_name(func, (new std::string(func_name))->c_str());
         duckdb_logical_type first_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
         duckdb_aggregate_function_add_parameter(func, first_type);
         const uint32_t total_arg_count = idx + 1;
@@ -216,13 +238,85 @@ duckdb_aggregate_function *traceprov_create_funcs(const uint32_t num_args){
             duckdb_aggregate_function_add_parameter(func, type);
         }
         duckdb_aggregate_function_set_return_type(func, type);
+        auto extra = new TraceProvAggExtra;
+        extra->ignore_gn = ignore_group_number;
+        duckdb_aggregate_function_set_extra_info(func, extra, nullptr);
         duckdb_destroy_logical_type(&type);
         duckdb_destroy_logical_type(&first_type);
         duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, traceprov_update, traceprov_combine, traceprov_finalize);
+        auto base = GetCAggregateFunction(func);
+        // IDK why the C-API requires the combine.
+        // TODO: Experiment with disabling this.
+        // base.combine = nullptr;
         funcs[idx] = func;
     }
     return funcs;
 }
+
+inline bool RowIsVisible(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+    return (row_idx < scan->next_row_index && scan->current_row_index <= row_idx);
+}
+
+inline sel_t RowOffset(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+    return duckdb::UnsafeNumericCast<sel_t>(row_idx - scan->current_row_index);
+}
+// Inspired from implementation in mode.cpp, but without any class stuff
+// since we don't need that.
+void traceprov_window(
+    duckdb::AggregateInputData &aggr_input_data,
+    const duckdb::WindowPartitionInput &partition,
+    duckdb::const_data_ptr_t g_state,
+    duckdb::data_ptr_t l_state,
+    const duckdb::SubFrames &subframes,
+    duckdb::Vector &result,
+    duckdb::idx_t rid
+){
+    if (partition.count == 0){
+        elog(INFO, "Skipping window because output is empty!");
+        return;
+    }
+    if (subframes.size() != 1)
+        elog(ERROR, "Expected the subframe size to be 1!");
+
+    auto frame = subframes.at(0);
+    // elog(INFO, "Start: %ld, End: %ld, RID: %ld, Count: %ld", frame.start, frame.end, rid, partition.count);
+    // Don't do anything if the frame end is not the row end.
+    if (frame.end < partition.count) return;
+    // Now, need to do all the bulk stuff.
+
+    auto scan = new duckdb::ColumnDataScanState();
+    auto inputs = partition.inputs;
+    inputs->InitializeScan(*scan, partition.column_ids);
+    duckdb::DataChunk page;
+    inputs->InitializeScanChunk(*scan, page);
+
+    int64_t last_chunk_idx = -1;
+    for (idx_t row_id = frame.start; row_id < frame.end; row_id++){
+        if(!inputs->Seek(row_id, *scan, page)){
+            elog(ERROR, "Expected seek to always be fine!")
+        }
+        // In this case, we'll have already written  up this chunk.
+        // So, continue in this case.
+        if ((int64_t)scan->chunk_index == last_chunk_idx) continue;
+        traceprov_update(NULL, reinterpret_cast<duckdb_data_chunk>(&page), NULL);
+        last_chunk_idx = scan->chunk_index;
+    }
+}
+
+duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args){
+    duckdb_aggregate_function *base_functions = traceprov_create_funcs(num_args, true);
+    for (uint32_t idx = 0; idx < num_args; idx++){
+        auto base_agg_function = GetCAggregateFunction(base_functions[idx]);
+        // We're basically creating the window variant of this func.
+        // need to disable everything that isn't window.
+        base_agg_function->combine = nullptr;
+        base_agg_function->finalize = nullptr;
+        base_agg_function->simple_update = nullptr;
+        base_agg_function->window = traceprov_window;
+    }
+    return base_functions;
+}
+
 
 void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckdb_vector output){
     #if TRACEPROV_USE_MMEM_PAGE
