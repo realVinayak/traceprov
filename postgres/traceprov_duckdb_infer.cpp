@@ -52,6 +52,8 @@ extern "C" {
         uint64_t number_of_records;
         void *col_null_layer_ptr;
         void *row_null_layer_ptr;
+        uint64_t number_of_col_records;
+        uint64_t current_col_idx;
     } TraceProvInitData;
 
     #define TRACEPROV_MAKE_WORKER_LAYER_KEY(X, Y) ((uint64_t)(((uint64_t)X << 32) | (uint64_t)Y))
@@ -141,10 +143,15 @@ extern "C" {
             }
         }
 
-        const void *final_ptr = get_final_ptr(init_data_inst->col_layer_ptr, current_layer);
-        // Ugh, TODO: This won't be the same when we'll have sorted-by-agg RLE.
-        init_data_inst->number_of_records = ((uint64)final_ptr - (uint64)init_data_inst->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
-
+        if (current_layer->aggregate_strategy == AGG_SORTED){
+            const void *final_ptr = get_final_ptr(init_data_inst->row_layer_ptr, bind_data->row_layer_info);
+            init_data_inst->number_of_records = ((uint64)final_ptr - (uint64)init_data_inst->row_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+            const void *final_col_ptr = get_final_ptr(init_data_inst->col_layer_ptr, current_layer);
+            init_data_inst->number_of_col_records = ((uint64)final_col_ptr - (uint64)init_data_inst->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        }else{
+            const void *final_ptr = get_final_ptr(init_data_inst->col_layer_ptr, current_layer);
+            init_data_inst->number_of_records = ((uint64)final_ptr - (uint64)init_data_inst->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        }
     }
 
     void traceprov_duckdb_bind(duckdb_bind_info info) {
@@ -183,6 +190,32 @@ extern "C" {
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
+    uint64_t fillup_pointer_compressed(
+        const struct traceprov_aggregate_layer *layer,
+        duckdb_data_chunk chunk,
+        void *source_ptr,
+        uint64_t current_pos,
+        const uint64_t final_num_records,
+        const uint64_t final_col_records,
+        TraceProvInitData *init_data,
+        TraceProvBindData *bind_data
+    ){
+        const uint64_t original_pos = current_pos;
+        for (uint64_t i = 0; i < STANDARD_VECTOR_SIZE; i++){
+            if (current_pos >= final_num_records)
+                break;
+            auto ptr = (uint64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(chunk, 0));
+            ptr[i] =  TRACEPROV_SET_WORKER_ID((init_data->current_col_idx + 1), bind_data->rel_args.worker_id);
+            current_pos++;
+            if (init_data->current_col_idx < final_col_records){
+                if (((uint64 *)source_ptr)[init_data->current_col_idx] <= current_pos){
+                    init_data->current_col_idx++;
+                }
+            }
+        }
+        duckdb_data_chunk_set_size(chunk, current_pos - original_pos);
+        return current_pos;
+    }
 
 
     uint64 fillup_pointer(
@@ -237,7 +270,21 @@ extern "C" {
 
         auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
         auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
-        auto final_state = fillup_pointer(bind_data->col_layer_info, output, init_data->col_layer_ptr, init_data->current, init_data->number_of_records, 0, bind_data->column_width, &init_data->col_layer_ptr, init_data->col_null_layer_ptr);
+        uint64 final_state = 0;
+        if (bind_data->col_layer_info->aggregate_strategy == AGG_SORTED){
+            final_state = fillup_pointer_compressed(
+                bind_data->col_layer_info,
+                output,
+                init_data->col_layer_ptr,
+                init_data->current,
+                init_data->number_of_records,
+                init_data->number_of_col_records,
+                init_data,
+                bind_data
+            );
+        }else{
+            final_state = fillup_pointer(bind_data->col_layer_info, output, init_data->col_layer_ptr, init_data->current, init_data->number_of_records, 0, bind_data->column_width, &init_data->col_layer_ptr, init_data->col_null_layer_ptr);
+        }
         if (bind_data->row_layer_info){
             fillup_pointer(bind_data->row_layer_info, output, init_data->row_layer_ptr, init_data->current, init_data->number_of_records, bind_data->column_width, bind_data->row_width, &init_data->row_layer_ptr, init_data->row_null_layer_ptr);
         }
