@@ -113,7 +113,7 @@ def make_directory(scales: List[int], widths: List[int]):
         dir_name="read_query",
         queries=[
             *[make_simple_query(*arg) for arg in args],
-            *[duckdb_query(*arg) for arg in args],
+            # *[duckdb_query(*arg) for arg in args],
         ],
     )
     return directory
@@ -124,22 +124,8 @@ directores = []
 
 def main():
     benchmark = GenericBenchmark("perf_read")
-    scales = [
-        100,
-        500,
-        1_000,
-        5_000,
-        10_000,
-        50_000,
-        100_000,
-        500_000,
-        1_000_000,
-        5_000_000,
-        10_000_000,
-        50_000_000,
-        100_000_000,
-    ]
-    widths = [1, 2, 3, 4]
+    scales = [10_000, 1_000_000, 5_000_000, 10_000_000]
+    widths = [1]
     directory = make_directory(scales, widths)
     result = benchmark.run_from_argparse(
         [directory], params=RunParams(repeat=1, throwaway=0)

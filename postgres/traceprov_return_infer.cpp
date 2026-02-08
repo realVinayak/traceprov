@@ -3732,9 +3732,15 @@ extern "C" {
             TraceProvNode *node = child.second;
             char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
             TraceProvData *data = nullptr;
+            uint64 duration = 0;
             if (use_duckdb){
                 elog(INFO, "Used duckdb!");
+                {
+                TP_EVALUATE_START();
                 data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);
+                TP_EVALUATE_END();
+                duration = TP_EVALUATE_DURATION();
+                }
             }else{
                 TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
                 eval_context->should_dump = false;
@@ -3744,6 +3750,7 @@ extern "C" {
             elog(INFO, "Gen SQL: %s", sql);
             elog(INFO, "Size %ld", data->at(0)->data->size());
             elog(INFO, "Width %ld", data->size());
+             elog(INFO, "Time %ld", duration    );
             auto top_result = new TraceProvTopResult;
             top_result->pdata = list_make1(data);
             top_result->width = data->size();

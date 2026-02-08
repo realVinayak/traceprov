@@ -854,7 +854,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         current_column_layer = get_layer(current_layer->buckets[bucket - 1]);
     }
     struct traceprov_aggregate_layer *current_rows_layer = get_layer(current_column_layer->rows_layer_number);
-    if (TRACEPROV_SHOULD_SORT(fcinfo->context)){
+    if (TRACEPROV_SHOULD_SORT(fcinfo->context) && false){
         // In this case, we can do the same optimization done that's done for sfunc
         // when encoding group numbers.
         if (is_init && current_layer->num_groups > 1){
