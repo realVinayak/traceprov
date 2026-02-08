@@ -63,7 +63,7 @@ def run():
                         if parsed.sd_extension_path is None
                         else Path(parsed.sd_extension_path)
                     ),
-                    run_inference=is_new_sd,
+                    run_inference=is_new_sd and parsed.infer,
                     validate=parsed.validate and is_new_sd,
                     mat_infer=parsed.mat_infer,
                 ),
@@ -83,9 +83,10 @@ def run():
                 materialize_infer=False,
                 iters=total_iters,
                 pre_base=pre_base_path,
-                run_inference=True,
+                run_inference=parsed.infer,
+                use_aggresive_optimized=parsed.agg_optimized,
             )
-        if parsed.sample_inference:
+        if parsed.sample_inference and parsed.infer:
             # need to sample the inference.
             base_result = query_result["base_time"][0]
             base_row_count = base_result["row_count"]

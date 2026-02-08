@@ -501,6 +501,7 @@ def run_single(
     materialize_infer: bool = False,
     pre_base: Path | None = None,
     run_inference: bool = True,
+    use_aggresive_optimized: bool = False,
 ):
     if validate:
         materialize_infer = True
@@ -513,7 +514,13 @@ def run_single(
 
     query_dir = root / query_num
     if use_optimized:
-        captured_sql = query_dir / "capture_new.sql"
+        captured_sql = None
+        if use_aggresive_optimized:
+            captured_sql = query_dir / "capture_ignore_gn.sql"
+            if not captured_sql.exists():
+                captured_sql = None
+        if captured_sql is None:
+            captured_sql = query_dir / "capture_new.sql"
     else:
         captured_sql = query_dir / "capture.sql"
 
