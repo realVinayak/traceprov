@@ -1,8 +1,5 @@
 // Like traceprov's normal infer, but returns the set of all rows inline for postgres
 // rather than dumping logic.
-// Currently, only handles simple layers.
-// TODO: Migrate all the arguments.
-// TODO: Migrate polynomials generation in some other file?
 
 #include <iostream>
 #include <fcntl.h>
@@ -77,6 +74,20 @@ extern "C" {
         tree->children =  new std::vector<TraceProvInferAbstractTree *>;
         tree->nodes = new std::vector<TraceProvNode *>;
         return tree;
+    }
+
+    // Get all children that lie in a tree.
+    // We could return a vector (instead of pg list), but that's awkward to deal with it.
+    static List *getTraceProvInferAbstractTreeNodes(const TraceProvInferAbstractTree* tree){
+        List *nodes = NIL;
+        for (uint64 idx = 0; idx < tree->nodes->size(); idx++){
+            // This is a pointer to the node, because we'll be mutating that in-place :)
+            nodes = lappend(nodes, &tree->nodes->at(idx));
+        }
+        for(auto child: *tree->children){
+            nodes = list_concat(nodes, getTraceProvInferAbstractTreeNodes(child));
+        }
+        return nodes;
     }
 
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
@@ -840,6 +851,17 @@ extern "C" {
         tp_filter_node->const_join_condition = new TraceProvConstJoinPairs;
         tp_filter_node->child_node = child_node;
         return tp_filter_node;
+    }
+
+    TraceProvExists *make_traceprov_exists(
+        TraceProvNode *current,
+        TraceProvNode *condition
+    ){
+        auto tp_exists_node = palloc0_object(TraceProvExists);
+        tp_exists_node->tag = T_TP_EXISTS;
+        tp_exists_node->current = current;
+        tp_exists_node->condition = condition;
+        return tp_exists_node;
     }
 
     static void traceprov_assert_is_in_range(const uint64 column_count, TraceProvColumn *column){
@@ -1929,6 +1951,9 @@ extern "C" {
         } else if (node->tag == T_TP_FILTER){
             TraceProvFilter *filter = (TraceProvFilter *)node;
             return traceprov_get_node_column_count(filter->child_node);
+        } else if (node->tag == T_TP_EXISTS){
+            TraceProvExists *exists = (TraceProvExists *)node;
+            return traceprov_get_node_column_count(exists->current);
         }
         elog(ERROR, "Got unexepected node: %d", node->tag);
         return 0;
@@ -1987,6 +2012,8 @@ extern "C" {
         } else if (node->tag == T_TP_WINDOW_READ){
             elog(ERROR, "Nope, too complicated to in-line handle window func read. Use duckdb inference instead!");
         } else if (node->tag == T_TP_FILTER){
+            elog(ERROR, "Not supported in-line for now..");
+        } else if (node->tag == T_TP_EXISTS){
             elog(ERROR, "Not supported in-line for now..");
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
@@ -2316,6 +2343,15 @@ extern "C" {
         return sql_repr.data;
     }
 
+    static char *traceprov_exists_to_sql(TraceProvExists *exists, TraceProvToSQLContext context){
+        char *condition_sql = traceprov_node_to_sql(exists->condition, context);
+        char *current_sql = traceprov_node_to_sql(exists->current, context);
+        const uint64 current_col_count = traceprov_get_node_column_count(exists->current);
+        char *current_alias_expanded = expand_alias(exists->current->alias_name, current_col_count);
+        
+        char *sql = psprintf("select * from (%s) as %s where (exists (%s))", current_sql, current_alias_expanded, condition_sql);
+        return sql;
+    }
 
     static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
         if (node->tag == T_TP_RELATION){
@@ -2336,6 +2372,10 @@ extern "C" {
         if (node->tag == T_TP_FILTER){
             node->alias_name = tp_parse_get_unique_alias(context.context);
             return traceprov_filter_to_sql((TraceProvFilter *)node, context);
+        }
+        if (node->tag == T_TP_EXISTS){
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_exists_to_sql((TraceProvExists *)node, context);
         }
         elog(ERROR, "Found handling invalid node: %d", node->tag);
     }
@@ -3000,26 +3040,49 @@ extern "C" {
         // we still need to read data to make base relations out of it.
         if (!aggregate_was_split){
             // The simple case.
-            TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
-                self_logs,
-                (TraceProvNode *)reference_node,
-                parse_context,
-                "intermediate_join",
-                reference_match_idx
-            );
+            if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
 
-            get_relation_from_join(join_exprn)->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+                auto base_log_relation = make_traceprov_relation(self_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
+                base_log_relation->rel_args = make_relation_args(current_local_context->worker_id, agg_graph->headNumber);
+                auto child_tree = derive_on_node(
+                    (TraceProvNode *)base_log_relation,
+                    agg_graph,
+                    0,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                );
+                List *derived_nodes = getTraceProvInferAbstractTreeNodes(child_tree);
+                ListCell *cursor;
+                foreach(cursor, derived_nodes){
+                    TraceProvNode **node = (TraceProvNode **)lfirst(cursor);
+                    auto exists_node = make_traceprov_exists(*node, reference_node);
+                    *node = (TraceProvNode *)exists_node;
+                }
+                current_tree->children->push_back(child_tree);
+            }else{
+                TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
+                    self_logs,
+                    (TraceProvNode *)reference_node,
+                    parse_context,
+                    "intermediate_join",
+                    reference_match_idx
+                );
 
-            join_exprn->is_left_star = true;
-            current_tree->children->push_back(derive_on_node(
-                (TraceProvNode*)join_exprn, 
-                agg_graph, 
-                reference_node_col_count,
-                current_local_context,
-                worker_local_contexts,
-                parse_context,
-                recurse_pack
-            ));
+                get_relation_from_join(join_exprn)->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+
+                join_exprn->is_left_star = true;
+                current_tree->children->push_back(derive_on_node(
+                    (TraceProvNode*)join_exprn, 
+                    agg_graph, 
+                    reference_node_col_count,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                ));
+            }
         }else{
             // This is a slightly complicated case.
             // But, there is still the guarantee that only 1 worker is the main worker.
@@ -3104,26 +3167,47 @@ extern "C" {
                     elog(ERROR, "Got mismatching node count on logs!");
                 }
 
-                current_tree->children->push_back(derive_on_node(
-                    (TraceProvNode*)partial_join_exprn, 
-                    agg_graph, 
-                    reference_node_col_count,
-                    current_local_context,
-                    worker_local_contexts,
-                    parse_context,
-                    shallow_copy_recurse_pack(&recurse_pack)
-                ));
+                if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
+                    auto child_tree = derive_on_node(
+                        (TraceProvNode *)base_log_relation,
+                        agg_graph,
+                        0,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    );
+                    List *derived_nodes = getTraceProvInferAbstractTreeNodes(child_tree);
+                    ListCell *cursor;
+                    foreach(cursor, derived_nodes){
+                        TraceProvNode **node = (TraceProvNode **)lfirst(cursor);
+                        // It should be very abornormal to be in a case where we'd get finalized in a child worker.
+                        // This is because, even in the case where there's a partition, we're still acting on all the data.
+                        auto exists_node = make_traceprov_exists(*node, (TraceProvNode*)partial_join_exprn);
+                        *node = (TraceProvNode *)exists_node;
+                    }
+                    current_tree->children->push_back(child_tree);
+                }else{
+                    current_tree->children->push_back(derive_on_node(
+                        (TraceProvNode*)partial_join_exprn, 
+                        agg_graph, 
+                        reference_node_col_count,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    ));
 
-                current_tree->children->push_back(derive_on_node(
-                    (TraceProvNode*)base_join_exprn, 
-                    agg_graph, 
-                    reference_node_col_count,
-                    current_local_context,
-                    worker_local_contexts,
-                    parse_context,
-                    shallow_copy_recurse_pack(&recurse_pack)
-                ));
-
+                    current_tree->children->push_back(derive_on_node(
+                        (TraceProvNode*)base_join_exprn, 
+                        agg_graph, 
+                        reference_node_col_count,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    ));
+                }
             }
         }
 
@@ -3142,7 +3226,7 @@ extern "C" {
         const TraceProvRecursePack recurse_pack
     ){
         // const uint64 worker_count = worker_local_contexts->size();
-        if (agg_graph->graph_type != TraceProvGraphKind::TP_AGGREGATE)
+        if ((agg_graph->graph_type != TraceProvGraphKind::TP_AGGREGATE) && (agg_graph->graph_type != TraceProvGraphKind::TP_PURE_AGGREGATE))
             elog(ERROR, "Expected the graph to always be of aggregate!");
         if (current_local_context != NULL){
             return derive_aggregate_on_single_context(

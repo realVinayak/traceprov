@@ -82,7 +82,8 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
     bool parentHasAggs,
     WindowDef *over,
     Node **fc_node,
-    bool is_for_window
+    bool is_for_window,
+    bool is_sink_agg
 );
 
 Node *traceprov_get_function_call_node(const char *, List *, WindowDef *);

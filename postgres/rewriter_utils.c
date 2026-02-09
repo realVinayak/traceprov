@@ -469,6 +469,9 @@ List *traceprov_aggregate_on_set(
         aggregatedInParent,
         NULL,
         NULL,
+        false,
+        // This could never be a purely sink agg, since that'll imply that there are
+        // no columns in the select clause...
         false
     );
     query->hasAggs = true;
@@ -546,7 +549,8 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
     // Useful because in some places (window rewrites)
     // we need to have a reference to the function node.
     Node **fc_node,
-    bool is_for_window
+    bool is_for_window,
+    bool is_sink_agg
 ){
     // Need to add the exprs from the targets.
     ListCell *target_entry_cursor;
@@ -591,7 +595,7 @@ TraceProvLayerNumber traceprov_aggregate_rewrite(
                 false
             ),
             make_traceprov_dependency(
-                TP_AGGREGATE,
+                is_sink_agg ? TP_PURE_AGGREGATE : TP_AGGREGATE,
                 layer_number,
                 childGraphs,
                 entries

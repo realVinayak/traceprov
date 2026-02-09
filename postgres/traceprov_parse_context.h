@@ -41,8 +41,11 @@ typedef enum TraceProvEntryKind {
 typedef enum TraceProvGraphKind {
     // So bugs can be caught.
     TP_INVALID = 0,
-    TP_AGGREGATE = 1,
-    TP_LOG = 2
+    TP_AGGREGATE,
+    TP_LOG,
+    // Like aggregate, but no group-by clauses.
+    // Used for infer optimizations.
+    TP_PURE_AGGREGATE
 } TraceProvGraphKind;
 
 typedef struct TraceProvWindowFrameEntry {
