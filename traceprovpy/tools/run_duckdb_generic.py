@@ -563,7 +563,13 @@ def run_single(
         for element in spec_element["elements"]:
             element_idx = element["idx"]
             if use_optimized:
-                infer_path = query_dir / f"infer_{element_idx}_new.sql"
+                infer_path = None
+                if use_aggresive_optimized:
+                    infer_path = query_dir / f"infer_{element_idx}_new_ignore_gn.sql"
+                if not infer_path.exists():
+                    infer_path = None
+                if infer_path is None:
+                    infer_path = query_dir / f"infer_{element_idx}_new.sql"
             else:
                 infer_path = query_dir / f"infer_{element_idx}.sql"
 
