@@ -381,6 +381,9 @@ char *traceProvDependencyToJson(const TraceProvDependency *graph){
             case TP_LOG:
                 appendStringInfo(&buf, "\"LOG\"");
                 break;
+            case TP_PURE_AGGREGATE:
+                appendStringInfo(&buf, "\"PURE_AGGREGATE\"");
+                break;
             default:
                 elog(ERROR, "Got unexpected graph type: %d", graph->graph_type);
                 break;

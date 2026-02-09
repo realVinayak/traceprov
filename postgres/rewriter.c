@@ -553,7 +553,8 @@ Query *traceprov_perform_rewrite(
             parentHasAggs,
             NULL,
             NULL,
-            false
+            false,
+            list_length(parse->groupClause) == 0
         );
     }
 

@@ -19,7 +19,8 @@ enum TraceProvNodeKind {
     T_TP_JOIN,
     T_TP_APPEND,
     T_TP_WINDOW_READ,
-    T_TP_FILTER
+    T_TP_FILTER,
+    T_TP_EXISTS
 };
 
 typedef struct TraceProvDescriptor {
@@ -114,6 +115,20 @@ typedef struct TraceProvFilter {
     TraceProvConstJoinPairs *const_join_condition;
     TraceProvNode *child_node;
 } TraceProvFilter;
+
+// Used for cases where there's a strict "sink"
+// For example, aggregation without any groups.
+// In such cases, we're wasting time making a join, because all
+// rows should be present.
+typedef struct TraceProvExists {
+    TraceProvNodeKind tag;
+    char *alias_name;
+    // The remaining node
+    TraceProvNode *current;
+    // The node that'll be wrapped in EXISTS.
+    TraceProvNode *condition;
+} TraceProvExists;
+
 
 typedef struct TraceProvDerivation {
     TraceProvSingleDerivation single_derivation;

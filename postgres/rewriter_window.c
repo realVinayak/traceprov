@@ -191,7 +191,8 @@ static Query *perform_window_clause_rewrite_inline(
                 true,
                 rows_window_def,
                 &window_fc_node,
-                true
+                true,
+                false
             );
             if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");
             // Need to set the window clause.
@@ -263,6 +264,7 @@ static Query *perform_window_clause_rewrite_inline(
                     // This is marked false for a reason.
                     // Doing it this way will allow the window to be derived later on, automatically.
                     // Since we'll only see once of this, it's fine.
+                    false,
                     false
                 );
                 if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");

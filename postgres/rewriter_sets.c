@@ -534,6 +534,7 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     true,
                     window_def,
                     NULL,
+                    false,
                     false
                 );
                 TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
