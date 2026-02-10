@@ -56,6 +56,11 @@ typedef struct TraceProvInitData {
     uint64_t current;
     uint64_t offset_in_chunk;
     void *col_layer_ptr;
+    void *row_count_layer_ptr;
+    void *col_layer_ptr_end;
+    void *row_count_layer_ptr_end;
+    uint64_t col_page_idx;
+    uint64_t row_page_idx;
 } TraceProvInitData;
 
 static uint64_t get_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t idx);
@@ -222,13 +227,7 @@ static TraceProvBindData *setup_layers(
     if (current_layer->page_mapping == NULL){
         map_layer_file(current_layer->layer_number, current_worker_id, &my_bind_data->col_layer_ptr, current_layer->size);
     }else if (current_layer->rows_layer_number) {
-        const uint64_t logged_chunk_size = (current_layer->num_pk_records * (sizeof(uint64_t)) * TP_STD_VECTOR_SIZE);
-        my_bind_data->first_page_element_count = (TRACEPROV_PAGE_SIZE / logged_chunk_size);
-        if (TRACEPROV_PAGE_SIZE % logged_chunk_size)
-            elog(ERROR, "Expected complete chunks!");
-        my_bind_data->incr_page_element_count = ((TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG) / logged_chunk_size);
-        if ((TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG) % logged_chunk_size)
-            elog(ERROR, "Expected complete chunks!");
+        my_bind_data->col_layer_ptr = current_layer->page_mapping[0];
     }else{
         // In this case, have page mapping, but not rows.
         // This will be the case for combine.
@@ -244,7 +243,6 @@ static TraceProvBindData *setup_layers(
             elog(ERROR, "expected complete chunks!");
     }
 
-
     my_bind_data->col_layer = current_layer;
 
     uint64_t chunk_count = 0;
@@ -258,19 +256,15 @@ static TraceProvBindData *setup_layers(
         if (rows_layer->page_mapping == NULL){
             map_layer_file(rows_layer->layer_number, current_worker_id, &my_bind_data->row_count_layer_ptr, rows_layer->size);
         }else{
-            const uint64_t logged_chunk_size = (rows_layer->num_pk_records * sizeof(uint64_t));
-            my_bind_data->row_first_page_element_count = (TRACEPROV_PAGE_SIZE / logged_chunk_size);
-            my_bind_data->row_incr_page_element_count = ((TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG) / logged_chunk_size);
+            my_bind_data->row_count_layer_ptr = rows_layer->page_mapping[0];
         }
         chunk_count = rows_layer->num_rows;
-        // move past the first page.
-        if (((current_layer->num_pk_records)*TP_STD_VECTOR_SIZE) > TRACEPROV_PAGE_SIZE)
-            my_bind_data->col_layer_ptr += TRACEPROV_PAGE_SIZE;
     }else{
         const void *final_ptr = get_final_ptr(my_bind_data->col_layer_ptr, current_layer);
         chunk_count = ((uint64_t)final_ptr - (uint64_t)my_bind_data->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
         // HACKY. Doesn't belong here.
         column_count++;
+        my_bind_data->is_strict_rows = true;
     }
 
     my_bind_data->column_width = column_count;
@@ -317,10 +311,14 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
 void traceprov_duckdb_init(duckdb_init_info info){
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
     auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
+    memset(init_data_inst, 0, sizeof(TraceProvInitData));
     init_data_inst->current = bind_data->start_offset;
     init_data_inst->is_single = (bind_data->rel_args.offset != -1);
     init_data_inst->offset_in_chunk = bind_data->offset_in_chunk;
     init_data_inst->col_layer_ptr = bind_data->col_layer_ptr;
+    init_data_inst->col_layer_ptr_end = init_data_inst->col_layer_ptr + TRACEPROV_PAGE_SIZE;
+    init_data_inst->row_count_layer_ptr = bind_data->row_count_layer_ptr;
+    init_data_inst->row_count_layer_ptr_end = bind_data->row_count_layer_ptr + TRACEPROV_PAGE_SIZE;
     elog(INFO, "Using %ld as the start offset!", bind_data->start_offset);
     duckdb_init_set_init_data(info, init_data_inst, free);
 }
@@ -421,6 +419,57 @@ static uint64_t get_local_idx(const uint64_t first_page_count, const int64_t inc
     return chunk_idx - before;
 }
 
+// We don't need a file version of this, since that cannot happen.
+// That is, since we always increment by 8 bytes, we'll never jump pages.
+void traceprov_grow_row_count_page_mapping(TraceProvInitData *init, TraceProvBindData *bind){
+    if (init->row_count_layer_ptr == init->row_count_layer_ptr_end){
+        init->row_count_layer_ptr = bind->row_layer->page_mapping[++init->row_page_idx];
+        init->row_count_layer_ptr_end = &((uint8_t *)init->row_count_layer_ptr)[TRACEPROV_INCREMENT_TRACE_BY_PG*TRACEPROV_PAGE_SIZE];
+    }
+}
+
+void traceprov_grow_col_page_mapping(const uint64_t extra_size, TraceProvInitData *init, TraceProvBindData *bind){
+    if ((init->col_layer_ptr + extra_size) > init->col_layer_ptr_end){
+        init->col_layer_ptr = bind->col_layer->page_mapping[++init->col_page_idx];
+        init->col_layer_ptr_end = &((uint8_t *)init->col_layer_ptr)[TRACEPROV_INCREMENT_TRACE_BY_PG*TRACEPROV_PAGE_SIZE];
+    }
+}
+
+void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output){
+    auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
+    auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
+
+    uint64_t chunk_size = 0;
+    if (!bind_data->is_strict_rows){
+        // Haven't emitted all chunks yet.
+        if (init_data->current < bind_data->num_rows){
+
+            traceprov_grow_row_count_page_mapping(init_data, bind_data);
+            const uint64_t num_rows = ((uint64_t*)init_data->row_count_layer_ptr)[0];
+            init_data->row_count_layer_ptr += sizeof(uint64_t);
+            const uint64_t extra_size = num_rows * sizeof(uint64_t);
+            for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
+                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                memcpy(dest_ptr, init_data->col_layer_ptr, extra_size);
+                init_data->col_layer_ptr += extra_size;
+            }
+            init_data->current++;
+            chunk_size = num_rows;
+        }
+        duckdb_data_chunk_set_size(output, chunk_size);
+        return;
+    }
+    init_data->current = fillup_pointer_huge(
+        bind_data->col_layer,
+        output,
+        init_data->current,
+        bind_data,
+        bind_data->num_rows,
+        bind_data->column_width
+    );
+}
+
 // It's different enough to warrant a new call path.
 void traceprov_duckdb_func_huge(duckdb_function_info info, duckdb_data_chunk output){
     auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
@@ -481,7 +530,7 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
         return;
     }
     if (bind_data->col_layer->page_mapping != NULL){
-        traceprov_duckdb_func_huge(info, output);
+        traceprov_duckdb_func_huge_incremental(info, output);
         return;
     }
     if (bind_data->row_count_layer_ptr){
