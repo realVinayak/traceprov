@@ -15,8 +15,10 @@
 #include <vector>
 
 #include "traceprov_duckdb_infer.hpp"
+#include "traceprov_extra_funcs.hpp"
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
+#define TP_ENABLE_PROFILING_QUERY_TREE "PRAGMA enable_profiling=query_tree"
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
 #define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
 
@@ -102,6 +104,10 @@ struct Options {
     bool is_new_sd;
     // via --sd_extension_path
     std::string sd_extension_path;
+    // via --query_tree
+    bool query_tree;
+    // via --load_micro_benchmarks
+    bool load_micro_benchmarks;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -127,7 +133,9 @@ struct Options parse_args(int argc, char **argv){
         .main_once_extra_all = false,
         .extra_file = "",
         .is_new_sd = false,
-        .sd_extension_path = ""
+        .sd_extension_path = "",
+        .query_tree = false,
+        .load_micro_benchmarks = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -202,6 +210,12 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--sd_extension_path")){
             options.sd_extension_path = std::string(argv[++i]);
             continue;
+        } else if (IS_OPTION("--query_tree")){
+            options.query_tree = true;
+            continue;
+        } else if (IS_OPTION("--load_micro_benchmarks")){
+            options.load_micro_benchmarks = true;
+            continue;
         }
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
         std::exit(1);
@@ -221,38 +235,6 @@ struct Options parse_args(int argc, char **argv){
 
     return options;
 };
-
-#define DUCKDB_EXIT_ON_ERROR(state) { \
-    if (state == DuckDBError){ \
-        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
-        std::exit(1); \
-    } \
-}
-
-#define DUCKDB_EXIT_ON_ERROR_MSG(state, msg) { \
-    if (state == DuckDBError){ \
-        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
-        std::cout << "error: " << msg << std::endl; \
-        std::exit(1); \
-    } \
-}
-
-#define DUCKDB_EXIT_ON_ERROR_RESULT(state, result) { \
-    if (state == DuckDBError){ \
-        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
-        std::cout << duckdb_result_error(&result) << std::endl; \
-        std::exit(1); \
-    } \
-}
-
-#define DUCKDB_RUN_SHORT_QUERY(con, query, msg) { \
-    duckdb_result result; \
-    std::cout << "QUERY: " << query << std::endl; \
-    duckdb_state state = duckdb_query(con, query, &result); \
-    DUCKDB_EXIT_ON_ERROR_RESULT(state, result); \
-    duckdb_destroy_result(&result); \
-    std::cout << "Reached " << msg << " correctly" << std::endl; \
-} \
 
 // Simply populates the data, given a chunk.
 static void populate_traceprov_data(
@@ -329,7 +311,7 @@ void perform_query(
     if (IS_SET(options.profile_out_path)){
         if (final_profile_out == NULL)
             elog(ERROR, "Expected profile out to be set!");
-        DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, "enable profiling");
+        DUCKDB_RUN_SHORT_QUERY(con, (options.query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
         DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
     }
 
@@ -494,12 +476,17 @@ int main(int argc, char **argv){
     
     duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
     DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
+
+    if (options.load_micro_benchmarks){
+        traceprov_create_vary_chunk_funcs(con);
+    }
+
     #endif
         
     if (options.disable_column_optimizer){
-    DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
-    //DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
-}
+        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+        //DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
+    }
 
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
 

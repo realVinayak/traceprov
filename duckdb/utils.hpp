@@ -1,4 +1,7 @@
+#ifndef __TP_UTILS__
+#define __TP_UTILS__
 #include <stdio.h>
+#include <iostream>
 #include "traceprov.hpp"
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -45,3 +48,4 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer);
 int map_traceprov_shared_context(struct traceprov_shared_context *ptr);
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size);
 void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer);
+#endif
