@@ -566,8 +566,8 @@ def run_single(
                 infer_path = None
                 if use_aggresive_optimized:
                     infer_path = query_dir / f"infer_{element_idx}_new_ignore_gn.sql"
-                if not infer_path.exists():
-                    infer_path = None
+                    if not infer_path.exists():
+                        infer_path = None
                 if infer_path is None:
                     infer_path = query_dir / f"infer_{element_idx}_new.sql"
             else:

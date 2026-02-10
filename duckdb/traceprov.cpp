@@ -85,7 +85,7 @@ static inline int round_up(const int number){
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states){
     const idx_t num_rows = duckdb_data_chunk_get_size(input);
     const idx_t num_cols = round_up(duckdb_data_chunk_get_column_count(input));
-    // PRINT_ON_DEBUG("Number of rows: %d", num_rows);
+    PRINT_ON_DEBUG("Number of rows: %d", num_rows);
     // No need to do anything.
     // This needs to be checked here (because we need to look up the first row to get the layer number...)
     if (num_rows == 0) return;
@@ -116,8 +116,10 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
         if (likely(agg_contexts != NULL)){
             memcpy(main_layer->current_row, agg_contexts, sizeof(uint64_t)*num_rows);
         }
-        main_layer->current_row += sizeof(uint64_t)*TP_STD_VECTOR_SIZE;
     }
+
+    // TODO: Optimize this away.
+    main_layer->current_row += sizeof(uint64_t)*TP_STD_VECTOR_SIZE;
 
     const idx_t true_column_count = duckdb_data_chunk_get_column_count(input);
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){

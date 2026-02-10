@@ -122,6 +122,38 @@ int get_error_no();
         elog(INFO, __VA_ARGS__);\
     } } while(0) \
 
+#define DUCKDB_EXIT_ON_ERROR(state) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_EXIT_ON_ERROR_MSG(state, msg) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::cout << "error: " << msg << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_EXIT_ON_ERROR_RESULT(state, result) { \
+    if (state == DuckDBError){ \
+        std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::cout << duckdb_result_error(&result) << std::endl; \
+        std::exit(1); \
+    } \
+}
+
+#define DUCKDB_RUN_SHORT_QUERY(con, query, msg) { \
+    duckdb_result result; \
+    std::cout << "QUERY: " << query << std::endl; \
+    duckdb_state state = duckdb_query(con, query, &result); \
+    DUCKDB_EXIT_ON_ERROR_RESULT(state, result); \
+    duckdb_destroy_result(&result); \
+    std::cout << "Reached " << msg << " correctly" << std::endl; \
+} \
+
 
 struct trace_file_forward_row {
     uint64_t   group_count;
