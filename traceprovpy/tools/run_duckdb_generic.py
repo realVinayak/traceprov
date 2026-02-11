@@ -502,6 +502,7 @@ def run_single(
     pre_base: Path | None = None,
     run_inference: bool = True,
     use_aggresive_optimized: bool = False,
+    strict: bool = False,
 ):
     if validate:
         materialize_infer = True
@@ -518,6 +519,7 @@ def run_single(
         if use_aggresive_optimized:
             captured_sql = query_dir / "capture_ignore_gn.sql"
             if not captured_sql.exists():
+                assert not strict, "Expected ignore to be set!"
                 captured_sql = None
         if captured_sql is None:
             captured_sql = query_dir / "capture_new.sql"
@@ -604,9 +606,20 @@ def run_single(
 
     if validate:
         # need to dump base and infer result on provenance, and compare both.
+        if use_optimized:
+            validate_path = None
+            if use_aggresive_optimized:
+                if (query_dir / "validate_new_ignore_gn.sql").exists():
+                    validate_path = "validate_new_ignore_gn.sql"
+                else:
+                    assert not strict, "Expected ignore to be set!"
+            if validate_path is None:
+                validate_path = "validate_new.sql"
+        else:
+            validate_path = "validate.sql"
         validate_query(
             query_dir,
-            ("validate_new.sql" if use_optimized else "validate.sql"),
+            validate_path,
             base_options.db,
             exec_str,
         )

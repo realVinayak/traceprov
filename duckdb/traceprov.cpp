@@ -91,7 +91,8 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
     if (num_rows == 0) return;
 
     TraceProvAggExtra *extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info);
-    idx_t num_cols = duckdb_data_chunk_get_column_count(input);
+    const idx_t orig_num_cols = duckdb_data_chunk_get_column_count(input);
+    idx_t num_cols = orig_num_cols;
     // If ignoring group numbers, don't need to log it (or count it as part of width)
     if (extra->ignore_gn)
         num_cols -= 1;
@@ -122,7 +123,7 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
     }
 
     const idx_t true_column_count = duckdb_data_chunk_get_column_count(input);
-    for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
+    for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
         uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
