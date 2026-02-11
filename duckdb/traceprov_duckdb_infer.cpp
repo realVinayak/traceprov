@@ -435,6 +435,14 @@ void traceprov_grow_col_page_mapping(const uint64_t extra_size, TraceProvInitDat
     }
 }
 
+void traceprov_grow_col_page_mapping_file(const uint64_t extra_size, TraceProvInitData *init, TraceProvBindData *bind){
+    if ((init->col_layer_ptr + extra_size) > init->col_layer_ptr_end){
+        // We don't need to consult any page mapping in that case.
+        init->col_layer_ptr = init->col_layer_ptr_end;
+        init->col_layer_ptr_end = &((uint8_t *)init->col_layer_ptr_end)[TRACEPROV_INCREMENT_TRACE_BY_PG*TRACEPROV_PAGE_SIZE];
+    }
+}
+
 void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output){
     auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
     auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
@@ -538,14 +546,12 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
         if (init_data->current < bind_data->num_rows){
             const uint64_t num_rows = ((uint64_t *)bind_data->row_count_layer_ptr)[init_data->current];
             const uint64_t col_width = bind_data->column_width;
+            const uint64_t extra_size = (sizeof(uint64_t)*num_rows);
             for (idx_t col_idx = 0; col_idx < col_width; col_idx++){
                 uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                const uint64_t *source_ptr = &(((uint64_t *)(bind_data->col_layer_ptr))[(((init_data->current * col_width) + col_idx) * TP_STD_VECTOR_SIZE)]);
-                if (init_data->is_single){
-                    dest_ptr[0] = source_ptr[init_data->offset_in_chunk];
-                }else{
-                    memcpy(dest_ptr, source_ptr, num_rows * sizeof(uint64_t));
-                }
+                traceprov_grow_col_page_mapping_file(extra_size, init_data, bind_data);
+                memcpy(dest_ptr, init_data->col_layer_ptr, sizeof(uint64_t)*num_rows);
+                init_data->col_layer_ptr += extra_size;
             }
             init_data->current++;
             chunk_size = num_rows;
