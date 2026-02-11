@@ -1,10 +1,7 @@
 -- using default substitutions
 select
     sum(l_extendedprice) / 7.0 as avg_yearly,
-    traceprov_log_entry_1 (
-        4,
-        traceprov_agg_key_parallel_offset_ignore_gn_2 (3, lineitem.rowid, part.rowid)
-    )
+    traceprov_agg_key_parallel_offset_ignore_gn_2 (3, lineitem.rowid, part.rowid)
 from
     lineitem,
     part
@@ -22,7 +19,7 @@ where
                     traceprov_log_entry_volatile_2 (
                         2,
                         part.rowid,
-                        traceprov_agg_key_parallel_offset_ignore_gn_1 (1, lineitem.rowid)
+                        traceprov_agg_key_parallel_offset_1 (1, lineitem.rowid)
                     )
                 from
                     lineitem
