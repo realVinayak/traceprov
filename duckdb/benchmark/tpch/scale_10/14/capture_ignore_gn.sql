@@ -6,10 +6,7 @@ select
             else 0
         end
     ) / sum(l_extendedprice * (1 - l_discount)) as promo_revenue,
-    traceprov_log_entry_1 (
-        2,
-        traceprov_agg_key_parallel_offset_ignore_gn_2 (1, lineitem.rowid, part.rowid)
-    )
+    traceprov_agg_key_parallel_offset_ignore_gn_2 (1, lineitem.rowid, part.rowid)
 from
     lineitem,
     part
