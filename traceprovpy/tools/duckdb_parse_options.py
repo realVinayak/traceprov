@@ -23,5 +23,8 @@ def make_duckdb_parse():
     parser.add_argument(
         "--agg_optimized", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--strict", action=argparse.BooleanOptionalAction, default=False
+    )
     parser.add_argument("--infer", action=argparse.BooleanOptionalAction, default=True)
     return parser

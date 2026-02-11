@@ -85,6 +85,7 @@ def run():
                 pre_base=pre_base_path,
                 run_inference=parsed.infer,
                 use_aggresive_optimized=parsed.agg_optimized,
+                strict=parsed.strict,
             )
         if parsed.sample_inference and parsed.infer:
             # need to sample the inference.
