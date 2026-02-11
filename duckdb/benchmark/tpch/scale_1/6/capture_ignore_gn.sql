@@ -3,7 +3,7 @@
 
 select
 	sum(l_extendedprice * l_discount) as revenue,
-    traceprov_log_entry_1(2, traceprov_agg_key_parallel_offset_ignore_gn_1(1, lineitem.rowid))
+    traceprov_agg_key_parallel_offset_ignore_gn_1(1, lineitem.rowid)
 from
 	lineitem
 where

@@ -145,6 +145,10 @@ void traceprov_combine(
     duckdb_aggregate_state *target_p,
     idx_t count
 ){
+    TraceProvAggExtra *extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info);
+    // If we're ignoring group numbers, don't do anything.
+    if (extra->ignore_gn)
+        return;
     struct traceprov_agg_context **source_states = (struct traceprov_agg_context **)source_p;
     struct traceprov_agg_context **target_states = (struct traceprov_agg_context **)target_p;
     for (idx_t idx = 0; idx < count; idx++){
