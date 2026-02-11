@@ -80,7 +80,7 @@ def run():
                 use_optimized=parsed.optimized,
                 validate=is_validate,
                 disable_col_opt=disable_col_opt,
-                materialize_infer=False,
+                materialize_infer=parsed.mat_infer,
                 iters=total_iters,
                 pre_base=pre_base_path,
                 run_inference=parsed.infer,
