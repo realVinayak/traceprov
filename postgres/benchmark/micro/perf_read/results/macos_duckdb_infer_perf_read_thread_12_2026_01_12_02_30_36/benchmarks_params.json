@@ -1,0 +1,4737 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "read_query",
+            "queries": [
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_500000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "500000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_1000000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "1000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_5000000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "5000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_10000000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "10000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_50000000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "50000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000000_1",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000000_2",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000000_3",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "create_log_entries_100000000_4",
+                        "base": "create.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_read_log",
+                                "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "100000000"
+                            },
+                            {
+                                "preprocessor_type": "ReplaceSelectivity",
+                                "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                            }
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_500000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 500000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1000000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 1000000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5000000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 5000000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10000000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 10000000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_50000000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 50000000,
+                            "width": 4
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000000_1",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000000,
+                            "width": 1
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000000_2",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000000,
+                            "width": 2
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000000_3",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000000,
+                            "width": 3
+                        }
+                    }
+                },
+                {
+                    "query_name": "create_log",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_100000000_4",
+                        "base": "DUCKDB_READ",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {
+                            "num_elements": 100000000,
+                            "width": 4
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "/tmp/",
+        "port": "5460",
+        "user": "vinny",
+        "password": "vinny",
+        "database": "perf_read_bench"
+    },
+    "runparams": {
+        "repeat": 1,
+        "throwaway": 0,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "perf_read",
+    "call_options": [
+        "./",
+        [
+            [
+                "read_query",
+                [
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_500000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "500000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_1000000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "1000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_5000000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "5000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_10000000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "10000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_50000000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "50000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000000_1",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000000_2",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000000_3",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "create_log_entries_100000000_4",
+                            "create.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_read_log",
+                                    "$INLINE-select * from traceprov_perf_read(1, 15);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "100000000"
+                                },
+                                {
+                                    "preprocessor_type": "ReplaceSelectivity",
+                                    "param": "generate_series::bigint,generate_series::bigint,generate_series::bigint,generate_series::bigint"
+                                }
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_500000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 500000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_1000000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 1000000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_5000000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 5000000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_10000000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 10000000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_50000000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 50000000,
+                                "width": 4
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000000_1",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000000,
+                                "width": 1
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000000_2",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000000,
+                                "width": 2
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000000_3",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000000,
+                                "width": 3
+                            }
+                        ]
+                    ],
+                    [
+                        "create_log",
+                        [
+                            "DUCKDB_INFERENCE_100000000_4",
+                            "DUCKDB_READ",
+                            null,
+                            [],
+                            [],
+                            {
+                                "num_elements": 100000000,
+                                "width": 4
+                            }
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "/tmp/",
+            "5460",
+            "vinny",
+            "vinny",
+            "perf_read_bench"
+        ],
+        [
+            1,
+            0,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "libtraceprovmacos_duckdb_infer_perf_read_thread_12",
+    "traceprov_infer_set_path": "libtraceprov_infermacos_duckdb_infer_perf_read_thread_12",
+    "traceprov_rewriter_path": "librewritermacos_duckdb_infer_perf_read_thread_12",
+    "sd_options": [
+        "/Users/uicdbgroup/vinny/git_experiments/traceprov/postgres/bld/bin/run_smokedduck_macos_duckdb_infer_perf_read_thread_12",
+        12,
+        false
+    ]
+}

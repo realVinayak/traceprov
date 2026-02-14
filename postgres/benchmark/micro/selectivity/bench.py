@@ -5,8 +5,15 @@ from traceprovpy.tools.benchmark import (
     Query,
     QueryDirectory,
     QuerySpec,
+    bench_has_duckdb_infer,
 )
+from traceprovpy.tools.benchmark_utils import (
+    TRACEPROV_GET_DERIVATION_SPEC,
+    TRACEPROV_SYNC_TIME,
+)
+from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec
 from traceprovpy.tools.run_with_timeout import (
+    MakeTraceProv,
     ReplaceFILE,
     ReplaceSelectivity,
     RunParams,
@@ -17,6 +24,51 @@ def get_filter_group(num_groups, selectivity, mode):
     multiplier = -1 if mode == "pre" else 1
     print(num_groups * selectivity, "num_gs")
     return int(selectivity * num_groups / 100) * multiplier
+
+
+def make_simple_directory(
+    dir_name, mode, num_groups, selectivity, use_duckdb_inference: bool
+):
+    replaces_selectivity = ReplaceSelectivity(
+        get_filter_group(num_groups, selectivity, mode)
+    )
+
+    base_query = Query(
+        query_name=f"predicate_{mode}",
+        spec=QuerySpec(
+            base="base.sql",
+            key=f"base_selectivity_{selectivity}",
+            preprocess=[replaces_selectivity],
+        ),
+    )
+
+    traceprov_query = Query(
+        query_name=f"predicate_{mode}",
+        spec=QuerySpec(
+            base="base.sql",
+            key=f"traceprov_selectivity_{selectivity}",
+            preprocess=[replaces_selectivity, MakeTraceProv()],
+            extras=[TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()],
+        ),
+    )
+
+    dir_queries = [base_query, traceprov_query]
+    if use_duckdb_inference:
+        dir_queries.append(
+            Query(
+                query_name=f"predicate_{mode}",
+                spec=DuckDBInferenceQuerySpec(
+                    base="DUCKDB_INFERENCE",
+                    key=f"DUCKDB_INFERENCE_predicate_{mode}_{selectivity}",
+                ),
+            )
+        )
+    return [
+        QueryDirectory(
+            dir_name=dir_name,
+            queries=dir_queries,
+        )
+    ]
 
 
 def make_directory(dir_name, mode, num_groups, selectivity):
@@ -195,12 +247,12 @@ def main():
         "--sel_dry_run", action=argparse.BooleanOptionalAction, default=False
     )
 
-    parsed, _ = parser.parse_known_args()
+    parsed, others = parser.parse_known_args()
     print(parsed)
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
-    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
+    # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
+    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
@@ -209,11 +261,12 @@ def main():
             )
         )
         selectivity_directories.extend(
-            make_directory(
+            make_simple_directory(
                 dir_name,
                 parsed.sel_mode,
                 parsed.sel_num_groups,
                 parsed.sel_selectivity,
+                use_duckdb_inference=bench_has_duckdb_infer(others),
             )
         )
 

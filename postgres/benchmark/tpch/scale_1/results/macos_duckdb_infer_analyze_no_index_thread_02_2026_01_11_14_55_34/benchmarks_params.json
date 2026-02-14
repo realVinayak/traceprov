@@ -1,0 +1,2297 @@
+{
+    "top_dir": "./",
+    "directories": [
+        {
+            "dir_name": "params_default",
+            "queries": [
+                {
+                    "query_name": "1",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "1",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "1",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_1",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "2",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "2",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "2",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_2",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "3",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "3",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "3",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_3",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "4",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "4",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "4",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_4",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "5",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "5",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "5",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_5",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "6",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "6",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "6",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_6",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "7",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "7",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "7",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_7",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "8",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "8",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "8",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_8",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "9",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "9",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "9",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_9",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "10",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "10",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "10",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_10",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "11",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "11",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "11",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_11",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "12",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "12",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "12",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_12",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "14",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "14",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "14",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_14",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "16",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "16",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "16",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_16",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "17",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "17",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "17",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_17",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "18",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "18",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "18",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_18",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "19",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "19",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "19",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_19",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "20",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "20",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "20",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_20",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "21",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "21",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "21",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_21",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "22",
+                    "spec": {
+                        "key": "base",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "22",
+                    "spec": {
+                        "key": "traceprov",
+                        "base": "base.sql",
+                        "materialize": null,
+                        "extras": [
+                            [
+                                "traceprov_sync_time",
+                                "$INLINE-select * from traceprov_sync_time(0);",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ],
+                            [
+                                "traceprov_derivation_spec",
+                                "$INLINE-select * from traceprov_derivation_spec();",
+                                true,
+                                false,
+                                false,
+                                [],
+                                true,
+                                true
+                            ]
+                        ],
+                        "preprocess": [
+                            "MakeTraceProv"
+                        ],
+                        "extra_options": {}
+                    }
+                },
+                {
+                    "query_name": "22",
+                    "spec": {
+                        "key": "DUCKDB_INFERENCE_22",
+                        "base": "DUCKDB_INFERENCE",
+                        "materialize": null,
+                        "extras": [],
+                        "preprocess": [],
+                        "extra_options": {}
+                    }
+                }
+            ]
+        }
+    ],
+    "connection_params": {
+        "host": "/tmp/",
+        "port": "5460",
+        "user": "vinny",
+        "password": "vinny",
+        "database": "tpch_01_v01"
+    },
+    "runparams": {
+        "repeat": 10,
+        "throwaway": 5,
+        "timeout": 600,
+        "dry_run": false,
+        "execution_time": null
+    },
+    "name": "tpch-driver",
+    "call_options": [
+        "./",
+        [
+            [
+                "params_default",
+                [
+                    [
+                        "1",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "1",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "1",
+                        [
+                            "DUCKDB_INFERENCE_1",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "2",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "2",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "2",
+                        [
+                            "DUCKDB_INFERENCE_2",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "3",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "3",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "3",
+                        [
+                            "DUCKDB_INFERENCE_3",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "4",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "4",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "4",
+                        [
+                            "DUCKDB_INFERENCE_4",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "5",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "5",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "5",
+                        [
+                            "DUCKDB_INFERENCE_5",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "6",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "6",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "6",
+                        [
+                            "DUCKDB_INFERENCE_6",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "7",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "7",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "7",
+                        [
+                            "DUCKDB_INFERENCE_7",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "8",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "8",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "8",
+                        [
+                            "DUCKDB_INFERENCE_8",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "9",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "9",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "9",
+                        [
+                            "DUCKDB_INFERENCE_9",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "10",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "10",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "10",
+                        [
+                            "DUCKDB_INFERENCE_10",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "11",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "11",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "11",
+                        [
+                            "DUCKDB_INFERENCE_11",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "12",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "12",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "12",
+                        [
+                            "DUCKDB_INFERENCE_12",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "14",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "14",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "14",
+                        [
+                            "DUCKDB_INFERENCE_14",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "16",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "16",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "16",
+                        [
+                            "DUCKDB_INFERENCE_16",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "17",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "17",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "17",
+                        [
+                            "DUCKDB_INFERENCE_17",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "18",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "18",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "18",
+                        [
+                            "DUCKDB_INFERENCE_18",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "19",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "19",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "19",
+                        [
+                            "DUCKDB_INFERENCE_19",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "20",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "20",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "20",
+                        [
+                            "DUCKDB_INFERENCE_20",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "21",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "21",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "21",
+                        [
+                            "DUCKDB_INFERENCE_21",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "22",
+                        [
+                            "base",
+                            "base.sql",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ],
+                    [
+                        "22",
+                        [
+                            "traceprov",
+                            "base.sql",
+                            null,
+                            [
+                                [
+                                    "traceprov_sync_time",
+                                    "$INLINE-select * from traceprov_sync_time(0);",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ],
+                                [
+                                    "traceprov_derivation_spec",
+                                    "$INLINE-select * from traceprov_derivation_spec();",
+                                    true,
+                                    false,
+                                    false,
+                                    [],
+                                    true,
+                                    true
+                                ]
+                            ],
+                            [
+                                "MakeTraceProv"
+                            ],
+                            {}
+                        ]
+                    ],
+                    [
+                        "22",
+                        [
+                            "DUCKDB_INFERENCE_22",
+                            "DUCKDB_INFERENCE",
+                            null,
+                            [],
+                            [],
+                            {}
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        [
+            "/tmp/",
+            "5460",
+            "vinny",
+            "vinny",
+            "tpch_01_v01"
+        ],
+        [
+            10,
+            5,
+            600,
+            false,
+            null
+        ]
+    ],
+    "traceprov_path": "libtraceprovmacos_duckdb_infer_analyze_no_index_thread_02",
+    "traceprov_infer_set_path": "libtraceprov_infermacos_duckdb_infer_analyze_no_index_thread_02",
+    "traceprov_rewriter_path": "librewritermacos_duckdb_infer_analyze_no_index_thread_02",
+    "sd_options": [
+        "/Users/uicdbgroup/vinny/git_experiments/traceprov/postgres/bld/bin/run_smokedduck_macos_duckdb_infer_analyze_no_index_thread_02",
+        2,
+        false
+    ]
+}

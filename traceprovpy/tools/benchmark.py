@@ -19,11 +19,15 @@
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
+    TP_SKIPPABLE_OPTION,
     ConnectionParams,
+    MakeTraceProv,
     Preprocessor,
     ReplaceFILE,
     ReplaceSelectivity,
     RunParams,
+    SkippableRunTimeOptions,
+    SmokedDuckOptions,
     run_with_timeout,
     RunWithTimeoutOptions,
 )
@@ -34,6 +38,7 @@ import time
 import json
 from datetime import date, datetime
 
+from traceprovpy.tools.setup import traceprov_reinit_state, traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
 
@@ -55,6 +60,9 @@ def json_serial(obj):
             preprocessor_type=ReplaceSelectivity.__name__, param=obj.selectivity
         )
 
+    if isinstance(obj, MakeTraceProv):
+        return "MakeTraceProv"
+
     if isinstance(obj, PosixPath):
         return obj.as_posix()
 
@@ -66,6 +74,8 @@ def json_serial(obj):
 
 def _run_with_timeout(options: RunWithTimeoutOptions):
     print(options.file_path)
+    if isinstance(options, SkippableRunTimeOptions):
+        return dict(skipped=True)
     return run_with_timeout(options)
 
 
@@ -87,6 +97,8 @@ class QuerySpec(NamedTuple):
     materialize: str | None = None
     extras: list[ExtraQuery] = []
     preprocess: list[Preprocessor] = []
+    # random options.
+    extra_options: dict = {}
 
     @staticmethod
     def get_pack(
@@ -95,6 +107,8 @@ class QuerySpec(NamedTuple):
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
         print(path)
+        if path == TP_SKIPPABLE_OPTION:
+            return SkippableRunTimeOptions(*get_run_options(path))
         if path.startswith("$ROOT"):
             query_path = Path(path.replace("$ROOT", os.getcwd()))
         elif path.startswith("$INLINE-"):
@@ -110,7 +124,10 @@ class QuerySpec(NamedTuple):
         return pack
 
     def run_packs(
-        self, top_dir: Path, get_run_options: Callable[[str], RunWithTimeoutOptions]
+        self,
+        top_dir: Path,
+        get_run_options: Callable[[str], RunWithTimeoutOptions],
+        _: "GenericBenchmark",
     ):
         base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)._replace(
             preprocessors=self.preprocess
@@ -169,13 +186,7 @@ class QuerySpec(NamedTuple):
                     break
 
             print("ON INDEX: ", iter_count)
-            flat_options = base_pack.connection_params.get_flat()
-            assert (
-                os.system(
-                    f'echo "select reinit_state();" | PGPASSWORD={base_pack.connection_params.password} psql {flat_options}'
-                )
-                == 0
-            )
+            traceprov_reinit_state(base_pack.connection_params)
             base_context = dict()
             base_pack = base_pack._replace(extras=base_context)
             base_time = _run_with_timeout(base_pack)
@@ -200,7 +211,8 @@ class QuerySpec(NamedTuple):
                 base_pack.params.throwaway is not None
                 and iter_count < base_pack.params.throwaway
             ):
-                if materialize_pack: materialize_pack.close_all()
+                if materialize_pack:
+                    materialize_pack.close_all()
                 iter_count += 1
                 continue
             results["base"].append(base_time)
@@ -240,12 +252,10 @@ class QuerySpec(NamedTuple):
 
 class ValidationQuerySpec(QuerySpec):
 
-    def run_packs(self, top_dir, get_run_options):
+    def run_packs(self, top_dir, get_run_options, _):
         print("[validation]: ", self.base, self.materialize)
-        base_pack = ValidationQuerySpec.get_pack(top_dir, self.base, get_run_options)
-        other_pack = ValidationQuerySpec.get_pack(
-            top_dir, self.materialize, get_run_options
-        )
+        base_pack = self.get_pack(top_dir, self.base, get_run_options)
+        other_pack = self.get_pack(top_dir, self.materialize, get_run_options)
 
         base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
         other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_pack.file_path} > /tmp/traceprov_other.out"
@@ -277,6 +287,24 @@ class QueryDirectory(NamedTuple):
         }
 
 
+def bench_has_bool_option(option: str):
+    def _checker(args: list[str]):
+        if f"--{option}" in args:
+            return True
+        if f"--no-{option}" in args:
+            return False
+        return False
+
+    return _checker
+
+
+INFER_DUCKDB_OPTION = "infer_duckdb"
+SMOKEDDUCK_OPTION = "use_sdb"
+
+bench_has_duckdb_infer = bench_has_bool_option(INFER_DUCKDB_OPTION)
+bench_has_smokedduck = bench_has_bool_option(SMOKEDDUCK_OPTION)
+
+
 class GenericBenchmark(NamedTuple):
     name: str
 
@@ -286,21 +314,45 @@ class GenericBenchmark(NamedTuple):
 
     traceprov_path: str = None
     traceprov_infer_set_path: str = None
+    traceprov_rewriter_path: str = None
+    sd_options: SmokedDuckOptions = None
 
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
-        assert self.traceprov_path is None and self.traceprov_infer_set_path is None
+        assert (
+            self.traceprov_path is None
+            and self.traceprov_infer_set_path is None
+            and self.traceprov_rewriter_path is None
+        )
         if parser is None:
             parser = argparse.ArgumentParser(prog=f"run-{self.name}")
         postgres_connection_from_cmd(parser)
         parser.add_argument("-suff", "--suff", required=True)
         parser.add_argument("-tp_root", "--traceprov_root", required=True)
         parser.add_argument("-t_root", "--test_root", required=True)
-
+        parser.add_argument("-sd_lib", required=False, type=str)
+        parser.add_argument("-sd_include", required=False, type=str)
+        parser.add_argument("-sd_num_threads", required=False, type=int)
+        parser.add_argument(
+            f"--{INFER_DUCKDB_OPTION}",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
+        parser.add_argument(
+            f"--{SMOKEDDUCK_OPTION}",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
+        parser.add_argument(
+            f"--sd_create_idx",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
         parsed, _ = parser.parse_known_args()
+
         connection_params = ConnectionParams(
             host=parsed.host,
             port=parsed.port,
@@ -308,7 +360,15 @@ class GenericBenchmark(NamedTuple):
             password=parsed.password,
             database=parsed.db,
         )
-        setup_bench = self.setup(parsed.traceprov_root, connection_params, parsed.suff)
+        setup_bench = self.setup(
+            parsed.traceprov_root,
+            connection_params,
+            parsed.suff,
+            parsed.sd_lib,
+            parsed.sd_include,
+            parsed.sd_num_threads,
+            parsed.sd_create_idx,
+        )
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
@@ -359,45 +419,23 @@ class GenericBenchmark(NamedTuple):
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
         suff: str = None,
+        # the smokedduck shared library.
+        sd_lib_path: str = "",
+        sd_include_path: str = "",
+        sd_num_threads: int = None,
+        sd_create_idx: bool = False,
     ):
-        if suff is None:
-            suff = self.name
-
-        response = os.system(
-            f"cd {traceprov_postgres_root} && ./build_and_install.sh {suff}"
-        )
-        if response != 0:
-            raise Exception("Make failed!")
-        traceprov_sql = Path(traceprov_postgres_root) / f"traceprov_{suff}.auto.sql"
-        traceprov_infer_set = (
-            Path(traceprov_postgres_root) / f"traceprov_return_infer_{suff}.auto.sql"
-        )
-        assert traceprov_sql.exists(), f"{traceprov_sql.as_posix()} should exist!"
-        assert (
-            traceprov_infer_set.exists()
-        ), f"{traceprov_infer_set.as_posix()} should exist!"
-
-        assert (
-            os.system(
-                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
-            )
-            == 0
+        setup_response = traceprov_setup(
+            suff or self.name,
+            traceprov_postgres_root,
+            connection_params,
+            sd_lib_path,
+            sd_include_path,
+            sd_num_threads,
+            sd_create_idx,
         )
 
-        assert (
-            os.system(
-                f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()} -v ON_ERROR_STOP=1"
-            )
-            == 0
-        )
-
-        traceprov_obj = f"libtraceprov{suff}"
-        traceprv_infer_set_obj = f"libtraceprov_infer{suff}"
-
-        return self._replace(
-            traceprov_path=traceprov_obj,
-            traceprov_infer_set_path=traceprv_infer_set_obj,
-        )
+        return self._replace(**setup_response)
 
     def run(
         self,
@@ -423,6 +461,7 @@ class GenericBenchmark(NamedTuple):
                 connection_params=connection_params,
                 file_path=file_path,
                 params=params,
+                shared_libraries=[self.traceprov_rewriter_path],
             )
 
         results_from_dirs = {}
@@ -434,7 +473,9 @@ class GenericBenchmark(NamedTuple):
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
                 results = query.spec.run_packs(
-                    Path(top_dir) / directory.dir_name / query.query_name, _get_options
+                    Path(top_dir) / directory.dir_name / query.query_name,
+                    _get_options,
+                    self,
                 )
                 combined_results[query.query_name] = {
                     **combined_results.get(query.query_name, {}),
@@ -472,6 +513,8 @@ class GenericBenchmark(NamedTuple):
 
     def setup_preprocess(self, directory: QueryDirectory):
         def _map_preprocess(preprocess: Preprocessor):
+            if isinstance(preprocess, MakeTraceProv):
+                return preprocess
             if not isinstance(preprocess, ReplaceFILE):
                 raise Exception("Not implemented other preprocess yet")
             if preprocess.replace_with_token == "traceprov_path":

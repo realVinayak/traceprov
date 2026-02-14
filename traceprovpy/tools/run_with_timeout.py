@@ -55,16 +55,19 @@ class ConnectionParams(NamedTuple):
         ]
         return " ".join(flat_options)
 
+    def make_connection(self):
+        return psycopg2.connect(
+            database=self.database,
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            port=self.port,
+        )
+
     @staticmethod
     def make_simple_connection(parsed):
         connection_params = ConnectionParams.make_from_parsed(parsed)
-        return psycopg2.connect(
-            database=connection_params.database,
-            host=connection_params.host,
-            user=connection_params.user,
-            password=connection_params.password,
-            port=connection_params.port,
-        )
+        return connection_params.make_connection()
 
     @staticmethod
     def make_from_parsed(parsed):
@@ -105,17 +108,37 @@ class ReplaceFILE(Preprocessor):
 
 
 class ReplaceSelectivity(Preprocessor):
-    def __init__(self, selectivity: Any):
+    def __init__(self, selectivity: Any, clause: str = ":selectivity"):
         self.selectivity = str(selectivity)
+        self.clause = clause
 
     def preprocess(self, in_content: str) -> str:
-        return in_content.replace(":selectivity", self.selectivity)
+        return in_content.replace(self.clause, self.selectivity)
 
     def __hash__(self):
         return hash((self.__class__.__name__, self.selectivity))
 
     def __repr__(self):
-        return f"ReplaceSelectivity('{self.selectivity}')"
+        return f"ReplaceSelectivity('{self.clause}->{self.selectivity}')"
+
+
+class SmokedDuckOptions(NamedTuple):
+    driver_executable: str
+    number_of_threads: int = 1
+    create_idx: bool = False
+
+
+class MakeTraceProv(Preprocessor):
+
+    def preprocess(self, in_content: str) -> str:
+        # make traceprov query.
+        return f"/*(traceprov)*/ {in_content}"
+
+    def __hash__(self):
+        return hash((self.__class__.__name__))
+
+    def __repr__(self):
+        return "MakeTraceProv"
 
 
 class RunWithTimeoutOptions(NamedTuple):
@@ -128,6 +151,7 @@ class RunWithTimeoutOptions(NamedTuple):
     skip_validation: bool = False
     preprocessors: list[Preprocessor] = []
     strict_run: bool = False
+    shared_libraries: list[str] = []
 
     def close_all(self):
         if self.extras is None:
@@ -144,6 +168,12 @@ class RunWithTimeoutOptions(NamedTuple):
             return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
         else:
             return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+
+
+TP_SKIPPABLE_OPTION = "$PLACEHOLDER$"
+
+
+class SkippableRunTimeOptions(RunWithTimeoutOptions): ...
 
 
 def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
@@ -167,6 +197,12 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         password=options.connection_params.password,
         port=options.connection_params.port,
     )
+
+    if cached_connection is None:
+        cursor = connection.cursor()
+        for shared_library in options.shared_libraries:
+            cursor.execute(f"load '{shared_library}';")
+        cursor.close()
 
     if (
         options.extras is not None
@@ -206,7 +242,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
             planning_time = analyze_result["Planning Time"]
             execution_time = analyze_result["Execution Time"]
             computed_time = dict(
-                explain_time=float((planning_time + execution_time) / 1000)
+                explain_time=float((planning_time + execution_time) / 1000),
+                # complete_plan=str(analyze_result),
             )
 
         # print(flattend_sql_query)

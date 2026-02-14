@@ -46,7 +46,6 @@ temp.out.sql
 tmp.sql
 postgres/benchmark/micro/set_operations
 postgres/complex.*
-<<<<<<< HEAD
 aclocal.m4
 autom4te.cache/
 compile
@@ -57,5 +56,21 @@ config.sub
 configure
 postgres/bld/*
 */*.o.dSYM/
-=======
->>>>>>> issue-62-macos
+smokedduck_scratch/
+postgres/run_smokedduck
+postgres/benchmark/tpch/distributed.json
+postgres/benchmark/tpch/distributed_time.json
+postgres/benchmark/micro/selectivity/distributed.json
+postgres/benchmark/micro/selectivity/distributed_time.json
+tmp/
+*.db
+traceprov_infer_dump/
+traceprov_out/
+end_analyzer.c
+temp.out
+tmp/
+*.db
+smokedduck_scratch/
+run_smokedduck
+.venv/
+tmp2

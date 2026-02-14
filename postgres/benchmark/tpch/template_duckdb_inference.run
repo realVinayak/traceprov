@@ -1,0 +1,1 @@
+export tp_skip_build=1 && python3 ../bench_parse_back_traceprov.py -cfg config_duckdb_inference.json -l ../validate_configs_layered/ -u postgres -p postgres -db tpch_01_v01 -suff local_test_duckdb_inference -tp_root ../../../ -t_root ./ -sd_lib /home/realvinayak123/projects/libduck_prebuilt/ -sd_include /home/realvinayak123/projects/libduck_prebuilt/ --infer_duckdb

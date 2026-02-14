@@ -21,7 +21,8 @@ void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "\t->last_mapping: %p", layer->last_mapping);
     elog(INFO, "\t->size: %d", layer->size);
     elog(INFO, "\t->current_row: %p", layer->current_row);
-    elog(INFO, "\t->num_groups: %d", layer->num_groups);
+    elog(INFO, "\t->num_groups: %ld", layer->num_groups);
+    elog(INFO, "\t->num_rows: %ld", layer->num_rows);
     elog(INFO, "\t->layer_number: %d", layer->layer_number);
     elog(INFO, "\t->record_padding: %d", layer->record_padding);
     elog(INFO, "\t->end_of_memory_zone: %p", layer->end_of_memory_zone);
@@ -33,11 +34,14 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     int rc = 0;
     // In this case, we'd have to grow the file.
     const long int initial_size = current_layer->size;
+    // Unmap previous allocation.
+    if ((rc = munmap(current_layer->last_mapping, TRACEPROV_SIZE_OF_ALLOCATION(initial_size) * TRACEPROV_PAGE_SIZE))){
+        elog(ERROR, "Error unmaping");
+    }
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
     const long int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
     if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){
-        PRINT_ON_DEBUG("Error increasing the page size layer");
-        return rc;
+        elog(ERROR, "Error increasing the page size layer: %d", rc);
     }
     // Now, need to create the new mapping.
     void *ptr = mmap(
@@ -50,14 +54,11 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     );
 
     if ((unlikely(ptr == MAP_FAILED))){
-        PRINT_ON_DEBUG(
+        elog(ERROR,
             "Error mmaping incremented trace file. %ld, %ld", 
             TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE,
             initial_size * TRACEPROV_PAGE_SIZE
         );
-        rc = 1;
-        elog(ERROR, "Error mmaping incremented trace file");
-        return rc;
     }
 
     // Now, need to some reinitialzation.

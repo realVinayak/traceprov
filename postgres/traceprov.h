@@ -5,8 +5,10 @@
 #include "c.h"
 #include "errno.h"
 #include "utils/elog.h"
+#include "nodes/nodes.h"
 
 #include <assert.h>
+
 
 // Force using C's sprintf, yukkky.
 // Otherwise, Postgres' sprintf will be taken.
@@ -24,22 +26,28 @@
 // This will be formatted with layer number
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
+#define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
+#define TRACEPROV_WORKER_LAYER_MAP      DEFINE_TRACE_PROV_FILE("/worker_%d_layers.tp")
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
+#define TRACEPROV_SIZE_OF_ALLOCATION(last_alloc) (last_alloc == 1 ? 1 : TRACEPROV_INCREMENT_TRACE_BY_PG)
+
+
+#ifndef TRACEPROV_PAGE_SIZE_RAW
+#define TRACEPROV_PAGE_SIZE_RAW 4096
+#endif
 
 // The intention here is to align with the OS' page size.
 // If the OS page size is different (huge pages, or some other page size)
-// The below should also be changed.
 #ifndef TRACEPROV_PAGE_SIZE_RAW
 static_assert(0, "page size not defined!");
 #else
-// The casting is helpful.
+// The casting is helpful since shifts get performed using it.
 #define TRACEPROV_PAGE_SIZE ((long int) TRACEPROV_PAGE_SIZE_RAW)
 #endif
 
-// #define TRACEPROV_PAGE_SIZE             (1L << 12)
 // Defines the maximum number of workers currently supported.
-#define TRACEPROV_MAX_WORKERS           256
+#define TRACEPROV_MAX_WORKERS           255
 // Defines the maximum number of layers per worker, before it begins
 // doing dynamic memory allocation.
 // Essentially, if the number of layer increases more than this, it then spills
@@ -56,6 +64,7 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
 #define DEBUG_MODE 0
+#define VALIDATE_MODE 0
 
 // Forward definitions.
 struct trace_file_forward_row;
@@ -78,6 +87,11 @@ int get_error_no();
         elog(INFO, "Error no: %d", get_error_no()); \
     } } while(0) \
 
+#define PRINT_ON_VALIDATE(...) do { \
+    if (VALIDATE_MODE) { \
+        elog(INFO, __VA_ARGS__);\
+    } } while(0) \
+
 
 struct trace_file_forward_row {
     int64   group_count;
@@ -98,7 +112,10 @@ struct trace_file_partial_row {
 };
 
 static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
+#define TRACEPROV_PARTIAL_ROW_SIZE 32
 
+// Bucket count (for hashing.)
+#define TRACEPROV_BUCKET_COUNT 2
 
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
@@ -107,7 +124,8 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 struct traceprov_aggregate_layer {
     // Defines number of PKs being logged.
     // This is NOT number of records
-    int32 num_pk_records;
+    // This is the "width" of records logged.
+    uint32 num_pk_records;
     // We only store the last mapping that it uses.
     void *last_mapping;
     // The size of the layer in pages.
@@ -115,9 +133,14 @@ struct traceprov_aggregate_layer {
     // This points to the current_row. 
     // This, will effectively lie in [last_mapping, last_mapping + TRACEPROV_BLOCK_SIZE)
     void *current_row;
-    // This stores the number of groups that this layer has seen.
+    // Layers can either act as base for aggregates, or simple append log, but not both.
     // Since this can exist in a background worker, this is always the LOCAL count of groups (and not global)
-    uint32 num_groups;
+    union {
+        // The number of groups that this layer has seen.
+        uint64 num_groups;
+        // The number of rows (logged)
+        uint64 num_rows;
+    };
     uint32 layer_number;
     // Each record gets this much padding.
     uint32 record_padding;
@@ -126,28 +149,29 @@ struct traceprov_aggregate_layer {
     void *end_of_memory_zone;
     // Stores the fd that corresponds to this layer.
     int32 layer_fd;
-    // Padding for this struct.
-    uint32 _padding[1];
+    // Whether this belongs to the leader.
+    // For aggregation, this is important, since combines happens on this layer.
+    bool is_leader_layer;
+    // If this is aggregate layer, then what strategy is used for this.
+    int aggregate_strategy;
+    uint32 buckets[TRACEPROV_BUCKET_COUNT - 1];
+    // If it is being combined, then this stores the layer number of the combined layer.
+    // This is used during inference, to correctly determine which layer file to consult.
+    uint32 combined_aggregate_layer_number;
+    // All layers are stored in a columnar fashion.
+    // This points to the rows (because we always index the columns directly)
+    uint32 rows_layer_number;
 };
 
-static_assert(sizeof(struct traceprov_aggregate_layer) == 64, "Size mismatch.");
+static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
 
 #define TRACRPROV_NUM_LAYER_PER_PAGE (TRACEPROV_PAGE_SIZE / sizeof(struct traceprov_aggregate_layer))
 
-static_assert(((TRACEPROV_PAGE_SIZE) % sizeof(struct traceprov_aggregate_layer)) == 0, "Expected complete layers per page");
-
-// TODO: Investigate is this is better off being page-aligned.
+// Local context that each worker has.
+// This stores the layers.
 struct local_context {
-    int32   worker_pid;
+    pid_t   worker_pid;
     uint8   worker_id;
-
-    // Stores the partial row (partial aggregates)
-    struct  trace_file_partial_row *initial_partial_row;
-    struct  trace_file_partial_row *current_partial_row;
-
-    int64   *init_subquery_row;
-    int64   *end_subquery_row;
-
     // This stores the aggregate layers.
     // Each aggregate consists of multiple mappings (see struct traceprov_aggregate_layer)
     struct  traceprov_aggregate_layer cached_layers[TRACEPROV_MAX_LAYER_PER_WORKER];
@@ -156,27 +180,24 @@ struct local_context {
     // We don't bother looking at this if we fit in cached layers,
     // So that is why this is "dynamic".
     uint32  dynamic_layer_count;
+    // Stores the dynamic layers (outside of TRACEPROV_MAX_LAYER_PER_WORKER.)
     int32   layer_fd;
 };
 
+// At least the local context should be fittable in a page.
+static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
+
 struct traceprov_shared_context {
     int32   magic_word;
+    // NOTE: This exists here just for legacy.
+    // TODO: Remove all the old code and get rid of this.
+    // The new derivation (using graph) doesn't depend on it.
     uint8   main_worker_id;
     // Counts the number of workers.
     uint8   worker_count;
-    // This stores the local contexts for all workers.
-    // Given the worker id, the context can be accessed as local_contexts[worker_id]
-    // It is, currently, a bit complicated to dynamically resize this.
-    // So, this is statically defined to have a size of 256.
-    // That is, at most, there can be 256 parallel workers.
-    // That seems like a reasonable limit anyways.
-    // It is complicated because ALL the workers need to see the same pointer.
-    // We go to town on dynamic resizing in other cases (like aggregate layers)
-    // However, dynamic sizing here would mean that we'll have to either
-    //     1. Use MAP_FIXED for traceprov_shared_context (bad, and complicated)
-    //     2. Map arbitrarily AND do pointer arithematic (not too bad)
-    //     3. Store the local_contexts as a logical pointer, like page 0, 1. (most practical)
-    struct local_context local_contexts[TRACEPROV_MAX_WORKERS];
+    // This gets stored in the shared context because it is otherwise hard to determine what's
+    // the appropriate layer to use for combine.
+    uint32  maximum_layer_number_used;
 };
 
 struct current_context {
@@ -186,6 +207,8 @@ struct current_context {
     // This value gets cached from shared_context.
     // This is done to avoid doing the stupid array indexing on every access.
     struct local_context *local_context;
+    // This is used during the logging of groups (to determine where the combiner layer goes.)
+    uint32  maximum_local_layer_used;
 };
 
 struct traceprov_agg_context {
@@ -194,17 +217,40 @@ struct traceprov_agg_context {
     // Group count for this group.
     int64 group_cnt;
     // Worker on which this group was processed.
-    int8 worker_id;
+    uint8 worker_id;
     // Layer number for this group.
-    int32 layer_number;
+    uint32 layer_number;
 };
+
+uint32 traceprov_hashint8(int64);
 
 // Whenever this condition fails, also need to update the function definition.
 static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
-#define TRACEPROV_SHARED_CONTEXT_SIZE (((sizeof(struct traceprov_shared_context) - 1) / 512) * 512)
+#define TRACEPROV_SHARED_CONTEXT_SIZE (sizeof(struct traceprov_shared_context))
 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
+// #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
+// #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
 
+#define TRACEPROV_SHOULD_HASH(state) (false)
+#define TRACEPROV_SHOULD_SORT(state) (false)
+
+#define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
+#define TRACEPROV_GET_BUCKET(X) ((uint8) (((uint64) X) >> 48))
+
+#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
+#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
+#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64)1) << 47)) & X)
+
+#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64) W) << 56) | X)
+#define TRACEPROV_GET_WORKER_ID(X) ((uint8) (((uint64) X) >> 56))
+#define TRACEPROV_STRIP_WORKER_ID(X) ((((uint64)(~((uint8)0))) << 56) & X)
+
+#define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
+
+#define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64)*layer->num_pk_records))
+
+void reinit_traceprov_infer_state();
 #endif
