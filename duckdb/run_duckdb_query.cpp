@@ -35,7 +35,7 @@
 #define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
 #define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
 
-#define TP_SET_STATS_OUTPUT_NEW "copy (select * from pragma_latest_qid()) to '%s'"
+#define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
 #undef sprintf
 
