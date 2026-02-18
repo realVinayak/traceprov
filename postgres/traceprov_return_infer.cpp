@@ -2606,8 +2606,13 @@ extern "C" {
         }
     }
 
-    // Based off pg_prepared_statement.
-    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvTopResult *derived){
+    // Generic prepare for materialization.
+    // Used for copy-based, and deep-copy-based methods.
+    // Since we end up storing the tupstore and tupdesc in rsinfo, we don't need any return (or out pointers.)
+    static void traceprov_prepare_for_materialize(
+        FunctionCallInfo fcinfo,
+        const int32 width
+    ){
         ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
         TupleDesc   tupdesc;
         Tuplestorestate *tupstore;
@@ -2626,7 +2631,7 @@ extern "C" {
 
         per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
         oldcontext = MemoryContextSwitchTo(per_query_ctx);
-        const int32 num_attrs = (int32)derived->width;
+        const int32 num_attrs = width;
         tupdesc = CreateTemplateTupleDesc(num_attrs);
         for (int32 col_idx = 0; col_idx < num_attrs; col_idx++){
             TupleDescInitEntry(tupdesc, (AttrNumber) col_idx + 1, psprintf("column_%d", col_idx), INT8OID, -1, 0);
@@ -2637,7 +2642,14 @@ extern "C" {
         rsinfo->setResult = tupstore;
         rsinfo->setDesc = tupdesc;
         MemoryContextSwitchTo(oldcontext);
+    }
 
+    // Based off pg_prepared_statement.
+    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvTopResult *derived){
+        traceprov_prepare_for_materialize(fcinfo, derived->width);
+        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+        TupleDesc tupdesc = rsinfo->setDesc;
+        Tuplestorestate *tupstore = rsinfo->setResult;
         ListCell *data_cursor;
         foreach(data_cursor, derived->pdata){
             TraceProvData *data = (TraceProvData *)lfirst(data_cursor);
@@ -3814,7 +3826,7 @@ extern "C" {
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
             TraceProvNode *node = child.second;
-            char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
             TraceProvData *data = nullptr;
             uint64 duration = 0;
             if (use_duckdb){
@@ -3847,6 +3859,33 @@ extern "C" {
         return (Datum) 0;
     }
 
+    // Same set up as traceprov_perform_generic_derivation.
+    // But is faster :)
+    // Accomplished by directly copy data from DuckDB to Postgres without storing it.
+    PG_FUNCTION_INFO_V1(traceprov_perform_duckdb_inference_fast);
+
+    Datum traceprov_perform_duckdb_inference_fast(PG_FUNCTION_ARGS){
+        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        TraceProvParseContext *parsed_back_context = NULL;
+        TraceProvInferSetupExtra *setup_extra;
+        auto result_map = get_generic_derivation_spec(&parsed_back_context, &setup_extra);
+
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+
+        if (result_map->find(result_to_return) == result_map->end()){
+            elog(ERROR, "Expected to find the node!!");
+        }
+
+        TraceProvNode *node_to_eval = result_map->at(result_to_return);
+        const char *sql = traceprov_node_to_sql(node_to_eval, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+        const uint32 expected_column_width = traceprov_get_node_column_count(node_to_eval);
+        traceprov_prepare_for_materialize(fcinfo, expected_column_width);
+        traceprov_perform_duckdb_inference_pg_copy(sql, traceprov_current.infer_context, fcinfo, expected_column_width);
+        return (Datum) 0;
+    }
+
     PG_FUNCTION_INFO_V1(traceprov_run_duckdb_query);
 
     // Does exactly the same setup as generic setup, but allows running generic
@@ -3856,7 +3895,7 @@ extern "C" {
         char *sql_to_run = PG_GETARG_CSTRING(0);
         TraceProvParseContext *parsed_back_context = NULL;
         TraceProvInferSetupExtra *setup_extra = NULL;
-        auto result_map = get_generic_derivation_spec(&parsed_back_context, &setup_extra);
+        (void)get_generic_derivation_spec(&parsed_back_context, &setup_extra);
 
         if (traceprov_current.infer_context == NULL){
             traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);

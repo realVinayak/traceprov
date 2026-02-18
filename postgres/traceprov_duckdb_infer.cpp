@@ -16,7 +16,7 @@
 extern "C" {
     #include "duckdb.h"
     #include <stdlib.h>
-
+    #include "funcapi.h"
 
     struct traceprov_inference_context {
         duckdb_database db;
@@ -232,7 +232,7 @@ extern "C" {
         
         const uint64_t original_pos = current_pos;
         for (uint64_t i = 0; i < STANDARD_VECTOR_SIZE; i++){
-            source_ptr += layer->record_padding;
+            source_ptr = &((uint8_t*)source_ptr)[layer->record_padding];
             if (current_pos >= final_num_records)
                 break;
             
@@ -527,7 +527,9 @@ extern "C" {
         
         auto function = setup_func();
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
-        PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "setting threads");
+        // Use whatever the default, should be max anyways.
+        // TODO: Make this configurable??
+        // PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "setting threads");
         *p_cleanup = traceprov_duckdb_cleanup;
     }
 
@@ -554,5 +556,59 @@ extern "C" {
 
         // PG_DUCKDB_RUN_SHORT_QUERY(con, generated_sql, "inference query");
         return traceprov_data;
+    }
+
+    // Technically, traceprov_perform_duckdb_inference can be generalized (a "handler" function can be passed)
+    // But, that'll have its own overhead (a new function call).
+    // Most of the stuff copied from that function is trivial anyways.
+    void traceprov_perform_duckdb_inference_pg_copy(
+        const char *generated_sql,
+        struct traceprov_inference_context *context,
+        FunctionCallInfo fcinfo,
+        const uint32 expected_col_width
+    ){
+        duckdb_connection con = context->con;
+        duckdb_prepared_statement stmt;
+        duckdb_result final_result;
+        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+        TupleDesc   tupdesc;
+        Tuplestorestate *tupstore;
+        tupdesc = rsinfo->setDesc;
+        tupstore = rsinfo->setResult;    
+
+        PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, generated_sql, &stmt), duckdb_prepare_error(stmt));
+        PG_DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
+
+        uint64_t total_chunk_count = duckdb_result_chunk_count(final_result);
+        
+        Datum *record = palloc0_array(Datum, expected_col_width);
+        bool *nulls = palloc0_array(bool, expected_col_width);
+
+        for (idx_t chunk_idx = 0; chunk_idx < total_chunk_count; chunk_idx++){
+            duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
+            if (DEBUG_MODE){
+                const uint32 column_count = duckdb_data_chunk_get_column_count(data_chunk);
+                if(column_count != expected_col_width)
+                    elog(ERROR, "Got mismatching col counts: %d, %d", column_count, expected_col_width);
+            }
+
+            const uint64_t row_count = duckdb_data_chunk_get_size(data_chunk);
+            for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+                memset(nulls, 0, sizeof(bool)*expected_col_width);
+                for (uint32 col_idx = 0; col_idx < expected_col_width; col_idx++){
+                    duckdb_vector col = duckdb_data_chunk_get_vector(data_chunk, col_idx);
+                    uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
+                    uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
+                    record[col_idx] = col_data[row_idx];
+                    nulls[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+                }
+                // Directly store the value in Postgres rather than storing them
+                // in an intermediate step.
+                tuplestore_putvalues(tupstore, tupdesc, record, nulls);
+            }
+        }
+        #if (PG_MAJORVERSION_NUM != 18)
+        tuplestore_donestoring(tupstore);
+        #endif
     }
 }

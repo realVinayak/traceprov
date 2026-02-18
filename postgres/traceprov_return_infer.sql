@@ -1,3 +1,7 @@
+-- TODO: Replace most of the __FILE__ with native PG.
+-- When I initially wrote this, I didn't know how easy PG makes to compile and auto load extensions
+-- So end up reinventing a lot of the wheel. Replace it.
+
 DROP FUNCTION IF EXISTS traceprov_infer (integer, integer, integer);
 
 DROP FUNCTION IF EXISTS traceprov_infer_time (integer, integer, integer);
@@ -101,6 +105,10 @@ OR REPLACE FUNCTION traceprov_perf_read (INT, BIGINT) RETURNS text AS '$libdir/_
 CREATE
 OR REPLACE FUNCTION traceprov_perform_generic_derivation (BIGINT) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_perform_generic_derivation' LANGUAGE C STRICT PARALLEL SAFE;
+
+CREATE
+OR REPLACE FUNCTION traceprov_perform_duckdb_inference_fast (BIGINT) RETURNS SETOF record AS '$libdir/__FILE__',
+'traceprov_perform_duckdb_inference_fast' LANGUAGE C STRICT PARALLEL SAFE;
 
 CREATE
 OR REPLACE FUNCTION traceprov_get_generic_derivation_spec (BOOLEAN) RETURNS text AS '$libdir/__FILE__',

@@ -1,9 +1,10 @@
 #ifndef __TP_INFER_ESSENTIALS__
 #define __TP_INFER_ESSENTIALS__
 
+#include <stdint.h>
+#include <unordered_map>
+
 extern "C" {
-    #include <stdint.h>
-    #include <unordered_map>
 
     // Forward declaration.
     typedef struct TraceProvBindData TraceProvBindData;
