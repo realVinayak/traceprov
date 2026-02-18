@@ -578,7 +578,7 @@ extern "C" {
     Datum traceprov_sync_time(FunctionCallInfo fcinfo){
         std::vector<std::string> *messages = new std::vector<std::string>;
 
-        auto start = std::chrono::high_resolution_clock::now();
+        TP_EVALUATE_START();
 
         struct traceprov_shared_context context;
         if (map_traceprov_shared_context(&context)){
@@ -618,16 +618,15 @@ extern "C" {
             }
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        TP_EVALUATE_END();
 
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        uint64 duration_time = (uint64)duration.count();
+        const uint64_t duration = TP_EVALUATE_DURATION();
 
         for (std::string s: *messages){
             elog(INFO, "SYNC: %s", s.c_str());
 	    }
         elog(INFO, "Final code: %d", final_code);
-        PG_RETURN_INT64(duration_time);
+        PG_RETURN_INT64(duration);
     }
 
     // Prints some useful statistics (like # of pks, # of groups)
