@@ -16,7 +16,9 @@
 #       -- Q01
 #       -- Q02
 
+from collections import defaultdict
 from typing import Any, Callable, NamedTuple, Tuple
+from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
@@ -41,7 +43,6 @@ from datetime import date, datetime
 from traceprovpy.tools.setup import traceprov_reinit_state, traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
-
 
 def json_serial(obj):
     # We've some datetimes that aren't natively json serializable. So, we have this wrapper.
@@ -69,6 +70,9 @@ def json_serial(obj):
     if isinstance(obj, decimal.Decimal):
         return str(obj)
 
+    if isinstance(obj, CallableRepr):
+        return f"CallableRepr({obj.name})"
+
     raise TypeError("Type %s not serializable" % type(obj))
 
 
@@ -89,7 +93,13 @@ class ExtraQuery(NamedTuple):
     preprocess: list[Preprocessor] = []
     capture_output: bool = True
     strict_run: bool = False
+    # Sometimes, it's benefecial to run extra multiple times too.
+    repeat: int = 1
+    # Allows running arbitrary functions in an ExtraQuery.
+    # Useful for the dynamic infer (where we don't need to memoize the "spec")
+    func: CallableRepr | None = None
 
+OPTION_GETTER = Callable[[str], RunWithTimeoutOptions]
 
 class QuerySpec(NamedTuple):
     key: str
@@ -127,8 +137,8 @@ class QuerySpec(NamedTuple):
         self,
         top_dir: Path,
         get_run_options: Callable[[str], RunWithTimeoutOptions],
-        _: "GenericBenchmark",
-    ):
+        benchmark: "GenericBenchmark",
+    ) -> Any:
         base_pack = QuerySpec.get_pack(top_dir, self.base, get_run_options)._replace(
             preprocessors=self.preprocess
         )
@@ -142,7 +152,7 @@ class QuerySpec(NamedTuple):
         results = dict(base=[], materialize=[], extras=[])
 
         def _run_extras(extras: list[ExtraQuery], _extra_context: dict | None = None):
-            extra_results = dict()
+            extra_results = defaultdict(list)
             for extra in extras:
                 extra_pack = QuerySpec.get_pack(
                     top_dir, extra.query, get_run_options
@@ -156,8 +166,13 @@ class QuerySpec(NamedTuple):
                     extra_pack = extra_pack._replace(
                         preprocessors=[*extra_pack.preprocessors, *extra.preprocess]
                     )
-                extra_result = _run_with_timeout(extra_pack)
-                extra_results[extra.label] = extra_result
+                for _ in range(extra.repeat):
+                    print(extra)
+                    if extra.func:
+                        extra_result = extra.func(self, extra, extra_pack, get_run_options)
+                    else:
+                        extra_result = _run_with_timeout(extra_pack)
+                    extra_results[extra.label].append(extra_result)
             return extra_results
 
         original_get_options = get_run_options
@@ -252,9 +267,10 @@ class QuerySpec(NamedTuple):
 
 class ValidationQuerySpec(QuerySpec):
 
-    def run_packs(self, top_dir, get_run_options, _):
+    def run_packs(self, top_dir, get_run_options, benchmark):
         print("[validation]: ", self.base, self.materialize)
         base_pack = self.get_pack(top_dir, self.base, get_run_options)
+        assert self.materialize
         other_pack = self.get_pack(top_dir, self.materialize, get_run_options)
 
         base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
@@ -312,10 +328,10 @@ class GenericBenchmark(NamedTuple):
         None | Tuple[str, list[QueryDirectory], ConnectionParams, RunParams]
     ) = None
 
-    traceprov_path: str = None
-    traceprov_infer_set_path: str = None
-    traceprov_rewriter_path: str = None
-    sd_options: SmokedDuckOptions = None
+    traceprov_path: None | str = None
+    traceprov_infer_set_path: None | str = None
+    traceprov_rewriter_path: None | str = None
+    sd_options: SmokedDuckOptions | None = None
 
     def run_from_argparse(
         self, directories: list[QueryDirectory], params=RunParams(), parser=None
@@ -418,11 +434,11 @@ class GenericBenchmark(NamedTuple):
         self,
         traceprov_postgres_root: str,
         connection_params: ConnectionParams,
-        suff: str = None,
+        suff: str | None = None,
         # the smokedduck shared library.
         sd_lib_path: str = "",
         sd_include_path: str = "",
-        sd_num_threads: int = None,
+        sd_num_threads: int | None = None,
         sd_create_idx: bool = False,
     ):
         setup_response = traceprov_setup(
@@ -457,6 +473,7 @@ class GenericBenchmark(NamedTuple):
         # params.validate()
 
         def _get_options(file_path: str):
+            assert self.traceprov_rewriter_path
             return RunWithTimeoutOptions(
                 connection_params=connection_params,
                 file_path=file_path,

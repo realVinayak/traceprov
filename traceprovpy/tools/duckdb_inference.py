@@ -30,7 +30,7 @@ class DuckDBDriverOptions(NamedTuple):
     time: str | None = None
     idx_scan_percent: str | None = None
     no_reinit: bool | None = None
-    min_layer_number: int = None
+    min_layer_number: None | int = None
     extra: str | None = None
     disable_col_opt: bool | None = None
     extras: list[str] = []
@@ -77,7 +77,6 @@ def run_simple_query(query: str, db_executable: str, db_path: str, **options):
     traceprov_assert_safe_run(f"{db_executable} {materialize_options.serialize()}")
 
 
-# def driver_run_query(executable: str, num_threads: int, num_repeat: int, )
 # Note that we end up utilzing the duckdb driver
 # which also gets used for smokedduck.
 class DuckDBInferenceQuerySpec(QuerySpec):
@@ -150,6 +149,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
                 idx_scan_percent=idx_scan_percent,
             )
             traceprov_assert_safe_run(f"{executable} {driver_options.serialize()}")
+            assert driver_options.time and driver_options.settings
             with open(driver_options.time) as f:
                 duckdb_result_spec = json.loads(f.read())
                 # print(duckdb_result_spec)
@@ -184,6 +184,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             traceprov_assert_safe_run(
                 f"{executable} {driver_options_profiled.serialize()}"
             )
+            assert driver_options_profiled.profile
             with open(driver_options_profiled.profile) as f:
                 duckdb_terminal_profile = json.loads(f.read())
             final_results = [

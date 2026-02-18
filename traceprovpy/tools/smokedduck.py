@@ -11,6 +11,7 @@ def load_json(file_path: str) -> dict:
         contents = json.loads(f.read())
     return contents
 
+# TODO: This ends up not being used, since all this lives in DuckDB impl
 class SmokedDuckQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options, benchmark):
