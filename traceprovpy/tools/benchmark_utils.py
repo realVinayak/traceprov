@@ -4,8 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 from traceprovpy.tools.benchmark import ExtraQuery
-from traceprovpy.tools.run_with_timeout import MakeTraceProv
+from traceprovpy.tools.callable_repr import CallableRepr
+from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
+
+from traceprovpy.tools.traceprov_extra_func import traceprov_extra_infer_func
 
 TRACEPROV_SYNC_TIME = lambda: ExtraQuery(
     label="traceprov_sync_time",
@@ -95,6 +98,12 @@ TRACEPROV_GET_GENERIC_DERIVATION_SPEC = lambda: ExtraQuery(
     capture_output=True,
 )
 
+TRACEPROV_INFER_SPEC = lambda: ExtraQuery(
+    label="traceprov_infer",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(traceprov_extra_infer_func, "traceprov_extra_infer_func"),
+    repeat=3
+)
 
 def traceprov_dump_safe_results(suff: str, results: Any):
     current_timestamp = datetime.now()

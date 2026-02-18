@@ -22,21 +22,21 @@ CACHED_CONNECTION = "_cached_connection"
 
 
 class RunParams(NamedTuple):
-    repeat: None | int = DEFAULT_REPEAT
-    throwaway: None | int = DEFAULT_THROWAWAY
+    repeat: int = DEFAULT_REPEAT
+    throwaway: int = DEFAULT_THROWAWAY
     # the default timeout is of 10 minutes (pretty generous)
     timeout: int = DEFAULT_TIMEOUT
     # If it is dry run, don't run the actual test, but just make sure the queries
     # confirm to format correctly.
     dry_run: bool = False
-    execution_time: int = None
+    execution_time: None | int = None
 
-    def validate(new_params):
-        if new_params.execution_time is not None and (
-            new_params.repeat is not None or new_params.throwaway is not None
+    def validate(self):
+        if self.execution_time is not None and (
+            self.repeat is not None or self.throwaway is not None
         ):
             raise Exception("execution time or runtime params should be defined")
-        return new_params
+        return self
 
 
 class ConnectionParams(NamedTuple):
@@ -99,7 +99,8 @@ class ReplaceFILE(Preprocessor):
     def preprocess(self, in_content: str) -> str:
         if self.replace_with_token is None:
             raise Exception("Expected replace token to be filled!")
-        return in_content.replace("__FILE__", self.replace_with_token)
+        stred = self.replace_with_token.as_posix() if isinstance(self.replace_with_token, PosixPath) else self.replace_with_token
+        return in_content.replace("__FILE__", stred)
 
     def __hash__(self):
         return hash((self.__class__.__name__, self.replace_with_token))
@@ -157,7 +158,7 @@ class RunWithTimeoutOptions(NamedTuple):
     def close_all(self):
         if self.extras is None:
             return
-        cached_connection = self.extras.get(CACHED_CONNECTION)
+        cached_connection = self.extras[CACHED_CONNECTION]
         cursor = cached_connection.cursor()
         cursor.execute("COMMIT;")
         cursor.close()
@@ -169,6 +170,10 @@ class RunWithTimeoutOptions(NamedTuple):
             return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
         else:
             return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+        
+    def run_connection_strict(self):
+        assert self.extras is not None
+        return self.extras[CACHED_CONNECTION]
 
 
 TP_SKIPPABLE_OPTION = "$PLACEHOLDER$"

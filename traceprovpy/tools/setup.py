@@ -11,7 +11,7 @@ def traceprov_setup(
     # the smokedduck shared library.
     sd_lib_path: str = "",
     sd_include_path: str = "",
-    sd_num_threads: int = None,
+    sd_num_threads: None | int = None,
     sd_create_idx: bool = False,
 ):
     assert suff is not None
