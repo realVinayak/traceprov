@@ -8,68 +8,13 @@ import json
 import os
 from pathlib import Path
 
+from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
-
-
-def safe_file(func):
-    def _func(file, *args, **kwargs):
-        if file is None:
-            return None
-        return func(file, *args, **kwargs)
-
-    return _func
-
-
-# misc wrappers to simplify stuff.
-# TODO: Put them somewhere more useful...
-def just_read(file: str | Path):
-    with open(file) as f:
-        result = f.read()
-    return result
-
-
-@safe_file
-def just_write(file: str | Path, contents: str):
-    with open(file, "w") as f:
-        f.write(contents)
-    return file
-
-
-@safe_file
-def json_read_file(file: str):
-    try:
-        with open(file) as f:
-            json_content = json.loads(f.read())
-        return json_content
-    except:
-        try:
-            return just_read(file)
-        except:
-            return None
-
-
-def json_read_files(files: list[str]):
-    return list(map(json_read_file, files))
-
-
-@safe_file
-def json_read_iters(file: str, iters: int):
-    assert "%d" in file
-    return [json_read_file(file.replace("%d", iter)) for iter in map(str, range(iters))]
-
-
-@safe_file
-def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]):
-    assert "%d_%d" in file
-    return [
-        json_read_file(file.replace("%d_%d", f"{a}_{b}"))
-        for a, b in product(first_iter, second_iter)
-    ]
 
 
 def make_dump_query(in_query: str, out_path: str):

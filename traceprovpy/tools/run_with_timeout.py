@@ -9,6 +9,7 @@ import os
 import argparse
 from pathlib import PosixPath
 
+from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.validate_query import validate_sql, ALL_CHECKS
 
 DEFAULT_REPEAT = 10
@@ -99,7 +100,11 @@ class ReplaceFILE(Preprocessor):
     def preprocess(self, in_content: str) -> str:
         if self.replace_with_token is None:
             raise Exception("Expected replace token to be filled!")
-        stred = self.replace_with_token.as_posix() if isinstance(self.replace_with_token, PosixPath) else self.replace_with_token
+        stred = (
+            self.replace_with_token.as_posix()
+            if isinstance(self.replace_with_token, PosixPath)
+            else self.replace_with_token
+        )
         return in_content.replace("__FILE__", stred)
 
     def __hash__(self):
@@ -170,7 +175,7 @@ class RunWithTimeoutOptions(NamedTuple):
             return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
         else:
             return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
-        
+
     def run_connection_strict(self):
         assert self.extras is not None
         return self.extras[CACHED_CONNECTION]
@@ -218,7 +223,11 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     ):
         options.extras[CACHED_CONNECTION] = connection
 
-    print("SKIP VALIDATION: ", options.skip_validation)
+    print(
+        "SKIP VALIDATION: ",
+        options.skip_validation,
+    )
+    print("RUNNING: ", just_read(options.file_path))
     # Don't bother verifying, for now....
     if not options.skip_validation and len(options.preprocessors) == 0:
         validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)

@@ -118,12 +118,6 @@ extern "C" {
         return col_data;
     }
 
-    // this is fine, even within the same "scope", because they can be separated by {....}
-    #define TP_EVALUATE_START() const auto evaluate_start = std::chrono::high_resolution_clock::now()
-    #define TP_EVALUATE_END() const auto evaluate_end = std::chrono::high_resolution_clock::now()
-    // This is an expression, since callers may want to do something else with it (assign and then log and then push into some vectorksz)
-    #define TP_EVALUATE_DURATION() (std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count())
-
     static TraceProvRelation* get_relation_from_join(TraceProvJoinExpr *join_exprn, bool right=true){
         TraceProvNode *node = right ? join_exprn->right : join_exprn->left;
         if (node->tag != T_TP_RELATION)
@@ -2636,7 +2630,7 @@ extern "C" {
             TupleDescInitEntry(tupdesc, (AttrNumber) col_idx + 1, psprintf("column_%d", col_idx), INT8OID, -1, 0);
         }
 
-        tupstore = tuplestore_begin_heap(rsinfo->allowedModes & SFRM_Materialize_Random, false, work_mem);
+        tupstore = tuplestore_begin_heap(rsinfo->allowedModes & SFRM_Materialize_Random, false, 10);
         rsinfo->returnMode = SFRM_Materialize;
         rsinfo->setResult = tupstore;
         rsinfo->setDesc = tupdesc;
@@ -3858,13 +3852,15 @@ extern "C" {
         return (Datum) 0;
     }
 
+    static TraceProvInferResult last_result;
     // Same set up as traceprov_perform_generic_derivation.
     // But is faster :)
     // Accomplished by directly copy data from DuckDB to Postgres without storing it.
     PG_FUNCTION_INFO_V1(traceprov_perform_duckdb_inference_fast);
 
     Datum traceprov_perform_duckdb_inference_fast(PG_FUNCTION_ARGS){
-        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        const TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        const bool is_dry_infer = PG_NARGS() > 1 ? PG_GETARG_BOOL(1) : false;
         TraceProvParseContext *parsed_back_context = NULL;
         TraceProvInferSetupExtra *setup_extra;
         auto result_map = get_generic_derivation_spec(&parsed_back_context, &setup_extra);
@@ -3880,9 +3876,33 @@ extern "C" {
         TraceProvNode *node_to_eval = result_map->at(result_to_return);
         const char *sql = traceprov_node_to_sql(node_to_eval, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
         const uint32 expected_column_width = traceprov_get_node_column_count(node_to_eval);
-        traceprov_prepare_for_materialize(fcinfo, expected_column_width);
-        traceprov_perform_duckdb_inference_pg_copy(sql, traceprov_current.infer_context, fcinfo, expected_column_width);
+        if (!is_dry_infer)
+            traceprov_prepare_for_materialize(fcinfo, expected_column_width);
+        TraceProvInferResult result = traceprov_perform_duckdb_inference_pg_copy(sql, traceprov_current.infer_context, fcinfo, expected_column_width);
+        last_result = result;
         return (Datum) 0;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_infer_stat);
+
+    Datum traceprov_get_infer_stat(PG_FUNCTION_ARGS){
+        const bool perform_infer = PG_GETARG_BOOL(1);
+        // This allows this function be reused directly after the prior call.
+        if (perform_infer){
+            traceprov_perform_duckdb_inference_fast(fcinfo);
+        }
+
+        // Convert the infer result to json.
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '{');
+        appendStringInfo(&buf, "\"width\": %ld", last_result.width);
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"time\": %ld", last_result.time);
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"row_count\": %ld", last_result.row_count);
+        appendStringInfoChar(&buf, '}');
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
     }
 
     PG_FUNCTION_INFO_V1(traceprov_run_duckdb_query);

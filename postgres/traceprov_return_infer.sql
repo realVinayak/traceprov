@@ -117,3 +117,8 @@ OR REPLACE FUNCTION traceprov_get_generic_derivation_spec (BOOLEAN) RETURNS text
 CREATE
 OR REPLACE FUNCTION traceprov_run_duckdb_query (cstring) RETURNS SETOF record AS '$libdir/__FILE__',
 'traceprov_run_duckdb_query' LANGUAGE C STRICT PARALLEL SAFE;
+
+
+CREATE
+OR REPLACE FUNCTION traceprov_get_infer_stat (BIGINT, BOOLEAN) RETURNS text AS '$libdir/__FILE__',
+'traceprov_get_infer_stat' LANGUAGE C STRICT PARALLEL SAFE;

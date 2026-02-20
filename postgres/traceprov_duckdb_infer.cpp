@@ -553,6 +553,7 @@ extern "C" {
             populate_traceprov_data(traceprov_data, &data_chunk);
             duckdb_destroy_data_chunk(&data_chunk);
         }
+        duckdb_destroy_result(&final_result);
 
         // PG_DUCKDB_RUN_SHORT_QUERY(con, generated_sql, "inference query");
         return traceprov_data;
@@ -561,7 +562,7 @@ extern "C" {
     // Technically, traceprov_perform_duckdb_inference can be generalized (a "handler" function can be passed)
     // But, that'll have its own overhead (a new function call).
     // Most of the stuff copied from that function is trivial anyways.
-    void traceprov_perform_duckdb_inference_pg_copy(
+    TraceProvInferResult traceprov_perform_duckdb_inference_pg_copy(
         const char *generated_sql,
         struct traceprov_inference_context *context,
         FunctionCallInfo fcinfo,
@@ -570,11 +571,10 @@ extern "C" {
         duckdb_connection con = context->con;
         duckdb_prepared_statement stmt;
         duckdb_result final_result;
-        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
-        TupleDesc   tupdesc;
-        Tuplestorestate *tupstore;
-        tupdesc = rsinfo->setDesc;
-        tupstore = rsinfo->setResult;    
+        TupleDesc   tupdesc = NULL;
+        Tuplestorestate *tupstore = NULL;
+
+       TP_EVALUATE_START();
 
         PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, generated_sql, &stmt), duckdb_prepare_error(stmt));
         PG_DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
@@ -584,6 +584,8 @@ extern "C" {
         Datum *record = palloc0_array(Datum, expected_col_width);
         bool *nulls = palloc0_array(bool, expected_col_width);
 
+        uint64_t total_row_count = 0;
+    
         for (idx_t chunk_idx = 0; chunk_idx < total_chunk_count; chunk_idx++){
             duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
             if (DEBUG_MODE){
@@ -593,22 +595,45 @@ extern "C" {
             }
 
             const uint64_t row_count = duckdb_data_chunk_get_size(data_chunk);
-            for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
-                memset(nulls, 0, sizeof(bool)*expected_col_width);
-                for (uint32 col_idx = 0; col_idx < expected_col_width; col_idx++){
-                    duckdb_vector col = duckdb_data_chunk_get_vector(data_chunk, col_idx);
-                    uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
-                    uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
-                    record[col_idx] = col_data[row_idx];
-                    nulls[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+            total_row_count += row_count;
+
+            ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+
+            if (rsinfo->returnMode == SFRM_Materialize){
+
+                tupdesc = rsinfo->setDesc;
+                tupstore = rsinfo->setResult;
+
+                for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+                    memset(nulls, 0, sizeof(bool)*expected_col_width);
+                    for (uint32 col_idx = 0; col_idx < expected_col_width; col_idx++){
+                        duckdb_vector col = duckdb_data_chunk_get_vector(data_chunk, col_idx);
+                        uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
+                        uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
+                        record[col_idx] = col_data[row_idx];
+                        nulls[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+                    }
+                    // Directly store the value in Postgres rather than storing them
+                    // in an intermediate step.
+                    tuplestore_putvalues(tupstore, tupdesc, record, nulls);
                 }
-                // Directly store the value in Postgres rather than storing them
-                // in an intermediate step.
-                tuplestore_putvalues(tupstore, tupdesc, record, nulls);
             }
+            duckdb_destroy_data_chunk(&data_chunk);
         }
+        duckdb_destroy_result(&final_result);
         #if (PG_MAJORVERSION_NUM != 18)
-        tuplestore_donestoring(tupstore);
+        if(tupstore){
+            tuplestore_donestoring(tupstore);
+        }
         #endif
+
+        TP_EVALUATE_END();
+        const uint64_t duration = TP_EVALUATE_DURATION();
+
+        return TraceProvInferResult {
+            .width = expected_col_width,
+            .time = duration,
+            .row_count = total_row_count,
+        };
     }
 }
