@@ -193,6 +193,11 @@ extern "C" {
         TraceProvSizeLayers *size_layer_map;
     } TraceProvInferSetupExtra;
 
+    typedef struct TraceProvInferResult {
+        uint32_t width;
+        uint64_t time;
+        uint64_t row_count;
+    } TraceProvInferResult;
 
     TraceProvData *traceprov_perform_duckdb_inference(const char *generated_sql, struct traceprov_inference_context *context);
     void traceprov_duckdb_setup_context(
@@ -200,7 +205,8 @@ extern "C" {
         void (**p_cleanup)(struct traceprov_inference_context *),
         TraceProvInferSetupExtra *setup_extra
     );
-    void traceprov_perform_duckdb_inference_pg_copy(
+
+    TraceProvInferResult traceprov_perform_duckdb_inference_pg_copy(
         const char *generated_sql,
         struct traceprov_inference_context *context,
         FunctionCallInfo fcinfo,

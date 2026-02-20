@@ -102,7 +102,8 @@ TRACEPROV_INFER_SPEC = lambda: ExtraQuery(
     label="traceprov_infer",
     query=TP_SKIPPABLE_OPTION,
     func=CallableRepr(traceprov_extra_infer_func, "traceprov_extra_infer_func"),
-    repeat=3
+    repeat=3,
+    runs_after_base=True,
 )
 
 def traceprov_dump_safe_results(suff: str, results: Any):

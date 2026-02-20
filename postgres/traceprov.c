@@ -480,8 +480,10 @@ static int initialize_layer_file(
                 }
             }
         }
-        if (IsA(state, AggState)){
+        if (IsA(state, AggState) && traceprov_use_compressed_in_sort){
             layer->aggregate_strategy = ((AggState *)state)->aggstrategy;
+        }else{
+            layer->aggregate_strategy = -1;
         }
     }
     return 0;

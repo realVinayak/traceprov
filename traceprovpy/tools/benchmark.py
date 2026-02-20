@@ -44,6 +44,7 @@ from traceprovpy.tools.setup import traceprov_reinit_state, traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
 
+
 def json_serial(obj):
     # We've some datetimes that aren't natively json serializable. So, we have this wrapper.
     # Adapted from stack overflow: https://stackoverflow.com/a/22238613.
@@ -99,7 +100,9 @@ class ExtraQuery(NamedTuple):
     # Useful for the dynamic infer (where we don't need to memoize the "spec")
     func: CallableRepr | None = None
 
+
 OPTION_GETTER = Callable[[str], RunWithTimeoutOptions]
+
 
 class QuerySpec(NamedTuple):
     key: str
@@ -166,13 +169,11 @@ class QuerySpec(NamedTuple):
                     extra_pack = extra_pack._replace(
                         preprocessors=[*extra_pack.preprocessors, *extra.preprocess]
                     )
-                for _ in range(extra.repeat):
-                    print(extra)
-                    if extra.func:
-                        extra_result = extra.func(self, extra, extra_pack, get_run_options)
-                    else:
-                        extra_result = _run_with_timeout(extra_pack)
-                    extra_results[extra.label].append(extra_result)
+                if extra.func:
+                    extra_result = extra.func(self, extra, extra_pack, get_run_options)
+                else:
+                    extra_result = _run_with_timeout(extra_pack)
+                extra_results[extra.label].append(extra_result)
             return extra_results
 
         original_get_options = get_run_options
