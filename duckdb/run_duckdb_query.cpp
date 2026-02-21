@@ -43,6 +43,7 @@
 #include "traceprov.hpp"
 #include "utils.hpp"
 
+#include "traceprov_settings.hpp"
 
 typedef uint32_t TraceProvLayerNumber;
 
@@ -58,6 +59,7 @@ typedef struct {
 
 typedef std::vector<TraceProvColumnData*> TraceProvData;
 
+// TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
     // via --lineage
     bool capture_lineage;
@@ -108,6 +110,10 @@ struct Options {
     bool query_tree;
     // via --load_micro_benchmarks
     bool load_micro_benchmarks;
+    /** TraceProv Settings */
+    // Note that the values are not repeated here (the update is inlined for these.)
+    // via --traceprov_use_partition_in_agg
+    // via --traceprov_use_partition_in_log
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -216,7 +222,14 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--load_micro_benchmarks")){
             options.load_micro_benchmarks = true;
             continue;
+        } else if (IS_OPTION("--traceprov_use_partition_in_agg")){
+            traceprov_use_partition_in_agg = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_use_partition_in_log")){
+            traceprov_use_partition_in_log = true;
+            continue;
         }
+
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
         std::exit(1);
     }
@@ -445,6 +458,7 @@ int main(int argc, char **argv){
     const uint32_t num_args = 12;
     duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
     duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true);
+    duckdb_aggregate_function *partition_funcs = traceprov_create_funcs(num_args, false, false, true);
     duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
     duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
     duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
@@ -454,6 +468,9 @@ int main(int argc, char **argv){
     
         DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, ignore_gn_funcs[farg_idx]));
         std::cout << "ran aggregate register ignore group nums successfully!" << std::endl;
+
+        DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, partition_funcs[farg_idx]));
+        std::cout << "ran aggregate register partition function successfully!" << std::endl;
 
         DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, window_funcs[farg_idx]));
         std::cout << "ran aggregate register window successfully!" << std::endl;

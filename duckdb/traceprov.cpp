@@ -6,6 +6,8 @@
 #include <string.h>
 #include "file_utils.hpp"
 #include <sys/mman.h>
+#include "traceprov_settings.hpp"
+#include <functional>
 
 struct current_context traceprov_current = {.my_worker_id = 0,
                                             .traceprov_shared_context_fd = -1,
@@ -41,7 +43,8 @@ static int initialize_local_and_layer(
     const uint32_t layer_number,
     const uint32_t key_length,
     const uint32_t record_length,
-    const bool set_current_row
+    const bool set_current_row,
+    const TraceProvDuckDbState *state
 ){
     int rc = 0;
     if ((rc = initialize_local_context())){
@@ -52,7 +55,8 @@ static int initialize_local_and_layer(
         layer_number,
         key_length,
         record_length,
-        set_current_row
+        set_current_row,
+        state
     ))){
         PRINT_ON_DEBUG("Error initializing layer file");
     }
@@ -82,32 +86,121 @@ static inline int round_up(const int number){
     return number == 1 ? 1 : (1 << (64 - __builtin_clzl(number - 1)));
 }
 
+#define TP_UPDATE_SETUP_MAIN() { \
+    extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info); \
+    orig_num_cols = duckdb_data_chunk_get_column_count(input); \
+    num_cols = orig_num_cols; \
+    if (extra->ignore_gn) \
+        num_cols -= 1; \
+    duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0); \
+    layer_number = ((uint32_t*)duckdb_vector_get_data(first_col_vector))[0]; \
+    if(initialize_local_and_layer(layer_number, num_cols, 1, true, extra->state)){ \
+        elog(ERROR, "Error setting up local or layer!"); \
+        return; \
+    } \
+    agg_contexts = (struct traceprov_agg_context **)states; \
+    main_layer = get_layer(layer_number); \
+} \
+
+#define TP_APPEND_CHUNK_SIZE(LAYER, CHUNK_SIZE) { \
+    grow_if_full(LAYER); \
+    *((uint64_t *)LAYER->current_row) = CHUNK_SIZE; \
+    LAYER->current_row = INCR_BY_BYTES(LAYER->current_row, sizeof(uint64_t)); \
+    LAYER->num_rows++; \
+} \
+
+// Partition version of update.
+// They both share a lot of things.
+// But, separating the code still helps
+// Common things are put in macros.
+void traceprov_update_partition(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states){
+    const idx_t num_rows = duckdb_data_chunk_get_size(input);
+    PRINT_ON_DEBUG("Number of rows: %ld", num_rows);
+    if (num_rows == 0) return;
+
+    TraceProvAggExtra *extra;
+    idx_t orig_num_cols, num_cols;
+    struct traceprov_agg_context **agg_contexts;
+    struct traceprov_aggregate_layer *main_layer;
+    uint32_t layer_number;
+
+    TP_UPDATE_SETUP_MAIN();
+
+    // TODO: eh, could be optimized (only clearing after being used), see if it's worth it.
+    for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
+        // Only clear the entries.
+        // Does not resize them (which is fine, since that avoids reallocting them to later.)
+        extra->slice_vectors[idx]->clear();
+    }
+
+    if (unlikely(agg_contexts == NULL || extra->ignore_gn))
+        elog(ERROR, "Invalid options!");
+
+    for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+        struct traceprov_agg_context *curr_state = agg_contexts[row_idx];
+
+        if (curr_state->layer_number == 0){
+            curr_state->layer_number = layer_number;
+            // Also hash the value.
+            const uint64_t original_group_number = ++main_layer->num_groups;
+            const uint64_t hashed = (extra->hasher)(original_group_number);
+            const uint64_t bucket = hashed % TRACEPROV_BUCKET_COUNT;
+            curr_state->group_cnt = TRACEPROV_SET_BUCKET(original_group_number, bucket);
+        }
+
+        const uint64_t local_bucket = TRACEPROV_GET_BUCKET(curr_state->group_cnt);
+        // This "collects" the row ids that correspond to this bucket.
+        extra->slice_vectors[local_bucket]->push_back(row_idx);
+    }
+
+    for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
+        const std::vector<uint32_t> *slice_vector = extra->slice_vectors[idx];
+        // Nothing to do for this bucket.
+        // Will happen when nothing gets hashed into for this bucket.
+        const uint64_t slice_size = slice_vector->size();
+        if (slice_size == 0) continue;
+        // avoids the function call overhead. But ig compiler can do it??
+        const uint32_t *slice_idx = slice_vector->data();
+        // This will be the size of this chunk.
+        const uint64_t chunk_size = sizeof(uint64_t)*slice_size;
+        struct traceprov_aggregate_layer *current_layer = main_layer;
+        if (idx > 0){
+            current_layer = get_layer(main_layer->buckets[idx - 1]);
+        }
+        TRACEPROV_GROW_IF_TRUE(current_layer, ((current_layer->current_row + chunk_size) > current_layer->end_of_memory_zone));
+        for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
+            *((uint64_t*)current_layer->current_row) = agg_contexts[slice_idx[curr_slice_idx]]->group_cnt;
+            current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
+        }
+        for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
+            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
+            uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
+            TRACEPROV_GROW_IF_TRUE(current_layer, ((current_layer->current_row + chunk_size) > current_layer->end_of_memory_zone));
+            for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
+                *((uint64_t*)current_layer->current_row) = col_data[slice_idx[curr_slice_idx]];
+                current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
+            }
+        }
+
+        struct traceprov_aggregate_layer *curr_rows_layer = get_layer(current_layer->rows_layer_number);
+        TP_APPEND_CHUNK_SIZE(curr_rows_layer, slice_size);
+    }
+}
+
+
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states){
     const idx_t num_rows = duckdb_data_chunk_get_size(input);
-
-    PRINT_ON_DEBUG("Number of rows: %d", num_rows);
+    PRINT_ON_DEBUG("Number of rows: %ld", num_rows);
     // No need to do anything.
     // This needs to be checked here (because we need to look up the first row to get the layer number...)
     if (num_rows == 0) return;
+    TraceProvAggExtra *extra;
+    idx_t orig_num_cols, num_cols;
+    struct traceprov_aggregate_layer *main_layer;
+    uint32_t layer_number;
+    struct traceprov_agg_context **agg_contexts;
 
-    TraceProvAggExtra *extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info);
-    const idx_t orig_num_cols = duckdb_data_chunk_get_column_count(input);
-    idx_t num_cols = orig_num_cols;
-    // If ignoring group numbers, don't need to log it (or count it as part of width)
-    if (extra->ignore_gn)
-        num_cols -= 1;
-
-    struct traceprov_agg_context **agg_contexts = (struct traceprov_agg_context **)states;
-
-    duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0);
-    const uint32_t layer_number = ((uint32_t*)duckdb_vector_get_data(first_col_vector))[0];
-
-    if(initialize_local_and_layer(layer_number, num_cols, 1, true)){
-        elog(ERROR, "Error setting up local or layer!");
-        return;
-    }
-
-    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+    TP_UPDATE_SETUP_MAIN();
 
     const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
@@ -119,24 +212,20 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
         }
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, agg_contexts, chunk_size);
-        main_layer->current_row += chunk_size;
+        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
 
-    const idx_t true_column_count = duckdb_data_chunk_get_column_count(input);
     for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
         uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, chunk_size);
-        main_layer->current_row += chunk_size;
+        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
 
     // Append the current size..., yuck.
     struct traceprov_aggregate_layer *chunk_size_layer = get_layer(main_layer->rows_layer_number);
-    grow_if_full(chunk_size_layer);
-    *((uint64_t *)chunk_size_layer->current_row) = num_rows;
-    chunk_size_layer->current_row += sizeof(uint64_t);
-    chunk_size_layer->num_rows++;
+    TP_APPEND_CHUNK_SIZE(chunk_size_layer, num_rows);
 }
 
 void traceprov_combine(
@@ -178,7 +267,7 @@ void traceprov_combine(
             ref_group_number = target_state->group_cnt;
         }
 
-        if(initialize_local_and_layer(combined_layer_number, 2, 0, true)){
+        if(initialize_local_and_layer(combined_layer_number, 2, 0, true, extra->state)){
             elog(ERROR, "Error setting up local or layer!");
             return;
         }
@@ -193,7 +282,7 @@ void traceprov_combine(
             TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
             ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
             ((uint64_t *)combined_layer->current_row)[1] = target_state->group_cnt;
-            combined_layer->current_row += (TRACEPROV_GET_RECORD_SIZE(combined_layer));
+            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, TRACEPROV_GET_RECORD_SIZE(combined_layer));
             target_state->is_combined = true;
         }
         TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
@@ -216,10 +305,21 @@ duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function funct
     return reinterpret_cast<duckdb::AggregateFunction *>(function);
 }
 
+void cleanup_extra(void *data){
+    auto extra = (TraceProvAggExtra *)data;
+    delete extra->state;
+    for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
+        if(extra->slice_vectors[idx])
+            delete extra->slice_vectors[idx];
+    }
+    delete extra;
+}
+
 duckdb_aggregate_function *traceprov_create_funcs(
     const uint32_t num_args,
     const bool is_window,
-    const bool ignore_group_number
+    const bool ignore_group_number,
+    const bool use_partition_update
 ){
     duckdb_aggregate_function *funcs = (duckdb_aggregate_function *)malloc(sizeof(duckdb_aggregate_function) *num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
@@ -229,6 +329,9 @@ duckdb_aggregate_function *traceprov_create_funcs(
         }
         if (ignore_group_number){
             func_name += "ignore_gn_";
+        }
+        if (use_partition_update){
+            func_name += "partition_";
         }
         func_name += std::to_string(idx + 1);
         duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
@@ -244,10 +347,29 @@ duckdb_aggregate_function *traceprov_create_funcs(
         duckdb_aggregate_function_set_return_type(func, type);
         auto extra = new TraceProvAggExtra;
         extra->ignore_gn = ignore_group_number;
-        duckdb_aggregate_function_set_extra_info(func, extra, nullptr);
+        auto tp_duckdb_state = new TraceProvDuckDbState;
+        extra->state = tp_duckdb_state;
+        tp_duckdb_state->should_hash = traceprov_use_partition_in_agg;
+        extra->hasher = std::hash<uint64_t>();
+        // Only in this case both creating entries.
+        for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
+            if (tp_duckdb_state->should_hash) {
+                auto vec = new std::vector<uint32_t>;
+                extra->slice_vectors[idx] = vec;
+                // We could be smarter here....
+                // We could do STANDARD_VECTOR_SIZE / TRACEPROV_BUCKET_COUNT
+                // Depends on how the data is layed out. This is assuming the worst case.
+                vec->reserve(STANDARD_VECTOR_SIZE);
+            }else{
+                extra->slice_vectors[idx] = nullptr;
+            }
+        }
+
+        duckdb_aggregate_function_set_extra_info(func, extra, cleanup_extra);
         duckdb_destroy_logical_type(&type);
         duckdb_destroy_logical_type(&first_type);
-        duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, traceprov_update, traceprov_combine, traceprov_finalize);
+        auto update = use_partition_update ? traceprov_update_partition : traceprov_update;
+        duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, update, traceprov_combine, traceprov_finalize);
         auto base = GetCAggregateFunction(func);
         // IDK why the C-API requires the combine.
         // TODO: Experiment with disabling this.
@@ -372,13 +494,14 @@ duckdb_scalar_function traceprov_create_reinit_state(){
     return func;
 }
 
-void traceprov_log(duckdb_function_info, duckdb_data_chunk input, duckdb_vector output){
+void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
     const idx_t num_rows = duckdb_data_chunk_get_size(input);
     const idx_t num_cols = duckdb_data_chunk_get_column_count(input);
     if (num_rows == 0) return;
+    const TraceProvDuckDbState *tp_duckdb_state = (TraceProvDuckDbState *) duckdb_scalar_function_get_extra_info(info);
     duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0);
     const uint32_t layer_number = ((uint32_t*)duckdb_vector_get_data(first_col_vector))[0];
-    if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true))){
+    if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true, tp_duckdb_state))){
         elog(ERROR, "Error setting up local or layer!");
     }
 
@@ -389,7 +512,7 @@ void traceprov_log(duckdb_function_info, duckdb_data_chunk input, duckdb_vector 
         uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, sizeof(uint64_t)*num_rows);
-        main_layer->current_row += chunk_size;
+        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
 
     memset(((bool*)duckdb_vector_get_data(output)), true, sizeof(bool)*num_rows);
@@ -398,7 +521,7 @@ void traceprov_log(duckdb_function_info, duckdb_data_chunk input, duckdb_vector 
     struct traceprov_aggregate_layer *chunk_size_layer = get_layer(main_layer->rows_layer_number);
     grow_if_full(chunk_size_layer);
     *((uint64_t *)chunk_size_layer->current_row) = num_rows;
-    chunk_size_layer->current_row += sizeof(uint64_t);
+    chunk_size_layer->current_row = INCR_BY_BYTES(chunk_size_layer->current_row, sizeof(uint64_t));
     chunk_size_layer->num_rows++;
 }
 
@@ -427,6 +550,9 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         if (is_volatile){
             duckdb_scalar_function_set_volatile(func);
         }
+        auto tp_duckdb_state = new TraceProvDuckDbState;
+        tp_duckdb_state->should_hash = traceprov_use_partition_in_log;
+        duckdb_scalar_function_set_extra_info(func, tp_duckdb_state, nullptr);
         funcs[idx] = func;
     }
     return funcs;

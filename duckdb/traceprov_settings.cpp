@@ -1,0 +1,9 @@
+#include "traceprov_settings.hpp"
+
+/** Partition options. Useful only when doing lineage derivation from an offset. */
+
+// Use partitioning in agg?
+bool traceprov_use_partition_in_agg = false;
+
+// Use partitioning in log?
+bool traceprov_use_partition_in_log = false;

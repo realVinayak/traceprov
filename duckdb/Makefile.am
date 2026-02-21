@@ -1,5 +1,5 @@
 lib_LTLIBRARIES = libtraceprov.la
-libtraceprov_la_SOURCES = traceprov.cpp file_utils.cpp utils.cpp traceprov_duckdb_infer.cpp traceprov_extra_funcs.cpp
+libtraceprov_la_SOURCES = traceprov.cpp file_utils.cpp utils.cpp traceprov_duckdb_infer.cpp traceprov_extra_funcs.cpp traceprov_settings.cpp
 
 AM_CFLAGS = -I${SMOKEDDUCK_INCUDE_PATH} -DTRACEPROV_PAGE_SIZE_RAW=${TRACEPROV_PAGE_SIZE} -UPACKAGE_NAME -UPACKAGE_VERSION -UPACKAGE_STRING -UPACKAGE_BUGREPORT -UPACKAGE_URL -UPACKAGE_TARNAME -UPACKAGE_URL
 AM_CPPFLAGS = -I${SMOKEDDUCK_INCUDE_PATH} -DTRACEPROV_PAGE_SIZE_RAW=${TRACEPROV_PAGE_SIZE} -UPACKAGE_NAME -UPACKAGE_VERSION -UPACKAGE_STRING -UPACKAGE_BUGREPORT -UPACKAGE_URL -UPACKAGE_TARNAME -UPACKAGE_URL

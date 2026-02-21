@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include "duckdb.hpp"
 #include <unistd.h>
+#include <functional>
 
 #define TP_STD_VECTOR_SIZE 2048
 
@@ -43,9 +44,9 @@
 // Whether to use 2 MB page
 #define TRACEPROV_USE_HUGE_PAGE 1
 // Whether to map memory page or not (otherwise file system is used)
-#define TRACEPROV_USE_MMEM_PAGE 1
+#define TRACEPROV_USE_MMEM_PAGE 0
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 1
+#define TRACEPROV_MAP_HUGE_PAGE 0
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
@@ -299,7 +300,11 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 // #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
 // #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
 
-#define TRACEPROV_SHOULD_HASH(state) (false)
+typedef struct TraceProvDuckDbState {
+    bool should_hash;
+} TraceProvDuckDbState;
+
+#define TRACEPROV_SHOULD_HASH(state) (state->should_hash)
 #define TRACEPROV_SHOULD_SORT(state) (false)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64_t) BUCKET) << 48) | X)
@@ -313,7 +318,10 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
 #define TRACEPROV_STRIP_WORKER_ID(X) ((((uint64_t)(~((uint8_t)0))) << 56) & X)
 
-#define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
+// TODO: Use this everywhere.
+#define INCR_BY_BYTES(X, Y) (&(((uint8_t*)X)[Y]))
+
+#define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row = INCR_BY_BYTES(layer->current_row, layer->record_padding))
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64_t)*layer->num_pk_records))
 
@@ -330,7 +338,7 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
-duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false);
+duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false, const bool use_partition=false);
 duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
@@ -341,6 +349,11 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
 
 typedef struct TraceProvAggExtra {
     bool ignore_gn;
+    TraceProvDuckDbState *state;
+    std::hash<uint64_t> hasher;
+    // The indexes at which each bucket is present.
+    // Done like this because it keeps the rest of the read logic nice.
+    std::vector<uint32_t> *slice_vectors[TRACEPROV_BUCKET_COUNT];
 } TraceProvAggExtra;
 
 #endif

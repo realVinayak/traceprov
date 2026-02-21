@@ -377,7 +377,8 @@ int initialize_layer_file(
     const uint32_t key_length,
     // Specifies the length of the record, excluding keys.
     const uint32_t record_length,
-    const bool set_current_row
+    const bool set_current_row,
+    const TraceProvDuckDbState *state
 ){
 
     /**
@@ -407,23 +408,23 @@ int initialize_layer_file(
         layer->rows_layer_number = record_layer_number;
     }
 
-    // if (state != NULL){
-    //     // If the entries in this file will be hashed, need to also make the hash buckets for them.
-    //     // This effectively makes a recursive call (but the state of the next is always null)
-    //     // Technically, the recursive call can be used to implement a multi-level partitioning...
-    //     if (TRACEPROV_SHOULD_HASH(state) && layer->buckets[0] == 0){
-    //         // Need to make the new levels
-    //         // Note that we only need to construct buckets after the current layer.
-    //         // because the current layer acts as the buckets for the other ones..
-    //         for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
-    //             const uint32_t hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
-    //             layer->buckets[bucket_idx] = hash_bucket_layer_number;
-    //             if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL)){
-    //                 elog(ERROR, "Error initializing the hash buckets");
-    //             }
-    //         }
-    //     }
-    // }
+    if (state != NULL){
+        // If the entries in this file will be hashed, need to also make the hash buckets for them.
+        // This effectively makes a recursive call (but the state of the next is always null)
+        // Technically, the recursive call can be used to implement a multi-level partitioning...
+        if (TRACEPROV_SHOULD_HASH(state) && layer->buckets[0] == 0){
+            // Need to make the new levels
+            // Note that we only need to construct buckets after the current layer.
+            // because the current layer acts as the buckets for the other ones..
+            for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
+                const uint32_t hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
+                layer->buckets[bucket_idx] = hash_bucket_layer_number;
+                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL)){
+                    elog(ERROR, "Error initializing the hash buckets");
+                }
+            }
+        }
+    }
     return 0;
 }
 
@@ -462,6 +463,8 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
 }
 
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
+    if (unlikely(current_layer->layer_number == 0))
+        elog(ERROR, "Expected the layer number to be filled!");
     #if TRACEPROV_USE_MMEM_PAGE
     if (current_layer->page_mapping != NULL){
         return grow_layer_file_huge(current_layer);
