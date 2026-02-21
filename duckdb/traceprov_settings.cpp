@@ -7,3 +7,6 @@ bool traceprov_use_partition_in_agg = false;
 
 // Use partitioning in log?
 bool traceprov_use_partition_in_log = false;
+
+// Use row format in agg partition?
+bool traceprov_use_row_in_agg_partition = false;

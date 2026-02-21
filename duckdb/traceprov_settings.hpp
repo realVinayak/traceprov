@@ -5,5 +5,6 @@
 
 extern bool traceprov_use_partition_in_agg;
 extern bool traceprov_use_partition_in_log;
+extern bool traceprov_use_row_in_agg_partition;
 
 #endif

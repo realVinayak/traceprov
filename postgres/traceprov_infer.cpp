@@ -101,7 +101,7 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
 // Walks through the shared context, and msyncs each file it sees.
 int traceprov_sync(const char *data_dir){
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
     int rc = 0;
     struct traceprov_shared_context context;
 
@@ -138,7 +138,7 @@ int traceprov_sync(const char *data_dir){
     }
 
 end:
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     std::cout << "SYNC Took: " << duration.count() << " ms" << std::endl;
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]){
     }
     std::cout << "Using layer: " << layer_number << std::endl;
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     struct traceprov_shared_context context;
     if (map_traceprov_shared_context(data_dir, &context)){
@@ -386,7 +386,7 @@ int main(int argc, char *argv[]){
         }
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     std::cout << "Took: " << duration.count() << " ms" << std::endl;

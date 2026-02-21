@@ -38,6 +38,11 @@ class DuckDBDriverOptions(NamedTuple):
     extra_file: str | None = None
     is_new_sd: bool = False
     sd_extension_path: str | None = None
+    traceprov_use_partition_in_agg: bool = False
+    traceprov_use_partition_in_log: bool = False
+    traceprov_use_row_in_agg_partition: bool = False
+    top_log_num: int | None = None
+    log_offset: int | None = None
 
     def _boolean_options(self):
         return {
@@ -47,6 +52,9 @@ class DuckDBDriverOptions(NamedTuple):
             "disable_col_opt",
             "main_once_extra_all",
             "is_new_sd",
+            "traceprov_use_partition_in_agg",
+            "traceprov_use_partition_in_log",
+            "traceprov_use_row_in_agg_partition",
         }
 
     def serialize(self) -> str:
@@ -121,7 +129,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             layer_idx = result_spec["idx"]
 
             sql_query = result_spec["sql"]
-            executable = benchmark.sd_options.driver_executable
+            executable = sd_options.driver_executable
             assert executable is not None
             print(executable)
             duckdb_inference_sql_query = "/tmp/duckdb_inference_dynamic.sql"

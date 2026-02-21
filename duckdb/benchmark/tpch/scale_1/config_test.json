@@ -1,11 +1,9 @@
 {
-    "_queries": [
+    "queries": [
         1
     ],
-    "queries": [
-        1,
-        6,
-        14
+    "_queries": [
+        1
     ],
     "validate": false,
     "subdirs": [

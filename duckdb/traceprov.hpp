@@ -44,9 +44,9 @@
 // Whether to use 2 MB page
 #define TRACEPROV_USE_HUGE_PAGE 1
 // Whether to map memory page or not (otherwise file system is used)
-#define TRACEPROV_USE_MMEM_PAGE 0
+#define TRACEPROV_USE_MMEM_PAGE 1
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 0
+#define TRACEPROV_MAP_HUGE_PAGE 1
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
@@ -178,7 +178,7 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
 // Bucket count (for hashing.)
-#define TRACEPROV_BUCKET_COUNT 2
+#define TRACEPROV_BUCKET_COUNT 4
 
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
@@ -338,7 +338,7 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
-duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false, const bool use_partition=false);
+duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false);
 duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
@@ -347,13 +347,20 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+// To avoid calling the duckdb function at every row, we try to cache some of that.
+// See, if it'd be a macro, this wouldn't be an issue. but whatever.
+// If the number of cols is more than that, we still cache, just that it is malloced.
+#define TRACEPROV_MAX_INLINE_CACHE_SIZE 64
+
 typedef struct TraceProvAggExtra {
     bool ignore_gn;
     TraceProvDuckDbState *state;
     std::hash<uint64_t> hasher;
     // The indexes at which each bucket is present.
     // Done like this because it keeps the rest of the read logic nice.
-    std::vector<uint32_t> *slice_vectors[TRACEPROV_BUCKET_COUNT];
+    void *slice_vectors[TRACEPROV_BUCKET_COUNT];
+    uint64_t *col_cache[TRACEPROV_MAX_INLINE_CACHE_SIZE];
+    uint64_t **dynamic_col_cache;
 } TraceProvAggExtra;
 
 #endif

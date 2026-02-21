@@ -110,10 +110,15 @@ struct Options {
     bool query_tree;
     // via --load_micro_benchmarks
     bool load_micro_benchmarks;
+    // via --top_log_num
+    uint32_t top_level_log_layer_number;
+    // via --log_offset
+    int64_t log_offset;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
     // via --traceprov_use_partition_in_log
+    // via --traceprov_use_row_in_agg_partition
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -141,7 +146,9 @@ struct Options parse_args(int argc, char **argv){
         .is_new_sd = false,
         .sd_extension_path = "",
         .query_tree = false,
-        .load_micro_benchmarks = false
+        .load_micro_benchmarks = false,
+        .top_level_log_layer_number = 0,
+        .log_offset = -1
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -228,6 +235,15 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_use_partition_in_log")){
             traceprov_use_partition_in_log = true;
             continue;
+        } else if (IS_OPTION("--traceprov_use_row_in_agg_partition")){
+            traceprov_use_row_in_agg_partition = true;
+            continue;
+        } else if (IS_OPTION("--top_log_num")){
+            options.top_level_log_layer_number = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--log_offset")){
+            options.log_offset = std::atoi(argv[++i]);
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -245,6 +261,9 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\tsettings_out_path: " << options.settings_out_path << std::endl;
     std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
+
+    if (options.top_level_log_layer_number == 0)
+        options.top_level_log_layer_number = options.min_layer_number - 1;
 
     return options;
 };
@@ -333,7 +352,7 @@ void perform_query(
     duckdb_prepared_statement stmt;
     duckdb_result final_result;
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
 
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
     if (options.use_pending){
@@ -373,7 +392,7 @@ void perform_query(
     duckdb_destroy_result(&final_result);
     duckdb_destroy_prepare(&stmt);
 
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
     if (duration.count() == 0){
         std::cout << "Got 0 as the measured time, use a finer granularity..." << std::endl;
@@ -456,9 +475,8 @@ int main(int argc, char **argv){
 
     #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
-    duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args);
+    duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false);
     duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true);
-    duckdb_aggregate_function *partition_funcs = traceprov_create_funcs(num_args, false, false, true);
     duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
     duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
     duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
@@ -468,9 +486,6 @@ int main(int argc, char **argv){
     
         DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, ignore_gn_funcs[farg_idx]));
         std::cout << "ran aggregate register ignore group nums successfully!" << std::endl;
-
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, partition_funcs[farg_idx]));
-        std::cout << "ran aggregate register partition function successfully!" << std::endl;
 
         DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, window_funcs[farg_idx]));
         std::cout << "ran aggregate register window successfully!" << std::endl;
@@ -580,6 +595,17 @@ int main(int argc, char **argv){
             perform_query(new_options, con, in_sql, agg_result, NULL, final_stats_query);
         }
         int extra_sql_idx = 0;
+
+        int64_t partition_idx = -1;
+        void *extra_cntxt = NULL;
+        if (options.log_offset != -1){
+            // Try partition pruning.
+            extra_cntxt = traceprov_get_partition(1, options.top_level_log_layer_number, options.log_offset, &partition_idx);
+        }
+        duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_idx, nullptr); // whatever
+        if (extra_cntxt)
+            duckdb_table_function_set_extra_info(tp_read_offset_func, extra_cntxt, free);
+
         // Run extra all ;)
         for (auto extra_sql: extra_sqls){
             extra_sql_idx++;

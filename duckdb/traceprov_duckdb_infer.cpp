@@ -187,9 +187,10 @@ void reset_global_context(){
 
 static TraceProvBindData *setup_layers(
     const uint64_t worker_id,
-    const uint64_t layer_number,
+    uint64_t layer_number,
     const int64_t log_offset,
-    const bool expect_present=true
+    const bool expect_present=true,
+    const int64_t partition_idx=-1
 ){
 
     initialize_global_context();
@@ -200,7 +201,6 @@ static TraceProvBindData *setup_layers(
 
     my_bind_data->rel_args.worker_id = worker_id;
     uint64_t current_worker_id = worker_id;
-    my_bind_data->rel_args.layer_number = layer_number;
 
 
     bool is_dummy = false;
@@ -212,6 +212,14 @@ static TraceProvBindData *setup_layers(
 
     auto current_local_context =  g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
     auto current_layer = &current_local_context->cached_layers[layer_number - 1];
+    if (partition_idx > 0){ // because == 0 is always current.
+        layer_number = current_layer->buckets[partition_idx - 1];
+        if (layer_number == 0)
+            elog(ERROR, "Got invalid comptued!");
+        current_layer = &current_local_context->cached_layers[layer_number - 1];
+    }
+
+    my_bind_data->rel_args.layer_number = layer_number;
 
     if (current_layer->layer_number != layer_number){
         if (current_layer->layer_number != 0){
@@ -299,8 +307,12 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         log_offset = duckdb_get_int64(param_3);
         duckdb_destroy_value(&param_3);
     }
-
-    auto my_bind_data = setup_layers(current_worker_id, layer_number, log_offset);
+    int64_t partition_idx = -1;
+    if (log_offset == -1){
+        partition_idx = (int64_t)duckdb_bind_get_extra_info(info);
+        // elog(INFO, "Using bucket, later: %ld", partition_idx);
+    }
+    auto my_bind_data = setup_layers(current_worker_id, layer_number, log_offset, true, partition_idx);
     for (uint64_t col_count = 0; col_count < my_bind_data->column_width; col_count++){
         const std::string param = std::string("column_") + std::to_string(col_count);
         duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
@@ -498,15 +510,22 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
     }
 
     if (bind_data->rel_args.offset != -1){
-        // alloc buffer for the values.
-        uint64_t *values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
-        read_at_offset(bind_data->rel_args.offset, bind_data, values, NULL);
+        uint64_t *values = (uint64_t *)duckdb_function_get_extra_info(info);
+        bool new_allocated = false;
+        if (values == NULL){
+            // This allows caching the value, if determined at partition pruning time.
+            // alloc buffer for the values.
+            values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
+            read_at_offset(bind_data->rel_args.offset, bind_data, values, NULL);
+            new_allocated = true;
+        }
         for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
             uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
             dest_ptr[0] = values[col_idx];
         }
         duckdb_data_chunk_set_size(output, 1);
-        free(values);
+        if (new_allocated)
+            free(values);
         init_data->is_dummy = true;
         return;
     }
@@ -558,6 +577,7 @@ duckdb_table_function traceprov_create_table_offset_func(){
     duckdb_logical_type offset_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
     duckdb_table_function_add_parameter(function, offset_type);
     duckdb_destroy_logical_type(&offset_type);
+    duckdb_table_function_set_extra_info(function, NULL, nullptr);
     return function;
 }
 
@@ -711,6 +731,20 @@ duckdb_scalar_function traceprov_create_table_window_func(
     window_extra->num_cols = num_args;
     duckdb_scalar_function_set_extra_info(func, window_extra, nullptr);
     return func;
+}
+
+void *traceprov_get_partition(const uint64_t worker_id, const uint64_t layer_number, const int64_t log_offset, int64_t *partition_id){
+    auto bind_data = setup_layers(worker_id, layer_number, log_offset, true);
+    auto value = (uint64_t *)malloc(sizeof(uint64_t)*(bind_data->column_width));
+    read_at_offset(log_offset, bind_data, value, NULL);
+    if (value == 0)
+        elog(ERROR, "Expected value to be something!!");
+    if (bind_data->column_width != 1)
+        elog(ERROR, "Not handling column width > 1 in partition pruning for now...")
+    const uint64_t log_value = value[0];
+    *partition_id = TRACEPROV_GET_BUCKET(log_value);
+    elog(INFO, "Using bucket: %ld", *partition_id);
+    return value;
 }
 
 #endif

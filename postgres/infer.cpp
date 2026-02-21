@@ -173,7 +173,7 @@ int main(int argc, char *argv[]){
     std::cout << "Using group no: " << group_no << std::endl;
 
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::steady_clock::now();
 
     auto present_groups = new std::vector<int64>;
 
@@ -352,7 +352,7 @@ int main(int argc, char *argv[]){
 
     }
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     for (int pk_id = 0; pk_id < LENGTH; pk_id++){

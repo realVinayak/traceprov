@@ -553,11 +553,11 @@ extern "C" {
         const int32 reference_layer = PG_GETARG_INT32(1);
         const int32 subq_layer_number = PG_GETARG_INT32(2);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        auto start = std::chrono::steady_clock::now();
 
         struct infer_result *infer_result_computed = perform_inference(layer_number, reference_layer, subq_layer_number);
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end = std::chrono::steady_clock::now();
         
         UNUSED(infer_result_computed);
 
@@ -1284,7 +1284,7 @@ extern "C" {
         const TraceProvDependency *dependency,
         bool emulate_read
     ){
-        // const auto evaluate_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_start = std::chrono::steady_clock::now();
         const struct traceprov_aggregate_layer *current_layer = &local_context->cached_layers[layer_number - 1];
         // In this case, the layer wasn't set.
         if (current_layer->layer_number == 0) return nullptr;
@@ -1321,7 +1321,7 @@ extern "C" {
                 return_data->at(foreach_current_index(entry_cursor))->descriptor = descriptor;
             }
         }
-        // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_end = std::chrono::steady_clock::now();
         // PRINT_ON_VALIDATE("read all took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
         return return_data;
     }
@@ -1635,7 +1635,7 @@ extern "C" {
         }
 
         std::sort(left_column_clone->begin(), left_column_clone->end());
-        // const auto evaluate_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_start = std::chrono::steady_clock::now();
         for (uint64 offset = 0; offset < right_column->data->size(); offset++){
             const auto match_key = right_column->data->at(offset);
             auto it = (std::lower_bound(
@@ -1842,7 +1842,7 @@ extern "C" {
             }
         }
 
-        // const auto evaluate_late_start = std::chrono::high_resolution_clock::now();
+        // const auto evaluate_late_start = std::chrono::steady_clock::now();
         TraceProvData *result = new TraceProvData;
         if(join_exprn->is_left_star){
             auto left_offsets = offsets->at(0);
@@ -1989,17 +1989,17 @@ extern "C" {
             }
             return relation->data;
         } else if (node->tag == T_TP_JOIN){
-            // const auto evaluate_start = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_start = std::chrono::steady_clock::now();
             TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)node;
             auto result = traceprov_evaluate_join_exprn(join_exprn, eval_context);
-            // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_end = std::chrono::steady_clock::now();
             // PRINT_ON_VALIDATE("Join took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
             return result;
         } else if (node->tag == T_TP_APPEND){
-            // const auto evaluate_start = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_start = std::chrono::steady_clock::now();
             TraceProvAppend *append_node = (TraceProvAppend *)node;
             auto result = traceprov_evaluate_append(append_node, eval_context);
-            // const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            // const auto evaluate_end = std::chrono::steady_clock::now();
             // PRINT_ON_VALIDATE("Append took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
             return result;
         } else if (node->tag == T_TP_WINDOW_READ){
@@ -2520,9 +2520,9 @@ extern "C" {
             List *create_idx = NIL;
             PERFORM_IF_USED((create_idx = traceprov_get_indexes(derived_node->node)));
 
-            const auto evaluate_start = std::chrono::high_resolution_clock::now();
+            const auto evaluate_start = std::chrono::steady_clock::now();
             TraceProvTopResult *node_result = traceprov_evaluate_node_top(derived_node->node, eval_context);
-            const auto evaluate_end = std::chrono::high_resolution_clock::now();
+            const auto evaluate_end = std::chrono::steady_clock::now();
             const auto duration = evaluate_end - evaluate_start;
             const uint64 duration_time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
             auto dump_file_name = psprintf(DEFINE_TRACE_PROV_FILE("/final_output_%d_dump.csv"), DataDir,  derived_node->layer_number);
@@ -2669,9 +2669,9 @@ extern "C" {
         TraceProvEvaluateNodeContext *eval_context = palloc0_object(TraceProvEvaluateNodeContext);
         eval_context->should_dump = false;
         char *spec = NULL;
-        const auto evaluate_start = std::chrono::high_resolution_clock::now();
+        const auto evaluate_start = std::chrono::steady_clock::now();
         perform_derivation(&spec, eval_context);
-        const auto evaluate_end = std::chrono::high_resolution_clock::now();
+        const auto evaluate_end = std::chrono::steady_clock::now();
         const auto duration = evaluate_end - evaluate_start;
         const uint64 duration_time = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
         StringInfoData buf;

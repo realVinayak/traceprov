@@ -231,7 +231,7 @@ void perform_query(
     duckdb_prepared_statement stmt;
     duckdb_result final_result;
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
 
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
     if (options.use_pending){
@@ -271,7 +271,7 @@ void perform_query(
     duckdb_destroy_result(&final_result);
     duckdb_destroy_prepare(&stmt);
 
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
     if (duration.count() == 0){
         std::cout << "Got 0 as the measured time, use a finer granularity..." << std::endl;

@@ -5,7 +5,7 @@ FROM (
         min(min_value) as min_over_group, 
         group_number,
         traceprov_agg_key_parallel_offset_1(1, id) as mapped_agg
-    from data_table_ROW_COUNT
+    from data_table_ROW_COUNT_random
     group by group_number 
     having min(min_value) <= :selectivity
 ) F;

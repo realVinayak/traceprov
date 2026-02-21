@@ -28,7 +28,7 @@ def run():
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
-    total_iters = 3
+    total_iters = 15
     base_sql = just_read(Path("queries/base.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
     capture_new_sql = just_read(Path("queries/capture_new.sql"))
@@ -127,7 +127,10 @@ def run():
                         materialize_infer=parsed.mat_infer,
                         iters=total_iters,
                         pre_base=None,
-                        run_inference=True,
+                        run_inference=parsed.infer,
+                        traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
+                        traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
+                        traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
                     )
                 )
                 if parsed.sample_inference:
@@ -140,6 +143,8 @@ def run():
                         )
                     elif not parsed.validate:
                         out_ids = [-1, *out_ids]
+
+                    out_ids = out_ids[0:1]
 
                     sample_inference_result = run_sample_inference(
                         Path(parsed.exe),
@@ -155,6 +160,9 @@ def run():
                         profile=False,
                         settings=False,
                         validate=parsed.validate,
+                        traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
+                        traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
+                        mat_infer=parsed.mat_infer,
                     )
                     query_result = {
                         **query_result,

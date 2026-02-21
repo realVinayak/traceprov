@@ -37,7 +37,13 @@ def run_sample_inference(
     profile: bool = True,
     settings: bool = True,
     validate: bool = False,
+    traceprov_use_partition_in_agg: bool = False,
+    traceprov_use_row_in_agg_partition: bool = False,
+    mat_infer: bool = False,
 ):
+
+    if traceprov_use_partition_in_agg:
+        assert len(samples) == 1
 
     if validate:
         iters = 1
@@ -72,7 +78,7 @@ def run_sample_inference(
         os.makedirs(sample_element_q_dir, exist_ok=True)
         for sample_id, out_id in enumerate(samples):
             infer_with_offset = infer_query.replace(TP_OFFSET_TICKER, str(out_id))
-            if validate:
+            if validate or mat_infer:
                 if sample_id == 0:
                     infer_with_offset = f"create or replace table LAYER_{element_idx} AS ({infer_with_offset})"
                 else:
@@ -102,8 +108,16 @@ def run_sample_inference(
         main_once_extra_all=True,
     )
 
+    if traceprov_use_partition_in_agg:
+        capture_options = capture_options._replace(
+            top_log_num=2,
+            log_offset=samples[0],
+            traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
+            traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
+        )
+
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
-    capture_result_time = json_read_file(capture_options.time)
+    capture_result_time: list = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
             capture_options.profile,
@@ -137,7 +151,7 @@ def run_single_smokedduck(
     root: Path,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
-    sd_extension_path: Path = None,
+    sd_extension_path: Path | None = None,
     is_new_sd: bool = False,
     run_inference: bool = True,
     validate: bool = False,
@@ -448,6 +462,9 @@ def run_single(
     run_inference: bool = True,
     use_aggresive_optimized: bool = False,
     strict: bool = False,
+    traceprov_use_partition_in_agg: bool = False,
+    traceprov_use_partition_in_log: bool = False,
+    traceprov_use_row_in_agg_partition: bool = False,
 ):
     if validate:
         materialize_infer = True
@@ -503,6 +520,9 @@ def run_single(
         profile="/tmp/capture_profile_%d.json",
         disable_col_opt=disable_col_opt,
         settings="/tmp/capture_settings.json",
+        traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
+        traceprov_use_partition_in_log=traceprov_use_partition_in_log,
+        traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
     )
 
     infer_paths = []

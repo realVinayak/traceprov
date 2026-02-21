@@ -86,6 +86,8 @@ def run():
                 run_inference=parsed.infer,
                 use_aggresive_optimized=parsed.agg_optimized,
                 strict=parsed.strict,
+                traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
+                traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
             )
         if parsed.sample_inference and parsed.infer:
             # need to sample the inference.

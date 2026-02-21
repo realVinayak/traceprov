@@ -1,5 +1,5 @@
 data/
-perf.data
+perf.data*
 crimes.csv
 .vscode
 *.so
