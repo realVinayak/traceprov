@@ -8,4 +8,5 @@ FROM (
     from data_table_ROW_COUNT_random
     group by group_number 
     having min(min_value) <= :selectivity
+    order by min_over_group
 ) F;
