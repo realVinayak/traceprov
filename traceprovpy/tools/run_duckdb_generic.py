@@ -40,10 +40,8 @@ def run_sample_inference(
     traceprov_use_partition_in_agg: bool = False,
     traceprov_use_row_in_agg_partition: bool = False,
     mat_infer: bool = False,
+    table_suff: str = "",
 ):
-
-    if traceprov_use_partition_in_agg:
-        assert len(samples) == 1
 
     if validate:
         iters = 1
@@ -78,13 +76,16 @@ def run_sample_inference(
         os.makedirs(sample_element_q_dir, exist_ok=True)
         for sample_id, out_id in enumerate(samples):
             infer_with_offset = infer_query.replace(TP_OFFSET_TICKER, str(out_id))
-            if validate or mat_infer:
+            if mat_infer:
+                infer_with_offset = f"create or replace table {table_suff}_LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
+            if validate:
                 if sample_id == 0:
                     infer_with_offset = f"create or replace table LAYER_{element_idx} AS ({infer_with_offset})"
                 else:
                     infer_with_offset = (
                         f"insert into LAYER_{element_idx} {infer_with_offset}"
                     )
+            infer_with_offset = f"/*(traceprov_log_offset): {spec_element['min_local_used']-1}:{out_id}*/ {infer_with_offset}"
             final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
             just_write(final_q_path, infer_with_offset)
             extra_sqls.append(final_q_path.as_posix())
@@ -110,8 +111,6 @@ def run_sample_inference(
 
     if traceprov_use_partition_in_agg:
         capture_options = capture_options._replace(
-            top_log_num=2,
-            log_offset=samples[0],
             traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
             traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
         )

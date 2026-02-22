@@ -302,20 +302,25 @@ static void populate_traceprov_data(
     }
 }
 
+static void populate_log_offset(Options *option, std::string extra_sql);
+static std::string serialize_option(Options *option);
+
 typedef struct PerformQueryResult {
     int64_t computed_time;
     TraceProvData *data;
+    Options option;
 } PerformQueryResult;
 
-PerformQueryResult *make_result(int64_t computed_time, TraceProvData *data){
+PerformQueryResult *make_result(int64_t computed_time, TraceProvData *data, Options *options){
     auto result = new PerformQueryResult;
     result->computed_time = computed_time;
     result->data = data;
+    result->option = *options;
     return result;
 }
 
 void perform_query(
-    struct Options &options, 
+    struct Options *options, 
     duckdb_connection &con, 
     std::string &in_sql,
     std::vector<PerformQueryResult *> &agg_result,
@@ -324,26 +329,26 @@ void perform_query(
 ){
 
     #if TRACEPROV_SD_MODE==0
-    if (!options.no_reinit_state){
+    if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
     }
     #endif
 
-    if (options.min_layer_number){
-        traceprov_current.maximum_local_layer_used = options.min_layer_number;
+    if (options->min_layer_number){
+        traceprov_current.maximum_local_layer_used = options->min_layer_number;
     }
 
 
-    if (options.capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
-        DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
+    if (options->capture_lineage){
+        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
+        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
     }
 
-    if (IS_SET(options.profile_out_path)){
+    if (IS_SET(options->profile_out_path)){
         if (final_profile_out == NULL)
             elog(ERROR, "Expected profile out to be set!");
-        DUCKDB_RUN_SHORT_QUERY(con, (options.query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
+        DUCKDB_RUN_SHORT_QUERY(con, (options->query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
         DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
     }
 
@@ -355,7 +360,7 @@ void perform_query(
     auto start_time = std::chrono::steady_clock::now();
 
     DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
-    if (options.use_pending){
+    if (options->use_pending){
         duckdb_pending_result result;
         DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(stmt, &result));
         DUCKDB_EXIT_ON_ERROR(duckdb_execute_pending(
@@ -371,7 +376,7 @@ void perform_query(
     uint64_t chunk_count = 0;
     auto traceprov_data = new TraceProvData;
 
-    if (options.use_pending){
+    if (options->use_pending){
         while (true) {
             duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(final_result);
             if (!data_chunk) break;
@@ -399,22 +404,22 @@ void perform_query(
         exit(1);
     }
 
-    agg_result.push_back(make_result(duration.count(), traceprov_data));
+    agg_result.push_back(make_result(duration.count(), traceprov_data, options));
 
     // This needs to run before anything else bc of overwrites.
     DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
 
-    if (options.capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options.is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
+    if (options->capture_lineage){
+        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
     }
 
     std::cout << "Chunks: " << chunk_count;
 
-    if (IS_SET(options.stats_path)){
+    if (IS_SET(options->stats_path)){
         if (final_stats_query == NULL)
             elog(ERROR, "Expected final stats query to be set!");
 
-        if (options.is_new_sd){
+        if (options->is_new_sd){
             DUCKDB_RUN_SHORT_QUERY(con, final_stats_query, "new sd result dump");
         }else{
             if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
@@ -426,7 +431,6 @@ void perform_query(
             duckdb_destroy_prepare(&stmt);
         }
     }
-
 }
 
 int main(int argc, char **argv){
@@ -562,7 +566,7 @@ int main(int argc, char **argv){
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
             
-            perform_query(options, con, in_sql, agg_result, final_profile_out, final_stats_query);
+            perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query);
             uint32_t extra_idx = 0;
             for (auto extra_sql: extra_sqls){
                 extra_idx++;
@@ -574,7 +578,7 @@ int main(int argc, char **argv){
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());
                 perform_query(
-                    new_options, con, extra_sql, agg_result, 
+                    &new_options, con, extra_sql, agg_result, 
                     final_profile_out,
                     NULL
                 );
@@ -592,22 +596,26 @@ int main(int argc, char **argv){
                 sprintf(final_stats_query, (options.is_new_sd ? TP_SET_STATS_OUTPUT_NEW : TP_SET_STATS_OUTPUT), stats_query);
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
-            perform_query(new_options, con, in_sql, agg_result, NULL, final_stats_query);
+            perform_query(&new_options, con, in_sql, agg_result, NULL, final_stats_query);
         }
         int extra_sql_idx = 0;
 
-        int64_t partition_idx = -1;
-        void *extra_cntxt = NULL;
-        if (options.log_offset != -1){
-            // Try partition pruning.
-            extra_cntxt = traceprov_get_partition(1, options.top_level_log_layer_number, options.log_offset, &partition_idx);
-        }
-        duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_idx, nullptr); // whatever
-        if (extra_cntxt)
-            duckdb_table_function_set_extra_info(tp_read_offset_func, extra_cntxt, free);
-
         // Run extra all ;)
         for (auto extra_sql: extra_sqls){
+
+            populate_log_offset(&options, extra_sql);
+
+            int64_t partition_idx = -1;
+            void *extra_cntxt = NULL;
+            // Figure out the 
+            if (options.log_offset != -1){
+                // Try partition pruning.
+                extra_cntxt = traceprov_get_partition(1, options.top_level_log_layer_number, options.log_offset, &partition_idx);
+            }
+            duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_idx, nullptr); // whatever
+            if (extra_cntxt)
+                duckdb_table_function_set_extra_info(tp_read_offset_func, extra_cntxt, free);
+
             extra_sql_idx++;
             Options extra_options = options;
             extra_options.no_reinit_state = true;
@@ -620,8 +628,11 @@ int main(int argc, char **argv){
                     sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(extra_options, con, extra_sql, agg_result, final_profile_out, NULL);
+                perform_query(&extra_options, con, extra_sql, agg_result, final_profile_out, NULL);
             }
+            // eh, so that the state is still consistent later.
+            duckdb_table_function_set_extra_info(tp_read_offset_func, NULL, nullptr);
+            duckdb_table_function_set_extra_info(tp_read_func, NULL, nullptr); 
         }
     }
 
@@ -651,6 +662,8 @@ int main(int argc, char **argv){
             time_out_json += "\"width\":" + std::to_string(width);
             time_out_json += ",";
             time_out_json += "\"row_count\": " + std::to_string(row_count);
+            time_out_json += ",";
+            time_out_json += "\"option\": " + serialize_option(&current->option);
             time_out_json += "}";
         }
         time_out_json += "]";
@@ -663,3 +676,25 @@ int main(int argc, char **argv){
     duckdb_close(&db);   
 }
 
+#define LOG_TICKER "/*(traceprov_log_offset): "
+#define LOG_TICKER_REST "%d:%ld*/"
+
+#define LOG_TICKER_ALL (LOG_TICKER LOG_TICKER_REST)
+// To allow for running the experiments multiple times, on the same offset, we try parsing it from the SQL itself.
+static void populate_log_offset(Options *option, std::string extra_sql){
+    if (extra_sql.find(LOG_TICKER) == std::string::npos){
+        // Maybe throw error here??
+        return;
+    }
+    if (sscanf(extra_sql.c_str(), LOG_TICKER_ALL, &option->top_level_log_layer_number, &option->log_offset) == EOF)
+        elog(ERROR, "Expected full conversion!!");
+}
+
+// This doesn't do all of option (that'll be too much)
+static std::string serialize_option(Options *option){
+    std::string serialized = "{";
+    serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
+    serialized += "\"log_offset\": " + std::to_string(option->log_offset);
+    serialized += "}";
+    return serialized;
+}

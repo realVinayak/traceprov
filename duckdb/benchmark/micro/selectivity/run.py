@@ -28,7 +28,7 @@ def run():
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
-    total_iters = 15
+    total_iters = 3
     base_sql = just_read(Path("queries/base.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
     capture_new_sql = just_read(Path("queries/capture_new.sql"))
@@ -93,7 +93,9 @@ def run():
                         row_count = query_result["sd"]["base_time"][0]["row_count"]
                         out_ids = range(row_count)
                         if parsed.sample_inference == "sample":
-                            out_ids = random.sample(out_ids, k=min(row_count, 100))
+                            out_ids = random.sample(
+                                out_ids, k=min(row_count, parsed.sample_num)
+                            )
                         query_id = query_result["sd"]["capture_stats"][0]["query_id"]
                         query_result["infer_result"] = run_sample_inference_smokedduck(
                             Path(parsed.exe),
@@ -135,16 +137,20 @@ def run():
                 )
                 if parsed.sample_inference:
                     row_count = query_result["traceprov"]["base_time"][0]["row_count"]
+                    assert isinstance(row_count, int)
                     out_ids = range(row_count)
                     if parsed.sample_inference == "sample":
                         out_ids = random.sample(
                             out_ids,
-                            min(100, row_count),
+                            min(parsed.sample_num, row_count),
                         )
+                        if len(out_ids) != row_count:
+                            # also pick first parsed.sample_num / 4
+                            clamped = int(parsed.sample_num / 4)
+                            out_ids.extend((range(row_count))[:clamped])
+                            out_ids.extend((range(row_count))[-clamped:])
                     elif not parsed.validate:
                         out_ids = [-1, *out_ids]
-
-                    out_ids = out_ids[0:1]
 
                     sample_inference_result = run_sample_inference(
                         Path(parsed.exe),
@@ -163,6 +169,7 @@ def run():
                         traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
                         traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
                         mat_infer=parsed.mat_infer,
+                        table_suff=parsed.suff,
                     )
                     query_result = {
                         **query_result,

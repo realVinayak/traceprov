@@ -42,4 +42,5 @@ def make_duckdb_parse():
         "--strict", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument("--infer", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--sample_num", type=int, default=100)
     return parser

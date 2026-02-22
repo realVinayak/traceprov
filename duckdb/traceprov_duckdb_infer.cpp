@@ -309,6 +309,8 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     }
     int64_t partition_idx = -1;
     if (log_offset == -1){
+        // This, for now, assumes that the bind infrastructure in DuckDB is correct.
+        // That is, if the arguments are different, then this bind gets called multiple times.
         partition_idx = (int64_t)duckdb_bind_get_extra_info(info);
         // elog(INFO, "Using bucket, later: %ld", partition_idx);
     }
