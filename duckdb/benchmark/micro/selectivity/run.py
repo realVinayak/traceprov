@@ -30,15 +30,19 @@ def run():
     os.makedirs(tmp, exist_ok=True)
     total_iters = 3
     base_sql = just_read(Path("queries/base.sql"))
+    base_offset_sql = just_read(Path("queries/base_offset.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
     capture_new_sql = just_read(Path("queries/capture_new.sql"))
     infer_sql = just_read(Path("queries/infer.sql"))
     validate_sql = just_read(Path("queries/validate.sql"))
     validate_new_sql = just_read(Path("queries/validate_new.sql"))
+    validate_offset_sql = just_read(Path("queries/validate_offset.sql"))
+    validate_new_offset_sql = just_read(Path("queries/validate_new_offset.sql"))
     validate_sd_sql = just_read(Path("queries/validate_sd.sql"))
     infer_offset_sql = just_read(Path("queries/infer_offset.sql"))
     validate_sd_new_sql = just_read(Path("queries/validate_new_sd.sql"))
     config = json_read_file(parsed.config)
+    assert config is not None
 
     query = "query"
     os.makedirs(tmp / query, exist_ok=True)
@@ -50,12 +54,19 @@ def run():
             replacer = lambda in_sql: in_sql.replace(
                 "ROW_COUNT", str(query_dir["num_rows"])
             ).replace(":selectivity", str(selectivity))
-            base_query = replacer(base_sql)
-            just_write(tmp / query / "base.sql", base_query)
+            just_write(tmp / query / "base.sql", replacer(base_sql))
+            just_write(tmp / query / "base_offset.sql", replacer(base_offset_sql))
             just_write(tmp / query / "capture.sql", replacer(capture_sql))
             just_write(tmp / query / "capture_new.sql", replacer(capture_new_sql))
             just_write(tmp / query / "validate.sql", replacer(validate_sql))
             just_write(tmp / query / "validate_sd.sql", replacer(validate_sd_sql))
+            just_write(
+                tmp / query / "validate_offset.sql", replacer(validate_offset_sql)
+            )
+            just_write(
+                tmp / query / "validate_new_offset.sql",
+                replacer(validate_new_offset_sql),
+            )
             just_write(tmp / query / "infer_1.sql", infer_sql)
             just_write(tmp / query / "infer_1_offset.sql", infer_offset_sql)
             just_write(tmp / query / "infer_1_new.sql", infer_sql)

@@ -15,6 +15,8 @@ from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
+TP_OUT_ID_TICKER = "%OUT_ID%"
+TP_ELEMENT_ID_TICKER = "%ELEM_ID%"
 
 
 def make_dump_query(in_query: str, out_path: str):
@@ -79,12 +81,7 @@ def run_sample_inference(
             if mat_infer:
                 infer_with_offset = f"create or replace table {table_suff}_LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
             if validate:
-                if sample_id == 0:
-                    infer_with_offset = f"create or replace table LAYER_{element_idx} AS ({infer_with_offset})"
-                else:
-                    infer_with_offset = (
-                        f"insert into LAYER_{element_idx} {infer_with_offset}"
-                    )
+                infer_with_offset = f"create or replace table LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
             infer_with_offset = f"/*(traceprov_log_offset): {spec_element['min_local_used']-1}:{out_id}*/ {infer_with_offset}"
             final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
             just_write(final_q_path, infer_with_offset)
@@ -93,7 +90,7 @@ def run_sample_inference(
 
     just_write("/tmp/extra_file.txt", "\n".join(extra_sqls))
     sql_spec_map = product(sql_spec_map, range(iters))
-    sql_spec_map = [("capture", 0), *sql_spec_map]
+    sql_spec_map = [("capture", 0, 0), *sql_spec_map]
 
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
@@ -133,7 +130,44 @@ def run_sample_inference(
     assert len(capture_result_time) == len(sql_spec_map)
 
     if validate:
-        validate_query(query_dir, "validate.sql", capture_options.db, exec_str)
+        for map_idx, map_entry in enumerate(sql_spec_map):
+            if map_idx == 0:
+                continue
+            (element_idx, sample_id, out_id), iter_id = map_entry
+            # don't do any validation in this case.
+            if iter_id > 0:
+                continue
+
+            if use_optimized:
+                validate_query_offset = query_dir / "validate_new_offset.sql"
+            else:
+                validate_query_offset = query_dir / "validate_offset.sql"
+
+            validate_out = query_dir / "replaced_validate.sql"
+            base_out = query_dir / "replaced_base.sql"
+
+            query_str = just_read(validate_query_offset)
+            query_str = query_str.replace(TP_ELEMENT_ID_TICKER, str(element_idx))
+            query_str = query_str.replace(TP_OUT_ID_TICKER, str(sample_id))
+
+            just_write(validate_out, query_str)
+
+            query_str = query_str.replace(TP_OFFSET_TICKER, str(out_id))
+
+            base_offset = query_dir / "base_offset.sql"
+            just_write(
+                base_out,
+                just_read(base_offset).replace(TP_OFFSET_TICKER, str(out_id)),
+            )
+
+            validate_query(
+                query_dir,
+                validate_out.parts[-1],
+                capture_options.db,
+                exec_str,
+                base_out.parts[-1],
+            )
+
     return dict(
         result_time=capture_result_time,
         profile=capture_profile_out,
@@ -248,13 +282,19 @@ def run_single_smokedduck(
     return final_result
 
 
-def validate_query(base_dir: Path, validate_query_name: str, db: str, exec_str: str):
+def validate_query(
+    base_dir: Path,
+    validate_query_name: str,
+    db: str,
+    exec_str: str,
+    base_query_name="base.sql",
+):
     base_dump_path = Path("/tmp/") / "base_dump.csv"
     capture_dump_path = Path("/tmp/") / "capture_dump.csv"
 
     base_dump_query_path = Path("/tmp/") / "base_dump_query.sql"
     base_dump_query = make_dump_query(
-        just_read(base_dir / "base.sql"), base_dump_path.as_posix()
+        just_read(base_dir / base_query_name), base_dump_path.as_posix()
     )
     just_write(base_dump_query_path, base_dump_query)
 
