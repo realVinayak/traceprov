@@ -7,12 +7,17 @@ from itertools import product
 import json
 import os
 from pathlib import Path
+import random
+from typing import Iterable, Sequence
 
 from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
+
+
+random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
 TP_OUT_ID_TICKER = "%OUT_ID%"
@@ -23,6 +28,19 @@ def make_dump_query(in_query: str, out_path: str):
     in_query = in_query.replace(";", "")
     dump_query = f"copy (select * from ({in_query}) f order by all) to '{out_path}' (header false)"
     return dump_query
+
+
+def infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
+    out_ids = random.sample(
+        out_ids,
+        min(sample_num, row_count),
+    )
+    if len(out_ids) != row_count:
+        # also pick first parsed.sample_num / 4
+        clamped = int(sample_num / 4)
+        out_ids.extend((range(row_count))[:clamped])
+        out_ids.extend((range(row_count))[-clamped:])
+    return out_ids
 
 
 def run_sample_inference(
