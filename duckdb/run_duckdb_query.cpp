@@ -605,6 +605,8 @@ int main(int argc, char **argv){
 
             populate_log_offset(&options, extra_sql);
 
+            #if TRACEPROV_SD_MODE == 0
+
             int64_t partition_idx = -1;
             void *extra_cntxt = NULL;
             // Figure out the 
@@ -616,6 +618,7 @@ int main(int argc, char **argv){
             if (extra_cntxt)
                 duckdb_table_function_set_extra_info(tp_read_offset_func, extra_cntxt, free);
 
+            #endif
             extra_sql_idx++;
             Options extra_options = options;
             extra_options.no_reinit_state = true;
@@ -630,9 +633,11 @@ int main(int argc, char **argv){
                 }
                 perform_query(&extra_options, con, extra_sql, agg_result, final_profile_out, NULL);
             }
+            #if TRACEPROV_SD_MODE == 0
             // eh, so that the state is still consistent later.
             duckdb_table_function_set_extra_info(tp_read_offset_func, NULL, nullptr);
-            duckdb_table_function_set_extra_info(tp_read_func, NULL, nullptr); 
+            duckdb_table_function_set_extra_info(tp_read_func, NULL, nullptr);
+            #endif
         }
     }
 

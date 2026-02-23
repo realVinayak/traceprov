@@ -10,6 +10,7 @@ from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
+    infer_sample_id,
     json_read_file,
     run_sample_inference,
     run_sample_inference_smokedduck,
@@ -78,7 +79,7 @@ def run():
                 root=Path(parsed.root),
                 spec_element=spec[query][0],
                 use_optimized=parsed.optimized,
-                validate=is_validate,
+                validate=is_validate and parsed.sample_inference is None,
                 disable_col_opt=disable_col_opt,
                 materialize_infer=parsed.mat_infer,
                 iters=total_iters,
@@ -89,14 +90,14 @@ def run():
                 traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
                 traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
             )
-        if parsed.sample_inference and parsed.infer:
+        if parsed.sample_inference:
             # need to sample the inference.
             base_result = query_result["base_time"][0]
-            base_row_count = base_result["row_count"]
-            if parsed.sample_inference == "all":
-                out_ids = range(base_row_count)
-            else:
-                raise NotImplementedError("not yet!")
+            base_row_count: int = base_result["row_count"]
+            out_ids = range(base_row_count)
+            if parsed.sample_inference == "sample":
+                out_ids = infer_sample_id(out_ids, base_row_count, parsed.sample_num)
+
             if parsed.sd_mode:
                 query_id = query_result["capture_stats"][0]["query_id"]
                 sample_inference_result = run_sample_inference_smokedduck(
@@ -111,7 +112,8 @@ def run():
                     pre_base=pre_base_path,
                 )
             else:
-                out_ids = [-1, *out_ids]
+                if parsed.sample_inference != "sample":
+                    out_ids = [-1, *out_ids]
                 sample_inference_result = run_sample_inference(
                     Path(parsed.exe),
                     db=Path(parsed.db),
@@ -125,6 +127,11 @@ def run():
                     disable_col_opt=disable_col_opt,
                     profile=False,
                     settings=False,
+                    validate=parsed.validate,
+                    traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
+                    traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
+                    mat_infer=parsed.mat_infer,
+                    table_suff=parsed.suff,
                 )
 
         assert query not in results
