@@ -24,4 +24,6 @@ void traceprov_add_layer_partition_info(
     void *cached_value
 );
 
+std::string *traceprov_serialize_partition(const TraceProvLayerPartition * partition);
+
 #endif

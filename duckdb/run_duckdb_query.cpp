@@ -122,6 +122,8 @@ struct Options {
     // via --use_part_agg
     // this is a bitset to speed things up.
     uint64_t use_partition_agg;
+    // something extra, not directly setable via an option.
+    void *_extra;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -155,7 +157,8 @@ struct Options parse_args(int argc, char **argv){
         .sd_extension_path = "",
         .query_tree = false,
         .load_micro_benchmarks = false,
-        .use_partition_agg = 0
+        .use_partition_agg = 0,
+        ._extra = NULL
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -620,6 +623,7 @@ int main(int argc, char **argv){
             extra_options.no_reinit_state = true;
             extra_options.capture_lineage = false;
             extra_options.stats_path = "";
+            extra_options._extra = partition_spec;
             char final_profile_out[256] = {0};
             for (int i = 0; i < extra_options.repeat; i++){
                 if (IS_SET(extra_options.profile_out_path)){
@@ -710,11 +714,9 @@ static void populate_log_offset(TraceProvLayerPartition *partition, std::string 
 
 // This doesn't do all of option (that'll be too much)
 static std::string serialize_option(Options *option){
-    // std::string serialized = "{";
-    // serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
-    // serialized += "\"log_offset\": " + std::to_string(option->log_offset);
-    // serialized += "}";
-    return std::string("{}");
+    if (option->_extra == NULL)
+        return "{}";
+    return *traceprov_serialize_partition((TraceProvLayerPartition *)option->_extra);
 }
 
 // // This doesn't do all of option (that'll be too much)

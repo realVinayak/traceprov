@@ -624,21 +624,46 @@ void traceprov_add_layer_partition_info(
     partition->map->at(child_layer)->parition_idx->push_back(parition_idx);
 }
 
-// std::string traceprov_serialize_partition(const TraceProvLayerPartition * partition){
-//     std::string new_str = std::string("");
-//     new_str.push_back('{');
-//     for (auto pair: *partition->map){
-//         new_str += "\"";
-//         new_str += std::to_string(pair.first);
-//         new_str += "\"";
-//         new_str += ":{";
-//         bool needs_child_sep = false;
-//         for (auto child: *pair.second){
-//             if (needs_child_sep)
-//                 new_str += ","; 
-//             needs_child_sep = true;
-//             child.p
-//         }
-//         new_str += "}";
-//     }
-// }
+
+std::string *serialize_int_vector(const std::vector<uint64_t> *int_vector){
+    std::string vec_string = std::string();
+    vec_string += "[";
+    if (int_vector != nullptr){
+        bool needs_sep = false;
+        for (auto value: *int_vector){
+            if (needs_sep)
+                vec_string += ",";
+            vec_string += std::to_string(value);
+            needs_sep = true;
+        }
+    }
+    vec_string += "]";
+    return new std::string(vec_string);
+}
+
+
+std::string *serialize_parition_item(const TraceProvPartitionItem *item){
+    std::string item_string = std::string();
+    item_string += "{";
+    item_string += "\"cached_value\": " + std::to_string((uint64_t)item->cached_value);
+    item_string += ",";
+    item_string += "\"partition_idx\": " + *serialize_int_vector(item->parition_idx);
+    item_string += "}";
+    return new std::string(item_string);
+}
+
+std::string *traceprov_serialize_partition(const TraceProvLayerPartition * partition){
+    std::string new_str = std::string("");
+    new_str += "{";
+    bool needs_sep = false;
+    for (auto pair: *partition->map){
+        if (needs_sep)
+            new_str += ",";
+        new_str += "\"" + std::to_string(pair.first) + "\"";
+        new_str += ":";
+        new_str += *serialize_parition_item(pair.second);
+        needs_sep = true;
+    }
+    new_str += "}";
+    return new std::string(new_str);
+}
