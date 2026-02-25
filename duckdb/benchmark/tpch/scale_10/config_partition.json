@@ -1,20 +1,78 @@
 {
-    "_queries": [
-        3,4,  5, 7, 9, 10, 11, 12, 15, 18, 21
-    ],
-    "partition_queries":[
-        {"query": 4, "infer": [1, 2]},
-        {"query": 11, "infer": [3]},
-        {"query": 13, "infer": [1], "needs_mod": true},
-        {"query": 15, "infer": [1, 5]},
-        {"query": 17, "infer": [1, 3]},
-        {"query": 18, "infer": [3] },
-        {"query": 20, "infer": [5] },
-        {"query": 21, "infer": [1, 2]},
-        {"query": 22, "Infer": [3]}
+    "_queries": [],
+    "partition_queries": [
+        {
+            "query": 4,
+            "infer": [
+                1,
+                2
+            ]
+        },
+        {
+            "query": 11,
+            "infer": [
+                3
+            ]
+        },
+        {
+            "query": 13,
+            "infer": [
+                1
+            ],
+            "needs_mod": true
+        },
+        {
+            "query": 15,
+            "infer": [
+                1,
+                5
+            ]
+        },
+        {
+            "query": 17,
+            "infer": [
+                1,
+                3
+            ]
+        },
+        {
+            "query": 18,
+            "infer": [
+                3
+            ]
+        },
+        {
+            "query": 20,
+            "infer": [
+                5
+            ]
+        },
+        {
+            "query": 21,
+            "infer": [
+                1,
+                2
+            ]
+        },
+        {
+            "query": 22,
+            "Infer": [
+                3
+            ]
+        }
     ],
     "queries": [
-        22
+        3,
+        4,
+        5,
+        7,
+        9,
+        10,
+        11,
+        12,
+        15,
+        18,
+        21
     ],
     "validate": false,
     "subdirs": [
