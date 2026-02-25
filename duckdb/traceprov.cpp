@@ -112,8 +112,7 @@ static inline int round_up(const int number){
 #define TRACPROV_SET_BUCKET_ON_STATE(STATE, LAYER, EXTRA) { \
     STATE->layer_number = layer_number; \
     const uint64_t original_group_number = ++LAYER->num_groups; \
-    const uint64_t hashed = (EXTRA->hasher)(original_group_number); \
-    const uint64_t bucket = hashed % TRACEPROV_BUCKET_COUNT; \
+    const uint64_t bucket = original_group_number % TRACEPROV_BUCKET_COUNT; \
     STATE->group_cnt = TRACEPROV_SET_BUCKET(original_group_number, bucket); \
 } \
 
