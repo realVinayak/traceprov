@@ -16,6 +16,15 @@
 
 #include "traceprov_duckdb_infer.hpp"
 #include "traceprov_extra_funcs.hpp"
+#include "traceprov_partition_info.hpp"
+
+#undef sprintf
+
+#include "duckdb.hpp"
+#include "traceprov.hpp"
+#include "utils.hpp"
+
+#include "traceprov_settings.hpp"
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_ENABLE_PROFILING_QUERY_TREE "PRAGMA enable_profiling=query_tree"
@@ -37,16 +46,6 @@
 
 #define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
-#undef sprintf
-
-#include "duckdb.hpp"
-#include "traceprov.hpp"
-#include "utils.hpp"
-
-#include "traceprov_settings.hpp"
-
-typedef uint32_t TraceProvLayerNumber;
-
 typedef struct TraceProvDescriptor {
     TraceProvLayerNumber layer_number;
     void *entry;
@@ -58,6 +57,16 @@ typedef struct {
 } TraceProvColumnData;
 
 typedef std::vector<TraceProvColumnData*> TraceProvData;
+
+typedef struct TraceProvLogExtra {
+    // what is the log offset?
+    int64_t log_offset;
+    // what layer is it for?
+    TraceProvLayerNumber top_level_log_layer_number;
+    // what layer does it point to?
+    // TODO: Generialize this.
+    TraceProvLayerNumber child_layer_number;
+} TraceProvLogExtra;
 
 // TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
@@ -110,10 +119,9 @@ struct Options {
     bool query_tree;
     // via --load_micro_benchmarks
     bool load_micro_benchmarks;
-    // via --top_log_num
-    uint32_t top_level_log_layer_number;
-    // via --log_offset
-    int64_t log_offset;
+    // via --use_part_agg
+    // this is a bitset to speed things up.
+    uint64_t use_partition_agg;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -147,8 +155,7 @@ struct Options parse_args(int argc, char **argv){
         .sd_extension_path = "",
         .query_tree = false,
         .load_micro_benchmarks = false,
-        .top_level_log_layer_number = 0,
-        .log_offset = -1
+        .use_partition_agg = 0
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -238,11 +245,8 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_use_row_in_agg_partition")){
             traceprov_use_row_in_agg_partition = true;
             continue;
-        } else if (IS_OPTION("--top_log_num")){
-            options.top_level_log_layer_number = std::atoi(argv[++i]);
-            continue;
-        } else if (IS_OPTION("--log_offset")){
-            options.log_offset = std::atoi(argv[++i]);
+        } else if (IS_OPTION("--use_part_agg")){
+            options.use_partition_agg |= (1 << std::atoi(argv[++i]));
             continue;
         }
 
@@ -261,9 +265,6 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\tsettings_out_path: " << options.settings_out_path << std::endl;
     std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
-
-    if (options.top_level_log_layer_number == 0)
-        options.top_level_log_layer_number = options.min_layer_number - 1;
 
     return options;
 };
@@ -302,7 +303,7 @@ static void populate_traceprov_data(
     }
 }
 
-static void populate_log_offset(Options *option, std::string extra_sql);
+static void populate_log_offset(TraceProvLayerPartition *parition, std::string extra_sql);
 static std::string serialize_option(Options *option);
 
 typedef struct PerformQueryResult {
@@ -479,8 +480,8 @@ int main(int argc, char **argv){
 
     #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
-    duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false);
-    duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true);
+    duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
+    duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
     duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
     duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
     duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
@@ -603,20 +604,15 @@ int main(int argc, char **argv){
         // Run extra all ;)
         for (auto extra_sql: extra_sqls){
 
-            populate_log_offset(&options, extra_sql);
+            // This way, the life cycle of partition_spec is just 1 query.
+            auto partition_spec = traceprov_make_layer_partition_info();
+
+            populate_log_offset(partition_spec, extra_sql);
 
             #if TRACEPROV_SD_MODE == 0
 
-            int64_t partition_idx = -1;
-            void *extra_cntxt = NULL;
-            // Figure out the 
-            if (options.log_offset != -1){
-                // Try partition pruning.
-                extra_cntxt = traceprov_get_partition(1, options.top_level_log_layer_number, options.log_offset, &partition_idx);
-            }
-            duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_idx, nullptr); // whatever
-            if (extra_cntxt)
-                duckdb_table_function_set_extra_info(tp_read_offset_func, extra_cntxt, free);
+            duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_spec, nullptr); // whatever
+            duckdb_table_function_set_extra_info(tp_read_offset_func, (void *)partition_spec, nullptr);
 
             #endif
             extra_sql_idx++;
@@ -682,24 +678,50 @@ int main(int argc, char **argv){
 }
 
 #define LOG_TICKER "/*(traceprov_log_offset): "
-#define LOG_TICKER_REST "%d:%ld*/"
+#define LOG_TICKER_REST "%d:%d:%d:%ld*/"
 
 #define LOG_TICKER_ALL (LOG_TICKER LOG_TICKER_REST)
+
 // To allow for running the experiments multiple times, on the same offset, we try parsing it from the SQL itself.
-static void populate_log_offset(Options *option, std::string extra_sql){
+static void populate_log_offset(TraceProvLayerPartition *partition, std::string extra_sql){
     if (extra_sql.find(LOG_TICKER) == std::string::npos){
         // Maybe throw error here??
         return;
     }
-    if (sscanf(extra_sql.c_str(), LOG_TICKER_ALL, &option->top_level_log_layer_number, &option->log_offset) == EOF)
+    TraceProvLayerNumber layer_number, child_layer_number;
+    uint64_t offset = 0;
+    uint32_t entry_idx = 0;
+    if (sscanf(extra_sql.c_str(), LOG_TICKER_ALL, &layer_number, &child_layer_number, &entry_idx, &offset) == EOF)
         elog(ERROR, "Expected full conversion!!");
+
+    
+    uint64_t partition_idx = 0;
+    // Cache the data, so it doesn't have to be recomputed again later.
+    void *cached_data = traceprov_get_partition(1, layer_number, offset, entry_idx, &partition_idx);
+
+    traceprov_add_layer_partition_info(
+        partition,
+        layer_number,
+        child_layer_number,
+        partition_idx,
+        cached_data
+    );
 }
 
 // This doesn't do all of option (that'll be too much)
 static std::string serialize_option(Options *option){
-    std::string serialized = "{";
-    serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
-    serialized += "\"log_offset\": " + std::to_string(option->log_offset);
-    serialized += "}";
-    return serialized;
+    // std::string serialized = "{";
+    // serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
+    // serialized += "\"log_offset\": " + std::to_string(option->log_offset);
+    // serialized += "}";
+    return std::string("{}");
 }
+
+// // This doesn't do all of option (that'll be too much)
+// static std::string serialize_option(Options *option){
+//     std::string serialized = "{";
+//     serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
+//     serialized += "\"log_offset\": " + std::to_string(option->log_offset);
+//     serialized += "}";
+//     return serialized;
+// }

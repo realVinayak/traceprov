@@ -91,7 +91,7 @@ class ExtraQuery(NamedTuple):
     runs_after_base: bool = False
     runs_after_materialize: bool = False
     skip_validation: bool = False
-    preprocess: list[Preprocessor] = []
+    preprocess: list[Preprocessor] | None = None
     capture_output: bool = True
     strict_run: bool = False
     # Sometimes, it's benefecial to run extra multiple times too.
@@ -548,7 +548,7 @@ class GenericBenchmark(NamedTuple):
             new_extras = [
                 extra._replace(
                     preprocess=[
-                        _map_preprocess(preproc) for preproc in extra.preprocess
+                        _map_preprocess(preproc) for preproc in extra.preprocess or []
                     ]
                 )
                 for extra in query_spec.extras

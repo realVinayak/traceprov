@@ -49,7 +49,8 @@ def run_sample_inference(
     query_num: str,
     root: Path,
     spec_element: dict,
-    samples: list[int],
+    partition_spec_element: dict,
+    samples: Iterable[int],
     use_optimized: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
@@ -62,6 +63,8 @@ def run_sample_inference(
     mat_infer: bool = False,
     table_suff: str = "",
 ):
+
+    # samples = [0]
 
     if validate:
         iters = 1
@@ -82,8 +85,13 @@ def run_sample_inference(
     sample_q_dir = Path("/tmp/")
     extra_sqls = []
     sql_spec_map = []
+    agg_use_part_agg = partition_spec_element["use_part_agg"]
+    top_level_log = partition_spec_element["top_level_log"]
+    entry_id = partition_spec_element.get("entry_id", 0)
     for idx, element in enumerate(spec_element["elements"]):
         element_idx = element["idx"]
+        if not element_idx in partition_spec_element["layers"]:
+            continue
         if use_optimized:
             infer_path = query_dir / f"infer_{element_idx}_new_offset.sql"
         else:
@@ -100,7 +108,7 @@ def run_sample_inference(
                 infer_with_offset = f"create or replace table {table_suff}_LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
             if validate:
                 infer_with_offset = f"create or replace table LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
-            infer_with_offset = f"/*(traceprov_log_offset): {spec_element['min_local_used']-1}:{out_id}*/ {infer_with_offset}"
+            infer_with_offset = f"/*(traceprov_log_offset): {top_level_log}:{agg_use_part_agg[0]}:{entry_id}:{out_id}*/ {infer_with_offset}"
             final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
             just_write(final_q_path, infer_with_offset)
             extra_sqls.append(final_q_path.as_posix())
@@ -122,6 +130,7 @@ def run_sample_inference(
         disable_col_opt=disable_col_opt,
         extra_file="/tmp/extra_file.txt",
         main_once_extra_all=True,
+        use_part_agg=agg_use_part_agg,
     )
 
     if traceprov_use_partition_in_agg:
@@ -161,8 +170,8 @@ def run_sample_inference(
             else:
                 validate_query_offset = query_dir / "validate_offset.sql"
 
-            validate_out = query_dir / "replaced_validate.sql"
-            base_out = query_dir / "replaced_base.sql"
+            validate_out = query_dir / "replaced_validate.tmp.sql"
+            base_out = query_dir / "replaced_base.tmp.sql"
 
             query_str = just_read(validate_query_offset)
             query_str = query_str.replace(TP_ELEMENT_ID_TICKER, str(element_idx))
@@ -629,7 +638,7 @@ def run_single(
     else:
         infer_results = None
 
-    if validate:
+    if validate and run_inference:
         # need to dump base and infer result on provenance, and compare both.
         if use_optimized:
             validate_path = None

@@ -27,9 +27,11 @@ def run():
     base_parser = make_duckdb_parse()
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
+    base_parser.add_argument("-part_cfg", required=True)
 
     parsed = base_parser.parse_args()
     config: dict = json_read_file(parsed.config)
+    part_config: dict = json_read_file(parsed.part_cfg)
     is_validate = config.get("validate", False) or parsed.validate
 
     # for now...
@@ -126,6 +128,7 @@ def run():
                     query_num=query,
                     root=Path(parsed.root),
                     spec_element=spec[query][0],
+                    partition_spec_element=part_config[query],
                     samples=out_ids,
                     use_optimized=parsed.optimized,
                     iters=total_iters,

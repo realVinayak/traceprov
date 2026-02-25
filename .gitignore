@@ -91,3 +91,7 @@ duckdb/benchmark/tpch/queries/root/*/*_count.sql
 duckdb/benchmark/tpch/queries/root/*/*_csv.sql
 *.shm
 *.tp
+replaced_base.sql
+replaced_validate.sql
+replaced_base.tmp.sql
+replaced_validate.tmp.sql

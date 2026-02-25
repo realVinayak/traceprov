@@ -338,7 +338,7 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
-duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false);
+duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false, const uint64_t use_agg_part = 0);
 duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
@@ -361,6 +361,9 @@ typedef struct TraceProvAggExtra {
     void *slice_vectors[TRACEPROV_BUCKET_COUNT];
     uint64_t *col_cache[TRACEPROV_MAX_INLINE_CACHE_SIZE];
     uint64_t **dynamic_col_cache;
+    uint64_t use_part_agg;
 } TraceProvAggExtra;
+
+typedef uint32_t TraceProvLayerNumber;
 
 #endif

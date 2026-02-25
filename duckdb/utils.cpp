@@ -9,6 +9,7 @@
 #include "utils.hpp"
 #include "file_utils.hpp"
 #include <errno.h>
+#include "traceprov_partition_info.hpp"
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
@@ -593,3 +594,51 @@ void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_la
     void *final_row = (void*)((uint64_t)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
     return final_row;
 }
+
+TraceProvLayerPartition *traceprov_make_layer_partition_info(){
+    auto partition_spec = new TraceProvLayerPartition;
+    partition_spec->map = new std::unordered_map<TraceProvLayerNumber, TraceProvPartitionItem*>;
+    return partition_spec;
+}
+
+void traceprov_add_layer_partition_info(
+    TraceProvLayerPartition *partition,
+    const TraceProvLayerNumber layer,
+    const TraceProvLayerNumber child_layer,
+    const uint64_t parition_idx,
+    void *cached_value
+){
+    if (partition->map->find(layer) == partition->map->end()){
+        TraceProvPartitionItem *item = new TraceProvPartitionItem;
+        item->cached_value = cached_value;
+        item->parition_idx = nullptr;
+        partition->map->insert({layer, item});
+    }
+
+    if (partition->map->find(child_layer) == partition->map->end()){
+        TraceProvPartitionItem *item = new TraceProvPartitionItem;
+        item->cached_value = NULL;
+        item->parition_idx = new std::vector<uint64_t>;
+        partition->map->insert({child_layer, item});
+    }
+    partition->map->at(child_layer)->parition_idx->push_back(parition_idx);
+}
+
+// std::string traceprov_serialize_partition(const TraceProvLayerPartition * partition){
+//     std::string new_str = std::string("");
+//     new_str.push_back('{');
+//     for (auto pair: *partition->map){
+//         new_str += "\"";
+//         new_str += std::to_string(pair.first);
+//         new_str += "\"";
+//         new_str += ":{";
+//         bool needs_child_sep = false;
+//         for (auto child: *pair.second){
+//             if (needs_child_sep)
+//                 new_str += ","; 
+//             needs_child_sep = true;
+//             child.p
+//         }
+//         new_str += "}";
+//     }
+// }

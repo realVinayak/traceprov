@@ -156,9 +156,9 @@ class RunWithTimeoutOptions(NamedTuple):
     # Just some extra context stuff (like connections)
     extras: dict | None = None
     skip_validation: bool = False
-    preprocessors: list[Preprocessor] = []
+    preprocessors: list[Preprocessor] | None = None
     strict_run: bool = False
-    shared_libraries: list[str] = []
+    shared_libraries: list[str] | None = []
 
     def close_all(self):
         if self.extras is None:
@@ -211,7 +211,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     if cached_connection is None:
         cursor = connection.cursor()
-        for shared_library in options.shared_libraries:
+        for shared_library in options.shared_libraries or []:
             cursor.execute(f"load '{shared_library}';")
         # cursor.execute("set max_parallel_workers_per_gather = 0;")
         cursor.close()
@@ -229,7 +229,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     )
     print("RUNNING: ", just_read(options.file_path))
     # Don't bother verifying, for now....
-    if not options.skip_validation and len(options.preprocessors) == 0:
+    if not options.skip_validation and len(options.preprocessors or []) == 0:
         validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)
 
     if options.params.dry_run:
@@ -241,8 +241,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         non_comment_stmts = [stmt for stmt in sql_stmts if not stmt.startswith("--")]
         flattend_sql_query = " ".join(non_comment_stmts)
 
-    for preprocessor in options.preprocessors:
-
+    for preprocessor in options.preprocessors or []:
         flattend_sql_query = preprocessor.preprocess(flattend_sql_query)
 
     timeout_stmt = f"SET statement_timeout = '{options.params.timeout}s';"

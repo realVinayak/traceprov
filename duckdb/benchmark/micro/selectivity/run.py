@@ -28,7 +28,7 @@ def run():
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
-    total_iters = 3
+    total_iters = 10
     base_sql = just_read(Path("queries/base.sql"))
     base_offset_sql = just_read(Path("queries/base_offset.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
@@ -169,6 +169,9 @@ def run():
                         query_num=query,
                         root=tmp,
                         spec_element=spec_element,
+                        partition_spec_element=dict(
+                            use_part_agg=[1], top_level_log=2, layers=[1]
+                        ),
                         samples=out_ids,
                         use_optimized=parsed.optimized,
                         iters=total_iters,

@@ -33,7 +33,6 @@ class DuckDBDriverOptions(NamedTuple):
     min_layer_number: None | int = None
     extra: str | None = None
     disable_col_opt: bool | None = None
-    extras: list[str] = []
     main_once_extra_all: bool = False
     extra_file: str | None = None
     is_new_sd: bool = False
@@ -43,6 +42,11 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_use_row_in_agg_partition: bool = False
     top_log_num: int | None = None
     log_offset: int | None = None
+    use_part_agg: list[int] | None = None
+
+    def set_part_agg(self, part_agg: int):
+        new_list = self.use_part_agg or []
+        return self._replace(use_part_agg=[*new_list, part_agg])
 
     def _boolean_options(self):
         return {
@@ -66,10 +70,15 @@ class DuckDBDriverOptions(NamedTuple):
             f"--{key} {value}"
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
-            and (key not in ["extra", "extras"])
+            and (key not in ["extra", "extras", "use_part_agg"])
         ]
-        all_extras = [*([self.extra] if self.extra is not None else []), *self.extras]
+        all_extras = [self.extra] if self.extra is not None else []
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
+        key_value_options = [
+            *key_value_options,
+            *[f"--use_part_agg {f}" for f in self.use_part_agg or []],
+        ]
+        print(key_value_options)
         assert self.i is not None
         with open(self.i) as f:
             contents = f.read()

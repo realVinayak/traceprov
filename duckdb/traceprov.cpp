@@ -255,6 +255,11 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
 
     TP_UPDATE_SETUP_MAIN(1);
 
+    if (unlikely(extra->state->should_hash)){
+        if ((extra->use_part_agg & (1 << layer_number)))
+            return traceprov_update_partition(info, input, states);
+    }
+
     const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
@@ -374,7 +379,8 @@ void cleanup_extra(void *data){
 duckdb_aggregate_function *traceprov_create_funcs(
     const uint32_t num_args,
     const bool is_window,
-    const bool ignore_group_number
+    const bool ignore_group_number,
+    const uint64_t use_part_agg
 ){
     duckdb_aggregate_function *funcs = (duckdb_aggregate_function *)malloc(sizeof(duckdb_aggregate_function) *num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
@@ -404,17 +410,18 @@ duckdb_aggregate_function *traceprov_create_funcs(
         tp_duckdb_state->should_hash = traceprov_use_partition_in_agg;
         extra->hasher = std::hash<uint64_t>();
         extra->dynamic_col_cache = nullptr;
+        extra->use_part_agg = traceprov_use_partition_in_agg ? use_part_agg : 0;
         // Only in this case both creating entries.
         for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
             if (tp_duckdb_state->should_hash) {
-            extra->slice_vectors[idx] = mmap(
-                NULL,
-                TRACEPROV_PAGE_SIZE,
-                PROT_WRITE,
-                TRACEPROV_MMAP_FLAGS,
-                0,
-                0
-            );
+                extra->slice_vectors[idx] = mmap(
+                    NULL,
+                    TRACEPROV_PAGE_SIZE,
+                    PROT_WRITE,
+                    TRACEPROV_MMAP_FLAGS,
+                    0,
+                    0
+                );
             }else{
                 extra->slice_vectors[idx] = nullptr;
             }
@@ -423,10 +430,7 @@ duckdb_aggregate_function *traceprov_create_funcs(
         duckdb_aggregate_function_set_extra_info(func, extra, cleanup_extra);
         duckdb_destroy_logical_type(&type);
         duckdb_destroy_logical_type(&first_type);
-        auto update = tp_duckdb_state->should_hash ? (
-            traceprov_use_row_in_agg_partition ? traceprov_update_partition_row_format : traceprov_update_partition) 
-            : traceprov_update;
-        duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, update, traceprov_combine, traceprov_finalize);
+        duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, traceprov_update, traceprov_combine, traceprov_finalize);
         auto base = GetCAggregateFunction(func);
         // IDK why the C-API requires the combine.
         // TODO: Experiment with disabling this.
