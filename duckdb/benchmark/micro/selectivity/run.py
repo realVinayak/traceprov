@@ -177,7 +177,7 @@ def run():
                         iters=total_iters,
                         pre_base=None,
                         disable_col_opt=False,
-                        profile=False,
+                        profile=True,
                         settings=False,
                         validate=parsed.validate,
                         traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
