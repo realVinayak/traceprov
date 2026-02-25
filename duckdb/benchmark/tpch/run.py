@@ -90,16 +90,20 @@ def run():
                 traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
                 traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
             )
+
         if parsed.sample_inference:
             # need to sample the inference.
-            base_result = query_result["base_time"][0]
+            if parsed.sd_mode:
+                base_result = query_result["sd"]["base_time"][0]
+            else:
+                base_result = query_result["base_time"][0]
             base_row_count: int = base_result["row_count"]
             out_ids = range(base_row_count)
             if parsed.sample_inference == "sample":
                 out_ids = infer_sample_id(out_ids, base_row_count, parsed.sample_num)
 
             if parsed.sd_mode:
-                query_id = query_result["capture_stats"][0]["query_id"]
+                query_id = query_result["sd"]["capture_stats"][0]["query_id"]
                 sample_inference_result = run_sample_inference_smokedduck(
                     Path(parsed.exe),
                     db=Path(parsed.db),
@@ -110,6 +114,8 @@ def run():
                     samples=out_ids,
                     iters=total_iters,
                     pre_base=pre_base_path,
+                    mat_infer=parsed.mat_infer,
+                    validate=parsed.validate,
                 )
             else:
                 if parsed.sample_inference != "sample":

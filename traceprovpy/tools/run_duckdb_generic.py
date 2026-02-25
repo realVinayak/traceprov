@@ -355,6 +355,7 @@ def run_sample_inference_smokedduck(
     profile: bool = True,
     settings: bool = True,
     validate: bool = False,
+    mat_infer: bool = False,
 ):
     sample_results = _run_sample_inference_smokedduck(
         exec,
@@ -369,6 +370,7 @@ def run_sample_inference_smokedduck(
         profile,
         settings,
         validate,
+        mat_infer,
     )
 
     if validate:
@@ -391,6 +393,7 @@ def _run_sample_inference_smokedduck(
     profile: bool = True,
     settings: bool = True,
     validate: bool = False,
+    mat_infer: bool = False,
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -413,7 +416,7 @@ def _run_sample_inference_smokedduck(
     for sample_id, out_id in enumerate(samples):
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
         infer_with_offset = f"select * from lineage_query(1, 100, {out_id}::UINTEGER)"
-        if validate:
+        if validate or mat_infer:
             if sample_id == 0:
                 infer_with_offset = (
                     f"create or replace table LAYER_1_SD AS ({infer_with_offset})"
