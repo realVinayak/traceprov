@@ -18,15 +18,10 @@ where
             l_orderkey
         from
             lineitem
-        where
-            lineitem.rowid in (
-                select
-                    column_1
-                from
-                    LAYER_1
-            )
         group by
             l_orderkey
+        having
+            sum(l_quantity) > 300
     )
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
         select
@@ -34,7 +29,7 @@ where
             column_2,
             column_3
         FROM
-            LAYER_3
+            LAYER_3_%OUT_ID%
     )
 group by
     c_name,

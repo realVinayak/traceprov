@@ -17,28 +17,19 @@ from
         where
             customer.rowid in (
                 select
-                    column_0
+                    column_1
                 from
-                    LAYER_3
+                    LAYER_3_%OUT_ID%
             )
             and c_acctbal > (
-                select
-                    avg(c_acctbal)
-                from
-                    customer
-                where
-                    c_acctbal > 0.00
-                    and substring(
-                        c_phone
-                        from
-                            1 for 2
-                    ) in ('13', '31', '23', '29', '30', '18', '17')
-                    and (customer.rowid) in (
-                        select
-                            column_0
-                        from
-                            LAYER_1
-                    )
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substring(c_phone from 1 for 2) in
+						('13', '31', '23', '29', '30', '18', '17')
             )
             and not exists (
                 select
