@@ -1,0 +1,11 @@
+AC_INIT([traceprov_common],[1.0])
+AM_INIT_AUTOMAKE([foreign])
+AC_PROG_CC
+AC_PROG_CXX
+LT_INIT
+CFLAGS="-Wall -g -O3"
+CXXFLAGS="-Wall -g -std=c++11 -O3"
+AC_CONFIG_FILES([Makefile])
+TRACEPROV_CUR_DIR="$(pwd)"
+AC_SUBST([TRACEPROV_CUR_DIR])
+AC_OUTPUT

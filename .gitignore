@@ -98,3 +98,6 @@ replaced_validate.tmp.sql
 node_modules/
 package-lock.json
 package.json
+common/Makefile
+common/Makefile.in
+common/bld/
