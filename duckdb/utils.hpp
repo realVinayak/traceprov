@@ -44,9 +44,10 @@ int initialize_layer_file(
     const TraceProvDuckDbState *state
 );
 
-extern struct current_context traceprov_current;
+extern thread_local struct current_context traceprov_current;
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer);
 int map_traceprov_shared_context(struct traceprov_shared_context *ptr);
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size);
 void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer);
+void traceprov_write_max_used_layer(const uint32_t maximum_layer_used);
 #endif

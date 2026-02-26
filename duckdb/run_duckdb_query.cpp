@@ -336,6 +336,7 @@ void perform_query(
     if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
+        traceprov_write_max_used_layer(options->min_layer_number);
     }
     #endif
 
@@ -534,11 +535,16 @@ int main(int argc, char **argv){
     if (!options.no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
+        traceprov_write_max_used_layer(options.min_layer_number);
     }
     #endif
 
     if (options.min_layer_number){
         traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        // In concurrent setting, the above is not safe.
+        // So, we fall back to the boring, slow, way, where we right it to a file.
+        // TODO: Only do this when threads > 1.
+        traceprov_write_max_used_layer(options.min_layer_number);
     }
 
     if (options.dry_run)

@@ -8,8 +8,9 @@
 #include <sys/mman.h>
 #include "traceprov_settings.hpp"
 #include <functional>
+#include <thread>
 
-struct current_context traceprov_current = {.my_worker_id = 0,
+thread_local struct current_context traceprov_current = {.my_worker_id = 0,
                                             .traceprov_shared_context_fd = -1,
                                             .shared_context = NULL,
                                             .local_context = NULL,

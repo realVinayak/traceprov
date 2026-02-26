@@ -15,8 +15,13 @@ static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
 void portable_elog(int level){
     if (level == INFO) return;
-    if (level == ERROR)
+    if (level == ERROR){
+        //  Recursive call is safe
+        elog(INFO, "Error no: %d", errno);
+        elog(INFO, "Error: %s", strerror(errno));
         exit(1);
+    }
+
 }
 
 static inline int round_up(const int number){
@@ -73,6 +78,20 @@ int fail_safe_mmap(int fd, size_t size, void **pptr){
 }
 
 
+void traceprov_write_max_used_layer(const uint32_t maximum_layer_used){
+    char buff[1024] = { 0 };
+    sprintf(buff, TRACEPROV_GRAPH_FILE, DataDir);
+    int graph_file_fd = open(buff, O_CREAT | O_RDWR, TRACEPROV_FILE_PERMISSION);
+    if (graph_file_fd < 0){
+        elog(ERROR, "Error opening the graph file for write!");
+    }else{
+        if((write(graph_file_fd, &maximum_layer_used, sizeof(uint32_t))) == -1){
+            elog(ERROR, "Write to graph file failed!");
+        }
+        if(close(graph_file_fd)) elog(ERROR, "Error closing graph file");   
+    }
+}
+
 int initialize_local_context(){
     
     if (traceprov_current.my_worker_id != 0) return 0;
@@ -124,7 +143,7 @@ int initialize_local_context(){
         sprintf(buff, TRACEPROV_GRAPH_FILE, DataDir);
         int graph_file_fd = open(buff, O_RDWR);
         if (graph_file_fd < 0){
-            elog(INFO, "Error opening the graph file!");   
+            elog(ERROR, "Error opening the graph file for read!");   
         }else{
             if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32_t))) == -1){
                 elog(ERROR, "Read from graph file failed!");
