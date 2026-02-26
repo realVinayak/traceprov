@@ -1,22 +1,13 @@
 #ifndef __TP_INFER_ESSENTIALS__
 #define __TP_INFER_ESSENTIALS__
-
-#include <stdint.h>
 #include <unordered_map>
 
 extern "C" {
+    #include <stdint.h>
 
     // Forward declaration.
     typedef struct TraceProvBindData TraceProvBindData;
     typedef struct TraceProvInitData TraceProvInitData;
-
-    // These are completely indepdent of postgres or duckdb (based off stdint)
-    // THis is done this way so we don't have to directly map PG -> DUCKDB
-    // and vice versa.
-    typedef struct TraceProvRelationArgs {
-        uint32_t worker_id;
-        uint32_t layer_number;
-    } TraceProvRelationArgs;
 
     typedef struct TraceProvWindowPack {
         TraceProvBindData *bind_data;

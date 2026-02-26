@@ -1,8 +1,8 @@
-#include "traceprov_parse_context.h"
 #include "postgres.h"
 #include "lib/stringinfo.h"
-#include "traceprov.h"
 #include "miscadmin.h"
+#include "traceprov_parse_context.h"
+#include "traceprov.h"
 
 
 #define NEED_SEP(cursor) (foreach_current_index(cursor) > 0)

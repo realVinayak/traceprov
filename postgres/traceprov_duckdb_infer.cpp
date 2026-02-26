@@ -3,6 +3,7 @@
 #include "traceprov_ext_utils.hpp"  
 #include "traceprov_infer.hpp"
 #include "traceprov_infer_essentials.hpp"
+#include <traceprov_node.hpp>
 
 // Duckdb integration for inference.
 // Duckdb doesn't technically do anything smart (just runs the query)
@@ -17,6 +18,7 @@ extern "C" {
     #include "duckdb.h"
     #include <stdlib.h>
     #include "funcapi.h"
+    #include "traceprov_graph.h"
 
     struct traceprov_inference_context {
         duckdb_database db;

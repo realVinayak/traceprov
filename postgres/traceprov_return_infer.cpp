@@ -12,6 +12,8 @@
 #include <fstream>
 #include "traceprov_infer_essentials.hpp"
 #include "traceprov_ext_utils.hpp"
+#include "traceprov_node.hpp"
+#include "traceprov_infer.hpp"
 
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
 
@@ -25,7 +27,8 @@ extern "C" {
     #include "utils/builtins.h"
     #include "traceprov_parse_context.h"
     #include "rewriter_utils.h"
-    #include "traceprov_infer.hpp"
+
+
     PG_MODULE_MAGIC;
 }
 
