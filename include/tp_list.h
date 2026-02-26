@@ -1,7 +1,8 @@
 #ifndef TP_PG_LIST_H
 #define TP_PG_LIST_H
 // This is so that we don't mess with stuff from before..
-#if TP_USE_PG_LIST==0
+// The major version check is useful so that IDE doesn't trip up.
+#if TP_USE_PG_LIST==0 && defined(PG_MAJORVERSION_NUM)==0
 
 #include <stdbool.h>
 #include <unistd.h>
