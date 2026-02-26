@@ -10,6 +10,7 @@
 #include "file_utils.hpp"
 #include <errno.h>
 #include "traceprov_partition_info.hpp"
+#include <mutex>
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
@@ -92,9 +93,26 @@ void traceprov_write_max_used_layer(const uint32_t maximum_layer_used){
     }
 }
 
+std::mutex shared_context_mutex;
+
+// This value gets adjusted without any race conditions.
+// So, doesn't need any mutexes.
+uint64_t traceprov_reinit_counter = 0;
+
+void traceprov_reset_local(){
+    traceprov_current.my_worker_id = 0;
+    traceprov_current.my_worker_id = 0;
+    traceprov_current.traceprov_shared_context_fd  = -1;
+    traceprov_current.shared_context = NULL;
+    traceprov_current.local_context = NULL;
+    traceprov_current.maximum_local_layer_used = 0;
+}
+
 int initialize_local_context(){
-    
-    if (traceprov_current.my_worker_id != 0) return 0;
+
+    if (traceprov_current.my_worker_id != 0 && traceprov_current.local_reinit_counter == traceprov_reinit_counter) return 0;
+
+    traceprov_reset_local();
 
     int rc = 0, is_locked = 0, shared_context_fd = 0, worker_layer_map_fd = 0;
     int32_t magic_word = 0;
@@ -118,6 +136,8 @@ int initialize_local_context(){
     }
 
     PRINT_ON_DEBUG("Opened shared context file correctly");
+
+    shared_context_mutex.lock();
 
     if ((rc = flock(shared_context_fd, LOCK_EX))){
         PRINT_ON_DEBUG("Error locking the file. %d", rc);
@@ -194,6 +214,7 @@ int initialize_local_context(){
     // Initialize the local context (in shared)
     traceprov_current.local_context->worker_id = traceprov_current.my_worker_id;
     traceprov_current.local_context->worker_pid = MyProcPid;
+    traceprov_current.local_reinit_counter = traceprov_reinit_counter;
 
     if (rc || !is_locked){
         elog(ERROR, "Expected rc to be 0, and the shared context file to be locked.");
@@ -206,6 +227,7 @@ exit_initialize_local_context:
             PRINT_ON_DEBUG("Error unlocked share context file: %d", rc);
             return previous_error;
         }
+        shared_context_mutex.unlock();
     }
     // Don't need to keep the shared context in-memory too.
     if (shared_context_fd > 0) close(shared_context_fd);
@@ -644,7 +666,7 @@ void traceprov_add_layer_partition_info(
 }
 
 
-std::string *serialize_int_vector(const std::vector<uint64_t> *int_vector){
+template <typename T> std::string *serialize_int_vector(const std::vector<T> *int_vector){
     std::string vec_string = std::string();
     vec_string += "[";
     if (int_vector != nullptr){
@@ -685,4 +707,109 @@ std::string *traceprov_serialize_partition(const TraceProvLayerPartition * parti
     }
     new_str += "}";
     return new std::string(new_str);
+}
+
+
+std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t worker_count){
+    auto worker_local_contexts = new std::vector<struct local_context *>;
+    for (uint8_t worker_id = 0; worker_id < worker_count; worker_id++){
+        char buff[256] = {0};
+        sprintf(buff, TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1);
+        int fd = open(buff, O_RDONLY);
+        if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
+        void *ptr = mmap(
+            NULL,
+            sizeof(struct local_context),
+            PROT_READ,
+            MAP_SHARED,
+            fd,
+            0
+        );
+        if (ptr == MAP_FAILED){
+            elog(ERROR, "Error mmaping the layer file!");
+        }
+        struct local_context *worker_local_context = (struct local_context *)ptr;
+        worker_local_contexts->push_back(worker_local_context);
+    }
+    return worker_local_contexts;
+}
+
+template <typename T> std::string construct_int_record(T value, const std::string col_name){
+    return std::to_string(value) + " AS " + col_name;
+}
+
+std::string construct_string_record(const std::string value, const std::string col_name){
+    return value + " AS " + col_name;
+}
+
+std::string get_layer_count(const uint64_t worker_id, const uint64_t layer_id){
+    std::string cols = std::to_string(worker_id) + "::bigint," + std::to_string(layer_id) + "::bigint";
+    return "(select count(*) from traceprov_read_worker_layer(" + cols + "))";
+}
+
+std::string combine_string_vector(const std::vector<std::string> vec, const std::string delim = ","){
+    std::string combined = "";
+    bool needs_delim = false;
+    for (auto elem: vec){
+        if (needs_delim)
+            combined += delim;
+        needs_delim = true;
+        combined += elem;
+    }
+    return combined;
+}
+
+// Constructs a query that returns layer info.
+// Done this way so that the logic to get the count can, simply, be reused, rather than recreating it.
+std::string traceprov_get_layer_info_query(){
+    traceprov_shared_context shared_context;
+    if (map_traceprov_shared_context(&shared_context))
+        elog(ERROR, "error maping shared context!");
+
+    auto local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
+
+    std::string sql_query = "";
+    std::vector<std::string> rows;
+    for (auto local_context: *local_contexts){
+        for (uint32_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            std::vector<std::string> record;
+            const struct traceprov_aggregate_layer *layer = &local_context->cached_layers[layer_idx];
+            if (layer->layer_number == 0) continue;
+            auto first = construct_int_record(local_context->worker_id, "worker_id");
+            record.push_back("select " + first);
+            record.push_back(construct_int_record(layer->layer_number, "layer_number"));
+            record.push_back(construct_int_record(layer->num_pk_records, "num_pk_records"));
+            record.push_back(construct_int_record((uint64_t)layer->last_mapping, "last_mapping"));
+            record.push_back(construct_int_record(layer->size, "size"));
+            record.push_back(construct_int_record((uint64_t)layer->current_row, "current_row"));
+            record.push_back(construct_int_record(layer->num_groups, "num_groups"));
+            record.push_back(construct_int_record(layer->num_rows, "num_rows"));
+            record.push_back(construct_int_record(layer->record_padding, "record_padding"));
+            record.push_back(construct_int_record((uint64_t)layer->end_of_memory_zone, "end_of_memory_zone"));
+            record.push_back(construct_int_record(layer->layer_fd, "layer_fd"));
+            record.push_back(construct_int_record((uint64_t)layer->is_leader_layer, "is_leader_layer"));
+            record.push_back(construct_int_record(layer->aggregate_strategy, "aggregate_strategy"));
+            std::vector<uint32_t> hash_buckets;
+            for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT - 1; idx++)
+                hash_buckets.push_back(layer->buckets[idx]);
+            record.push_back(construct_string_record(*serialize_int_vector(&hash_buckets), "hash_buckets"));
+            record.push_back(construct_int_record(layer->combined_aggregate_layer_number, "combined_aggregate_layer_number"));
+            record.push_back(construct_int_record(layer->rows_layer_number, "rows_layer_number"));
+            std::vector<uint64_t> page_mappings;
+            for (uint32_t idx = 0; idx < layer->page_mapping_size; idx++)
+                page_mappings.push_back((uint64_t)layer->page_mapping[idx]);
+            record.push_back(construct_string_record(*serialize_int_vector(&page_mappings), "page_mapping"));
+            record.push_back(construct_int_record(layer->page_mapping_capacity, "page_mapping_capacity"));
+            record.push_back(construct_int_record(layer->page_mapping_size, "page_mapping_size"));
+            record.push_back(
+                construct_string_record(
+                    get_layer_count((uint64_t)local_context->worker_id, (uint64_t)layer->layer_number),
+                    "layer_record_count"
+                )
+            );
+            auto combined = combine_string_vector(record);
+            rows.push_back(combined);
+        }   
+    }
+    return combine_string_vector(rows, " UNION ALL ");
 }

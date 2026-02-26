@@ -50,4 +50,7 @@ int map_traceprov_shared_context(struct traceprov_shared_context *ptr);
 int map_layer_file(int layer_number, int worker_id, void **ptr, int file_size);
 void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer);
 void traceprov_write_max_used_layer(const uint32_t maximum_layer_used);
+std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t worker_count);
+std::string traceprov_get_layer_info_query();
+void traceprov_reset_local();
 #endif

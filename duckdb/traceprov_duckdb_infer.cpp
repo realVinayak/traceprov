@@ -68,30 +68,6 @@ typedef struct TraceProvInitData {
 static uint64_t get_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t idx);
 static uint64_t get_local_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t page_idx, const uint64_t chunk_idx);
 
-std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t worker_count){
-    auto worker_local_contexts = new std::vector<struct local_context *>;
-    for (uint8_t worker_id = 0; worker_id < worker_count; worker_id++){
-        char buff[256] = {0};
-        sprintf(buff, TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1);
-        int fd = open(buff, O_RDONLY);
-        if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
-        void *ptr = mmap(
-            NULL,
-            sizeof(struct local_context),
-            PROT_READ,
-            MAP_SHARED,
-            fd,
-            0
-        );
-        if (ptr == MAP_FAILED){
-            elog(ERROR, "Error mmaping the layer file!");
-        }
-        struct local_context *worker_local_context = (struct local_context *)ptr;
-        worker_local_contexts->push_back(worker_local_context);
-    }
-    return worker_local_contexts;
-}
-
 // We don't need a file version of this, since that cannot happen.
 // That is, since we always increment by 8 bytes, we'll never jump pages.
 static inline void traceprov_grow_row_count_page_mapping(TraceProvInitData *init, TraceProvBindData *bind){

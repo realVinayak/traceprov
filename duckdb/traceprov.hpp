@@ -46,7 +46,7 @@
 // Whether to map memory page or not (otherwise file system is used)
 #define TRACEPROV_USE_MMEM_PAGE 1
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 1
+#define TRACEPROV_MAP_HUGE_PAGE 0
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
@@ -277,6 +277,7 @@ struct current_context {
     struct local_context *local_context;
     // This is used during the logging of groups (to determine where the combiner layer goes.)
     uint32_t  maximum_local_layer_used;
+    uint64_t  local_reinit_counter;
 };
 
 struct traceprov_agg_context {
@@ -365,5 +366,7 @@ typedef struct TraceProvAggExtra {
 } TraceProvAggExtra;
 
 typedef uint32_t TraceProvLayerNumber;
+
+extern uint64_t traceprov_reinit_counter;
 
 #endif

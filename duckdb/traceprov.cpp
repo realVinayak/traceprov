@@ -525,12 +525,9 @@ void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckd
     }
     #endif
 
-    traceprov_current.my_worker_id = 0;
-    traceprov_current.my_worker_id = 0;
-    traceprov_current.traceprov_shared_context_fd  = -1;
-    traceprov_current.shared_context = NULL;
-    traceprov_current.local_context = NULL;
-    traceprov_current.maximum_local_layer_used = 0;
+    traceprov_reset_local();
+
+    traceprov_reinit_counter++;
     char *traceprov_data_dir = (char *)malloc(sizeof(char)*512);
     memset(traceprov_data_dir, 0, sizeof(char)*512);
     sprintf(traceprov_data_dir, TRACE_PROV_DIR, DataDir);

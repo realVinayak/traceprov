@@ -46,6 +46,8 @@
 
 #define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
+#define TP_LAYER_STATS_OUTPUT(QUERY, OUT) ("copy (select * from (" + QUERY + ")) to '" + OUT + "'")
+
 typedef struct TraceProvDescriptor {
     TraceProvLayerNumber layer_number;
     void *entry;
@@ -124,6 +126,8 @@ struct Options {
     uint64_t use_partition_agg;
     // something extra, not directly setable via an option.
     void *_extra;
+    // via --layer_stats_out
+    std::string layer_stats_out;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -158,7 +162,8 @@ struct Options parse_args(int argc, char **argv){
         .query_tree = false,
         .load_micro_benchmarks = false,
         .use_partition_agg = 0,
-        ._extra = NULL
+        ._extra = NULL,
+        .layer_stats_out = ""
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -251,6 +256,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--use_part_agg")){
             options.use_partition_agg |= (1 << std::atoi(argv[++i]));
             continue;
+        } else if (IS_OPTION("--layer_stats_out")){
+            options.layer_stats_out = std::string(argv[++i]);
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -329,7 +337,8 @@ void perform_query(
     std::string &in_sql,
     std::vector<PerformQueryResult *> &agg_result,
     const char *final_profile_out,
-    const char *final_stats_query
+    const char *final_stats_query,
+    std::string layer_stats_out
 ){
 
     #if TRACEPROV_SD_MODE==0
@@ -436,6 +445,13 @@ void perform_query(
             duckdb_destroy_prepare(&stmt);
         }
     }
+
+    if (IS_SET(layer_stats_out)){
+        std::string _layer_stats_query = traceprov_get_layer_info_query();
+        _layer_stats_query = (TP_LAYER_STATS_OUTPUT(_layer_stats_query, layer_stats_out));
+        DUCKDB_RUN_SHORT_QUERY(con, _layer_stats_query.c_str(), "layer stats out");
+    }
+        
 }
 
 int main(int argc, char **argv){
@@ -564,6 +580,7 @@ int main(int argc, char **argv){
             char final_profile_out[256] = {0};
             char final_stats_query[256] = {0};
             char profile_out[256] = {0};
+            std::string layer_stats_out_str = "";
             if (IS_SET(options.profile_out_path)){
                 sprintf(profile_out, options.profile_out_path.c_str(), i);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
@@ -576,7 +593,13 @@ int main(int argc, char **argv){
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
             
-            perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query);
+            if (IS_SET(options.layer_stats_out)){
+                char layer_stats_out[256] = {0};
+                sprintf(layer_stats_out, options.layer_stats_out.c_str(), i);
+                layer_stats_out_str = std::string(layer_stats_out);
+            }
+            
+            perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
             uint32_t extra_idx = 0;
             for (auto extra_sql: extra_sqls){
                 extra_idx++;
@@ -590,7 +613,8 @@ int main(int argc, char **argv){
                 perform_query(
                     &new_options, con, extra_sql, agg_result, 
                     final_profile_out,
-                    NULL
+                    NULL,
+                    ""
                 );
             }
         }
@@ -606,7 +630,7 @@ int main(int argc, char **argv){
                 sprintf(final_stats_query, (options.is_new_sd ? TP_SET_STATS_OUTPUT_NEW : TP_SET_STATS_OUTPUT), stats_query);
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
-            perform_query(&new_options, con, in_sql, agg_result, NULL, final_stats_query);
+            perform_query(&new_options, con, in_sql, agg_result, NULL, final_stats_query, "");
         }
         int extra_sql_idx = 0;
 
@@ -637,7 +661,7 @@ int main(int argc, char **argv){
                     sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&extra_options, con, extra_sql, agg_result, final_profile_out, NULL);
+                perform_query(&extra_options, con, extra_sql, agg_result, final_profile_out, NULL, "");
             }
             #if TRACEPROV_SD_MODE == 0
             // eh, so that the state is still consistent later.
@@ -654,10 +678,6 @@ int main(int argc, char **argv){
     }
 
     if (IS_SET(options.time_out_path)){
-        // if (agg_result.size() != (uint64_t)options.repeat){
-        //     std::cout << "Got inconsistent size of computed time!" << std::endl;
-        //     exit(1);
-        // }
         std::string time_out_json = "[";
         for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
             auto current = agg_result.at(computed_time_idx);
