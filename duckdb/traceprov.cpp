@@ -114,7 +114,7 @@ static inline int round_up(const int number){
     STATE->layer_number = layer_number; \
     const uint64_t original_group_number = ++LAYER->num_groups; \
     const uint64_t bucket = original_group_number % TRACEPROV_BUCKET_COUNT; \
-    STATE->group_cnt = TRACEPROV_SET_BUCKET(original_group_number, bucket); \
+    STATE->group_cnt = TRACEPROV_SET_WORKER_ID((TRACEPROV_SET_BUCKET(original_group_number, bucket)), traceprov_current.my_worker_id); \
 } \
 
 // Partition version of update.
@@ -265,7 +265,8 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
             if (agg_contexts[row_idx]->layer_number == 0){
                 agg_contexts[row_idx]->layer_number = layer_number;
-                agg_contexts[row_idx]->group_cnt = (uint64_t)agg_contexts[row_idx];
+                // Annotate the group with the worker id.
+                agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
             }
         }
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
@@ -319,8 +320,7 @@ void traceprov_combine(
             combined_layer_number =  main_layer->combined_aggregate_layer_number;
         }
         if (!target_state->is_combined){
-            // ugh. fine for now...
-            ref_group_number = ++main_layer->num_groups;
+            ref_group_number = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
         }else{
             ref_group_number = target_state->group_cnt;
         }
