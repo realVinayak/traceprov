@@ -89,19 +89,29 @@ def extract_traceprov(traceprov_result: dict):
 
 
 def extract_stats_sample_infer_row(sql_map: list[dict], time_results: list[dict]):
-    time_map = defaultdict(list)
+    time_map = defaultdict(dict)
     for cell, time_cell in zip(sql_map, time_results, strict=True):
         key = tuple(cell[0])
         assert len(key) == 3
-        time_map[key].append(time_cell["time"])
-    time_map_reduced = {key: values[5:] for (key, values) in time_map.items()}
+        element_id, *rest = key
+        rest = tuple(rest)
+        time_map[rest][element_id] = [*time_map[rest].get(element_id, []), time_cell['time']]
+    time_map_summed = []
+    #print(time_map)
+    for key, values in time_map.items():
+        #print("merging: ", values.keys())
+        #print(list(zip(*values.values(), strict=True)))
+        time_map_summed.append(list(map(sum, zip(*values.values(), strict=True))))
+    #print(time_map_summed)
+    # time_map_reduced = {key: sorted(values[5:], reverse=True)[3:] for (key, values) in time_map.items()}
+    time_map_reduced = [sorted(values[5:], reverse=True)[2:] for values in time_map_summed]
     # time_map_reduced = {key: values for (key, values) in time_map.items()}
     time_map_reduced = [
         (
             statistics.median(values),
             statistics.stdev(values) / statistics.mean(values),
         )
-        for values in time_map_reduced.values()
+        for values in time_map_reduced
     ]
     stats = dict(
         average_time=statistics.mean(item[0] for item in time_map_reduced),
@@ -233,6 +243,7 @@ def plot_partition_result(
 
     infer_time.set_xticks(x_axis + (len(remap_data) / 2) * width, x_axis_labels)
     infer_time.set_ylabel("Infer Time (microseconds)")
+    infer_time.set_yscale("log")
 
     for _id, _std_dev_ax in enumerate(std_dev_ax):
         _std_dev_ax.set_xticks(

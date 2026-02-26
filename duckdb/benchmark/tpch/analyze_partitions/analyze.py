@@ -42,6 +42,7 @@ def plot_result_for_num(result: list[dict], out_dir: Path, sf):
         fig_title,
         0.1,
         0.12,
+        str(sf)
     )
 
 
