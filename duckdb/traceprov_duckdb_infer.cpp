@@ -18,18 +18,13 @@
 
 #include <cmath>
 #include "traceprov_partition_info.hpp"
+#include <traceprov_node.hpp>
 
 TraceProvDuckDbGlobalState g_tp_duckdb_state {
     .did_initialize = false,
     .worker_local_contexts = NULL
 };
 
-typedef struct TraceProvRelationArgs {
-    uint64_t worker_id;
-    uint64_t layer_number;
-    // -1 if everything. Otherwise >= 0.
-    int64_t offset;
-} TraceProvRelationArgs;
 
 typedef struct TraceProvBindData {
     TraceProvRelationArgs rel_args;

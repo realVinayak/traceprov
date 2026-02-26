@@ -11,6 +11,7 @@
 #include <errno.h>
 #include "traceprov_partition_info.hpp"
 #include <mutex>
+#include "utils.h"
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
@@ -22,11 +23,6 @@ void portable_elog(int level){
         elog(INFO, "Error: %s", strerror(errno));
         exit(1);
     }
-
-}
-
-static inline int round_up(const int number){
-    return number == 1 ? 1 : (1 << (64 - __builtin_clzl(number - 1)));
 }
 
 int initialize_file(int fd, const uint32_t *magic_word, size_t size){

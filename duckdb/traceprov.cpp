@@ -82,11 +82,6 @@ void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state stat
     memset(agg_context, 0, sizeof(struct traceprov_agg_context));
 }
 
-
-static inline int round_up(const int number){
-    return number == 1 ? 1 : (1 << (64 - __builtin_clzl(number - 1)));
-}
-
 #define TP_UPDATE_SETUP_MAIN(ROW_LAYER_WIDTH) { \
     extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info); \
     orig_num_cols = duckdb_data_chunk_get_column_count(input); \
