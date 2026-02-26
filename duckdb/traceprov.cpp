@@ -347,6 +347,10 @@ void traceprov_combine(
         ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
         ((uint64_t *)combined_layer->current_row)[1] = source_state->group_cnt;
         target_state->group_cnt = ref_group_number;
+        // This gets used to detect that this agg was split in the first place, since that is very much context dependent.
+        // Even in the case where we statically detect, we'll fail to detect this case, because runtime issues can still
+        // make it not be combined.
+        main_layer->is_leader_layer = true;
     }
 }
 
