@@ -26,7 +26,7 @@ class NormalizedRowTpch(NormalizedSampleInferRow):
 
 
 def plot_result_for_num(result: list[dict], out_dir: Path, sf):
-    x_axis_value = ["3", "5", "7", "9", "10", "12"]
+    x_axis_value = list(map(str, [3, 4, 5, 7, 9, 10, 11, 12, 15, 18, 21]))
     remap_data = {
         el["category"]: {el_child["query_num"]: el_child for el_child in el["data"]}
         for el in result
