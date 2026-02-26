@@ -95,3 +95,6 @@ replaced_base.sql
 replaced_validate.sql
 replaced_base.tmp.sql
 replaced_validate.tmp.sql
+node_modules/
+package-lock.json
+package.json
