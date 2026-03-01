@@ -482,13 +482,13 @@ def _run_sample_inference_smokedduck(
 
 
 def extract_extras(
-    time_results: list, profile_results: list, driver_options: DuckDBDriverOptions
+    time_results: list, profile_results: list, driver_options: DuckDBDriverOptions, extra_count: int
 ):
     # first will be the base.
     # rest will be the extras.
     assert driver_options.extra_file is None
     assert driver_options.extra is None
-    collection_size = len(driver_options.extras) + 1
+    collection_size = extra_count + 1
     assert len(time_results) == (collection_size * driver_options.repeat)
     # this should be correctly sized (just be the base repeat)
     assert len(profile_results) == driver_options.repeat
@@ -505,7 +505,7 @@ def extract_extras(
                 if (time_idx % collection_size) == extra_id
             ],
         )
-        for extra_id in range(1, len(driver_options.extras) + 1)
+        for extra_id in range(1, extra_count + 1)
     ]
     capture_result_time = [
         time_node
@@ -593,7 +593,6 @@ def run_single(
         traceprov_materialize_derivation=validate and run_inference
     )
 
-    infer_paths = []
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)
 
@@ -638,9 +637,11 @@ def run_single(
     )
     capture_settings = json_read_file(capture_options.settings)
 
-    if infer_paths:
+    if run_inference:
+        collection_size = int(len(capture_result_time) / (capture_options.repeat)) - 1
+        # print(capture_options)
         capture_result_time, infer_results = extract_extras(
-            capture_result_time, capture_profile_out, capture_options
+            capture_result_time, capture_profile_out, capture_options, collection_size
         )
     else:
         infer_results = None
