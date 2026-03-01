@@ -295,6 +295,11 @@ void traceprov_combine(
         return;
     struct traceprov_agg_context **source_states = (struct traceprov_agg_context **)source_p;
     struct traceprov_agg_context **target_states = (struct traceprov_agg_context **)target_p;
+    if (unlikely(initialize_local_context() != 0)){
+        // Here, we purposefully don't setup the main layer.
+        // This is because it is not really needed anyways.
+        elog(ERROR, "Error setting up local context;")
+    }
     for (idx_t idx = 0; idx < count; idx++){
         if (target_states[idx]->is_combined && source_states[idx]->is_combined)
             elog(ERROR, "Didn't expect both of the states to be combined...");
