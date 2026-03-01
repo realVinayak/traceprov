@@ -9,9 +9,9 @@ import getpass
 copy_csv_func = (
     lambda data_dir, destination_dir: f"""
 #!/bin/bash
-# sudo -s <<EOF
-cp {data_dir}/traceprov/*.csv {destination_dir}
-# EOF
+sudo -s <<"EOF"
+cp {data_dir}/traceprov/graph.bin {destination_dir}
+EOF
 """
 )
 

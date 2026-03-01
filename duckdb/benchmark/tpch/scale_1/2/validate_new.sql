@@ -1,6 +1,5 @@
 -- using default substitutions
-select
-    s_acctbal,
+select s_acctbal,
     s_name,
     n_name,
     p_partkey,
@@ -8,27 +7,22 @@ select
     s_address,
     s_phone,
     s_comment
-from
-    part,
+from part,
     supplier,
     partsupp,
     nation,
     region
-where
-    p_partkey = ps_partkey
+where p_partkey = ps_partkey
     and s_suppkey = ps_suppkey
     and s_nationkey = n_nationkey
     and n_regionkey = r_regionkey
     and ps_supplycost = (
-        select
-            min(ps_supplycost)
-        from
-            partsupp,
+        select min(ps_supplycost)
+        from partsupp,
             supplier,
             nation,
             region
-        where
-            p_partkey = ps_partkey
+        where p_partkey = ps_partkey
             and s_suppkey = ps_suppkey
             and s_nationkey = n_nationkey
             and n_regionkey = r_regionkey
@@ -38,13 +32,11 @@ where
                 nation.rowid,
                 region.rowid
             ) in (
-                select
-                    column_1_1,
+                select column_1_1,
                     column_2_1,
                     column_3_1,
                     column_4_1
-                from
-                    LAYER_1
+                from traceprov_lineage_1
             )
     )
     and (
@@ -54,15 +46,11 @@ where
         nation.rowid,
         region.rowid
     ) in (
-        SELECT
-            *
-        from
-            LAYER_3
+        SELECT *
+        from traceprov_lineage_3
     )
-order by
-    s_acctbal desc,
+order by s_acctbal desc,
     n_name,
     s_name,
     p_partkey
-LIMIT
-    100;
+LIMIT 100;

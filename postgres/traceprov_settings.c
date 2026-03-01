@@ -8,3 +8,5 @@ bool traceprov_use_prealloc_log = false;
 bool traceprov_use_prealloc_intermediate = false;
 // Use compressed representation in sort.
 bool traceprov_use_compressed_in_sort = false;
+// Use row-id based rewrite (for duckdb)?
+bool traceprov_use_rowid_duckdb = false;

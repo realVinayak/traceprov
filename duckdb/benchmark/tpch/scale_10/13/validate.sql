@@ -1,29 +1,19 @@
 -- using default substitutions
-select
-    c_count,
+select c_count,
     count(*) as custdist
-from
-    (
-        select
-            c_custkey,
+from (
+        select c_custkey,
             count(o_orderkey)
-        from
-            customer
+        from customer
             left outer join orders on c_custkey = o_custkey
             and o_comment not like '%special%requests%'
-        where
-            (c_custkey, coalesce(o_orderkey, 0)) in (
-                select
-                    column_1_1,
+        where (c_custkey, coalesce(o_orderkey, 0)) in (
+                select column_1_1,
                     column_2
-                from
-                    LAYER_1
+                from traceprov_lineage_1
             )
-        group by
-            c_custkey
+        group by c_custkey
     ) as c_orders (c_custkey, c_count)
-group by
-    c_count
-order by
-    custdist desc,
+group by c_count
+order by custdist desc,
     c_count desc;

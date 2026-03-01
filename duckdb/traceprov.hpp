@@ -19,6 +19,7 @@
 // TODO: Make this per-process to enable concurrent traceprovs.
 // The prefix here is the base dir (root of data dir.)
 #define TRACE_PROV_DIR "%s/traceprov"
+#define TRACEPROV_GRAPH_FILE "/tmp/traceprov/graph.bin"
 
 #define DEFINE_TRACE_PROV_FILE(filename) TRACE_PROV_DIR filename
 
@@ -27,7 +28,7 @@
 // This will be formatted with layer number
 #define TRACEPROV_SHARED_CONTEXT        DEFINE_TRACE_PROV_FILE("/shared_context.shm")
 #define TRACEPROV_PER_WORKER_FILE       DEFINE_TRACE_PROV_FILE("/worker_%d.tp")
-#define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
+// #define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
 #define TRACEPROV_WORKER_LAYER_MAP      DEFINE_TRACE_PROV_FILE("/worker_%d_layers.tp")
 
 #define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
@@ -46,7 +47,7 @@
 // Whether to map memory page or not (otherwise file system is used)
 #define TRACEPROV_USE_MMEM_PAGE 1
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 0
+#define TRACEPROV_MAP_HUGE_PAGE 1
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");

@@ -7,5 +7,6 @@ extern bool traceprov_use_prealloc;
 extern bool traceprov_use_prealloc_log;
 extern bool traceprov_use_prealloc_intermediate;
 extern bool traceprov_use_compressed_in_sort;
+extern bool traceprov_use_rowid_duckdb;
 
 #endif

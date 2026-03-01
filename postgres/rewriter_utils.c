@@ -690,10 +690,10 @@ dummy_pg_get_function_sqlbody(PG_FUNCTION_ARGS)
 // Temporarily, just return invalid.
 // Everything else just picks this repr up so they don't need to be changed
 #if (PG_MAJORVERSION_NUM > 14)
-char *tracprov_parse_back_query(Query *query){
-    return pstrdup("--invalid-parsed-back--");
-}
-#else
+// char *tracprov_parse_back_query(Query *query){
+//     return pstrdup("--invalid-parsed-back--");
+// }
+// #else
 // Get str representation of the query.
 // This, first, makes a function out of the query.
 // Then, looks at the SQL body of the function.

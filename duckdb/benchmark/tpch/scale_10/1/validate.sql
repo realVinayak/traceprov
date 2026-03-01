@@ -1,6 +1,5 @@
 -- using default substitutions
-select
-    l_returnflag,
+select l_returnflag,
     l_linestatus,
     sum(l_quantity) as sum_qty,
     sum(l_extendedprice) as sum_base_price,
@@ -10,19 +9,13 @@ select
     avg(l_extendedprice) as avg_price,
     avg(l_discount) as avg_disc,
     count(*) as count_order
-from
-    lineitem
-where
-    (l_orderkey, l_linenumber) in (
-        select
-            column_1,
+from lineitem
+where (l_orderkey, l_linenumber) in (
+        select column_1,
             column_2
-        from
-            LAYER_1
+        from traceprov_lineage_1
     )
-group by
-    l_returnflag,
+group by l_returnflag,
     l_linestatus
-order by
-    l_returnflag,
+order by l_returnflag,
     l_linestatus;

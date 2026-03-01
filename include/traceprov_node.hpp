@@ -144,6 +144,7 @@ extern "C" {
     // It is possible that multiple paths exist to a sublink. So, that's why each graph gets a map to sublink.
     typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
     typedef std::unordered_map<uint32, std::vector<TraceProvLayerNumber> *> TraceProvSizeLayers;
+    typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
     // Just so they can be processed together

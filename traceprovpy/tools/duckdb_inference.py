@@ -16,6 +16,7 @@ from traceprovpy.tools.run_with_timeout import (
 from traceprovpy.tools.copy_traceprov_dump import make_copy
 import os
 
+TRACEPROV_GRAPH_FILE = "/tmp/traceprov/graph.bin"
 
 class DuckDBDriverOptions(NamedTuple):
     db: str
@@ -43,6 +44,8 @@ class DuckDBDriverOptions(NamedTuple):
     top_log_num: int | None = None
     log_offset: int | None = None
     use_part_agg: list[int] | None = None
+    traceprov_perform_derivation: bool = False
+    traceprov_materialize_derivation: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -59,6 +62,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_partition_in_agg",
             "traceprov_use_partition_in_log",
             "traceprov_use_row_in_agg_partition",
+            "traceprov_perform_derivation",
+            "traceprov_materialize_derivation"
         }
 
     def serialize(self) -> str:
@@ -214,3 +219,17 @@ class DuckDBInferenceQuerySpec(QuerySpec):
                 },
             ]
         return final_results
+
+
+# copies the graph.bin file.
+class DuckDbInferenceBinQuerySpec(QuerySpec):
+    def run_packs(
+        self,
+        top_dir: Path,
+        get_run_options: Callable[[str], RunWithTimeoutOptions],
+        benchmark: GenericBenchmark,
+    ):
+        pg_pack = get_run_options(TP_SKIPPABLE_OPTION)
+        assert self.extra_options is not None
+        destination_dir : Path = self.extra_options['destination_dir']
+        make_copy(pg_pack.connection_params, destination_dir.as_posix())

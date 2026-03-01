@@ -1,9 +1,11 @@
 # just calls run_single.
 import argparse
 from datetime import datetime
+from importlib.machinery import PathFinder
 import json
 import os
 from pathlib import Path
+from pickletools import optimize
 
 # from run_single import add_query_options, run_single, json_read_file
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
@@ -73,13 +75,19 @@ def run():
             )
         else:
             disable_col_opt = query in NEEDS_DISABLE
+            graph_dir = Path(parsed.graph_dir)
+            if parsed.optimized:
+                graph_dir = graph_dir / "optimized"
+            else:
+                graph_dir = graph_dir / "non_optimized"
             query_result = run_single(
                 Path(parsed.exe),
                 db=Path(parsed.db),
                 query_num=query,
                 base_root=Path(parsed.base_root),
                 root=Path(parsed.root),
-                spec_element=spec[query][0],
+                traceprov_graph_path=graph_dir / query / "graph.bin",
+                threads=parsed.threads,
                 use_optimized=parsed.optimized,
                 validate=is_validate and parsed.sample_inference is None,
                 disable_col_opt=disable_col_opt,

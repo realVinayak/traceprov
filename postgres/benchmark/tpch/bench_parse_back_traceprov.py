@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import List
 from traceprovpy.tools.benchmark import (
     ExtraQuery,
@@ -15,7 +17,7 @@ from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_PERFORM_DERIVATION,
     TRACEPROV_SYNC_TIME,
 )
-from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec
+from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec, DuckDbInferenceBinQuerySpec
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     MakeTraceProv,
@@ -26,12 +28,13 @@ import json
 import argparse
 
 
-def special_query(query_name: str, is_traceprov: bool):
+def special_query(query_name: str, is_traceprov: bool, extra_commands: list[str] = []):
     if query_name != "15":
         return None
     key = "traceprov_15_skippable" if is_traceprov else "base_15_skippable"
     return Query(
         query_name=query_name,
+        extra_commands = extra_commands,
         spec=QuerySpec(
             base=TP_SKIPPABLE_OPTION,
             key=key,
@@ -61,11 +64,11 @@ def special_query(query_name: str, is_traceprov: bool):
                     strict_run=False,
                     preprocess=([MakeTraceProv()] if is_traceprov else []),
                 ),
-                *(
-                    [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
-                    if is_traceprov
-                    else []
-                ),
+                # *(
+                #     [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
+                #     if is_traceprov
+                #     else []
+                # ),
                 ExtraQuery(
                     label="15_post",
                     query="$INLINE-drop view revenue0;",
@@ -79,7 +82,7 @@ def special_query(query_name: str, is_traceprov: bool):
     )
 
 
-def make_normal_query(query_name: str, is_traceprov=False):
+def make_normal_query(query_name: str, is_traceprov=False, extra_commands: list[str] = None):
     if not is_traceprov:
         return Query(
             query_name=query_name,
@@ -88,9 +91,11 @@ def make_normal_query(query_name: str, is_traceprov=False):
 
     # don't need to check if we'll dump or not.
     # extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
-    extras = [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
+    # extras = [TRACEPROV_CAPTURE_QUERY(), TRACEPROV_GET_GENERIC_DERIVATION_SPEC()]
+    extras = []
     return Query(
         query_name=query_name,
+        extra_commands=extra_commands,
         spec=QuerySpec(
             base="base.sql",
             key="traceprov",
@@ -101,30 +106,32 @@ def make_normal_query(query_name: str, is_traceprov=False):
 
 
 def get_query(
-    query_name: str, config: dict, use_duckdb_inference: bool, is_validate: bool
+    query_name: str, config: dict, use_duckdb_inference: bool, is_validate: bool,
+    extra_commands: list[str] = [], out_dir: str= ""
 ):
     user_specs = config.get("specs", [])
     subdir_queries: List[Query] = []
     if len(user_specs) == 0:
-        special_query_maybe = special_query(query_name, is_traceprov=False)
+        special_query_maybe = special_query(query_name, is_traceprov=False, extra_commands=extra_commands)
         if special_query_maybe:
-            subdir_queries.append(special_query_maybe)
-            special_query_traceprov = special_query(query_name, is_traceprov=True)
+            special_query_traceprov = special_query(query_name, is_traceprov=True, extra_commands=extra_commands)
             assert special_query_traceprov is not None
             subdir_queries.append(special_query_traceprov)
         else:
             # subdir_queries.append(make_normal_query(query_name, is_traceprov=False))
-            subdir_queries.append(make_normal_query(query_name, is_traceprov=True))
-            if use_duckdb_inference:
-                subdir_queries.append(
-                    Query(
-                        query_name=query_name,
-                        spec=DuckDBInferenceQuerySpec(
-                            base="DUCKDB_INFERENCE",
-                            key=f"DUCKDB_INFERENCE_{query_name}",
-                        ),
-                    )
+            subdir_queries.append(make_normal_query(query_name, is_traceprov=True, extra_commands=extra_commands))
+        destination_dir = Path(f"{out_dir}/{query_name}/")
+        os.makedirs(destination_dir, exist_ok=True)
+        subdir_queries.append(
+            Query(
+                query_name=query_name,
+                spec=DuckDbInferenceBinQuerySpec(
+                    base="DUCKDB_INFERENCE",
+                    key=f"DUCKDB_INFERENCE_{query_name}",
+                    extra_options=dict(destination_dir=destination_dir)
                 )
+            )
+        )
     else:
         for spec in user_specs:
             spec_without_extras = {
@@ -160,6 +167,8 @@ def main():
     parser = argparse.ArgumentParser(prog="tpch-driver")
     parser.add_argument("-cfg", "--config", required=True, type=str)
     parser.add_argument("-l", "--layers", required=True, type=str)
+    parser.add_argument("--out_dir", required=True, type=str)
+    parser.add_argument("--use_optimized_query", action=argparse.BooleanOptionalAction, default=False)
     parsed, others = parser.parse_known_args()
     with open(parsed.config) as f:
         config: dict = json.loads(f.read())
@@ -167,13 +176,16 @@ def main():
     use_duckdb_inference = bench_has_duckdb_infer(others)
     dir_queries = []
 
+    extra_commands = []
+    if parsed.use_optimized_query:
+        extra_commands = ["set traceprov.use_rowid_duckdb=on;"]
     for subdir in config["subdirs"]:
         subdir_queries = []
         for query_name in config["queries"]:
             query_name = str(query_name)
             subdir_queries = [
                 *subdir_queries,
-                *get_query(query_name, config, False, False),
+                *get_query(query_name, config, False, False, extra_commands, out_dir=parsed.out_dir),
             ]
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 

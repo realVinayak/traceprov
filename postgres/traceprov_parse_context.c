@@ -3,6 +3,7 @@
 #include "miscadmin.h"
 #include "traceprov_parse_context.h"
 #include "traceprov.h"
+#include "utils.h"
 
 
 #define NEED_SEP(cursor) (foreach_current_index(cursor) > 0)
@@ -469,58 +470,12 @@ void traceprovPrintContext(const TraceProvParseContext *context){
     elog(INFO, "JSON: %s", traceProvParseContextToJson(context));
 }
 
-typedef struct TraceProvDependencyMetaHeader {
-    TraceProvLayerNumber max_layer_number;
-    // Number of graphs being stored.
-    uint32 num_graphs;
-    uint32 num_set_padding_map_items;
-    uint32 num_set_graph_map_items;
-    uint32 num_sublink_items;
-    uint32 num_set_pointer_map;
-} TraceProvDependencyMetaHeader;
-
-static_assert(sizeof(TraceProvDependencyMetaHeader) == 24);
-
-// This is not in the header for a reason, nothing outside of this file
-// should know that this even exists.
-typedef struct TraceProvDependencyHeader {
-    uint32 idx; // own's index (each block has a unique index)
-    uint32 numberOfEntries; // Number of entries
-    uint32 numberOfDirectChildren; // Number of direct children.
-    TraceProvDependency *graphPtr; // Useful to detect if the graph is null or not.
-} TraceProvDependencyHeader;
-
-void failSafeWrite(FILE *file, const void *buff, size_t length){
-    size_t written = fwrite(buff, length, 1, file);
-    if (written != 1){
-        elog(ERROR, "Error dumping the graph!");
-    }
-}
-
-#define FAIL_SAFE_WRITE_INT(FILE, VALUE, TYPE) do { \
-    int32 value = VALUE; \
-    if (sizeof(TYPE) != sizeof(int32)) {  \
-        elog(ERROR, "macro only for int!"); \
-    } \
-    failSafeWrite(FILE, &value, sizeof(int32)); \
-} while(0); \
-
-void failSafeRead(FILE *file, void *buff, size_t length){
-    const size_t readValues = fread(buff, length, 1, file);
-    if (readValues != 1){
-        elog(ERROR, "Error reading from the graph file!");
-    }
-}
-
 void _serializeTraceProvDepedency(const TraceProvDependency *, FILE *);
 
 void _serializeContext(const TraceProvParseContext*, FILE *);
 TraceProvDependency *_deserializeTraceProvDependency(FILE *);
 TraceProvParseContext *_deserializeTraceProvParseContext(FILE *, TraceProvDependencyMetaHeader*);
 
-typedef struct TraceProvStringHeader {
-    size_t size;
-} TraceProvStringHeader;
 // Serializes multiple graphs in the graph file.
 // This needs to be a list, because we can multiple pointers.
 // Need to also dump some things from the context. For example, need to dump the set-padding map.
@@ -559,10 +514,6 @@ void serializeTraceProvDepedency(List *graphs, TraceProvParseContext *context, c
     if (string_header.size) failSafeWrite(fptr, parsed_back_query, string_header.size);
     fclose(fptr);
 }
-
-typedef struct TraceProvEntryMetaHeader {
-    uint32 num_keys;
-} TraceProvEntryMetaHeader;
 
 // Used for serialization, since we also need to serialize the corresponding keys in sublinks.
 static void _serializeTraceProvEntry(const TraceProvEntry *entry, FILE *output_file){
@@ -685,7 +636,6 @@ List* deserializeTraceProvDependency(TraceProvParseContext **parsed_context, cha
             *parsed_back_query = parsed_back_holder;
         }
     }
-
 
     fclose(fptr);
     return graphs;

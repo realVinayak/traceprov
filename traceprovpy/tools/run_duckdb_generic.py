@@ -12,7 +12,7 @@ from typing import Iterable, Sequence
 
 from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
-from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
+from traceprovpy.tools.duckdb_inference import TRACEPROV_GRAPH_FILE, DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 
@@ -521,7 +521,8 @@ def run_single(
     query_num: str,
     base_root: Path,
     root: Path,
-    spec_element: dict,
+    traceprov_graph_path: Path,
+    threads: int,
     use_optimized: bool = False,
     validate: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
@@ -557,8 +558,6 @@ def run_single(
     else:
         captured_sql = query_dir / "capture.sql"
 
-    min_layer_used = spec_element["min_local_used"]
-
     exec_str = exe.as_posix()
 
     if pre_base:
@@ -570,12 +569,11 @@ def run_single(
     base_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
-        threads=1,
+        threads=threads,
         i=base_sql.as_posix(),
         time="/tmp/base_time.json",
-        min_layer_number=min_layer_used,
         profile="/tmp/base_profile_%d.json",
-        settings="/tmp/base_settings.json",
+        settings="/tmp/base_settings.json"
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
@@ -592,37 +590,46 @@ def run_single(
         traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
         traceprov_use_partition_in_log=traceprov_use_partition_in_log,
         traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
+        traceprov_materialize_derivation=validate and run_inference
     )
 
     infer_paths = []
+    graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
+    os.makedirs(graph_file_dest, exist_ok=True)
+
     if run_inference:
-        for element in spec_element["elements"]:
-            element_idx = element["idx"]
-            if use_optimized:
-                infer_path = None
-                if use_aggresive_optimized:
-                    infer_path = query_dir / f"infer_{element_idx}_new_ignore_gn.sql"
-                    if not infer_path.exists():
-                        infer_path = None
-                if infer_path is None:
-                    infer_path = query_dir / f"infer_{element_idx}_new.sql"
-            else:
-                infer_path = query_dir / f"infer_{element_idx}.sql"
+        traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+        capture_options = capture_options._replace(
+            traceprov_perform_derivation=True
+        )
+    # if run_inference:
+    #     for element in spec_element["elements"]:
+    #         element_idx = element["idx"]
+    #         if use_optimized:
+    #             infer_path = None
+    #             if use_aggresive_optimized:
+    #                 infer_path = query_dir / f"infer_{element_idx}_new_ignore_gn.sql"
+    #                 if not infer_path.exists():
+    #                     infer_path = None
+    #             if infer_path is None:
+    #                 infer_path = query_dir / f"infer_{element_idx}_new.sql"
+    #         else:
+    #             infer_path = query_dir / f"infer_{element_idx}.sql"
 
-            assert infer_path.exists()
-            infer_path = infer_path.as_posix()
-            if materialize_infer:
-                contents = just_read(infer_path)
-                table_name = f"LAYER_{element_idx}"
-                infer_path = (
-                    Path("/tmp/") / f"infer_{element_idx}_materialize.sql"
-                ).as_posix()
-                mat_contents = f"create or replace table {table_name} AS ({contents});"
-                just_write(infer_path, mat_contents)
-            infer_paths = [*infer_paths, infer_path]
+    #         assert infer_path.exists()
+    #         infer_path = infer_path.as_posix()
+    #         if materialize_infer:
+    #             contents = just_read(infer_path)
+    #             table_name = f"LAYER_{element_idx}"
+    #             infer_path = (
+    #                 Path("/tmp/") / f"infer_{element_idx}_materialize.sql"
+    #             ).as_posix()
+    #             mat_contents = f"create or replace table {table_name} AS ({contents});"
+    #             just_write(infer_path, mat_contents)
+    #         infer_paths = [*infer_paths, infer_path]
 
-    if infer_paths:
-        capture_options = capture_options._replace(extras=infer_paths)
+    # if infer_paths:
+    #     capture_options = capture_options._replace(extras=infer_paths)
 
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
     capture_result_time = json_read_file(capture_options.time)

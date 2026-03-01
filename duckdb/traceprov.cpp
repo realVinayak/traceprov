@@ -257,16 +257,17 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
 
     const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
+        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
             if (agg_contexts[row_idx]->layer_number == 0){
                 agg_contexts[row_idx]->layer_number = layer_number;
                 // Annotate the group with the worker id.
                 agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
+                agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
             }
+            *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->group_cnt;
+            main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint64_t));
         }
-        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
-        memcpy(main_layer->current_row, agg_contexts, chunk_size);
-        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
 
     for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
@@ -297,8 +298,13 @@ void traceprov_combine(
     for (idx_t idx = 0; idx < count; idx++){
         if (target_states[idx]->is_combined && source_states[idx]->is_combined)
             elog(ERROR, "Didn't expect both of the states to be combined...");
-        if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0)
+        
+        bool was_copied = false;
+        if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0){
             memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
+            // "forget" the source state.
+            was_copied = true;
+        }
         // Makes sense to just do this one inline (in a row-based fashion for now...)
         uint64_t ref_group_number = 0;
         // not touching this
@@ -320,11 +326,19 @@ void traceprov_combine(
             ref_group_number = target_state->group_cnt;
         }
 
-        if(initialize_local_and_layer(combined_layer_number, 2, 0, true, extra->state)){
+        if(initialize_local_and_layer(combined_layer_number, 3, 0, true, extra->state)){
             elog(ERROR, "Error setting up local or layer!");
             return;
         }
         struct traceprov_aggregate_layer *combined_layer = get_layer(combined_layer_number);
+        if (unlikely(combined_layer->combined_aggregate_layer_number == 0)){
+            // It is, actually, entirely possible that the combiner thread doesn't do
+            // any its local work. In that case, the main layer won't be set up.
+            // That's fine, but we cannot use "is_leader_layer" to detect if aggregate was split.
+            // Also, the numbering is arbitrary, so we cannot query it directly.
+            // The "best" way is to set combined_aggregate_layer_number, and then query on it.
+            combined_layer->combined_aggregate_layer_number = layer_number;
+        }
         TRACEPROV_GROW_IF_TRUE(
             combined_layer,
             ((combined_layer->current_row == combined_layer->end_of_memory_zone) 
@@ -334,13 +348,20 @@ void traceprov_combine(
         if (!target_state->is_combined){
             TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
             ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
-            ((uint64_t *)combined_layer->current_row)[1] = target_state->group_cnt;
-            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, TRACEPROV_GET_RECORD_SIZE(combined_layer));
+            ((uint64_t *)combined_layer->current_row)[1] = target_state->worker_id;
+            ((uint64_t *)combined_layer->current_row)[2] = target_state->group_cnt;
+            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, 3*sizeof(uint64_t));
             target_state->is_combined = true;
         }
-        TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
-        ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
-        ((uint64_t *)combined_layer->current_row)[1] = source_state->group_cnt;
+        if (!was_copied){
+            // In the worst case, we create a hole, which we skip over anyways later.
+            TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
+            ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
+            ((uint64_t *)combined_layer->current_row)[1] = source_state->worker_id;
+            ((uint64_t *)combined_layer->current_row)[2] = source_state->group_cnt;
+            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, 3*sizeof(uint64_t));
+        }
+
         target_state->group_cnt = ref_group_number;
         // This gets used to detect that this agg was split in the first place, since that is very much context dependent.
         // Even in the case where we statically detect, we'll fail to detect this case, because runtime issues can still

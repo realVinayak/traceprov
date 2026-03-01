@@ -1,6 +1,7 @@
 # some basic options that get reused for duckdb.
 
 import argparse
+import re
 
 
 def make_duckdb_parse():
@@ -25,7 +26,7 @@ def make_duckdb_parse():
         action=argparse.BooleanOptionalAction,
         default=False,
     )
-    parser.add_argument("--sample_inference", choices=["all", "sample"], default=False)
+    parser.add_argument("--sample_inference", choices=["all", "sample"], default=None)
     parser.add_argument(
         "--validate", action=argparse.BooleanOptionalAction, default=False
     )
@@ -43,4 +44,6 @@ def make_duckdb_parse():
     )
     parser.add_argument("--infer", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sample_num", type=int, default=100)
+    parser.add_argument("--graph_dir", type=str, required=False)
+    parser.add_argument("--threads", type=int, default=1)
     return parser

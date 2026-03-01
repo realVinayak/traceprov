@@ -39,7 +39,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 15,
+        "repeat": 3,
         "throwaway": 0
     },
     "q_config": {

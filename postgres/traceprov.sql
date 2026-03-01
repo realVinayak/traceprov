@@ -328,6 +328,18 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
     BIGINT
 );
 
+DROP FUNCTION IF EXISTS traceprov_log_entry (
+    INT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+);
+
+
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT, BIGINT);
@@ -921,6 +933,18 @@ CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RE
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
+'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+
+CREATE FUNCTION traceprov_log_entry (
+    INTEGER,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_log_entry (

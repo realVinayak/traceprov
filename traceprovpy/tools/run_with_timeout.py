@@ -158,7 +158,9 @@ class RunWithTimeoutOptions(NamedTuple):
     skip_validation: bool = False
     preprocessors: list[Preprocessor] | None = None
     strict_run: bool = False
-    shared_libraries: list[str] | None = []
+    shared_libraries: list[str] | None = None
+    # extra commands that need to be run, when opening the connection.
+    extra_commands: list[str] | None = None
 
     def close_all(self):
         if self.extras is None:
@@ -213,6 +215,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         cursor = connection.cursor()
         for shared_library in options.shared_libraries or []:
             cursor.execute(f"load '{shared_library}';")
+        for command in options.extra_commands or []:
+            cursor.execute(command)
         # cursor.execute("set max_parallel_workers_per_gather = 0;")
         cursor.close()
 

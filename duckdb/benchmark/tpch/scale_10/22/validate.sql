@@ -1,60 +1,40 @@
 -- using default substitutions
-select
-    cntrycode,
+select cntrycode,
     count(*) as numcust,
     sum(c_acctbal) as totacctbal
-from
-    (
-        select
-            substring(
+from (
+        select substring(
                 c_phone
-                from
-                    1 for 2
+                from 1 for 2
             ) as cntrycode,
             c_acctbal
-        from
-            customer
-        where
-            c_custkey in (
-                select
-                    column_1
-                from
-                    LAYER_3
+        from customer
+        where c_custkey in (
+                select column_1
+                from traceprov_lineage_3
             )
             and substring(
                 c_phone
-                from
-                    1 for 2
+                from 1 for 2
             ) in ('13', '31', '23', '29', '30', '18', '17')
             and c_acctbal > (
-                select
-                    avg(c_acctbal)
-                from
-                    customer
-                where
-                    c_acctbal > 0.00
+                select avg(c_acctbal)
+                from customer
+                where c_acctbal > 0.00
                     and substring(
                         c_phone
-                        from
-                            1 for 2
+                        from 1 for 2
                     ) in ('13', '31', '23', '29', '30', '18', '17')
                     and (c_custkey) in (
-                        select
-                            column_1
-                        from
-                            LAYER_1
+                        select column_1
+                        from traceprov_lineage_1
                     )
             )
             and not exists (
-                select
-                    *
-                from
-                    orders
-                where
-                    o_custkey = c_custkey
+                select *
+                from orders
+                where o_custkey = c_custkey
             )
     ) as custsale
-group by
-    cntrycode
-order by
-    cntrycode;
+group by cntrycode
+order by cntrycode;

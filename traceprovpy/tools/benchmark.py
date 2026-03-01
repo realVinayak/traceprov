@@ -111,7 +111,7 @@ class QuerySpec(NamedTuple):
     extras: list[ExtraQuery] = []
     preprocess: list[Preprocessor] = []
     # random options.
-    extra_options: dict = {}
+    extra_options: dict = None
 
     @staticmethod
     def get_pack(
@@ -167,7 +167,7 @@ class QuerySpec(NamedTuple):
                 )
                 if extra.preprocess:
                     extra_pack = extra_pack._replace(
-                        preprocessors=[*extra_pack.preprocessors, *extra.preprocess]
+                        preprocessors=[*(extra_pack.preprocessors or []), *(extra.preprocess or [])]
                     )
                 if extra.func:
                     extra_result = extra.func(self, extra, extra_pack, get_run_options)
@@ -288,6 +288,7 @@ class ValidationQuerySpec(QuerySpec):
 class Query(NamedTuple):
     query_name: str
     spec: QuerySpec
+    extra_commands: list[str] | None = []
 
     def get_as_dict(self) -> dict[str, Any]:
         return {**self._asdict(), "spec": self.spec._asdict()}
@@ -473,16 +474,19 @@ class GenericBenchmark(NamedTuple):
         call_options = (top_dir, directories, connection_params, params)
         # params.validate()
 
-        def _get_options(file_path: str):
-            assert self.traceprov_rewriter_path
-            return RunWithTimeoutOptions(
-                connection_params=connection_params,
-                file_path=file_path,
-                params=params,
-                shared_libraries=[
-                    self.traceprov_rewriter_path,
-                ],
-            )
+        def _get_options_from_query(query: Query):
+            def _get_options_from_file(file_path: str):
+                assert self.traceprov_rewriter_path
+                return RunWithTimeoutOptions(
+                    connection_params=connection_params,
+                    file_path=file_path,
+                    params=params,
+                    shared_libraries=[
+                        self.traceprov_rewriter_path,
+                    ],
+                    extra_commands=list(query.extra_commands or [])
+                )
+            return _get_options_from_file
 
         results_from_dirs = {}
         directories_preprocess_applied = [
@@ -492,6 +496,7 @@ class GenericBenchmark(NamedTuple):
             combined_results = {}
             for query in directory.queries:
                 print(f"[{self.name}: ({directory.dir_name}, {query.query_name})]")
+                _get_options = _get_options_from_query(query)
                 results = query.spec.run_packs(
                     Path(top_dir) / directory.dir_name / query.query_name,
                     _get_options,

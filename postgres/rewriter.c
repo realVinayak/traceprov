@@ -136,6 +136,18 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomBoolVariable(
+        "traceprov.use_rowid_duckdb",
+        "Use duckdb-compliant rowid rewrite",
+        "Use duckdb-compliant rowid rewrite",
+        &traceprov_use_rowid_duckdb,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 
@@ -685,6 +697,9 @@ void rteRewrite(
                     TraceProvTarget *new_tp_target = makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL, false, is_nullable);
                     traceprov_target_set_nullable(new_tp_target);
                     targetsToAdd = lappend(targetsToAdd, new_tp_target);
+                    // If using duckdb-based rowid rewrite, don't add the rowids.
+                    // This is useful to have an extra option as.
+                    if (traceprov_use_rowid_duckdb) break;
                 }
             }
             ReleaseSysCache(indexTuple);

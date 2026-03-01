@@ -93,7 +93,6 @@ extern "C" {
         return nodes;
     }
 
-    typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
     static void flattenTraceProvInferAbstractTree(TraceProvInferAbstractTree *tree, TraceProvResultMap *result_map, TraceProvParseContext *parse_context);
 
     static TraceProvDerivedNode *traceprov_make_derived_node(TraceProvLayerNumber layer_number, TraceProvNode *node){

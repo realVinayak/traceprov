@@ -73,12 +73,8 @@ def traceprov_setup(
     )
 
     if sd_lib_path:
-        sd_executable_path = (
-            Path(traceprov_postgres_root) / f"bld/bin/run_smokedduck_{suff}"
-        ).resolve()
-        assert sd_executable_path.exists(), "smokedduck path should exist!"
         sd_options = SmokedDuckOptions(
-            driver_executable=sd_executable_path.as_posix(),
+            driver_executable=Path(""),
             number_of_threads=sd_num_threads or 1,
             create_idx=sd_create_idx,
         )

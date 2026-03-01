@@ -1,8 +1,10 @@
+#if TP_USE_PG_LIST == 0
+
 #include <stdlib.h>
 #include <string.h>
 
-#include "../include/tp_list.h"
-#include "../include/utils.h"
+#include "tp_list.h"
+#include "utils.h"
 
 #define offsetof(t, d) __builtin_offsetof(t, d)
 
@@ -1495,3 +1497,5 @@ list_copy_tail(const List *oldlist, int nskip)
 	check_list_invariants(newlist);
 	return newlist;
 }
+
+#endif

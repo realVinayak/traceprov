@@ -25,6 +25,13 @@
 #include "utils.hpp"
 
 #include "traceprov_settings.hpp"
+#include <traceprov_node.hpp>
+
+#include <derivation_utils.hpp>
+
+extern "C" {
+    #include <mem_alloc.h>
+}
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
 #define TP_ENABLE_PROFILING_QUERY_TREE "PRAGMA enable_profiling=query_tree"
@@ -47,18 +54,6 @@
 #define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
 #define TP_LAYER_STATS_OUTPUT(QUERY, OUT) ("copy (select * from (" + QUERY + ")) to '" + OUT + "'")
-
-typedef struct TraceProvDescriptor {
-    TraceProvLayerNumber layer_number;
-    void *entry;
-} TraceProvDescriptor;
-
-typedef struct {
-    TraceProvDescriptor *descriptor;
-    std::vector<uint64_t> *data;
-} TraceProvColumnData;
-
-typedef std::vector<TraceProvColumnData*> TraceProvData;
 
 typedef struct TraceProvLogExtra {
     // what is the log offset?
@@ -126,8 +121,11 @@ struct Options {
     uint64_t use_partition_agg;
     // something extra, not directly setable via an option.
     void *_extra;
+    std::string _extra_output;
     // via --layer_stats_out
     std::string layer_stats_out;
+    bool traceprov_perform_derivation;
+    bool traceprov_materialize_derivation;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -163,7 +161,11 @@ struct Options parse_args(int argc, char **argv){
         .load_micro_benchmarks = false,
         .use_partition_agg = 0,
         ._extra = NULL,
-        .layer_stats_out = ""
+        ._extra_output = "",
+        .layer_stats_out = "",
+        // This needs to be another option, unfortunately.
+        .traceprov_perform_derivation = false,
+        .traceprov_materialize_derivation = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -259,7 +261,14 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--layer_stats_out")){
             options.layer_stats_out = std::string(argv[++i]);
             continue;
+        } else if (IS_OPTION("--traceprov_perform_derivation")){
+            options.traceprov_perform_derivation = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_materialize_derivation")){
+            options.traceprov_materialize_derivation = true;
+            continue;
         }
+
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
         std::exit(1);
@@ -345,7 +354,7 @@ void perform_query(
     if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
-        traceprov_write_max_used_layer(options->min_layer_number);
+        // traceprov_write_max_used_layer(options->min_layer_number);
     }
     #endif
 
@@ -451,8 +460,20 @@ void perform_query(
         _layer_stats_query = (TP_LAYER_STATS_OUTPUT(_layer_stats_query, layer_stats_out));
         DUCKDB_RUN_SHORT_QUERY(con, _layer_stats_query.c_str(), "layer stats out");
     }
-        
 }
+
+TraceProvResultMap *get_generic_derivation_spec(
+    TraceProvParseContext **p_parsed_back_context,
+    TraceProvInferSetupExtra **p_extra,
+    char **p_parsed_query
+);
+
+typedef struct ExtraQuery {
+    std::string sql;
+    std::string extra;
+} ExtraQuery;
+
+void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options);
 
 int main(int argc, char **argv){
     struct Options options = parse_args(argc, argv);
@@ -464,7 +485,7 @@ int main(int argc, char **argv){
     std::cout << "From file: " << in_sql << std::endl;
     std::vector<PerformQueryResult *> agg_result;
 
-    std::vector<std::string> extra_sqls;
+    std::vector<ExtraQuery> extra_sqls;
 
     for (auto extra_sql_path: *options.extra_query_paths){
         std::string extra_sql = "";
@@ -473,8 +494,10 @@ int main(int argc, char **argv){
         extra_buffer << extra_sql_stream.rdbuf();
         extra_sql = extra_buffer.str();
         // std::cout << "From file (extra): " << extra_sql << std::endl;
-        extra_sqls.push_back(extra_sql);
+        extra_sqls.push_back(ExtraQuery {.sql = extra_sql, .extra= ""});
     }
+
+    traceprov_set_mem_config(TraceProvMemoryAllocator {.allocator = malloc, .free = free});
 
     duckdb_database db;
     duckdb_connection con;
@@ -551,16 +574,11 @@ int main(int argc, char **argv){
     if (!options.no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
-        traceprov_write_max_used_layer(options.min_layer_number);
     }
     #endif
 
     if (options.min_layer_number){
         traceprov_current.maximum_local_layer_used = options.min_layer_number;
-        // In concurrent setting, the above is not safe.
-        // So, we fall back to the boring, slow, way, where we right it to a file.
-        // TODO: Only do this when threads > 1.
-        traceprov_write_max_used_layer(options.min_layer_number);
     }
 
     if (options.dry_run)
@@ -600,8 +618,13 @@ int main(int argc, char **argv){
             }
             
             perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
+
+            auto extra_sqls_clone = (extra_sqls);
+            augment_extra_sql(extra_sqls_clone, &options);
+
             uint32_t extra_idx = 0;
-            for (auto extra_sql: extra_sqls){
+
+            for (auto extra_sql: extra_sqls_clone){
                 extra_idx++;
                 Options new_options = options;
                 new_options.no_reinit_state = true;
@@ -610,8 +633,9 @@ int main(int argc, char **argv){
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());
+                new_options._extra_output = extra_sql.extra;
                 perform_query(
-                    &new_options, con, extra_sql, agg_result, 
+                    &new_options, con, extra_sql.sql, agg_result, 
                     final_profile_out,
                     NULL,
                     ""
@@ -634,13 +658,17 @@ int main(int argc, char **argv){
         }
         int extra_sql_idx = 0;
 
+
+        auto extra_sqls_clone = (extra_sqls);
+        augment_extra_sql(extra_sqls_clone, &options);
+
         // Run extra all ;)
-        for (auto extra_sql: extra_sqls){
+        for (auto extra_sql: extra_sqls_clone){
 
             // This way, the life cycle of partition_spec is just 1 query.
             auto partition_spec = traceprov_make_layer_partition_info();
 
-            populate_log_offset(partition_spec, extra_sql);
+            populate_log_offset(partition_spec, extra_sql.sql);
 
             #if TRACEPROV_SD_MODE == 0
 
@@ -661,7 +689,8 @@ int main(int argc, char **argv){
                     sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&extra_options, con, extra_sql, agg_result, final_profile_out, NULL, "");
+                perform_query(&extra_options, con, extra_sql.sql, agg_result, final_profile_out, NULL, "");
+                extra_options._extra_output = extra_sql.extra;
             }
             #if TRACEPROV_SD_MODE == 0
             // eh, so that the state is still consistent later.
@@ -740,16 +769,48 @@ static void populate_log_offset(TraceProvLayerPartition *partition, std::string 
 
 // This doesn't do all of option (that'll be too much)
 static std::string serialize_option(Options *option){
-    if (option->_extra == NULL)
+    if (option->_extra == NULL && !IS_SET(option->_extra_output))
         return "{}";
-    return *traceprov_serialize_partition((TraceProvLayerPartition *)option->_extra);
+    std::string option_serialized;
+    option_serialized += "{";
+    option_serialized += "\"partition\": ";
+    if (option->_extra){
+        option_serialized += *traceprov_serialize_partition((TraceProvLayerPartition *)option->_extra);
+    }else{
+        option_serialized += "null";
+    }
+    option_serialized += ",";
+    option_serialized += "\"extra\": ";
+    if (IS_SET(option->_extra_output)){
+        option_serialized += "\"";
+        option_serialized += option->_extra_output;
+        option_serialized += "\"";
+    }
+    option_serialized += "}";
+    return option_serialized;
 }
 
-// // This doesn't do all of option (that'll be too much)
-// static std::string serialize_option(Options *option){
-//     std::string serialized = "{";
-//     serialized += "\"top_level_log_layer_number\": " + std::to_string(option->top_level_log_layer_number) + ",";
-//     serialized += "\"log_offset\": " + std::to_string(option->log_offset);
-//     serialized += "}";
-//     return serialized;
-// }
+
+void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
+    if (options->traceprov_perform_derivation){
+        TraceProvParseContext *parsed_back_context;
+        char *parsed_sql = NULL;
+        auto result_map = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
+        for (auto result_map_pair: *result_map){
+            auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+            elog(INFO, "SQL Query: %s", node_sql.c_str());
+            if (options->traceprov_materialize_derivation){
+                std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+                node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+            }
+            // std::string extra_str = "";
+            // extra_str += "{";
+            // extra_str += "\"layer\": ";
+            // extra_str += std::to_string(result_map_pair.first);
+            // extra_str += ",";
+            // extra_str += "\"sql\": ";
+            // extra_str += "\"" + std::string(parsed_sql) + "\""
+            extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+        }
+    }
+}

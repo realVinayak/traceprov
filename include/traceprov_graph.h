@@ -1,8 +1,8 @@
 #ifndef TP_GRAPH_H
 #define TP_GRAPH_H
-#include "tp_list.h"
 #include <unistd.h>
 #include <stdint.h>
+#include "tp_list.h"
 
 #define TRACEPROV_SET_GRAPH ((TraceProvDependency*)-1)
 
@@ -136,4 +136,35 @@ typedef struct TraceProvTargetSublinkItem {
     TraceProvLayerNumber layer_number;
     int offset_in_key;
 } TraceProvTargetSublinkItem;
+
+typedef struct TraceProvDependencyMetaHeader {
+    TraceProvLayerNumber max_layer_number;
+    // Number of graphs being stored.
+    uint32_t num_graphs;
+    uint32_t num_set_padding_map_items;
+    uint32_t num_set_graph_map_items;
+    uint32_t num_sublink_items;
+    uint32_t num_set_pointer_map;
+} TraceProvDependencyMetaHeader;
+
+// static_assert(sizeof(TraceProvDependencyMetaHeader) == 24);
+
+// This is not in the header for a reason, nothing outside of this file
+// should know that this even exists.
+typedef struct TraceProvDependencyHeader {
+    uint32_t idx; // own's index (each block has a unique index)
+    uint32_t numberOfEntries; // Number of entries
+    uint32_t numberOfDirectChildren; // Number of direct children.
+    TraceProvDependency *graphPtr; // Useful to detect if the graph is null or not.
+} TraceProvDependencyHeader;
+
+typedef struct TraceProvStringHeader {
+    size_t size;
+} TraceProvStringHeader;
+
+
+typedef struct TraceProvEntryMetaHeader {
+    uint32 num_keys;
+} TraceProvEntryMetaHeader;
+
 #endif

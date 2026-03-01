@@ -1,6 +1,5 @@
 -- using default substitutions
-select
-    l_shipmode,
+select l_shipmode,
     sum(
         case
             when o_orderpriority = '1-URGENT'
@@ -15,20 +14,14 @@ select
             else 0
         end
     ) as low_line_count
-from
-    orders,
+from orders,
     lineitem
-where
-    o_orderkey = l_orderkey
+where o_orderkey = l_orderkey
     and (o_orderkey, l_orderkey, l_linenumber) in (
-        select
-            column_1,
+        select column_1,
             column_2,
             column_3
-        FROM
-            LAYER_1
+        FROM traceprov_lineage_1
     )
-group by
-    l_shipmode
-order by
-    l_shipmode;
+group by l_shipmode
+order by l_shipmode;
