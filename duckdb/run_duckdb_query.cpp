@@ -289,38 +289,46 @@ struct Options parse_args(int argc, char **argv){
     return options;
 };
 
+typedef struct TraceProvLightData {
+    uint64_t column_count;
+    uint64_t row_count;
+} TraceProvLightData;
+
 // Simply populates the data, given a chunk.
 static void populate_traceprov_data(
-    TraceProvData *traceprov_data, 
+    TraceProvLightData *traceprov_data, 
     duckdb_data_chunk *chunk
 ){
     const uint64_t column_count = duckdb_data_chunk_get_column_count(*chunk);
     const uint64_t row_count = duckdb_data_chunk_get_size(*chunk);
     // Unlikely because it'll happen just once, for the first chunk.
-    if ((column_count != traceprov_data->size())){
-        if (traceprov_data->size() != 0){
+    if ((column_count != traceprov_data->column_count)){
+        if (traceprov_data->row_count != 0){
             std::cout << "Attempting to set different number of column entries" << std::endl;
             exit(1);
         }
-        for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
-            auto column_data = new TraceProvColumnData;
-            column_data->data = new std::vector<uint64_t>();
-            traceprov_data->push_back(column_data);
-        }
+        traceprov_data->column_count = column_count;
+        // for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
+        //     auto column_data = new TraceProvColumnData;
+        //     column_data->data = new std::vector<uint64_t>();
+        //     traceprov_data->push_back(column_data);
+        // }
     }
-    for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
-        duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, col_idx);
-        uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
-        uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
-        auto current_column_data = traceprov_data->at(col_idx)->data;
-        for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
-            if((!duckdb_validity_row_is_valid(col_validity, row_idx))){
-                std::cout << "Expected all non-null row, for now" << std::endl;
-                exit(1);
-            }
-            current_column_data->push_back(col_data[row_idx]);
-        }
-    }
+    traceprov_data->row_count += row_count;
+    // for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
+    //     duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, col_idx);
+    //     uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
+    //     uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
+    //     traceprov_data->row_count += row_count;
+    //     // auto current_column_data = traceprov_data->at(col_idx)->data;
+    //     // // for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+    //     // //     if((!duckdb_validity_row_is_valid(col_validity, row_idx))){
+    //     // //         std::cout << "Expected all non-null row, for now" << std::endl;
+    //     // //         exit(1);
+    //     // //     }
+    //     // //     current_column_data->push_back(col_data[row_idx]);
+    //     // // }
+    // }
 }
 
 static void populate_log_offset(TraceProvLayerPartition *parition, std::string extra_sql);
@@ -328,11 +336,11 @@ static std::string serialize_option(Options *option);
 
 typedef struct PerformQueryResult {
     int64_t computed_time;
-    TraceProvData *data;
+    TraceProvLightData *data;
     Options option;
 } PerformQueryResult;
 
-PerformQueryResult *make_result(int64_t computed_time, TraceProvData *data, Options *options){
+PerformQueryResult *make_result(int64_t computed_time, TraceProvLightData *data, Options *options){
     auto result = new PerformQueryResult;
     result->computed_time = computed_time;
     result->data = data;
@@ -397,7 +405,9 @@ void perform_query(
     std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
 
     uint64_t chunk_count = 0;
-    auto traceprov_data = new TraceProvData;
+    auto traceprov_data = new TraceProvLightData;
+    traceprov_data->column_count = 0;
+    traceprov_data->row_count = 0;
 
     if (options->use_pending){
         while (true) {
@@ -711,10 +721,11 @@ int main(int argc, char **argv){
         for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
             auto current = agg_result.at(computed_time_idx);
             if (computed_time_idx > 0) time_out_json += ",";
-            const uint64_t width = (current->data->size());
+            const uint64_t width = (current->data->column_count);
             uint64_t row_count = 0;
             if (width > 0){
-                row_count = (current->data->at(0)->data->size());
+                // row_count = (current->data->at(0)->data->size());
+                row_count = current->data->row_count;
             }
             time_out_json += "{";
             time_out_json += "\"time\":" + std::to_string(current->computed_time);
