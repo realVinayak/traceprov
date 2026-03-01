@@ -531,24 +531,6 @@ duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args
 
 
 void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckdb_vector output){
-    #if TRACEPROV_USE_MMEM_PAGE
-    if (traceprov_current.local_context != NULL){
-        // cleanup mem stuff (unmapping)
-        for (uint32_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
-            const struct traceprov_aggregate_layer *agg_layer = &traceprov_current.local_context->cached_layers[layer_idx];
-            if (agg_layer->layer_number == 0 || agg_layer->page_mapping == NULL) continue;
-            for (uint32_t mapping_id = 0; mapping_id < agg_layer->page_mapping_size; mapping_id++){
-                void *page_ptr = agg_layer->page_mapping[mapping_id];
-                const uint64_t page_size = mapping_id == 0 ?  TRACEPROV_PAGE_SIZE : (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE);
-                if(munmap(page_ptr, page_size)){
-                    PRINT_ON_DEBUG("Got error stage when unmapping!");
-                    elog(ERROR, "Got error stage when unmapping!");
-                }
-            }
-            free(agg_layer->page_mapping);
-        }
-    }
-    #endif
 
     traceprov_reset_local();
 
