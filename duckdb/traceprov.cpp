@@ -547,6 +547,7 @@ void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckd
         elog(ERROR, "Error removing files from traceprov dir!");
     }
     result_data[0] = 0;
+    free(traceprov_data_dir);
 }
 
 duckdb_scalar_function traceprov_create_reinit_state(){

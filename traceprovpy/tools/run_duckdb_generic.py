@@ -335,6 +335,7 @@ def validate_query(
         db=db,
         i=in_path.as_posix(),
         repeat=1,
+        threads=12
     )
     traceprov_assert_safe_run(
         f"{exec_str} {simple_option(base_dump_query_path).serialize()}"
@@ -418,7 +419,7 @@ def _run_sample_inference_smokedduck(
         )
         traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
 
-    sample_q_dir = Path("/tmp/sd_infer/") / query_num
+    sample_q_dir = Path("./tmp/sd_infer/") / query_num
     os.makedirs(sample_q_dir, exist_ok=True)
     extra_sqls = []
     sql_spec_map = []
@@ -441,18 +442,18 @@ def _run_sample_inference_smokedduck(
         ("capture", 0),
         *product(sql_spec_map, range(iters)),
     ]
-    just_write("/tmp/extra_file.txt", "\n".join(extra_sqls))
+    just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
 
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
         threads=1,
         i=base_sql.as_posix(),
-        time="/tmp/infer_time.json",
-        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
-        settings=("/tmp/capture_settings.json" if settings else None),
-        extra_file="/tmp/extra_file.txt",
-        stats="/tmp/capture_sd_stats_%d.json",
+        time="./tmp/infer_time.json",
+        profile=("./tmp/infer_profile_%d_%d.json" if profile else None),
+        settings=("./tmp/capture_settings.json" if settings else None),
+        extra_file="./tmp/extra_file.txt",
+        stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
         main_once_extra_all=True,
     )
@@ -571,9 +572,9 @@ def run_single(
         repeat=iters,
         threads=threads,
         i=base_sql.as_posix(),
-        time="/tmp/base_time.json",
-        profile="/tmp/base_profile_%d.json",
-        settings="/tmp/base_settings.json"
+        time="./tmp/base_time.json",
+        profile="./tmp/base_profile_%d.json",
+        settings="./tmp/base_settings.json"
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
@@ -583,10 +584,10 @@ def run_single(
 
     capture_options = base_options._replace(
         i=captured_sql.as_posix(),
-        time="/tmp/capture_time.json",
-        profile="/tmp/capture_profile_%d.json",
+        time="./tmp/capture_time.json",
+        profile="./tmp/capture_profile_%d.json",
         disable_col_opt=disable_col_opt,
-        settings="/tmp/capture_settings.json",
+        settings="./tmp/capture_settings.json",
         traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
         traceprov_use_partition_in_log=traceprov_use_partition_in_log,
         traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
@@ -595,9 +596,9 @@ def run_single(
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)
-
+    traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
     if run_inference:
-        traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+        #traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
         capture_options = capture_options._replace(
             traceprov_perform_derivation=True
         )

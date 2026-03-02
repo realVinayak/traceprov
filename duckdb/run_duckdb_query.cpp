@@ -366,6 +366,12 @@ void perform_query(
     }
     #endif
 
+    if (options->disable_column_optimizer){
+        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+        //DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
+    }else{
+        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
+    }
     if (options->min_layer_number){
         traceprov_current.maximum_local_layer_used = options->min_layer_number;
     }
@@ -573,12 +579,13 @@ int main(int argc, char **argv){
 
     #endif
         
-    if (options.disable_column_optimizer){
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+    //if (options.disable_column_optimizer){
+    //    DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
         //DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
-    }
+    //}
 
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
+    DUCKDB_RUN_SHORT_QUERY(con, "set max_expression_depth=(1::ubigint << 63) - 1;", "run max expression depth adjustment;");
 
     #if TRACEPROV_SD_MODE==0
     if (!options.no_reinit_state){
@@ -640,6 +647,7 @@ int main(int argc, char **argv){
                 new_options.no_reinit_state = true;
                 new_options.capture_lineage = false;
                 new_options.stats_path = "";
+		new_options.disable_column_optimizer = false;
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());
@@ -809,7 +817,7 @@ void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
         auto result_map = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
         for (auto result_map_pair: *result_map){
             auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
-            elog(INFO, "SQL Query: %s", node_sql.c_str());
+            //elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
