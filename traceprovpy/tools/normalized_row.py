@@ -32,9 +32,11 @@ class NormalizedRow(object):
     category: str
     base: Extendable
     capture: Extendable
+    base_profile: Extendable
+    capture_profile: Extendable
 
     def keys(self):
-        return {"category", "base", "capture"}
+        return {"category", "base", "capture", "base_profile", "capture_profile"}
 
     def __init__(self, **kwargs):
         for key, value in kwargs.items():
@@ -45,14 +47,14 @@ class NormalizedRow(object):
         extendables = [
             getattr(self, key).add_key(key)
             for key in keys
-            if isinstance(getattr(self, key), Extendable)
+            if hasattr(self, key) and isinstance(getattr(self, key), Extendable)
         ]
         extended = list(map(merge, zip(*extendables, strict=True)))
         iter_count = list(extended)
         simple_keys = {
             key: getattr(self, key)
             for key in keys
-            if not isinstance(getattr(self, key), Extendable)
+            if hasattr(self, key) and not isinstance(getattr(self, key), Extendable)
             and getattr(self, key) is not None
         }
         rows = [
@@ -72,6 +74,12 @@ def extract_bucket_category(file_name: str):
     return bucket
 
 
+def extract_thread_category(file_name: str):
+    match = re.search(r"_thread_(\d+)", file_name)
+    assert match is not None
+    bucket = int(match.groups()[0])
+    return str(bucket)
+
 import statistics
 
 
@@ -80,13 +88,37 @@ def tap_simple_result(result: dict):
         time=result["time"], width=result["width"], row_count=result["row_count"]
     )
 
+def tap_profile_result(result: dict):
+    return dict(
+        latency=result['latency']
+    )
+
+def sum_simple_result(left_result: dict, right_result: dict):
+    return {
+        **left_result,
+        **{
+            key: left_result.get(key) + value
+            for (key, value) in right_result.items()
+        }
+    }
+def combine_tap_result(results: list[dict]):
+    def _reduce(previous, current):
+        return [sum_simple_result(*res) for res in zip(previous, current)]
+
+    return reduce(_reduce, results[1:], results[0])
+
 
 def extract_traceprov(traceprov_result: dict):
     return dict(
         base=Extendable(map(tap_simple_result, traceprov_result["base_time"])),
         capture=Extendable(map(tap_simple_result, traceprov_result["capture_time"])),
+        base_profile=Extendable(map(tap_profile_result, traceprov_result["base_profile"])),
+        capture_profile=Extendable(map(tap_profile_result, traceprov_result["capture_profile"]))
     )
 
+
+def extract_infer(infer_results: dict):
+    return combine_tap_result([([tap_simple_result(node) for node in infer_result['times']]) for infer_result in infer_results])
 
 def extract_stats_sample_infer_row(sql_map: list[dict], time_results: list[dict]):
     time_map = defaultdict(dict)
@@ -127,6 +159,11 @@ class NormalizedSampleInferRow(NormalizedRow):
     def keys(self):
         return super().keys() | {"average_time", "max_stdev_ratio"}
 
+class NormalizedInferRow(NormalizedRow):
+    infer: Extendable
+
+    def keys(self):
+        return super().keys() | {"infer"}
 
 category_order = [
     "TraceProv(bucket: None)",

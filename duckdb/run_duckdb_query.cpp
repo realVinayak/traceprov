@@ -78,7 +78,7 @@ struct Options {
     // whwther to utilie pending system (for testing.)
     bool use_pending;
     // via --threads
-    int num_threads;
+    uint32 num_threads;
     // via --stats
     std::string stats_path;
     // via --i
@@ -131,6 +131,7 @@ struct Options {
     // via --traceprov_use_partition_in_agg
     // via --traceprov_use_partition_in_log
     // via --traceprov_use_row_in_agg_partition
+    // via --traceprov_skip_page_cache
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -266,6 +267,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_materialize_derivation")){
             options.traceprov_materialize_derivation = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_skip_page_cache")){
+            traceprov_skip_page_cache = true;
             continue;
         }
 
@@ -586,6 +590,7 @@ int main(int argc, char **argv){
 
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
     DUCKDB_RUN_SHORT_QUERY(con, "set max_expression_depth=(1::ubigint << 63) - 1;", "run max expression depth adjustment;");
+    traceprov_setup_page_cache(options.num_threads);
 
     #if TRACEPROV_SD_MODE==0
     if (!options.no_reinit_state){

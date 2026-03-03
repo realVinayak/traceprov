@@ -10,11 +10,14 @@
 #include <functional>
 #include <thread>
 
-thread_local struct current_context traceprov_current = {.my_worker_id = 0,
-                                            .traceprov_shared_context_fd = -1,
-                                            .shared_context = NULL,
-                                            .local_context = NULL,
-                                            .maximum_local_layer_used = 0};
+thread_local struct current_context traceprov_current = {
+    .my_worker_id = 0,
+    .traceprov_shared_context_fd = -1,
+    .shared_context = NULL,
+    .local_context = NULL,
+    .maximum_local_layer_used = 0,
+    .page_cache_idx = 0
+};
 
 #if TRACEPROV_SD_MODE==0
 static void bp(){

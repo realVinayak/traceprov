@@ -53,4 +53,24 @@ void traceprov_write_max_used_layer(const uint32_t maximum_layer_used);
 std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t worker_count);
 std::string traceprov_get_layer_info_query();
 void traceprov_reset_local();
+
+typedef struct TraceProvPageCacheEntry {
+    // Current idx.
+    uint32_t idx;
+    // Number of pages.
+    uint32_t size;
+    // cached pages.
+    void **pages;
+} TraceProvPageCacheEntry;
+
+typedef struct TraceProvPageCache {
+    TraceProvPageCacheEntry *initial_entries;
+    TraceProvPageCacheEntry *later_entries;
+} TraceProvPageCache;
+
+extern TraceProvPageCache g_page_cache;
+void traceprov_setup_page_cache(const uint32_t num_threads);
+
+#define TRACEPROV_PAGE_CACHE_IDX(curr_local_context) (curr_local_context.page_cache_idx)
+
 #endif

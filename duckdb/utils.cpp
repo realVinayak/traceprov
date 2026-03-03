@@ -12,6 +12,7 @@
 #include "traceprov_partition_info.hpp"
 #include <mutex>
 #include "utils.h"
+#include "traceprov_settings.hpp"
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
@@ -101,18 +102,50 @@ void traceprov_reset_local(){
 
     if (traceprov_current.local_context != NULL){
         // cleanup mem stuff (unmapping)
+        std::vector<void *> *free_initial_pages = new  std::vector<void *>;
+        std::vector<void *> *free_later_pages = new  std::vector<void *>;
         for (uint32_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
             const struct traceprov_aggregate_layer *agg_layer = &traceprov_current.local_context->cached_layers[layer_idx];
             if (agg_layer->layer_number == 0 || agg_layer->page_mapping == NULL) continue;
             for (uint32_t mapping_id = 0; mapping_id < agg_layer->page_mapping_size; mapping_id++){
                 void *page_ptr = agg_layer->page_mapping[mapping_id];
-                const uint64_t page_size = mapping_id == 0 ?  TRACEPROV_PAGE_SIZE : (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE);
-                if(munmap(page_ptr, page_size)){
-                    PRINT_ON_DEBUG("Got error stage when unmapping!");
-                    elog(ERROR, "Got error stage when unmapping!");
+                if (!traceprov_skip_page_cache){
+                    if (mapping_id == 0){
+                        free_initial_pages->push_back(page_ptr);
+                    }else{
+                        free_later_pages->push_back(page_ptr);
+                    }
+                }else{
+                    const uint64_t page_size = mapping_id == 0 ?  TRACEPROV_PAGE_SIZE : (TRACEPROV_INCREMENT_TRACE_BY_PG * TRACEPROV_PAGE_SIZE);
+                    if(munmap(page_ptr, page_size)){
+                        PRINT_ON_DEBUG("Got error stage when unmapping!");
+                        elog(ERROR, "Got error stage when unmapping!");
+                    }
                 }
             }
             free(agg_layer->page_mapping);
+        }
+        if (!traceprov_skip_page_cache){
+            TraceProvPageCacheEntry *initial_page_entry = &g_page_cache.initial_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
+            for (uint32_t start_idx = initial_page_entry->idx; start_idx < initial_page_entry->size; start_idx++){
+                // It is possible that not all the pages end up getting reused.
+                // Hence, need to reclaim such pages.
+                free_initial_pages->push_back(initial_page_entry->pages[start_idx]);
+            }
+
+            // Reclaim the later pages too.
+            TraceProvPageCacheEntry *later_page_entry = &g_page_cache.later_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
+            for (uint32_t start_idx = later_page_entry->idx; start_idx < later_page_entry->size; start_idx++){
+                free_later_pages->push_back(later_page_entry->pages[start_idx]);
+            }
+            // Reset the cache entry, finally.
+            initial_page_entry->idx = 0;
+            initial_page_entry->size = free_initial_pages->size();
+            initial_page_entry->pages = free_initial_pages->data();
+
+            later_page_entry->idx = 0;
+            later_page_entry->size = free_later_pages->size();
+            later_page_entry->pages = free_later_pages->data();
         }
     }
     #endif
@@ -232,6 +265,11 @@ int initialize_local_context(){
     traceprov_current.local_context->worker_id = traceprov_current.my_worker_id;
     traceprov_current.local_context->worker_pid = MyProcPid;
     traceprov_current.local_reinit_counter = traceprov_reinit_counter;
+    
+    // Don't set this in any other case.
+    // This is, effectivelly, constant across the lifecycle of this thread.
+    if (traceprov_current.page_cache_idx == 0)
+        traceprov_current.page_cache_idx = traceprov_current.my_worker_id;;
 
     if (rc || !is_locked){
         elog(ERROR, "Expected rc to be 0, and the shared context file to be locked.");
@@ -359,41 +397,49 @@ int get_or_create_layer(
         return 0;
     }
 
-    // Need to mmap the file.
-    #if TRACEPROV_USE_MMEM_PAGE
-    PRINT_ON_DEBUG("Mapping huge pages!");
-    // Can make do with anonymous mapping.
-    void *trace_ptr = mmap(
-        NULL,
-        TRACEPROV_PAGE_SIZE,
-        PROT_WRITE,
-        TRACEPROV_MMAP_FLAGS,
-        0,
-        0
-    );
+    void *trace_ptr = NULL;
+    auto entry_line = &g_page_cache.initial_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
     int trace_file_fd = 0;
-    #else
-    // Map the actual trace file for this layer.
-    // Each worker gets its own trace file.
-    char buff[1024] = {0};
-    sprintf(buff, TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, traceprov_current.my_worker_id);
-    int trace_file_fd = remove_and_create(
-        buff,
-        TRACEPROV_PAGE_SIZE
-    );
+    if (entry_line->idx < entry_line->size){
+        trace_ptr = entry_line->pages[entry_line->idx++];
+        // elog(INFO, "rEUSING PGES!");
+    }else{
+        // Need to mmap the file.
+        #if TRACEPROV_USE_MMEM_PAGE
+        PRINT_ON_DEBUG("Mapping huge pages!");
+        // Can make do with anonymous mapping.
+        trace_ptr = mmap(
+            NULL,
+            TRACEPROV_PAGE_SIZE,
+            PROT_WRITE,
+            TRACEPROV_MMAP_FLAGS,
+            0,
+            0
+        );
+        int trace_file_fd = 0;
+        #else
+        // Map the actual trace file for this layer.
+        // Each worker gets its own trace file.
+        char buff[1024] = {0};
+        sprintf(buff, TRACEPROV_MAIN_TRACE_FILE, DataDir, layer_number, traceprov_current.my_worker_id);
+        trace_file_fd = remove_and_create(
+            buff,
+            TRACEPROV_PAGE_SIZE
+        );
 
-    if (trace_file_fd < 0){
-        return 1;
+        if (trace_file_fd < 0){
+            return 1;
+        }
+        trace_ptr = mmap(
+            NULL,
+            TRACEPROV_PAGE_SIZE,
+            PROT_WRITE,
+            MAP_SHARED,
+            trace_file_fd,
+            0
+        );
+        #endif
     }
-    void *trace_ptr = mmap(
-        NULL,
-        TRACEPROV_PAGE_SIZE,
-        PROT_WRITE,
-        MAP_SHARED,
-        trace_file_fd,
-        0
-    );
-    #endif
 
     if (trace_ptr == MAP_FAILED){
         elog(ERROR, "Mapping the trace file failed.");
@@ -492,14 +538,20 @@ int initialize_layer_file(
 int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
     PRINT_ON_DEBUG("re-mapping huge pages!");
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
-    void *trace_ptr = mmap(
-        NULL,
-        TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
-        PROT_WRITE,
-        TRACEPROV_MMAP_FLAGS,
-        0,
-        0
-    );
+    void *trace_ptr = NULL;
+    auto entry_line = &g_page_cache.later_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
+    if (entry_line->idx < entry_line->size){
+        trace_ptr = entry_line->pages[entry_line->idx++];
+    }else{
+        trace_ptr = mmap(
+            NULL,
+            TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
+            PROT_WRITE,
+            TRACEPROV_MMAP_FLAGS,
+            0,
+            0
+        );
+    }
     if (trace_ptr == MAP_FAILED){
         elog(ERROR, "remap failed for huge.");
     }
@@ -829,4 +881,18 @@ std::string traceprov_get_layer_info_query(){
         }   
     }
     return combine_string_vector(rows, " UNION ALL ");
+}
+
+
+TraceProvPageCache g_page_cache = {
+    .initial_entries = NULL,
+    .later_entries = NULL
+};
+
+void traceprov_setup_page_cache(const uint32_t num_threads){
+    size_t cache_line_size = sizeof(TraceProvPageCacheEntry)*num_threads;
+    g_page_cache.initial_entries = (TraceProvPageCacheEntry *)malloc(cache_line_size);
+    g_page_cache.later_entries = (TraceProvPageCacheEntry *)malloc(cache_line_size);
+    memset(g_page_cache.initial_entries, 0, cache_line_size);
+    memset(g_page_cache.later_entries, 0, cache_line_size);
 }

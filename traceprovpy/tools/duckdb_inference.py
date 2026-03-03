@@ -46,6 +46,7 @@ class DuckDBDriverOptions(NamedTuple):
     use_part_agg: list[int] | None = None
     traceprov_perform_derivation: bool = False
     traceprov_materialize_derivation: bool = False
+    traceprov_skip_page_cache: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -63,7 +64,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_partition_in_log",
             "traceprov_use_row_in_agg_partition",
             "traceprov_perform_derivation",
-            "traceprov_materialize_derivation"
+            "traceprov_materialize_derivation",
+            "traceprov_skip_page_cache"
         }
 
     def serialize(self) -> str:

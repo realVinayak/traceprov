@@ -279,6 +279,10 @@ struct current_context {
     // This is used during the logging of groups (to determine where the combiner layer goes.)
     uint32_t  maximum_local_layer_used;
     uint64_t  local_reinit_counter;
+    // 1-indexed.
+    // Gets set the first time.
+    // There can be some cache locality benefits, otherwise, not much,
+    uint32_t page_cache_idx;
 };
 
 struct traceprov_agg_context {

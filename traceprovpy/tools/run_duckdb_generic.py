@@ -669,9 +669,9 @@ def run_single(
 
     final_result = dict(
         base_time=base_result_time,
-        base_profile=base_profile_out,
+        # base_profile=base_profile_out,
         capture_time=capture_result_time,
-        capture_profile=capture_profile_out,
+        # capture_profile=capture_profile_out,
         infer_results=infer_results,
         base_settings=base_settings,
         capture_settings=capture_settings,
