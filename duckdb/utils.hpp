@@ -69,7 +69,7 @@ typedef struct TraceProvPageCache {
 } TraceProvPageCache;
 
 extern TraceProvPageCache g_page_cache;
-void traceprov_setup_page_cache(const uint32_t num_threads);
+void traceprov_setup_page_cache(const uint32_t num_threads, const uint32_t page_count = 0);
 
 #define TRACEPROV_PAGE_CACHE_IDX(curr_local_context) (curr_local_context.page_cache_idx)
 

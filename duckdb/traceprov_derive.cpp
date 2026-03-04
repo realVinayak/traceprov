@@ -633,15 +633,15 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         );
 
         join_exprn->is_left_star = true;
-        current_tree->children->push_back(derive_on_node(
-            (TraceProvNode*)join_exprn, 
-            agg_graph, 
-            reference_node_col_count,
-            NULL,
-            worker_local_contexts,
-            parse_context,
-            recurse_pack
-        ));
+        // current_tree->children->push_back(derive_on_node(
+        //     (TraceProvNode*)join_exprn, 
+        //     agg_graph, 
+        //     reference_node_col_count,
+        //     NULL,
+        //     worker_local_contexts,
+        //     parse_context,
+        //     recurse_pack
+        // ));
 
         if (traceprov_use_implicit_union){
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);

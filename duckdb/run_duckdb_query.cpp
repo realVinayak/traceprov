@@ -128,6 +128,7 @@ struct Options {
     bool traceprov_materialize_derivation;
     // Just print derivation, don't perform it. Useful for debugging.
     bool traceprov_dry_run_derivation;
+    uint32_t initial_page_count;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -170,7 +171,8 @@ struct Options parse_args(int argc, char **argv){
         // This needs to be another option, unfortunately.
         .traceprov_perform_derivation = false,
         .traceprov_materialize_derivation = false,
-        .traceprov_dry_run_derivation = false
+        .traceprov_dry_run_derivation = false,
+        .initial_page_count = 0
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -280,6 +282,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_use_implicit_union")){
             traceprov_use_implicit_union = true;
+            continue;
+        } else if (IS_OPTION("--initial_page_count")){
+            options.initial_page_count = std::atoi(argv[++i]);
             continue;
         }
 
@@ -597,6 +602,7 @@ int main(int argc, char **argv){
 
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
+        traceprov_create_debug_table_funcs(con);
     }
 
     #endif
@@ -608,7 +614,7 @@ int main(int argc, char **argv){
 
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
     DUCKDB_RUN_SHORT_QUERY(con, "set max_expression_depth=(1::ubigint << 63) - 1;", "run max expression depth adjustment;");
-    traceprov_setup_page_cache(options.num_threads);
+    traceprov_setup_page_cache(options.num_threads, options.initial_page_count);
 
     #if TRACEPROV_SD_MODE==0
     if (!options.no_reinit_state){
@@ -840,6 +846,14 @@ void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
         char *parsed_sql = NULL;
         auto result_map = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
         for (auto result_map_pair: *result_map){
+            if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
+                // In this case, it is a simple scan.
+                // Apparently, for some reason, DuckDB does not parallelise this????
+                // Anyways, right now, that breaks things.
+                // So, remember that it was a simple scan.
+                TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
+                relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
+            }
             auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){

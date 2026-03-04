@@ -3,5 +3,6 @@
 #include "duckdb.hpp"
 
 void traceprov_create_vary_chunk_funcs(duckdb_connection con);
+void traceprov_create_debug_table_funcs(duckdb_connection con);
 
 #endif

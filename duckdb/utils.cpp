@@ -889,10 +889,36 @@ TraceProvPageCache g_page_cache = {
     .later_entries = NULL
 };
 
-void traceprov_setup_page_cache(const uint32_t num_threads){
+void traceprov_setup_page_cache(const uint32_t num_threads, const uint32_t page_count){
     size_t cache_line_size = sizeof(TraceProvPageCacheEntry)*num_threads;
     g_page_cache.initial_entries = (TraceProvPageCacheEntry *)malloc(cache_line_size);
     g_page_cache.later_entries = (TraceProvPageCacheEntry *)malloc(cache_line_size);
     memset(g_page_cache.initial_entries, 0, cache_line_size);
     memset(g_page_cache.later_entries, 0, cache_line_size);
+    if (page_count){
+       // For each thread, pre-allocate and pre-fault these many number of pages.
+       for (uint32_t thread_id = 0; thread_id < num_threads; thread_id++){
+            TraceProvPageCacheEntry *entry = &g_page_cache.later_entries[thread_id];
+            std::vector<void *> *free_later_pages = new  std::vector<void *>;
+            for (uint32_t idx = 0; idx < page_count; idx++){
+                void *trace_ptr = mmap(
+                    NULL,
+                    TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
+                    PROT_WRITE,
+                    TRACEPROV_MMAP_FLAGS,
+                    0,
+                    0
+                );
+                if (trace_ptr == MAP_FAILED){
+                    elog(ERROR, "remap failed for huge.");
+                }
+                // Set the first byte.
+                // This is done so that the pages get pre-faulted
+                ((uint8_t*)trace_ptr)[0] = 1;
+                free_later_pages->push_back(trace_ptr);
+            }
+            entry->pages = free_later_pages->data();
+            entry->size = page_count;
+       }
+    }
 }

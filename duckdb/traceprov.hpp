@@ -15,6 +15,7 @@
 // TODO: Make this customimizable..
 #define DataDir "./"
 #define MyProcPid getpid()
+#define MyProcTid gettid()
 
 // TODO: Make this per-process to enable concurrent traceprovs.
 // The prefix here is the base dir (root of data dir.)
@@ -375,5 +376,6 @@ typedef uint32_t TraceProvLayerNumber;
 extern uint64_t traceprov_reinit_counter;
 
 #define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
+#define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
 
 #endif

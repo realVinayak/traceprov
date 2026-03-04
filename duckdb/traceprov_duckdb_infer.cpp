@@ -47,6 +47,8 @@ typedef struct TraceProvBindData {
     int64_t offset_in_chunk;
     std::vector<TraceProvBindData *> *worker_bind_data;
     bool is_memory_mapping;
+    std::mutex *bind_data_mutex;
+    uint64_t max_worker_idx;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData {
@@ -65,6 +67,7 @@ typedef struct TraceProvInitData {
     uint64_t worker_bind_idx;
     // Useful to do it this way.
     std::vector<TraceProvInitData *> *worker_init_data;
+    uint64_t idx_in_bind;
 } TraceProvInitData;
 
 static uint64_t get_idx(const uint64_t first_page_count, const int64_t incr_page_count, const uint64_t idx);
@@ -171,6 +174,7 @@ void reset_global_context(){
 static TraceProvBindData *allocate_bind_data(){
     auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
     memset(my_bind_data, 0, sizeof(TraceProvBindData));
+    my_bind_data->bind_data_mutex = new std::mutex;
     return my_bind_data;
 }
 
@@ -358,17 +362,41 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         duckdb_bind_add_result_column(info, param.c_str(), type);
         duckdb_destroy_logical_type(&type);
     }
+    bind_data->rel_args.table_flags = table_flags;
     duckdb_bind_set_bind_data(info, bind_data, free);
 }
 
 void traceprov_duckdb_init(duckdb_init_info info){
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
     TraceProvInitData *init_data_inst = allocate_init_data();
-    init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
     // TODO: See if it is worth optimization below.
     // Even if we're using 1 thread, we still treat the init data as a "worker" one.
     // This simplifies of the code handling later. But, could, theoreticlaly, be micro-optimized.
+    uint64_t max_threads = 1;
     if (bind_data->rel_args.worker_id == 0){
+        // Don't make init data yet for this case.
+        max_threads = bind_data->worker_bind_data->size();
+    }else{
+        init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
+        init_data_inst->worker_init_data->push_back(
+            traceprov_make_init_data(bind_data)
+        );
+    }
+    duckdb_init_set_init_data(info, init_data_inst, free);
+    // This way, all the threads will scan each portion of the init data.
+    duckdb_init_set_max_threads(info, max_threads);
+}
+
+void traceprov_duckdb_local_init(duckdb_init_info info){
+    auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
+    bind_data->bind_data_mutex->lock();
+    const uint64_t self_idx = bind_data->max_worker_idx++;
+    bind_data->bind_data_mutex->unlock();
+    TraceProvInitData *init_data_inst = allocate_init_data();
+    init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
+    // TODO: Make this smarter.
+    // Specificially, see if this thread has a local context, and try "sticking" to that context
+    if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
         // In this case, need to over the children ones.
         for (auto worker_bind_data: *bind_data->worker_bind_data){
             init_data_inst->worker_init_data->push_back(
@@ -377,8 +405,9 @@ void traceprov_duckdb_init(duckdb_init_info info){
         }
     }else{
         init_data_inst->worker_init_data->push_back(
-            traceprov_make_init_data(bind_data)
+            traceprov_make_init_data(bind_data->worker_bind_data->at(self_idx))
         );
+        init_data_inst->idx_in_bind = self_idx;
     }
     duckdb_init_set_init_data(info, init_data_inst, free);
 }
@@ -472,19 +501,24 @@ static uint64_t get_local_idx(const uint64_t first_page_count, const int64_t inc
 
 void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output){
     auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
-    auto init_data_combined = (TraceProvInitData *)duckdb_function_get_init_data(info);
+    auto init_data_combined = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
 
     // This is the only case that signifies table scan end now.
     if (init_data_combined->worker_bind_idx >= init_data_combined->worker_init_data->size()){
         return duckdb_data_chunk_set_size(output, 0);
     }
 
-    auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
-
     TraceProvBindData *bind_data = bind_data_combined;
 
-    if (bind_data_combined->worker_bind_data)
-        bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->worker_bind_idx);
+    if (bind_data_combined->worker_bind_data){
+        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
+            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->worker_bind_idx);
+        }else{
+            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->idx_in_bind);
+        }
+    }
+
+    auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
 
     uint64_t chunk_size = 0;
     if (!bind_data->is_strict_rows){
@@ -527,7 +561,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
 
 void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
     auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
-    auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
+    auto init_data = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
 
     if (init_data->is_dummy){
         duckdb_data_chunk_set_size(output, 0);
@@ -598,6 +632,7 @@ duckdb_table_function traceprov_create_table_func(){
     duckdb_table_function_set_bind(function, traceprov_duckdb_bind);
     duckdb_table_function_set_init(function, traceprov_duckdb_init);
     duckdb_table_function_set_function(function, traceprov_duckdb_func);
+    duckdb_table_function_set_local_init(function, traceprov_duckdb_local_init);
     return function;
 }
 
