@@ -99,6 +99,8 @@ def run():
                 strict=parsed.strict,
                 traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
                 traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
+                traceprov_use_implicit_union=parsed.traceprov_use_implicit_union,
+                traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation
             )
 
         if parsed.sample_inference:

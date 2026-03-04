@@ -18,6 +18,9 @@ import os
 
 TRACEPROV_GRAPH_FILE = "/tmp/traceprov/graph.bin"
 
+# TODO: Breakk this up.
+# TODO: Add automatic parse arguments. Cmon that already exists in other places.
+# TODO: Add separate options for the settings (slightly complicated to do automatically, but better than current)
 class DuckDBDriverOptions(NamedTuple):
     db: str
     i: str
@@ -47,6 +50,8 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_perform_derivation: bool = False
     traceprov_materialize_derivation: bool = False
     traceprov_skip_page_cache: bool = False
+    traceprov_use_implicit_union: bool = False
+    traceprov_dry_run_derivation: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -65,7 +70,9 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_row_in_agg_partition",
             "traceprov_perform_derivation",
             "traceprov_materialize_derivation",
-            "traceprov_skip_page_cache"
+            "traceprov_skip_page_cache",
+            "traceprov_use_implicit_union",
+            "traceprov_dry_run_derivation"
         }
 
     def serialize(self) -> str:

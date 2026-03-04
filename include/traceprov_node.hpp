@@ -190,6 +190,7 @@ extern "C" {
     typedef struct TraceProvRelationArgs {
         uint64_t worker_id;
         uint64_t layer_number;
+        uint64_t table_flags;
         // -1 if everything. Otherwise >= 0.
         int64_t offset;
     } TraceProvRelationArgs;

@@ -2,6 +2,7 @@
 #include "traceprov.hpp"
 #include "utils.hpp"
 #include "derivation_utils.hpp"
+#include "traceprov_settings.hpp"
 
 extern "C" {
     #include "utils.h"
@@ -209,7 +210,6 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
             nullptr
         );
         TraceProvRelation *top_level_log_relation = make_traceprov_relation(current_layer_data, tp_psprintf("top_level_%s", tp_parse_get_unique_alias(parsed_back_context)));
-        top_level_log_relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
         current_tree->children->push_back(
             derive_on_node(
                 (TraceProvNode *)top_level_log_relation,
@@ -221,6 +221,16 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
                 recurse_pack_worker
             )
         );
+
+        if (traceprov_use_implicit_union){
+            // If doing implicit union, value of 0 implicitly implies that all workers need to be read.
+            // Since we couldn't have 0 as the worker id before, this doesn't break anything from before :)
+            top_level_log_relation->rel_args = make_relation_args(0, agg_layer->layer_number);
+            break;          
+        }else{
+            top_level_log_relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
+        }
+
     }
     return current_tree;
 }
@@ -559,8 +569,15 @@ TraceProvNode *simple_read_from_log(
             current_layer_data,
             tp_psprintf("log_read_to_append_%s",  tp_parse_get_unique_alias(parse_context))
         );
-        relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
         nodes = lappend(nodes, relation);
+        if (traceprov_use_implicit_union){
+            // traceprov append consturctor is smart enough to simply return the first node
+            // if the number of children is 1. So, this is absolutely fine. Nice.
+            relation->rel_args = make_relation_args(0, agg_layer->layer_number);
+            break;
+        }else{
+            relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
+        }
     }
     return make_traceprov_append(nodes, false);
 }
@@ -614,7 +631,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
             "intermediate_join",
             reference_match_idx
         );
-        traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
 
         join_exprn->is_left_star = true;
         current_tree->children->push_back(derive_on_node(
@@ -626,6 +642,13 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
             parse_context,
             recurse_pack
         ));
+
+        if (traceprov_use_implicit_union){
+            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
+            break;
+        }else{
+            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
+        }
     }
 
     // Now, need to iterate over the combined pairs.
@@ -643,7 +666,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
             combine_logs,
             tp_psprintf("combined_entry")
         );
-        combine_relation->rel_args = make_relation_args(combiner_worker_local_context->worker_id, worker_layer_pair.second->layer_number);
 
         TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the worker id
         TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the individual log 
@@ -672,7 +694,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
             const uint8_t worker_id = remote_worker_local_pair.first;
             auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr);
             auto base_log_relation = make_traceprov_relation(base_logs, tp_psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
-            base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
             TraceProvJoinExpr *base_join_exprn = make_traceprov_join_from_rel(
                 reference_node, 
                 (TraceProvNode *)base_log_relation,
@@ -694,8 +715,10 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
                     );
             }
 
-            TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
-            partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
+            if (!traceprov_use_implicit_union){
+                TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
+                partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
+            }
             if (traceprov_get_node_column_count((TraceProvNode *)partial_join_exprn) != traceprov_get_node_column_count((TraceProvNode *)base_join_exprn)){
                 elog(ERROR, "Got mismatching node count on logs!");
             }
@@ -709,6 +732,23 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
                 parse_context,
                 traceprov_shallow_copy_recurse_pack(&recurse_pack)
             ));
+
+            if (traceprov_use_implicit_union){
+                base_log_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
+                break;
+            }else{
+                base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
+            }
+        }
+        if (traceprov_use_implicit_union){
+            // When doing implicit union, we need to return all combines.
+            // However, since combine layers are arbitrarily numbered, it is possible that the same layer number
+            // does not mean the same across workers. So, need this.
+            combine_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
+            combine_relation->rel_args->table_flags |= TRACEPROV_TABLE_COMBINE;
+            break;
+        }else{
+            combine_relation->rel_args = make_relation_args(combiner_worker_local_context->worker_id, worker_layer_pair.second->layer_number);
         }
     }
     return current_tree;

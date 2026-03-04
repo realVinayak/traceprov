@@ -374,4 +374,6 @@ typedef uint32_t TraceProvLayerNumber;
 
 extern uint64_t traceprov_reinit_counter;
 
+#define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
+
 #endif

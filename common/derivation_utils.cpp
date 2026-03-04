@@ -512,7 +512,7 @@ extern "C" {
         sql += "SELECT ";
         sql += traceprov_get_column_select(relation->name, relation->data->size(), true);
         if (context.use_table_def){
-            sql = safe_append(sql, tp_psprintf(" FROM traceprov_read_worker_layer(%d::int, %d::int) AS %s", relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name));
+            sql = safe_append(sql, tp_psprintf(" FROM traceprov_read_worker_layer(%ld::bigint, %d::int, %d::int) AS %s", relation->rel_args->table_flags, relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name));
         }else{
             sql = safe_append(sql, tp_psprintf(" FROM %s", relation->name));
         }

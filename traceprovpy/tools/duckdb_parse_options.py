@@ -46,4 +46,15 @@ def make_duckdb_parse():
     parser.add_argument("--sample_num", type=int, default=100)
     parser.add_argument("--graph_dir", type=str, required=False)
     parser.add_argument("--threads", type=int, default=1)
+
+    parser.add_argument(
+        "--traceprov_use_implicit_union",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument(
+        "--traceprov_dry_run_derivation",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser

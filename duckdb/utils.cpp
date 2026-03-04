@@ -812,7 +812,7 @@ std::string construct_string_record(const std::string value, const std::string c
 }
 
 std::string get_layer_count(const uint64_t worker_id, const uint64_t layer_id){
-    std::string cols = std::to_string(worker_id) + "::bigint," + std::to_string(layer_id) + "::bigint";
+    std::string cols = "0::bigint," + std::to_string(worker_id) + "::bigint," + std::to_string(layer_id) + "::bigint";
     return "(select count(*) from traceprov_read_worker_layer(" + cols + "))";
 }
 

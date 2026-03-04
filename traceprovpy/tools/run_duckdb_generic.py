@@ -536,6 +536,8 @@ def run_single(
     traceprov_use_partition_in_agg: bool = False,
     traceprov_use_partition_in_log: bool = False,
     traceprov_use_row_in_agg_partition: bool = False,
+    traceprov_use_implicit_union: bool = False,
+    traceprov_dry_run_derivation: bool = False
 ):
     if validate:
         materialize_infer = True
@@ -600,7 +602,9 @@ def run_single(
     if run_inference:
         #traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
         capture_options = capture_options._replace(
-            traceprov_perform_derivation=True
+            traceprov_perform_derivation=True,
+            traceprov_dry_run_derivation=traceprov_dry_run_derivation,
+            traceprov_use_implicit_union=traceprov_use_implicit_union
         )
     # if run_inference:
     #     for element in spec_element["elements"]:

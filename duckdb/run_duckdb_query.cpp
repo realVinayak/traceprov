@@ -126,12 +126,15 @@ struct Options {
     std::string layer_stats_out;
     bool traceprov_perform_derivation;
     bool traceprov_materialize_derivation;
+    // Just print derivation, don't perform it. Useful for debugging.
+    bool traceprov_dry_run_derivation;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
     // via --traceprov_use_partition_in_log
     // via --traceprov_use_row_in_agg_partition
     // via --traceprov_skip_page_cache
+    // via --traceprov_use_implicit_union
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -166,7 +169,8 @@ struct Options parse_args(int argc, char **argv){
         .layer_stats_out = "",
         // This needs to be another option, unfortunately.
         .traceprov_perform_derivation = false,
-        .traceprov_materialize_derivation = false
+        .traceprov_materialize_derivation = false,
+        .traceprov_dry_run_derivation = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -271,8 +275,13 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_skip_page_cache")){
             traceprov_skip_page_cache = true;
             continue;
+        } else if (IS_OPTION("--traceprov_dry_run_derivation")){
+            options.traceprov_dry_run_derivation = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_use_implicit_union")){
+            traceprov_use_implicit_union = true;
+            continue;
         }
-
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
         std::exit(1);
@@ -359,7 +368,8 @@ void perform_query(
     std::vector<PerformQueryResult *> &agg_result,
     const char *final_profile_out,
     const char *final_stats_query,
-    std::string layer_stats_out
+    std::string layer_stats_out,
+    duckdb_prepared_statement *later_stmt = NULL
 ){
 
     #if TRACEPROV_SD_MODE==0
@@ -395,12 +405,18 @@ void perform_query(
 
 
     // Need to use both, the pending and the streaming API.
-    duckdb_prepared_statement stmt;
+    duckdb_prepared_statement stmt = NULL;
     duckdb_result final_result;
 
     auto start_time = std::chrono::steady_clock::now();
 
-    DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
+    if (later_stmt != NULL){
+        stmt = *later_stmt;
+    }
+
+    if (stmt == NULL)
+        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
+
     if (options->use_pending){
         duckdb_pending_result result;
         DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(stmt, &result));
@@ -411,6 +427,8 @@ void perform_query(
     }else{
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_execute_prepared(stmt, &final_result), duckdb_result_error(&final_result));
     }
+    if (later_stmt)
+        *later_stmt = stmt;
 
     std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
 
@@ -438,7 +456,7 @@ void perform_query(
     }
 
     duckdb_destroy_result(&final_result);
-    duckdb_destroy_prepare(&stmt);
+    // duckdb_destroy_prepare(&stmt);
 
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
@@ -652,7 +670,7 @@ int main(int argc, char **argv){
                 new_options.no_reinit_state = true;
                 new_options.capture_lineage = false;
                 new_options.stats_path = "";
-		new_options.disable_column_optimizer = false;
+                new_options.disable_column_optimizer = false;
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());
@@ -706,13 +724,14 @@ int main(int argc, char **argv){
             extra_options.stats_path = "";
             extra_options._extra = partition_spec;
             char final_profile_out[256] = {0};
+            duckdb_prepared_statement stmt = NULL;
             for (int i = 0; i < extra_options.repeat; i++){
                 if (IS_SET(extra_options.profile_out_path)){
                     char profile_out[256] = {0};
                     sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&extra_options, con, extra_sql.sql, agg_result, final_profile_out, NULL, "");
+                perform_query(&extra_options, con, extra_sql.sql, agg_result, final_profile_out, NULL, "", &stmt);
                 extra_options._extra_output = extra_sql.extra;
             }
             #if TRACEPROV_SD_MODE == 0
@@ -834,7 +853,11 @@ void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
             // extra_str += ",";
             // extra_str += "\"sql\": ";
             // extra_str += "\"" + std::string(parsed_sql) + "\""
-            extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+            if (options->traceprov_dry_run_derivation){
+                elog(INFO, "SQL Query: %s", node_sql.c_str());
+            }else{
+                extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+            }
         }
     }
 }

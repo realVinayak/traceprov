@@ -13,3 +13,6 @@ bool traceprov_use_row_in_agg_partition = false;
 
 // Skip page cache?
 bool traceprov_skip_page_cache = false;
+
+// Use implicit union? (in derivation)
+bool traceprov_use_implicit_union = false;
