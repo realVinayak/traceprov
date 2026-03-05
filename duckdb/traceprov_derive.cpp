@@ -621,6 +621,13 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
     auto layers_across_workers = find_layers_across_workers(agg_graph->headNumber, worker_local_contexts, 0);
     const uint64_t reference_node_col_count = traceprov_get_node_column_count(reference_node);
 
+    // Now, need to iterate over the combined pairs.
+    auto worker_combine_layers = find_combine_layers_across_workers(
+        agg_graph->headNumber,
+        worker_local_contexts
+    );
+
+
     for (auto worker_layer_pair: *layers_across_workers){
         const auto worker_local_context = worker_local_contexts->at(worker_layer_pair.first - 1);
         auto curr_worker_logs = read_all_columns(layer_number_to_search, worker_local_context, nullptr);
@@ -633,15 +640,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         );
 
         join_exprn->is_left_star = true;
-        // current_tree->children->push_back(derive_on_node(
-        //     (TraceProvNode*)join_exprn, 
-        //     agg_graph, 
-        //     reference_node_col_count,
-        //     NULL,
-        //     worker_local_contexts,
-        //     parse_context,
-        //     recurse_pack
-        // ));
 
         if (traceprov_use_implicit_union){
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
@@ -649,13 +647,19 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         }else{
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
         }
-    }
 
-    // Now, need to iterate over the combined pairs.
-    auto worker_combine_layers = find_combine_layers_across_workers(
-        agg_graph->headNumber,
-        worker_local_contexts
-    );
+        if (worker_combine_layers->size() == 0){
+            current_tree->children->push_back(derive_on_node(
+                (TraceProvNode*)join_exprn, 
+                agg_graph, 
+                reference_node_col_count,
+                NULL,
+                worker_local_contexts,
+                parse_context,
+                recurse_pack
+            ));
+        }
+    }
 
     for (auto worker_layer_pair: *worker_combine_layers){
         // For each combine, need to, unfortunately, join will all the previous ones.
@@ -667,11 +671,13 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
             tp_psprintf("combined_entry")
         );
 
-        TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the worker id
-        TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the individual log 
+        TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the individual log
+        TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the worker id
         auto output_column = new std::vector<TraceProvColumn*>;
         output_column->push_back(output_column_1);
-        output_column->push_back(output_column_2);
+
+        if (!traceprov_use_implicit_union)
+            output_column->push_back(output_column_2);
 
         TraceProvColumn *join_column_1 = new TraceProvColumn(1, reference_match_idx);
         TraceProvColumn *join_column_2 = new TraceProvColumn(2, 1);
@@ -688,7 +694,7 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         const uint64_t combine_match_key_idx = traceprov_get_node_column_count((TraceProvNode *)combine_join);
         if (combine_match_key_idx != (traceprov_get_node_column_count(reference_node) + 2))
             elog(INFO, "Inconsistent state!");
-        const uint64_t worker_id_key_idx = combine_match_key_idx - 1;
+        const uint64_t worker_id_key_idx = combine_match_key_idx;
     
         for (auto remote_worker_local_pair: *layers_across_workers){
             const uint8_t worker_id = remote_worker_local_pair.first;

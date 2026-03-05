@@ -102,10 +102,14 @@ def sum_simple_result(left_result: dict, right_result: dict):
         }
     }
 def combine_tap_result(results: list[dict]):
+
     def _reduce(previous, current):
         return [sum_simple_result(*res) for res in zip(previous, current)]
 
-    return reduce(_reduce, results[1:], results[0])
+    try:
+        return reduce(_reduce, results[1:], results[0])
+    except:
+        return None
 
 
 def extract_traceprov(traceprov_result: dict):

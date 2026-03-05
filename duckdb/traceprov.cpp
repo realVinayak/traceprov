@@ -334,7 +334,8 @@ void traceprov_combine(
             ref_group_number = target_state->group_cnt;
         }
 
-        if(initialize_local_and_layer(combined_layer_number, 3, 0, true, extra->state)){
+        const uint32_t width = traceprov_use_implicit_union ? 2 : 3;
+        if(initialize_local_and_layer(combined_layer_number, width, 0, true, extra->state)){
             elog(ERROR, "Error setting up local or layer!");
             return;
         }
@@ -356,18 +357,22 @@ void traceprov_combine(
         if (!target_state->is_combined){
             TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
             ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
-            ((uint64_t *)combined_layer->current_row)[1] = target_state->worker_id;
-            ((uint64_t *)combined_layer->current_row)[2] = target_state->group_cnt;
-            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, 3*sizeof(uint64_t));
+            ((uint64_t *)combined_layer->current_row)[1] = target_state->group_cnt;
+            if (!traceprov_use_implicit_union){
+                ((uint64_t *)combined_layer->current_row)[2] = target_state->worker_id;
+            }
+            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, width*sizeof(uint64_t));
             target_state->is_combined = true;
         }
         if (!was_copied){
             // In the worst case, we create a hole, which we skip over anyways later.
             TRACEPROV_INCREMENT_BY_PADDING(combined_layer);
             ((uint64_t *)combined_layer->current_row)[0] = ref_group_number;
-            ((uint64_t *)combined_layer->current_row)[1] = source_state->worker_id;
-            ((uint64_t *)combined_layer->current_row)[2] = source_state->group_cnt;
-            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, 3*sizeof(uint64_t));
+            ((uint64_t *)combined_layer->current_row)[1] = source_state->group_cnt;
+            if (!traceprov_use_implicit_union){
+                ((uint64_t *)combined_layer->current_row)[2] = source_state->worker_id;
+            }
+            combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, width*sizeof(uint64_t));
         }
 
         target_state->group_cnt = ref_group_number;
@@ -376,6 +381,100 @@ void traceprov_combine(
         // make it not be combined.
         main_layer->is_leader_layer = true;
     }
+}
+
+// Faster version of old combine.
+// Focus is to convert row-based to column layout (much faster to read)
+void traceprov_combine_optimized(
+    duckdb_function_info info,
+    duckdb_aggregate_state *source_p,
+    duckdb_aggregate_state *target_p,
+    idx_t count
+){
+    TraceProvAggExtra *extra = (TraceProvAggExtra *) duckdb_aggregate_function_get_extra_info(info);
+    // If we're ignoring group numbers, don't do anything.
+    if (extra->ignore_gn)
+        return;
+    struct traceprov_agg_context **source_states = (struct traceprov_agg_context **)source_p;
+    struct traceprov_agg_context **target_states = (struct traceprov_agg_context **)target_p;
+    if (unlikely(initialize_local_context() != 0)){
+        // Here, we purposefully don't setup the main layer.
+        // This is because it is not really needed anyways.
+        elog(ERROR, "Error setting up local context;")
+    }
+    // In some rare cases, seems like source states are also null.
+    // In those cases, try looking at target states.
+    uint32_t layer_number = source_states[0]->layer_number;
+    if (unlikely(layer_number == 0)){
+        layer_number = target_states[0]->layer_number;
+    }
+
+    if (unlikely(layer_number == 0)){
+        elog(ERROR, "Expected to find non-zero layer number in combine!");
+    }
+    struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
+
+    uint32_t combined_layer_number = 0;
+    // it is entirely possible that we see not combined aggs for the same layer.
+    // For those cases, need to check if we set the combined in the main layer.
+    if (((combined_layer_number = main_layer->combined_aggregate_layer_number) == 0)){
+        main_layer->combined_aggregate_layer_number = ++traceprov_current.maximum_local_layer_used;
+        combined_layer_number =  main_layer->combined_aggregate_layer_number;
+    }
+
+    if(initialize_local_and_layer(combined_layer_number, 2, 1, true, extra->state)){
+        elog(ERROR, "Error setting up local or layer!");
+        return;
+    }
+    struct traceprov_aggregate_layer *combined_layer = get_layer(combined_layer_number);
+    if (unlikely(combined_layer->combined_aggregate_layer_number == 0)){
+        // It is, actually, entirely possible that the combiner thread doesn't do
+        // any its local work. In that case, the main layer won't be set up.
+        // That's fine, but we cannot use "is_leader_layer" to detect if aggregate was split.
+        // Also, the numbering is arbitrary, so we cannot query it directly.
+        // The "best" way is to set combined_aggregate_layer_number, and then query on it.
+        combined_layer->combined_aggregate_layer_number = layer_number;
+        combined_layer->read_columns_at_once = true;
+    }
+
+    // It is very beneficial to write to just a single page, in this case.
+    // This is because we'll be going back-and-forth. So, in this case,
+    // we try allocating the space for two chunks at once. In most cases, it'll succeed.
+    // In cases towards the edge of a page, we'll jump to the next page.
+    // Need to remember this too when reading this.
+    const uint64_t chunk_size = sizeof(uint64_t)*count;
+    TRACEPROV_GROW_IF_TRUE(combined_layer, ((combined_layer->current_row + 2*chunk_size) > combined_layer->end_of_memory_zone));
+
+    uint64_t *target_write_ptr = (uint64_t*)combined_layer->current_row;
+    uint64_t *source_write_ptr = &(((uint64_t*)combined_layer->current_row)[count]);
+
+    for (idx_t idx = 0; idx < count; idx++){
+        if (target_states[idx]->is_combined && source_states[idx]->is_combined)
+            elog(ERROR, "Didn't expect both of the states to be combined...");
+
+        if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0){
+            if (unlikely(source_states[idx]->is_combined)){
+                elog(ERROR, "Expected source to not be combined in this case!");
+            }
+            memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
+        }
+
+        const struct traceprov_agg_context *source_state = source_states[idx];
+        struct traceprov_agg_context *target_state = target_states[idx];
+
+        if (!target_state->is_combined){
+            target_state->group_cnt = TRACEPROV_SET_IS_COMBINED(target_state->group_cnt);
+            target_state->is_combined = true;
+        }
+        target_write_ptr[0] = target_state->group_cnt;
+        source_write_ptr[0] = source_state->group_cnt;
+        target_write_ptr++;
+        source_write_ptr++;
+    }
+    combined_layer->current_row = source_write_ptr;
+    main_layer->is_leader_layer = true;
+    struct traceprov_aggregate_layer *chunk_size_layer = get_layer(combined_layer->rows_layer_number);
+    TP_APPEND_CHUNK_SIZE(chunk_size_layer, count);
 }
 
 void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *source_p, duckdb_vector result, idx_t count, idx_t offset){
@@ -458,7 +557,14 @@ duckdb_aggregate_function *traceprov_create_funcs(
         duckdb_aggregate_function_set_extra_info(func, extra, cleanup_extra);
         duckdb_destroy_logical_type(&type);
         duckdb_destroy_logical_type(&first_type);
-        duckdb_aggregate_function_set_functions(func, traceprov_get_state_size, traceprov_initialize, traceprov_update, traceprov_combine, traceprov_finalize);
+        duckdb_aggregate_function_set_functions(
+            func, 
+            traceprov_get_state_size,
+            traceprov_initialize,
+            traceprov_update,
+            traceprov_use_implicit_union ? traceprov_combine_optimized : traceprov_combine,
+            traceprov_finalize
+        );
         auto base = GetCAggregateFunction(func);
         // IDK why the C-API requires the combine.
         // TODO: Experiment with disabling this.

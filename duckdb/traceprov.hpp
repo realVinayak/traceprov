@@ -231,6 +231,7 @@ struct traceprov_aggregate_layer {
     void **page_mapping;
     uint32_t page_mapping_capacity;
     uint32_t page_mapping_size;
+    bool read_columns_at_once;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);

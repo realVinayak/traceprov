@@ -426,9 +426,9 @@ void perform_query(
 
     auto start_time = std::chrono::steady_clock::now();
 
-    if (later_stmt != NULL){
-        stmt = *later_stmt;
-    }
+    // if (later_stmt != NULL){
+    //     stmt = *later_stmt;
+    // }
 
     if (stmt == NULL)
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
@@ -472,7 +472,7 @@ void perform_query(
     }
 
     duckdb_destroy_result(&final_result);
-    // duckdb_destroy_prepare(&stmt);
+    duckdb_destroy_prepare(&stmt);
 
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
