@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Callable, NamedTuple, Set
+from typing import Callable, NamedTuple, Set, Tuple
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_SQL_DERIVATION_QUERY,
     traceprov_assert_safe_run,
@@ -52,6 +52,8 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_skip_page_cache: bool = False
     traceprov_use_implicit_union: bool = False
     traceprov_dry_run_derivation: bool = False
+    traceprov_layers_to_derive: Tuple[int] | None = None
+    traceprov_use_merge_chunks: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -72,7 +74,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_materialize_derivation",
             "traceprov_skip_page_cache",
             "traceprov_use_implicit_union",
-            "traceprov_dry_run_derivation"
+            "traceprov_dry_run_derivation",
+            "traceprov_use_merge_chunks"
         }
 
     def serialize(self) -> str:
@@ -85,6 +88,7 @@ class DuckDBDriverOptions(NamedTuple):
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
             and (key not in ["extra", "extras", "use_part_agg"])
+            and (key not in ["traceprov_layers_to_derive"])
         ]
         all_extras = [self.extra] if self.extra is not None else []
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
@@ -92,6 +96,12 @@ class DuckDBDriverOptions(NamedTuple):
             *key_value_options,
             *[f"--use_part_agg {f}" for f in self.use_part_agg or []],
         ]
+        if self.traceprov_layers_to_derive:
+            key_value_options = [
+                *key_value_options, 
+                *[f"--traceprov_layers_to_derive {layer_to_derive}" for layer_to_derive in self.traceprov_layers_to_derive]
+            ]
+
         print(key_value_options)
         assert self.i is not None
         with open(self.i) as f:

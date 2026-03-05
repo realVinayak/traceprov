@@ -3,6 +3,7 @@
 #define TP_NODE_HPP
 #include <vector>
 #include <unordered_map>
+#include <string>
 
 extern "C" {
     #include <stdint.h>
@@ -170,10 +171,21 @@ extern "C" {
         std::vector<TraceProvNode *> *nodes;
     } TraceProvInferAbstractTree;
 
+    typedef struct TraceProvRelationArgs {
+        uint64_t worker_id;
+        uint64_t layer_number;
+        uint64_t table_flags;
+        // -1 if everything. Otherwise >= 0.
+        int64_t offset;
+    } TraceProvRelationArgs;
+
     typedef struct TraceProvToSQLContext {
         TraceProvParseContext *context;
         bool use_table_def;
         TraceProvSizeLayers *size_layer_map;
+        // If set, it'll record the base relations too.
+        std::vector<std::string> *ddls;
+        std::vector<std::pair<uint64_t, uint64_t>> *added_ddls;
     } TraceProvToSQLContext;
 
     typedef struct TraceProvInferSetupExtra {
@@ -186,14 +198,6 @@ extern "C" {
         uint64_t time;
         uint64_t row_count;
     } TraceProvInferResult;
-
-    typedef struct TraceProvRelationArgs {
-        uint64_t worker_id;
-        uint64_t layer_number;
-        uint64_t table_flags;
-        // -1 if everything. Otherwise >= 0.
-        int64_t offset;
-    } TraceProvRelationArgs;
 
     typedef struct TraceProvDerivation {
         List *derived_join_exprns;

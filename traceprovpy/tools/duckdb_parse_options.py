@@ -57,4 +57,9 @@ def make_duckdb_parse():
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument(
+        "--traceprov_use_merge_chunks",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser

@@ -19,6 +19,7 @@
 #include <cmath>
 #include "traceprov_partition_info.hpp"
 #include <traceprov_node.hpp>
+#include "traceprov_settings.hpp"
 
 TraceProvDuckDbGlobalState g_tp_duckdb_state {
     .did_initialize = false,
@@ -354,7 +355,9 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         bind_data->rel_args.offset = log_offset;
     }else{
         bind_data = setup_layers(current_worker_id, layer_number, log_offset, true, partition_idx);
+        bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
         bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
+        bind_data->worker_bind_data->push_back(bind_data);
     }
     for (uint64_t col_count = 0; col_count < bind_data->column_width; col_count++){
         const std::string param = std::string("column_") + std::to_string(col_count);
@@ -523,25 +526,33 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
     uint64_t chunk_size = 0;
     if (!bind_data->is_strict_rows){
         // Haven't emitted all chunks yet.
-        if (init_data->current < bind_data->num_rows){
-            traceprov_grow_row_count_page_mapping(init_data, bind_data);
-            const uint64_t num_rows = *((uint64_t*)init_data->row_count_layer_ptr);
-            init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t));
-            const uint64_t extra_size = num_rows * sizeof(uint64_t);
-            for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
-                traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                memcpy(dest_ptr, init_data->col_layer_ptr, extra_size);
-                init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
+        uint64_t seek_ahead_chunk_size = 0;
+        while (true){
+            if (init_data->current < bind_data->num_rows){
+                traceprov_grow_row_count_page_mapping(init_data, bind_data);
+                const uint64_t num_rows = *((uint64_t*)init_data->row_count_layer_ptr);
+                seek_ahead_chunk_size += num_rows;
+                if (seek_ahead_chunk_size > STANDARD_VECTOR_SIZE) break;
+                init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t));
+                const uint64_t extra_size = num_rows * sizeof(uint64_t);
+                for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                    traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
+                    uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                    memcpy(&dest_ptr[chunk_size], init_data->col_layer_ptr, extra_size);
+                    init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
+                }
+                init_data->current++;
+                chunk_size += num_rows;
+            }else{
+                // This way, when the last chunk of the any worker's layer is seen, we automatically
+                // shift to the next worker's layer.
+                init_data_combined->worker_bind_idx++;
+                break;
             }
-            init_data->current++;
-            chunk_size = num_rows;
+            // The original behaviour.
+            if (!traceprov_use_merge_chunks) break;
         }
-        if (init_data->current == bind_data->num_rows){
-            // This way, when the last chunk of the any worker's layer is seen, we automatically
-            // shift to the next worker's layer.
-            init_data_combined->worker_bind_idx++;
-        }
+        // elog(INFO, "Chunk Sizes: %ld", chunk_size);
         duckdb_data_chunk_set_size(output, chunk_size);
         return;
     }

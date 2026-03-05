@@ -516,6 +516,20 @@ extern "C" {
         }else{
             sql = safe_append(sql, tp_psprintf(" FROM %s", relation->name));
         }
+        if (context.ddls){
+            bool found = false;
+            auto curr_pair = std::pair<uint64_t, uint64_t>(relation->rel_args->worker_id, relation->rel_args->layer_number);
+            for (auto old: *context.added_ddls){
+                if (old == (curr_pair)){
+                    found = true;
+                    break;
+                }
+            }
+            if (!found){
+                context.ddls->push_back(sql);
+                context.added_ddls->push_back(curr_pair);
+            }
+        }
         return sql;
     }
 

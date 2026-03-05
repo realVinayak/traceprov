@@ -8,7 +8,7 @@ import json
 import os
 from pathlib import Path
 import random
-from typing import Iterable, Sequence
+from typing import Iterable, Sequence, Tuple
 
 from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
@@ -524,6 +524,7 @@ def run_single(
     root: Path,
     traceprov_graph_path: Path,
     threads: int,
+    traceprov_layers_to_derive: Tuple[int],
     use_optimized: bool = False,
     validate: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
@@ -537,7 +538,8 @@ def run_single(
     traceprov_use_partition_in_log: bool = False,
     traceprov_use_row_in_agg_partition: bool = False,
     traceprov_use_implicit_union: bool = False,
-    traceprov_dry_run_derivation: bool = False
+    traceprov_dry_run_derivation: bool = False,
+    traceprov_use_merge_chunks: bool = False
 ):
     if validate:
         materialize_infer = True
@@ -593,7 +595,9 @@ def run_single(
         traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
         traceprov_use_partition_in_log=traceprov_use_partition_in_log,
         traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
-        traceprov_materialize_derivation=validate and run_inference
+        traceprov_materialize_derivation=validate and run_inference,
+        traceprov_layers_to_derive=traceprov_layers_to_derive,
+        traceprov_use_merge_chunks=traceprov_use_merge_chunks
     )
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent

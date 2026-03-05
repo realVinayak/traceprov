@@ -1,6 +1,7 @@
 # just calls run_single.
 import argparse
 from datetime import datetime
+from email.mime import base
 from importlib.machinery import PathFinder
 import json
 import os
@@ -30,10 +31,12 @@ def run():
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("-part_cfg", required=True)
+    base_parser.add_argument("--query_layer_cfg", required=True)
 
     parsed = base_parser.parse_args()
     config: dict = json_read_file(parsed.config)
     part_config: dict = json_read_file(parsed.part_cfg)
+    query_layer_config: dict = json_read_file(parsed.query_layer_cfg)
     is_validate = config.get("validate", False) or parsed.validate
 
     # for now...
@@ -88,6 +91,7 @@ def run():
                 root=Path(parsed.root),
                 traceprov_graph_path=graph_dir / query / "graph.bin",
                 threads=parsed.threads,
+                traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
                 use_optimized=parsed.optimized,
                 validate=is_validate and parsed.sample_inference is None,
                 disable_col_opt=disable_col_opt,
@@ -100,7 +104,8 @@ def run():
                 traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
                 traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
                 traceprov_use_implicit_union=parsed.traceprov_use_implicit_union,
-                traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation
+                traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation,
+                traceprov_use_merge_chunks=parsed.traceprov_use_merge_chunks
             )
 
         if parsed.sample_inference:

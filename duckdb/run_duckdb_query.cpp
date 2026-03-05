@@ -129,6 +129,9 @@ struct Options {
     // Just print derivation, don't perform it. Useful for debugging.
     bool traceprov_dry_run_derivation;
     uint32_t initial_page_count;
+    // Because we implictly make queries for all the layers, some of them are intermediate.
+    // If non-empty, only these ones will be derived.
+    std::vector<uint32_t> *traceprov_layers_to_derive;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -136,6 +139,7 @@ struct Options {
     // via --traceprov_use_row_in_agg_partition
     // via --traceprov_skip_page_cache
     // via --traceprov_use_implicit_union
+    // via --traceprov_use_merge_chunks
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -172,7 +176,8 @@ struct Options parse_args(int argc, char **argv){
         .traceprov_perform_derivation = false,
         .traceprov_materialize_derivation = false,
         .traceprov_dry_run_derivation = false,
-        .initial_page_count = 0
+        .initial_page_count = 0,
+        .traceprov_layers_to_derive = new std::vector<uint32_t>
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -285,6 +290,12 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--initial_page_count")){
             options.initial_page_count = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--traceprov_layers_to_derive")){
+            options.traceprov_layers_to_derive->push_back(std::atoi(argv[++i]));
+            continue;
+        } else if (IS_OPTION("--traceprov_use_merge_chunks")){
+            traceprov_use_merge_chunks = true;
             continue;
         }
 
@@ -839,6 +850,7 @@ static std::string serialize_option(Options *option){
     return option_serialized;
 }
 
+static int global_counter = 0;
 
 void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
     if (options->traceprov_perform_derivation){
@@ -854,11 +866,27 @@ void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
                 TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
                 relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
             }
-            auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+            std::vector<std::string> ddls;
+            std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+            if ((options->traceprov_layers_to_derive->size() != 0) &&
+                (std::find(
+                    options->traceprov_layers_to_derive->begin(), 
+                    options->traceprov_layers_to_derive->end(), result_map_pair.first
+                )) == options->traceprov_layers_to_derive->end())
+                {
+                    continue;
+                }
+            auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true, .ddls = &ddls, .added_ddls = &added_ddls});
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+                for (auto ddl_string : ddls){
+                    std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                    extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+                    elog(INFO, "Table: %s", base_table_name.c_str());
+                    elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
+                }
             }
             // std::string extra_str = "";
             // extra_str += "{";
