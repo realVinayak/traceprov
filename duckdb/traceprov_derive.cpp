@@ -641,13 +641,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
 
         join_exprn->is_left_star = true;
 
-        if (traceprov_use_implicit_union){
-            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
-            break;
-        }else{
-            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
-        }
-
         if (worker_combine_layers->size() == 0){
             current_tree->children->push_back(derive_on_node(
                 (TraceProvNode*)join_exprn, 
@@ -658,6 +651,13 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
                 parse_context,
                 recurse_pack
             ));
+        }
+
+        if (traceprov_use_implicit_union){
+            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
+            break;
+        }else{
+            traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
         }
     }
 
