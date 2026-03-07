@@ -19,6 +19,8 @@ thread_local struct current_context traceprov_current = {
     .page_cache_idx = 0
 };
 
+#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
+
 #if TRACEPROV_SD_MODE==0
 static void bp(){
 
@@ -374,6 +376,10 @@ void traceprov_combine(
             }
             combined_layer->current_row = INCR_BY_BYTES(combined_layer->current_row, width*sizeof(uint64_t));
         }
+        #if TRACEPROV_COLLECT_STATS_MODE == 1
+        ++target_state->combined_count;
+        combined_layer->max_combined_times = MAX(combined_layer->max_combined_times, target_state->combined_count);
+        #endif
 
         target_state->group_cnt = ref_group_number;
         // This gets used to detect that this agg was split in the first place, since that is very much context dependent.
@@ -452,36 +458,66 @@ void traceprov_combine_optimized(
         if (target_states[idx]->is_combined && source_states[idx]->is_combined)
             elog(ERROR, "Didn't expect both of the states to be combined...");
 
+        bool was_copied = false;
         if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0){
             if (unlikely(source_states[idx]->is_combined)){
                 elog(ERROR, "Expected source to not be combined in this case!");
             }
             memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
+            was_copied = true;
         }
 
         const struct traceprov_agg_context *source_state = source_states[idx];
         struct traceprov_agg_context *target_state = target_states[idx];
 
+        if (traceprov_combine_in_memory){
+            // First time, after all.
+            if (unlikely(target_state->extended_state == NULL)){
+                target_state->extended_state = new TraceProvAggStateExtended;
+            }
+            target_state->extended_state->push_back(source_state->group_cnt);
+            if (!target_state->is_combined && !was_copied){
+                // This is done so that only once the target state value appears.
+                target_state->extended_state->push_back(target_state->group_cnt);
+            }
+            target_state->is_combined = true;
+            continue;
+        }
+
         if (!target_state->is_combined){
             target_state->group_cnt = TRACEPROV_SET_IS_COMBINED(target_state->group_cnt);
             target_state->is_combined = true;
         }
+
+        #if TRACEPROV_COLLECT_STATS_MODE == 1
+        ++target_state->combined_count;
+        combined_layer->max_combined_times = MAX(combined_layer->max_combined_times, target_state->combined_count);
+        #endif
         target_write_ptr[0] = target_state->group_cnt;
         source_write_ptr[0] = source_state->group_cnt;
         target_write_ptr++;
         source_write_ptr++;
     }
-    combined_layer->current_row = source_write_ptr;
-    main_layer->is_leader_layer = true;
-    struct traceprov_aggregate_layer *chunk_size_layer = get_layer(combined_layer->rows_layer_number);
-    TP_APPEND_CHUNK_SIZE(chunk_size_layer, count);
+
+    if (!traceprov_combine_in_memory){
+        // We're not going to look at this anyways.
+        combined_layer->current_row = source_write_ptr;
+        main_layer->is_leader_layer = true;
+        struct traceprov_aggregate_layer *chunk_size_layer = get_layer(combined_layer->rows_layer_number);
+        TP_APPEND_CHUNK_SIZE(chunk_size_layer, count);
+    }
+
 }
 
 void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *source_p, duckdb_vector result, idx_t count, idx_t offset){
     struct traceprov_agg_context **source_states = (struct traceprov_agg_context **)source_p;
     uint64_t *result_data = (uint64_t *)duckdb_vector_get_data(result);
     for (idx_t i = 0; i < count; i++){
-        result_data[offset + i] = source_states[i]->group_cnt;
+        uint64_t agg_result = (uint64_t)source_states[i]->extended_state;
+        if (agg_result == 0){
+            agg_result = source_states[i]->group_cnt;
+        }
+        result_data[offset + i] = agg_result;
     }
 }
 

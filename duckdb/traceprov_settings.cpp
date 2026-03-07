@@ -23,3 +23,7 @@ bool traceprov_use_implicit_union = false;
 // This leads to cases where in the inference where we read the chunks inefficiently.
 // With this optimization, we seek ahead and merge the chunks till we fit the 2048 size.
 bool traceprov_use_merge_chunks = false;
+
+// Combine in-memory?
+// warning: also affects derivation (no joins necessary to combine layer)
+bool traceprov_combine_in_memory = false;

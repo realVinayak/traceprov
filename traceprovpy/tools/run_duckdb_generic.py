@@ -539,7 +539,8 @@ def run_single(
     traceprov_use_row_in_agg_partition: bool = False,
     traceprov_use_implicit_union: bool = False,
     traceprov_dry_run_derivation: bool = False,
-    traceprov_use_merge_chunks: bool = False
+    traceprov_use_merge_chunks: bool = False,
+    traceprov_combine_in_memory: bool = False
 ):
     if validate:
         materialize_infer = True
@@ -597,7 +598,8 @@ def run_single(
         traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
         traceprov_materialize_derivation=validate and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
-        traceprov_use_merge_chunks=traceprov_use_merge_chunks
+        traceprov_use_merge_chunks=traceprov_use_merge_chunks,
+        traceprov_combine_in_memory=traceprov_combine_in_memory
     )
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent

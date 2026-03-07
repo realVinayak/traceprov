@@ -20,6 +20,7 @@
 #include "traceprov_partition_info.hpp"
 #include <traceprov_node.hpp>
 #include "traceprov_settings.hpp"
+#include "traceprov_derive.hpp"
 
 TraceProvDuckDbGlobalState g_tp_duckdb_state {
     .did_initialize = false,
@@ -50,6 +51,7 @@ typedef struct TraceProvBindData {
     bool is_memory_mapping;
     std::mutex *bind_data_mutex;
     uint64_t max_worker_idx;
+    uint32_t pointer_column_idx;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData {
@@ -108,7 +110,7 @@ TraceProvInitData *traceprov_make_init_data(TraceProvBindData *bind_data){
     auto init_data_inst = allocate_init_data();
     init_data_inst->current = bind_data->start_offset;
     init_data_inst->is_single = (bind_data->rel_args.offset != -1);
-    init_data_inst->offset_in_chunk = bind_data->offset_in_chunk;
+    init_data_inst->offset_in_chunk = 0;
     init_data_inst->col_layer_ptr = bind_data->col_layer_ptr;
     init_data_inst->col_layer_ptr_end = init_data_inst->col_layer_ptr + TRACEPROV_PAGE_SIZE;
     init_data_inst->row_count_layer_ptr = bind_data->row_count_layer_ptr;
@@ -309,12 +311,16 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     uint64_t partition_idx = 0;
     // This, for now, assumes that the bind infrastructure in DuckDB is correct.
     // That is, if the arguments are different, then this bind gets called multiple times.
-    TraceProvLayerPartition *extra_info = (TraceProvLayerPartition *)duckdb_bind_get_extra_info(info);
+    TraceProvTableExtra *extra_info = (TraceProvTableExtra *)duckdb_bind_get_extra_info(info);
+    uint32_t pointer_column_idx = 0;
     if (extra_info != nullptr){
-        if (extra_info->map->find(layer_number) != extra_info->map->end()){
-            auto partitions = extra_info->map->at(layer_number)->parition_idx;
-            if (partitions != nullptr){
-                partition_idx = partitions->at(0);
+        auto partition_spec = (TraceProvLayerPartition *)extra_info->partition_spec;
+        if (partition_spec != NULL){
+            if (partition_spec->map->find(layer_number) != partition_spec->map->end()){
+                auto partitions = partition_spec->map->at(layer_number)->parition_idx;
+                if (partitions != nullptr){
+                    partition_idx = partitions->at(0);
+                }
             }
         }
     }
@@ -352,6 +358,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
                 elog(ERROR, "Got inconsitent size!");
             }
             bind_data->column_width = child_bind_data->column_width;
+            child_bind_data->pointer_column_idx = pointer_column_idx;
         }
         bind_data->rel_args.offset = log_offset;
     }else{
@@ -360,6 +367,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
         bind_data->worker_bind_data->push_back(bind_data);
     }
+    bind_data->pointer_column_idx = pointer_column_idx;
     for (uint64_t col_count = 0; col_count < bind_data->column_width; col_count++){
         const std::string param = std::string("column_") + std::to_string(col_count);
         duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
@@ -820,6 +828,63 @@ void *traceprov_get_partition(const uint64_t worker_id, const uint64_t layer_num
     *partition_id = TRACEPROV_GET_BUCKET(log_value);
     elog(INFO, "Using bucket: %ld", *partition_id);
     return value;
+}
+
+
+void traceprov_read_int_vector_func(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
+
+    duckdb_vector ptr_vector = duckdb_data_chunk_get_vector(input, 0);
+    uint64_t *ptr_vector_data = (uint64_t *)duckdb_vector_get_data(ptr_vector);
+
+    const idx_t row_count = duckdb_data_chunk_get_size(input);
+    idx_t expected_size = 0;
+    for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
+        const std::vector<uint64_t> *vector = (std::vector<uint64_t >*) ptr_vector_data[row_idx];
+        if (vector == NULL) continue;
+        expected_size += vector->size();
+    }
+    if (duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
+        elog(ERROR, "Error reserving!");
+    }
+    if (duckdb_list_vector_set_size(output, expected_size) == DuckDBError){
+        elog(ERROR, "Error setting size!");
+    }
+    auto entries = (duckdb_list_entry *)duckdb_vector_get_data(output);
+
+    duckdb_vector child_ptr = duckdb_list_vector_get_child(output);
+    uint64_t *child_ptr_data = (uint64_t*)duckdb_vector_get_data(child_ptr);
+
+    uint64_t generic_idx = 0;
+
+    for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+        const std::vector<uint64_t> *vector = (std::vector<uint64_t >*) ptr_vector_data[row_idx];
+        idx_t vector_size = 0;
+        const idx_t generic_start_idx = generic_idx;
+        if (vector != NULL){
+            vector_size = vector->size();
+            // Done via memcpy to speed this up.
+            memcpy(&child_ptr_data[generic_start_idx], vector->data(), vector_size*sizeof(uint64_t));
+        }
+        generic_idx += vector_size;
+        entries[row_idx].offset = generic_start_idx;
+        entries[row_idx].length = vector_size;
+    }
+}
+
+duckdb_scalar_function traceprov_create_read_vector_func(){
+    duckdb_scalar_function func = duckdb_create_scalar_function();
+    std::string *func_name = new std::string("traceprov_read_int_vector");
+    duckdb_scalar_function_set_name(func, func_name->c_str());
+    duckdb_logical_type ubigint_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+    duckdb_scalar_function_add_parameter(func, ubigint_type);
+
+    duckdb_logical_type list_type = duckdb_create_list_type(ubigint_type);
+    duckdb_scalar_function_set_return_type(func, list_type);
+    duckdb_destroy_logical_type(&list_type);
+    duckdb_destroy_logical_type(&ubigint_type);
+
+    duckdb_scalar_function_set_function(func, traceprov_read_int_vector_func);
+    return func;
 }
 
 #endif

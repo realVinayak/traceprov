@@ -96,6 +96,21 @@ static TraceProvInferAbstractTree *derive_window_on_single_context(
     const TraceProvRecursePack recurse_pack
 );
 
+TraceProvPointerContext *traceprov_make_pointer_context();
+
+static void pointer_context_add_layer(
+    const TraceProvPointerContext *pointer_context,
+    const TraceProvLayerNumber layer,
+    uint32_t pointer_idx
+);
+
+void traceprov_infer_pointers(
+    const TraceProvDependency *graph,
+    const TraceProvPointerContext *pointer_context,
+    const std::vector<struct local_context *> *worker_local_contexts,
+    const uint32_t start_idx = 0
+);
+
 std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
     const TraceProvLayerNumber log_layer_number,
     const std::vector<struct local_context *> *worker_local_contexts,
@@ -235,7 +250,7 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
     return current_tree;
 }
 
-TraceProvResultMap *get_generic_derivation_spec(
+TraceProvDerivationSpec *get_generic_derivation_spec(
     TraceProvParseContext **p_parsed_back_context,
     TraceProvInferSetupExtra **p_extra,
     char **p_parsed_query
@@ -265,6 +280,8 @@ TraceProvResultMap *get_generic_derivation_spec(
     setup_extra->worker_count = worker_count;
     if (p_extra)
         *p_extra = setup_extra;
+
+    auto p_context = traceprov_make_pointer_context();
     foreach(graph_cursor, graphs){
         TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
         // The top level graph should always be the simple log.
@@ -286,10 +303,22 @@ TraceProvResultMap *get_generic_derivation_spec(
                 }
             )
         );
+
+        traceprov_infer_pointers(
+            graph,
+            p_context,
+            worker_local_contexts
+        );
+
     }
     ListCell *sublink_cursor;
     foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
         TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
+        traceprov_infer_pointers(
+            child_sublink,
+            p_context,
+            worker_local_contexts
+        );
         // If a sublink is being used, don't derive it.
         // It should be automatically be derived as part of generic handling.
         if (list_member_int(get_all_used_sublinks, child_sublink->headNumber)) continue;
@@ -311,11 +340,15 @@ TraceProvResultMap *get_generic_derivation_spec(
                 }
             )
         );
+
     }
 
     auto result_map = new TraceProvResultMap;
     flattenTraceProvInferAbstractTree(top_tree, result_map, parsed_back_context);
-    return result_map;
+    TraceProvDerivationSpec *spec = new TraceProvDerivationSpec;
+    spec->p_context = p_context;
+    spec->result_map = result_map;
+    return spec;
 }
 
 // Generic handling of derivation.
@@ -447,6 +480,61 @@ static TraceProvInferAbstractTree *derive_set_on_node(
     }
 
     return current_tree;
+}
+
+static void pointer_context_add_layer(
+    const TraceProvPointerContext *pointer_context,
+    const TraceProvLayerNumber layer,
+    uint32_t pointer_idx
+){
+    if (pointer_context->map->find(layer) == pointer_context->map->end()){
+        pointer_context->map->insert({layer, new std::vector<uint32_t>});
+    }else{
+        elog(ERROR, "Didn't expect find an older copy!");
+    }
+    auto pointer_context_values = pointer_context->map->at(layer);
+    pointer_context_values->push_back(pointer_idx);
+}
+
+TraceProvPointerContext *traceprov_make_pointer_context(){
+    TraceProvPointerContext *p_context = new TraceProvPointerContext;
+    p_context->map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t>*>;
+    return p_context;
+}
+
+void traceprov_infer_pointers(
+    const TraceProvDependency *graph,
+    const TraceProvPointerContext *pointer_context,
+    const std::vector<struct local_context *> *worker_local_contexts,
+    const uint32_t start_idx
+){
+    ListCell *entry_cursor;
+    foreach(entry_cursor, graph->entries){
+        const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+        if (te->kind == TP_ENTRY_KIND_POINTER){
+            // Hmm not sure about this one.
+            // TODO: Check if this stuff is valid for window too.
+            if (te->is_pointer_for_window) continue;
+            TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
+            auto worker_combine_layers = find_combine_layers_across_workers(
+                child_graph->headNumber,
+                worker_local_contexts
+            );
+            // Nothing to add.
+            if (worker_combine_layers->size() == 0) continue;
+            pointer_context_add_layer(
+                pointer_context,
+                graph->headNumber,
+                start_idx + foreach_current_index(entry_cursor)
+            );
+            traceprov_infer_pointers(
+                child_graph,
+                pointer_context,
+                worker_local_contexts,
+                1
+            );
+        }
+    }
 }
 
 static TraceProvInferAbstractTree* derive_sublinks(
@@ -627,7 +715,6 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         worker_local_contexts
     );
 
-
     for (auto worker_layer_pair: *layers_across_workers){
         const auto worker_local_context = worker_local_contexts->at(worker_layer_pair.first - 1);
         auto curr_worker_logs = read_all_columns(layer_number_to_search, worker_local_context, nullptr);
@@ -641,7 +728,8 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
 
         join_exprn->is_left_star = true;
 
-        if (worker_combine_layers->size() == 0){
+        uint64_t rel_flags = 0;
+        if ((worker_combine_layers->size() == 0) || (traceprov_combine_in_memory)){
             current_tree->children->push_back(derive_on_node(
                 (TraceProvNode*)join_exprn, 
                 agg_graph, 
@@ -655,108 +743,114 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
 
         if (traceprov_use_implicit_union){
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
+            traceprov_get_relation_from_join(join_exprn)->rel_args->table_flags = rel_flags;
             break;
         }else{
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);
         }
     }
 
-    for (auto worker_layer_pair: *worker_combine_layers){
-        // For each combine, need to, unfortunately, join will all the previous ones.
-        // No pruning (yet) :/
-        const auto combiner_worker_local_context = worker_local_contexts->at(worker_layer_pair.first - 1);
-        auto combine_logs = read_all_columns(worker_layer_pair.second->layer_number, combiner_worker_local_context, nullptr);
-        TraceProvRelation *combine_relation = make_traceprov_relation(
-            combine_logs,
-            tp_psprintf("combined_entry")
-        );
-
-        TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the individual log
-        TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the worker id
-        auto output_column = new std::vector<TraceProvColumn*>;
-        output_column->push_back(output_column_1);
-
-        if (!traceprov_use_implicit_union)
-            output_column->push_back(output_column_2);
-
-        TraceProvColumn *join_column_1 = new TraceProvColumn(1, reference_match_idx);
-        TraceProvColumn *join_column_2 = new TraceProvColumn(2, 1);
-        auto join_condition = new TraceProvJoinConditions;
-        join_condition->push_back(new std::pair<TraceProvColumn*, TraceProvColumn*>(join_column_1, join_column_2));
-        auto combine_join = make_traceprov_join_expr(
-            reference_node,
-            (TraceProvNode *)combine_relation,
-            join_condition,
-            output_column,
-            true
-        );
-
-        const uint64_t combine_match_key_idx = traceprov_get_node_column_count((TraceProvNode *)combine_join);
-        if (combine_match_key_idx != (traceprov_get_node_column_count(reference_node) + 2))
-            elog(INFO, "Inconsistent state!");
-        const uint64_t worker_id_key_idx = combine_match_key_idx;
-    
-        for (auto remote_worker_local_pair: *layers_across_workers){
-            const uint8_t worker_id = remote_worker_local_pair.first;
-            auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr);
-            auto base_log_relation = make_traceprov_relation(base_logs, tp_psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
-            TraceProvJoinExpr *base_join_exprn = make_traceprov_join_from_rel(
-                reference_node, 
-                (TraceProvNode *)base_log_relation,
-                base_log_relation->data->size(),
-                reference_match_idx
-            );
-            base_join_exprn->is_left_star = true;
-            TraceProvJoinExpr *partial_join_exprn = make_traceprov_join_from_rel(
-                (TraceProvNode *)combine_join,
-                (TraceProvNode *)base_log_relation,
-                base_log_relation->data->size(),
-                combine_match_key_idx
+    // Ugh, TODO: Refactor. 
+    if (!traceprov_combine_in_memory){
+        for (auto worker_layer_pair: *worker_combine_layers){
+            // For each combine, need to, unfortunately, join will all the previous ones.
+            // No pruning (yet) :/
+            const auto combiner_worker_local_context = worker_local_contexts->at(worker_layer_pair.first - 1);
+            auto combine_logs = read_all_columns(worker_layer_pair.second->layer_number, combiner_worker_local_context, nullptr);
+            TraceProvRelation *combine_relation = make_traceprov_relation(
+                combine_logs,
+                tp_psprintf("combined_entry")
             );
 
-            for (uint col_idx = 0; col_idx < reference_node_col_count; col_idx++){
-                partial_join_exprn->output_columns->insert(
-                    partial_join_exprn->output_columns->begin() + col_idx,
-                    new TraceProvColumn(1, col_idx + 1)
-                    );
-            }
+            TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the individual log
+            TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the worker id
+            auto output_column = new std::vector<TraceProvColumn*>;
+            output_column->push_back(output_column_1);
 
-            if (!traceprov_use_implicit_union){
-                TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
-                partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
-            }
-            if (traceprov_get_node_column_count((TraceProvNode *)partial_join_exprn) != traceprov_get_node_column_count((TraceProvNode *)base_join_exprn)){
-                elog(ERROR, "Got mismatching node count on logs!");
-            }
+            if (!traceprov_use_implicit_union)
+                output_column->push_back(output_column_2);
 
-            current_tree->children->push_back(derive_on_node(
-                (TraceProvNode*)partial_join_exprn, 
-                agg_graph, 
-                reference_node_col_count,
-                NULL,
-                worker_local_contexts,
-                parse_context,
-                traceprov_shallow_copy_recurse_pack(&recurse_pack)
-            ));
+            TraceProvColumn *join_column_1 = new TraceProvColumn(1, reference_match_idx);
+            TraceProvColumn *join_column_2 = new TraceProvColumn(2, 1);
+            auto join_condition = new TraceProvJoinConditions;
+            join_condition->push_back(new std::pair<TraceProvColumn*, TraceProvColumn*>(join_column_1, join_column_2));
+            auto combine_join = make_traceprov_join_expr(
+                reference_node,
+                (TraceProvNode *)combine_relation,
+                join_condition,
+                output_column,
+                true
+            );
 
+            const uint64_t combine_match_key_idx = traceprov_get_node_column_count((TraceProvNode *)combine_join);
+            if (combine_match_key_idx != (traceprov_get_node_column_count(reference_node) + 2))
+                elog(INFO, "Inconsistent state!");
+            const uint64_t worker_id_key_idx = combine_match_key_idx;
+        
+            for (auto remote_worker_local_pair: *layers_across_workers){
+                const uint8_t worker_id = remote_worker_local_pair.first;
+                auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr);
+                auto base_log_relation = make_traceprov_relation(base_logs, tp_psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
+                TraceProvJoinExpr *base_join_exprn = make_traceprov_join_from_rel(
+                    reference_node, 
+                    (TraceProvNode *)base_log_relation,
+                    base_log_relation->data->size(),
+                    reference_match_idx
+                );
+                base_join_exprn->is_left_star = true;
+                TraceProvJoinExpr *partial_join_exprn = make_traceprov_join_from_rel(
+                    (TraceProvNode *)combine_join,
+                    (TraceProvNode *)base_log_relation,
+                    base_log_relation->data->size(),
+                    combine_match_key_idx
+                );
+
+                for (uint col_idx = 0; col_idx < reference_node_col_count; col_idx++){
+                    partial_join_exprn->output_columns->insert(
+                        partial_join_exprn->output_columns->begin() + col_idx,
+                        new TraceProvColumn(1, col_idx + 1)
+                        );
+                }
+
+                if (!traceprov_use_implicit_union){
+                    TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
+                    partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
+                }
+                if (traceprov_get_node_column_count((TraceProvNode *)partial_join_exprn) != traceprov_get_node_column_count((TraceProvNode *)base_join_exprn)){
+                    elog(ERROR, "Got mismatching node count on logs!");
+                }
+
+                current_tree->children->push_back(derive_on_node(
+                    (TraceProvNode*)partial_join_exprn, 
+                    agg_graph, 
+                    reference_node_col_count,
+                    NULL,
+                    worker_local_contexts,
+                    parse_context,
+                    traceprov_shallow_copy_recurse_pack(&recurse_pack)
+                ));
+
+                if (traceprov_use_implicit_union){
+                    base_log_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
+                    break;
+                }else{
+                    base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
+                }
+            }
             if (traceprov_use_implicit_union){
-                base_log_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
+                // When doing implicit union, we need to return all combines.
+                // However, since combine layers are arbitrarily numbered, it is possible that the same layer number
+                // does not mean the same across workers. So, need this.
+                combine_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
+                combine_relation->rel_args->table_flags |= TRACEPROV_TABLE_COMBINE;
                 break;
             }else{
-                base_log_relation->rel_args = make_relation_args(worker_id, agg_graph->headNumber);
+                combine_relation->rel_args = make_relation_args(combiner_worker_local_context->worker_id, worker_layer_pair.second->layer_number);
             }
         }
-        if (traceprov_use_implicit_union){
-            // When doing implicit union, we need to return all combines.
-            // However, since combine layers are arbitrarily numbered, it is possible that the same layer number
-            // does not mean the same across workers. So, need this.
-            combine_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
-            combine_relation->rel_args->table_flags |= TRACEPROV_TABLE_COMBINE;
-            break;
-        }else{
-            combine_relation->rel_args = make_relation_args(combiner_worker_local_context->worker_id, worker_layer_pair.second->layer_number);
-        }
     }
+
+
     return current_tree;
 }
 

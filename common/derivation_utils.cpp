@@ -1,6 +1,7 @@
 #include "traceprov_node.hpp"
 #include "derivation_utils.hpp"
 #include <string>
+#include <algorithm>
 
 extern "C" {
     #include "tp_list.h"
@@ -10,7 +11,7 @@ extern "C" {
 
     std::string safe_append(std::string old, char *other);
     static char *traceprov_get_column_name_idx(char *alias, uint64_t column_idx);
-    static std::string traceprov_get_column_select(char *alias, uint64_t column_count, bool add_bigint_cast=false);
+    static std::string traceprov_get_column_select(char *alias, uint64_t column_count, bool add_bigint_cast=false, std::vector<uint32_t> *unnest_cols = NULL);
     static std::string traceprov_relation_to_sql(TraceProvRelation *relation, TraceProvToSQLContext context);
     static std::string traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvToSQLContext context);
     std::string expand_alias(const char *alias_name, const uint64_t column_count);
@@ -493,16 +494,34 @@ extern "C" {
         return tp_psprintf("%s.column_%d", alias, column_idx);
     }
 
-    static std::string traceprov_get_column_select(char *alias, uint64_t column_count, bool add_bigint_cast){
+static std::string traceprov_get_column_select(
+        char *alias,
+        uint64_t column_count,
+        bool add_bigint_cast,
+        std::vector<uint32_t> *unnest_cols
+    ){
         std::string sql_repr;
         for (uint64_t column_idx = 0; column_idx < column_count; column_idx++){
             if (column_idx > 0) sql_repr += ',';
-            sql_repr = safe_append(sql_repr, traceprov_get_column_name_idx(alias, column_idx));
-            if (add_bigint_cast){
-                sql_repr += "::bigint";
-                sql_repr += " as ";
-                sql_repr = safe_append(sql_repr, traceprov_get_column_name_idx(nullptr, column_idx));
+            std::string col_repr;
+            col_repr = safe_append(col_repr, traceprov_get_column_name_idx(alias, column_idx));
+            bool is_unnest = false;
+            if (unnest_cols != NULL){
+                is_unnest = std::find(
+                    unnest_cols->begin(),
+                    unnest_cols->end(),
+                    column_idx
+                ) != unnest_cols->end();
             }
+            if (add_bigint_cast){
+                col_repr += "::bigint";
+                col_repr += " as ";
+                col_repr = safe_append(col_repr, traceprov_get_column_name_idx(nullptr, column_idx));
+            }
+            if (is_unnest){
+                col_repr = safe_append("unnest(traceprov_read_int_vector(" + col_repr  + ")) as ", traceprov_get_column_name_idx(nullptr, column_idx));
+            }
+            sql_repr += col_repr;
         }
         return sql_repr;
     }
@@ -510,7 +529,13 @@ extern "C" {
     static std::string traceprov_relation_to_sql(TraceProvRelation *relation, TraceProvToSQLContext context){
         std::string sql = "";
         sql += "SELECT ";
-        sql += traceprov_get_column_select(relation->name, relation->data->size(), false);
+        std::vector<uint32_t> *unnest_cols = NULL;
+        if (context.pointer_context != NULL){
+            if (context.pointer_context->map->find(relation->rel_args->layer_number) != context.pointer_context->map->end()){
+                unnest_cols = context.pointer_context->map->at(relation->rel_args->layer_number);
+            }
+        }
+        sql += traceprov_get_column_select(relation->name, relation->data->size(), false, unnest_cols);
         if (context.use_table_def){
             sql = safe_append(sql, tp_psprintf(" FROM traceprov_read_worker_layer(%ld::bigint, %d::int, %d::int) AS %s", relation->rel_args->table_flags, relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name));
         }else{

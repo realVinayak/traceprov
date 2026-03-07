@@ -98,6 +98,9 @@ static_assert(0, "page size not defined!");
 
 #define DEBUG_MODE 0
 #define VALIDATE_MODE 0
+// To analyze different implementation strategies, we need to collect some statistics.
+// This is usually very inefficient, so a separate compile time option for now.
+#define TRACEPROV_COLLECT_STATS_MODE 0
 
 // Forward definitions.
 struct trace_file_forward_row;
@@ -232,6 +235,10 @@ struct traceprov_aggregate_layer {
     uint32_t page_mapping_capacity;
     uint32_t page_mapping_size;
     bool read_columns_at_once;
+    #if TRACEPROV_COLLECT_STATS_MODE == 1
+    // If this is a combine layer, also keep track of the maximum times a group has been accummulated.
+    uint64_t max_combined_times;
+    #endif
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -287,6 +294,9 @@ struct current_context {
     uint32_t page_cache_idx;
 };
 
+
+typedef std::vector<uint64_t> TraceProvAggStateExtended;
+
 struct traceprov_agg_context {
     // Whether this aggregation was combined.
     uint8_t is_combined;
@@ -296,6 +306,10 @@ struct traceprov_agg_context {
     uint8_t worker_id;
     // Layer number for this group.
     uint32_t layer_number;
+    #if TRACEPROV_COLLECT_STATS_MODE == 1
+    uint32_t combined_count;
+    #endif
+    TraceProvAggStateExtended *extended_state;
 };
 
 // Whenever this condition fails, also need to update the function definition.
@@ -378,5 +392,11 @@ extern uint64_t traceprov_reinit_counter;
 
 #define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
 #define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
+
+// Only usede when combining in memory.
+// In the flags, also store which attributes are pointers.
+// It, in all the cases, only one column is the pointer. So, this is fine.
+#define TRACEPROV_SET_POINTER_COLUMN(COL, FLAG) ((((uint64_t)COL) << 8) | ((uint64_t)FLAG))
+#define TRACEPROV_GET_POINTER_COLUMN(COL, FLAG) ((uint64_t)((uint8_t)(((uint64_t)FLAG) >> 8)))
 
 #endif

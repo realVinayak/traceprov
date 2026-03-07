@@ -28,6 +28,7 @@
 #include <traceprov_node.hpp>
 
 #include <derivation_utils.hpp>
+#include "traceprov_derive.hpp"
 
 extern "C" {
     #include <mem_alloc.h>
@@ -297,6 +298,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_use_merge_chunks")){
             traceprov_use_merge_chunks = true;
             continue;
+        } else if (IS_OPTION("--traceprov_combine_in_memory")){
+            traceprov_combine_in_memory = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -516,18 +520,18 @@ void perform_query(
     }
 }
 
-TraceProvResultMap *get_generic_derivation_spec(
-    TraceProvParseContext **p_parsed_back_context,
-    TraceProvInferSetupExtra **p_extra,
-    char **p_parsed_query
-);
-
 typedef struct ExtraQuery {
     std::string sql;
     std::string extra;
 } ExtraQuery;
 
-void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options);
+void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_extra);
+
+TraceProvTableExtra *make_table_extra(){
+    TraceProvTableExtra *table_extra = (TraceProvTableExtra *)malloc(sizeof(TraceProvTableExtra));
+    memset(table_extra, 0, sizeof(TraceProvTableExtra));
+    return table_extra;
+}
 
 int main(int argc, char **argv){
     struct Options options = parse_args(argc, argv);
@@ -611,6 +615,9 @@ int main(int argc, char **argv){
     duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
     DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
 
+    duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
+
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
         traceprov_create_debug_table_funcs(con);
@@ -677,7 +684,17 @@ int main(int argc, char **argv){
             perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
 
             auto extra_sqls_clone = (extra_sqls);
-            augment_extra_sql(extra_sqls_clone, &options);
+            void *table_func_extra = NULL;
+            augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
+
+            #if TRACEPROV_SD_MODE == 0
+
+            auto extra = make_table_extra();
+            extra->pointer_spec = table_func_extra;
+            duckdb_table_function_set_extra_info(tp_read_func, extra, free); // whatever
+            duckdb_table_function_set_extra_info(tp_read_offset_func, extra, free);
+
+            #endif
 
             uint32_t extra_idx = 0;
 
@@ -718,7 +735,8 @@ int main(int argc, char **argv){
 
 
         auto extra_sqls_clone = (extra_sqls);
-        augment_extra_sql(extra_sqls_clone, &options);
+        void *table_func_extra = NULL;
+        augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
 
         // Run extra all ;)
         for (auto extra_sql: extra_sqls_clone){
@@ -729,9 +747,12 @@ int main(int argc, char **argv){
             populate_log_offset(partition_spec, extra_sql.sql);
 
             #if TRACEPROV_SD_MODE == 0
+            auto extra = make_table_extra();
+            extra->partition_spec = partition_spec;
+            extra->pointer_spec = table_func_extra;
 
-            duckdb_table_function_set_extra_info(tp_read_func, (void *)partition_spec, nullptr); // whatever
-            duckdb_table_function_set_extra_info(tp_read_offset_func, (void *)partition_spec, nullptr);
+            duckdb_table_function_set_extra_info(tp_read_func, (void *)extra, free);
+            duckdb_table_function_set_extra_info(tp_read_offset_func, (void *)extra, free);
 
             #endif
             extra_sql_idx++;
@@ -852,12 +873,13 @@ static std::string serialize_option(Options *option){
 
 static int global_counter = 0;
 
-void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
+void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_func_extra){
     if (options->traceprov_perform_derivation){
         TraceProvParseContext *parsed_back_context;
         char *parsed_sql = NULL;
-        auto result_map = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
-        for (auto result_map_pair: *result_map){
+        auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
+        *table_func_extra = result_spec->p_context;
+        for (auto result_map_pair: *result_spec->result_map){
             if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
                 // In this case, it is a simple scan.
                 // Apparently, for some reason, DuckDB does not parallelise this????
@@ -876,7 +898,16 @@ void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options){
                 {
                     continue;
                 }
-            auto node_sql = traceprov_node_to_sql(result_map_pair.second, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true, .ddls = &ddls, .added_ddls = &added_ddls});
+            auto node_sql = traceprov_node_to_sql(
+                result_map_pair.second, 
+                TraceProvToSQLContext{
+                    .context = parsed_back_context,
+                    .use_table_def = true,
+                    .ddls = &ddls,
+                    .added_ddls = &added_ddls,
+                    .pointer_context = traceprov_combine_in_memory ? result_spec->p_context : NULL
+                }
+            );
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);

@@ -139,6 +139,11 @@ extern "C" {
         bool should_dump;
     } TraceProvEvaluateNodeContext;
 
+
+    typedef struct TraceProvPointerContext{
+        std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t> *> *map;
+    } TraceProvPointerContext;
+
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
 
     // This gets used to determine whether we're done processing everything we need for a sublink.
@@ -146,6 +151,10 @@ extern "C" {
     typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
     typedef std::unordered_map<uint32, std::vector<TraceProvLayerNumber> *> TraceProvSizeLayers;
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
+    typedef struct TraceProvDerivationSpec {
+        TraceProvResultMap *result_map;
+        TraceProvPointerContext *p_context;
+    } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
     // Just so they can be processed together
@@ -186,6 +195,8 @@ extern "C" {
         // If set, it'll record the base relations too.
         std::vector<std::string> *ddls;
         std::vector<std::pair<uint64_t, uint64_t>> *added_ddls;
+        // So that, in relation scans, we can wrap this 
+        TraceProvPointerContext *pointer_context;
     } TraceProvToSQLContext;
 
     typedef struct TraceProvInferSetupExtra {

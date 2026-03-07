@@ -54,6 +54,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_dry_run_derivation: bool = False
     traceprov_layers_to_derive: Tuple[int] | None = None
     traceprov_use_merge_chunks: bool = False
+    traceprov_combine_in_memory: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -75,7 +76,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_skip_page_cache",
             "traceprov_use_implicit_union",
             "traceprov_dry_run_derivation",
-            "traceprov_use_merge_chunks"
+            "traceprov_use_merge_chunks",
+            "traceprov_combine_in_memory"
         }
 
     def serialize(self) -> str:

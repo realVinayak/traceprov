@@ -876,6 +876,9 @@ std::string traceprov_get_layer_info_query(){
                     "layer_record_count"
                 )
             );
+            #if TRACEPROV_COLLECT_STATS_MODE == 1
+            record.push_back(construct_int_record(layer->max_combined_times, "max_combined_times"));
+            #endif
             auto combined = combine_string_vector(record);
             rows.push_back(combined);
         }   
