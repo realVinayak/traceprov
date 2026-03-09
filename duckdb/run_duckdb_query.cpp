@@ -318,7 +318,7 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\tsettings_out_path: " << options.settings_out_path << std::endl;
     std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
-
+    traceprov_thread_count = options.num_threads;
     return options;
 };
 
@@ -401,7 +401,7 @@ void perform_query(
     #endif
 
     if (options->disable_column_optimizer){
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
         //DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'COLUMN_LIFETIME,unused_columns';", "run disable optimizer..;");
     }else{
         DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
@@ -704,7 +704,7 @@ int main(int argc, char **argv){
                 new_options.no_reinit_state = true;
                 new_options.capture_lineage = false;
                 new_options.stats_path = "";
-                new_options.disable_column_optimizer = false;
+                new_options.disable_column_optimizer = true;
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());

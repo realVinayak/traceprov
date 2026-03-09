@@ -401,6 +401,7 @@ void traceprov_duckdb_init(duckdb_init_info info){
 
 void traceprov_duckdb_local_init(duckdb_init_info info){
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
+    bool is_dummy = false;
     bind_data->bind_data_mutex->lock();
     const uint64_t self_idx = bind_data->max_worker_idx++;
     bind_data->bind_data_mutex->unlock();
@@ -410,10 +411,15 @@ void traceprov_duckdb_local_init(duckdb_init_info info){
     // Specificially, see if this thread has a local context, and try "sticking" to that context
     if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
         // In this case, need to over the children ones.
-        for (auto worker_bind_data: *bind_data->worker_bind_data){
-            init_data_inst->worker_init_data->push_back(
-                traceprov_make_init_data(worker_bind_data)
-            );
+        if (self_idx == 0){
+            for (auto worker_bind_data: *bind_data->worker_bind_data){
+                init_data_inst->worker_init_data->push_back(
+                    traceprov_make_init_data(worker_bind_data)
+                );
+            }
+        }else{
+            // Ugh.
+            is_dummy = true;
         }
     }else{
         init_data_inst->worker_init_data->push_back(
@@ -421,6 +427,7 @@ void traceprov_duckdb_local_init(duckdb_init_info info){
         );
         init_data_inst->idx_in_bind = self_idx;
     }
+    init_data_inst->is_dummy = is_dummy;
     duckdb_init_set_init_data(info, init_data_inst, free);
 }
 
@@ -836,13 +843,27 @@ void traceprov_read_int_vector_func(duckdb_function_info info, duckdb_data_chunk
     duckdb_vector ptr_vector = duckdb_data_chunk_get_vector(input, 0);
     uint64_t *ptr_vector_data = (uint64_t *)duckdb_vector_get_data(ptr_vector);
 
+    duckdb_vector idx_vector = duckdb_data_chunk_get_vector(input, 1);
+    const uint64_t idx_to_return = ((uint64_t*)duckdb_vector_get_data(idx_vector))[0];
+
     const idx_t row_count = duckdb_data_chunk_get_size(input);
     idx_t expected_size = 0;
     for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
-        const std::vector<uint64_t> *vector = (std::vector<uint64_t >*) ptr_vector_data[row_idx];
-        if (vector == NULL) continue;
-        expected_size += vector->size();
+        auto extended_state = (AggStateExtended *) ptr_vector_data[row_idx];
+        if (extended_state == NULL) continue;
+        if (idx_to_return == 0){
+            expected_size += extended_state->total_size;
+        }else{
+            expected_size++;
+            if (extended_state->extended != NULL){
+                if (extended_state->extended->at(idx_to_return - 1)){
+                    auto extended_to_append = extended_state->extended->at(idx_to_return - 1);
+                    expected_size += extended_to_append->size();
+                }
+            }
+        }
     }
+    // elog(INFO, "Row: %ld, Expected: %ld", row_count, expected_size);
     if (duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
         elog(ERROR, "Error reserving!");
     }
@@ -857,13 +878,41 @@ void traceprov_read_int_vector_func(duckdb_function_info info, duckdb_data_chunk
     uint64_t generic_idx = 0;
 
     for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
-        const std::vector<uint64_t> *vector = (std::vector<uint64_t >*) ptr_vector_data[row_idx];
+        auto extended_state = (AggStateExtended*) ptr_vector_data[row_idx];
         idx_t vector_size = 0;
         const idx_t generic_start_idx = generic_idx;
-        if (vector != NULL){
-            vector_size = vector->size();
-            // Done via memcpy to speed this up.
-            memcpy(&child_ptr_data[generic_start_idx], vector->data(), vector_size*sizeof(uint64_t));
+        idx_t end_idx = 0;
+        if (extended_state != NULL){
+            if (idx_to_return == 0){
+                vector_size = extended_state->inline_state->size();
+                // Done via memcpy to speed this up.
+                idx_t cursor = generic_start_idx;
+                memcpy(&child_ptr_data[cursor], extended_state->inline_state->data(), extended_state->inline_state->size()*sizeof(uint64_t));
+                cursor += extended_state->inline_state->size();
+                if (extended_state->extended){
+                    for (auto vec: *extended_state->extended){
+                        if (vec == NULL) continue;
+                        memcpy(&child_ptr_data[cursor], vec->data(), vec->size()*sizeof(uint64_t));
+                        vector_size += vec->size();
+                        cursor += vec->size();
+                    }
+                }
+            }else{
+                std::vector<uint64_t> *extended_to_append = NULL;
+                if (extended_state->extended != NULL){
+                    if (extended_state->extended->at(idx_to_return - 1)){
+                        extended_to_append = extended_state->extended->at(idx_to_return - 1);
+                    }
+                }
+                idx_t cursor = generic_start_idx;
+                vector_size++;
+                child_ptr_data[generic_start_idx] = extended_state->inline_state->at(idx_to_return - 1);
+                cursor++;
+                if (extended_to_append){
+                    memcpy(&child_ptr_data[cursor], extended_to_append->data(), extended_to_append->size()*sizeof(uint64_t));
+                    vector_size += extended_to_append->size();
+                }
+            }
         }
         generic_idx += vector_size;
         entries[row_idx].offset = generic_start_idx;
@@ -876,6 +925,7 @@ duckdb_scalar_function traceprov_create_read_vector_func(){
     std::string *func_name = new std::string("traceprov_read_int_vector");
     duckdb_scalar_function_set_name(func, func_name->c_str());
     duckdb_logical_type ubigint_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+    duckdb_scalar_function_add_parameter(func, ubigint_type);
     duckdb_scalar_function_add_parameter(func, ubigint_type);
 
     duckdb_logical_type list_type = duckdb_create_list_type(ubigint_type);

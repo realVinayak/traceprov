@@ -112,7 +112,7 @@ void traceprov_debug_table_bind(duckdb_bind_info info){
         duckdb_bind_add_result_column(info, param.c_str(), type);
         duckdb_destroy_logical_type(&type);
     }
-    // duckdb_bind_set_cardinality(info, 1000*1000, true);
+    duckdb_bind_set_cardinality(info, 1000*1000, true);
 }
 
 
@@ -134,7 +134,7 @@ void traceprov_debug_table_func(duckdb_function_info info, duckdb_data_chunk out
     auto init_data =  (uint64_t)duckdb_function_get_init_data(info);
     auto local_init_data = (uint64_t)duckdb_function_get_local_init_data(info);
     elog(INFO, "Local init data: %ld, %ld, %d:%d\n", init_data, local_init_data, MyProcPid, MyProcTid);
-    
+    sleep(3);
 }
 
 // Just some functions for debugging

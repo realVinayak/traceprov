@@ -519,7 +519,7 @@ static std::string traceprov_get_column_select(
                 col_repr = safe_append(col_repr, traceprov_get_column_name_idx(nullptr, column_idx));
             }
             if (is_unnest){
-                col_repr = safe_append("unnest(traceprov_read_int_vector(" + col_repr  + ")) as ", traceprov_get_column_name_idx(nullptr, column_idx));
+                col_repr = safe_append("unnest(traceprov_read_int_vector(" + col_repr  + ", 0)) as ", traceprov_get_column_name_idx(nullptr, column_idx));
             }
             sql_repr += col_repr;
         }

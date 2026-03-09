@@ -294,8 +294,15 @@ struct current_context {
     uint32_t page_cache_idx;
 };
 
-
-typedef std::vector<uint64_t> TraceProvAggStateExtended;
+typedef struct AggStateExtended {
+    // Usually, this will suffice.
+    std::vector<uint64_t> *inline_state;
+    // Occasionally, need to also store extensions.
+    // This is rare, so very lazily allocated.
+    std::vector<std::vector<uint64_t> *> *extended;
+    // Caching this.
+    uint32_t total_size;
+} AggStateExtended;
 
 struct traceprov_agg_context {
     // Whether this aggregation was combined.
@@ -309,7 +316,7 @@ struct traceprov_agg_context {
     #if TRACEPROV_COLLECT_STATS_MODE == 1
     uint32_t combined_count;
     #endif
-    TraceProvAggStateExtended *extended_state;
+    AggStateExtended *extended_state;
 };
 
 // Whenever this condition fails, also need to update the function definition.

@@ -27,3 +27,5 @@ bool traceprov_use_merge_chunks = false;
 // Combine in-memory?
 // warning: also affects derivation (no joins necessary to combine layer)
 bool traceprov_combine_in_memory = false;
+
+uint32_t traceprov_thread_count = 1;
