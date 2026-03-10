@@ -520,13 +520,16 @@ void traceprov_infer_pointers(
                 child_graph->headNumber,
                 worker_local_contexts
             );
-            // Nothing to add.
-            if (worker_combine_layers->size() == 0) continue;
-            pointer_context_add_layer(
-                pointer_context,
-                graph->headNumber,
-                start_idx + foreach_current_index(entry_cursor)
-            );
+            // Nothing to add otherwise.
+            // It is still possible that the child may contain some.
+            // So, need to still look at them.
+            if (worker_combine_layers->size() > 0){
+                pointer_context_add_layer(
+                    pointer_context,
+                    graph->headNumber,
+                    start_idx + foreach_current_index(entry_cursor)
+                );
+            }
             traceprov_infer_pointers(
                 child_graph,
                 pointer_context,
