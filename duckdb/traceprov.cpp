@@ -474,45 +474,61 @@ void traceprov_combine_optimized(
             // First time, after all.
             if (unlikely(target_state->extended_state == NULL)){
                 target_state->extended_state = new AggStateExtended;
-                target_state->extended_state->inline_state = new std::vector<uint64_t>(traceprov_thread_count, 0);
+                if (traceprov_split_combine){
+                    target_state->extended_state->inline_state = new std::vector<uint64_t>(traceprov_thread_count, 0);
+                    target_state->extended_state->total_size = traceprov_thread_count;
+                }else{
+                    target_state->extended_state->inline_state = new std::vector<uint64_t>;
+                    target_state->extended_state->inline_state->reserve(traceprov_thread_count);
+                    target_state->extended_state->total_size = 0;
+                }
                 target_state->extended_state->extended = NULL;
-                target_state->extended_state->total_size = traceprov_thread_count;
             }
             const uint8_t source_worker = source_state->worker_id - 1;
-            if (target_state->extended_state->inline_state->at(source_worker) != 0){
-                // elog(INFO, "Need extra!");
-                // Need to extend the inline state.
-                if (target_state->extended_state->extended == NULL)
-                    target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
-                
-                if (target_state->extended_state->extended->at(source_worker) == NULL){
-                    target_state->extended_state->extended->at(source_worker) = new std::vector<uint64_t>;
-                }
-
-                target_state->extended_state->extended->at(source_worker)->push_back(source_state->group_cnt);
+            if (!traceprov_split_combine){
+                target_state->extended_state->inline_state->push_back(source_state->group_cnt);
                 target_state->extended_state->total_size++;
             }else{
-                target_state->extended_state->inline_state->at(source_worker) = source_state->group_cnt;
+                if (target_state->extended_state->inline_state->at(source_worker) != 0){
+                    // elog(INFO, "Need extra!");
+                    // Need to extend the inline state.
+                    if (target_state->extended_state->extended == NULL)
+                        target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
+                    
+                    if (target_state->extended_state->extended->at(source_worker) == NULL){
+                        target_state->extended_state->extended->at(source_worker) = new std::vector<uint64_t>;
+                    }
+
+                    target_state->extended_state->extended->at(source_worker)->push_back(source_state->group_cnt);
+                    target_state->extended_state->total_size++;
+                }else{
+                    target_state->extended_state->inline_state->at(source_worker) = source_state->group_cnt;
+                }
             }
 
             if (!target_state->is_combined && !was_copied){
                 // This is done so that only once the target state value appears.
                 const uint8_t target_worker = target_state->worker_id - 1;
 
-                if (target_state->extended_state->inline_state->at(target_worker) != 0){
-                    elog(INFO, "Need extra!");
-                    // Need to extend the inline state.
-                    if (target_state->extended_state->extended == NULL)
-                        target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
-                    
-                    if (target_state->extended_state->extended->at(target_worker) == NULL){
-                        target_state->extended_state->extended->at(target_worker) = new std::vector<uint64_t>;
-                    }
-
-                    target_state->extended_state->extended->at(target_worker)->push_back(target_state->group_cnt);
+                if (!traceprov_split_combine){
+                    target_state->extended_state->inline_state->push_back(target_worker);
                     target_state->extended_state->total_size++;
-                }else{
-                    target_state->extended_state->inline_state->at(target_worker) = target_state->group_cnt;
+                }else {
+                    if (target_state->extended_state->inline_state->at(target_worker) != 0){
+                        elog(INFO, "Need extra!");
+                        // Need to extend the inline state.
+                        if (target_state->extended_state->extended == NULL)
+                            target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
+                        
+                        if (target_state->extended_state->extended->at(target_worker) == NULL){
+                            target_state->extended_state->extended->at(target_worker) = new std::vector<uint64_t>;
+                        }
+
+                        target_state->extended_state->extended->at(target_worker)->push_back(target_state->group_cnt);
+                        target_state->extended_state->total_size++;
+                    }else{
+                        target_state->extended_state->inline_state->at(target_worker) = target_state->group_cnt;
+                    }
                 }
             }
             target_state->is_combined = true;

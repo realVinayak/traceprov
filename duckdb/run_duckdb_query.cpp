@@ -301,6 +301,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_combine_in_memory")){
             traceprov_combine_in_memory = true;
             continue;
+        } else if (IS_OPTION("--traceprov_split_combine")){
+            traceprov_split_combine = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
