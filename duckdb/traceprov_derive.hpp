@@ -10,4 +10,13 @@ typedef struct TraceProvTableExtra {
     void *partition_spec;
     void *pointer_spec;
 } TraceProvTableExtra;
+
+typedef std::unordered_map<TraceProvLayerNumber, std::vector<std::string *> *> TraceProvLayerString;
+
+typedef struct TraceProvInferExtra {
+    TraceProvDerivationSpec *spec;
+    TraceProvLayerString *layer_string;
+    std::vector<duckdb_connection> *cached_connections;
+} TraceProvInferExtra;
+
 #endif

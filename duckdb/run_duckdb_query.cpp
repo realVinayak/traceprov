@@ -66,6 +66,12 @@ typedef struct TraceProvLogExtra {
     TraceProvLayerNumber child_layer_number;
 } TraceProvLogExtra;
 
+typedef struct ExtraQueryGroup {
+    std::unordered_map<TraceProvLayerNumber, std::vector<std::string *> *> *query_map;
+} ExtraQueryGroup;
+
+std::string read_file(std::string file);
+
 // TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
     // via --lineage
@@ -133,6 +139,7 @@ struct Options {
     // Because we implictly make queries for all the layers, some of them are intermediate.
     // If non-empty, only these ones will be derived.
     std::vector<uint32_t> *traceprov_layers_to_derive;
+    ExtraQueryGroup *extra_query_groups;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -178,7 +185,8 @@ struct Options parse_args(int argc, char **argv){
         .traceprov_materialize_derivation = false,
         .traceprov_dry_run_derivation = false,
         .initial_page_count = 0,
-        .traceprov_layers_to_derive = new std::vector<uint32_t>
+        .traceprov_layers_to_derive = new std::vector<uint32_t>,
+        .extra_query_groups = tp_alloc0_object(ExtraQueryGroup)
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -237,9 +245,21 @@ struct Options parse_args(int argc, char **argv){
             auto extra_path = std::string(argv[++i]);
             std::ifstream extra_file_stream(extra_path.c_str());
             uint64_t added = 0;
+            TraceProvLayerNumber layer = 0;
+            sscanf(extra_path.c_str(), "/tmp/infer_%d_template", &layer);
+            if (layer == 0){
+                elog(ERROR, "Error parsing: %s", extra_path.c_str());
+            }
             for (std::string extra_file_path; std::getline(extra_file_stream, extra_file_path);){
                 if (extra_file_path.size() > 0){
-                    options.extra_query_paths->push_back(extra_file_path);
+                    if (options.extra_query_groups->query_map == NULL){
+                        options.extra_query_groups->query_map = new std::unordered_map<TraceProvLayerNumber, std::vector<std::string *> *>;
+                    }
+                    if (options.extra_query_groups->query_map->find(layer) == options.extra_query_groups->query_map->end()){
+                        options.extra_query_groups->query_map->insert({layer, new std::vector<std::string *>});
+                    }
+                    auto dest_ptr = options.extra_query_groups->query_map->at(layer);
+                    dest_ptr->push_back(new std::string(read_file(extra_file_path)));
                     added++;
                 }
             }
@@ -528,7 +548,7 @@ typedef struct ExtraQuery {
     std::string extra;
 } ExtraQuery;
 
-void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_extra);
+TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_extra);
 
 TraceProvTableExtra *make_table_extra(){
     TraceProvTableExtra *table_extra = (TraceProvTableExtra *)malloc(sizeof(TraceProvTableExtra));
@@ -536,7 +556,64 @@ TraceProvTableExtra *make_table_extra(){
     return table_extra;
 }
 
+std::string read_file(std::string file){
+    std::string contents = "";
+    std::ifstream file_stream(file.c_str());
+    std::stringstream buffer;
+    buffer << file_stream.rdbuf();
+    contents = buffer.str();
+    return contents;
+}
+
+
+typedef struct Funcs {
+    duckdb_table_function tp_read_func;
+    duckdb_table_function tp_read_offset_func;
+} Funcs;
+
+Funcs traceprov_add_funcs(duckdb_connection con){
+    duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
+
+    duckdb_table_function tp_read_func = traceprov_create_table_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
+
+    duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
+    
+    duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
+
+    duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
+
+    return Funcs {
+        .tp_read_func = tp_read_func,
+        .tp_read_offset_func = tp_read_offset_func
+    };
+}
+
+std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threads){
+    auto conns = new std::vector<duckdb_connection>;
+    for (uint32_t idx = 0; idx < num_threads; idx++){
+        duckdb_database db;
+        duckdb_connection con;
+        char *error_msg;
+        duckdb_config db_config;
+        DUCKDB_EXIT_ON_ERROR(duckdb_create_config(&db_config));
+        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(nullptr, &db, nullptr, &error_msg), error_msg);
+        DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
+        DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "doing threads!");
+        traceprov_add_funcs(con);
+        conns->push_back(con);
+    }
+    return conns;
+}
+
 int main(int argc, char **argv){
+
+    traceprov_set_mem_config(TraceProvMemoryAllocator {.allocator = malloc, .free = free});
+
     struct Options options = parse_args(argc, argv);
 
     std::ifstream in_sql_stream(options.input_path.c_str());
@@ -558,8 +635,6 @@ int main(int argc, char **argv){
         extra_sqls.push_back(ExtraQuery {.sql = extra_sql, .extra= ""});
     }
 
-    traceprov_set_mem_config(TraceProvMemoryAllocator {.allocator = malloc, .free = free});
-
     duckdb_database db;
     duckdb_connection con;
     char *error_msg;
@@ -574,6 +649,7 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
     DUCKDB_RUN_SHORT_QUERY(con, "load JSON;", "load json");
+    DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "set insertion order preserve");
 
     if (options.is_new_sd){
         if (!IS_SET(options.sd_extension_path))
@@ -606,20 +682,10 @@ int main(int argc, char **argv){
         std::cout << "ran top-level volatile log register successfully!" << std::endl;
     }
 
-    duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
+    Funcs table_funcs = traceprov_add_funcs(con);
 
-    duckdb_table_function tp_read_func = traceprov_create_table_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
-
-    duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
-    
-    duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
-
-    duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
+    auto infer_table_func = traceprov_create_infer_table_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, infer_table_func));
 
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
@@ -688,14 +754,24 @@ int main(int argc, char **argv){
 
             auto extra_sqls_clone = (extra_sqls);
             void *table_func_extra = NULL;
-            augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
+            auto spec = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
 
             #if TRACEPROV_SD_MODE == 0
 
+            if (traceprov_split_combine){
+               auto cached_cons = make_duckdb_connections(options.num_threads);
+                TraceProvInferExtra *infer_extra = tp_alloc0_object(TraceProvInferExtra);
+                infer_extra->cached_connections = cached_cons;
+                infer_extra->layer_string = options.extra_query_groups->query_map;
+                infer_extra->spec = spec;
+                duckdb_table_function_set_extra_info(infer_table_func, infer_extra, free);
+            }
+
             auto extra = make_table_extra();
             extra->pointer_spec = table_func_extra;
-            duckdb_table_function_set_extra_info(tp_read_func, extra, free); // whatever
-            duckdb_table_function_set_extra_info(tp_read_offset_func, extra, free);
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_func, extra, free); // whatever
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, extra, free);
+
 
             #endif
 
@@ -754,8 +830,8 @@ int main(int argc, char **argv){
             extra->partition_spec = partition_spec;
             extra->pointer_spec = table_func_extra;
 
-            duckdb_table_function_set_extra_info(tp_read_func, (void *)extra, free);
-            duckdb_table_function_set_extra_info(tp_read_offset_func, (void *)extra, free);
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_func, (void *)extra, free);
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, (void *)extra, free);
 
             #endif
             extra_sql_idx++;
@@ -777,8 +853,8 @@ int main(int argc, char **argv){
             }
             #if TRACEPROV_SD_MODE == 0
             // eh, so that the state is still consistent later.
-            duckdb_table_function_set_extra_info(tp_read_offset_func, NULL, nullptr);
-            duckdb_table_function_set_extra_info(tp_read_func, NULL, nullptr);
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
+            duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
             #endif
         }
     }
@@ -876,64 +952,66 @@ static std::string serialize_option(Options *option){
 
 static int global_counter = 0;
 
-void augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_func_extra){
-    if (options->traceprov_perform_derivation){
-        TraceProvParseContext *parsed_back_context;
-        char *parsed_sql = NULL;
-        auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
-        *table_func_extra = result_spec->p_context;
-        for (auto result_map_pair: *result_spec->result_map){
-            if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
-                // In this case, it is a simple scan.
-                // Apparently, for some reason, DuckDB does not parallelise this????
-                // Anyways, right now, that breaks things.
-                // So, remember that it was a simple scan.
-                TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
-                relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
+TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_func_extra){
+    if (!options->traceprov_perform_derivation) return NULL;
+
+    TraceProvParseContext *parsed_back_context;
+    char *parsed_sql = NULL;
+    auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
+    *table_func_extra = result_spec->p_context;
+    for (auto result_map_pair: *result_spec->result_map){
+        if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
+            // In this case, it is a simple scan.
+            // Apparently, for some reason, DuckDB does not parallelise this????
+            // Anyways, right now, that breaks things.
+            // So, remember that it was a simple scan.
+            TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
+            relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
+        }
+        std::vector<std::string> ddls;
+        std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+        if ((options->traceprov_layers_to_derive->size() != 0) &&
+            (std::find(
+                options->traceprov_layers_to_derive->begin(), 
+                options->traceprov_layers_to_derive->end(), result_map_pair.first
+            )) == options->traceprov_layers_to_derive->end())
+            {
+                continue;
             }
-            std::vector<std::string> ddls;
-            std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
-            if ((options->traceprov_layers_to_derive->size() != 0) &&
-                (std::find(
-                    options->traceprov_layers_to_derive->begin(), 
-                    options->traceprov_layers_to_derive->end(), result_map_pair.first
-                )) == options->traceprov_layers_to_derive->end())
-                {
-                    continue;
-                }
-            auto node_sql = traceprov_node_to_sql(
-                result_map_pair.second, 
-                TraceProvToSQLContext{
-                    .context = parsed_back_context,
-                    .use_table_def = true,
-                    .ddls = &ddls,
-                    .added_ddls = &added_ddls,
-                    .pointer_context = traceprov_combine_in_memory ? result_spec->p_context : NULL
-                }
-            );
-            //elog(INFO, "SQL Query: %s", node_sql.c_str());
-            if (options->traceprov_materialize_derivation){
-                std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
-                node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-                for (auto ddl_string : ddls){
-                    std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-                    extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-                    elog(INFO, "Table: %s", base_table_name.c_str());
-                    elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
-                }
+        auto node_sql = traceprov_node_to_sql(
+            result_map_pair.second, 
+            TraceProvToSQLContext{
+                .context = parsed_back_context,
+                .use_table_def = true,
+                .ddls = &ddls,
+                .added_ddls = &added_ddls,
+                .pointer_context = traceprov_combine_in_memory ? result_spec->p_context : NULL
             }
-            // std::string extra_str = "";
-            // extra_str += "{";
-            // extra_str += "\"layer\": ";
-            // extra_str += std::to_string(result_map_pair.first);
-            // extra_str += ",";
-            // extra_str += "\"sql\": ";
-            // extra_str += "\"" + std::string(parsed_sql) + "\""
-            if (options->traceprov_dry_run_derivation){
-                elog(INFO, "SQL Query: %s", node_sql.c_str());
-            }else{
-                extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+        );
+        //elog(INFO, "SQL Query: %s", node_sql.c_str());
+        if (options->traceprov_materialize_derivation){
+            std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+            node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+            for (auto ddl_string : ddls){
+                std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+                elog(INFO, "Table: %s", base_table_name.c_str());
+                elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
             }
         }
+        // std::string extra_str = "";
+        // extra_str += "{";
+        // extra_str += "\"layer\": ";
+        // extra_str += std::to_string(result_map_pair.first);
+        // extra_str += ",";
+        // extra_str += "\"sql\": ";
+        // extra_str += "\"" + std::string(parsed_sql) + "\""
+        if (options->traceprov_dry_run_derivation){
+            elog(INFO, "SQL Query: %s", node_sql.c_str());
+        }else if (!traceprov_split_combine){
+            extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+        }
     }
+
+    return result_spec;
 }

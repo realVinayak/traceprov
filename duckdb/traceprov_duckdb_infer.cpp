@@ -21,6 +21,7 @@
 #include <traceprov_node.hpp>
 #include "traceprov_settings.hpp"
 #include "traceprov_derive.hpp"
+#include "derivation_utils.hpp"
 
 TraceProvDuckDbGlobalState g_tp_duckdb_state {
     .did_initialize = false,
@@ -158,7 +159,10 @@ static void read_at_offset(
     }
 }
 
+std::mutex g_tp_state_mutex;
+
 void initialize_global_context(){
+    g_tp_state_mutex.lock();
     if (!g_tp_duckdb_state.did_initialize){
         traceprov_shared_context shared_context;
         if (map_traceprov_shared_context(&shared_context))
@@ -167,6 +171,7 @@ void initialize_global_context(){
         g_tp_duckdb_state.did_initialize = true;
         g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
     }
+    g_tp_state_mutex.unlock();
 }
 
 void reset_global_context(){
@@ -206,7 +211,7 @@ static TraceProvBindData *setup_layers(
     if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size()){
         current_worker_id = 1;
         is_dummy = true;
-        elog(INFO, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.");
+        // elog(INFO, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.");
         return NULL;
     }
 
@@ -960,6 +965,116 @@ duckdb_scalar_function traceprov_create_read_vector_func(){
 
     duckdb_scalar_function_set_function(func, traceprov_read_int_vector_func);
     return func;
+}
+
+typedef struct TraceProvInferBind {
+    std::mutex *bind_mutex;
+    std::vector<std::string *> *queries;
+    TraceProvNode *node;
+    uint32_t worker_count;
+} TraceProvInferBind;
+
+typedef struct TraceProvInferLocalInit {
+    uint32_t worker_idx;
+    std::string *query;
+    duckdb_prepared_statement stmt;
+    duckdb_connection con;
+    duckdb_result curr_result;
+} TraceProvInferLocalInit;
+
+void traceprov_infer_bind(duckdb_bind_info info){
+    auto param_1 = duckdb_bind_get_parameter(info, 0);
+    const uint64_t layer_number = duckdb_get_uint64(param_1);
+    duckdb_destroy_value(&param_1);
+
+    TraceProvInferExtra *extra_info = (TraceProvInferExtra *)duckdb_bind_get_extra_info(info);
+    TraceProvInferBind *bind = (TraceProvInferBind *)malloc(sizeof(TraceProvInferBind));
+    auto node = extra_info->spec->result_map->at(layer_number);
+
+    bind->bind_mutex = new std::mutex;
+    bind->node = node;
+    bind->queries = extra_info->layer_string->at(layer_number);
+    bind->worker_count = 0;
+
+
+    const uint64_t column_count = traceprov_get_node_column_count(node);
+    for (uint64_t col_count = 0; col_count < column_count; col_count++){
+        const std::string param = std::string("column_") + std::to_string(col_count);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+        duckdb_bind_add_result_column(info, param.c_str(), type);
+        duckdb_destroy_logical_type(&type);
+    }
+
+    duckdb_bind_set_bind_data(info, bind, free);
+    duckdb_bind_set_cardinality(info, 1000000, true);
+}
+
+void traceprov_infer_init(duckdb_init_info info){
+    auto bind_data = (TraceProvInferBind *)duckdb_init_get_bind_data(info);
+    duckdb_init_set_max_threads(info, bind_data->queries->size());
+    duckdb_init_set_init_data(info, NULL, NULL);
+}
+
+void traceprov_infer_local_init(duckdb_init_info info){
+    TraceProvInferExtra *extra = (TraceProvInferExtra *)duckdb_init_get_extra_info(info);
+    auto bind_data = (TraceProvInferBind *)duckdb_init_get_bind_data(info);
+    auto local_init_data = (TraceProvInferLocalInit *)malloc(sizeof(TraceProvInferLocalInit));
+    bind_data->bind_mutex->lock();
+    const uint64_t self_idx = bind_data->worker_count++;
+    bind_data->bind_mutex->unlock();
+    local_init_data->worker_idx = self_idx;
+    local_init_data->query = bind_data->queries->at(self_idx);
+    local_init_data->stmt = NULL;
+    local_init_data->con = extra->cached_connections->at(self_idx);
+    duckdb_init_set_init_data(info, local_init_data, free);
+}
+
+void traceprov_infer_func(duckdb_function_info info, duckdb_data_chunk output){
+    auto bind_data = (TraceProvInferBind *)duckdb_function_get_bind_data(info);
+    auto init_data = (TraceProvInferLocalInit *)duckdb_function_get_local_init_data(info);
+    auto con = init_data->con;
+    if (init_data->stmt == NULL){
+        // Compile the statement.
+        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, init_data->query->c_str(), &init_data->stmt), duckdb_prepare_error(init_data->stmt));
+        DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared_streaming(init_data->stmt, &init_data->curr_result));
+        if (!duckdb_result_is_streaming(init_data->curr_result)){
+            elog(ERROR, "Expected result to be streaming!");
+        }
+    }
+    duckdb_data_chunk result_chunk = duckdb_stream_fetch_chunk(init_data->curr_result);
+    if (result_chunk == NULL){
+        duckdb_data_chunk_set_size(output, 0);
+        return;
+    }
+    // Copy all the vectors.
+    const uint64_t result_column_count = duckdb_data_chunk_get_column_count(result_chunk);
+    const uint64_t expected_column_count = duckdb_data_chunk_get_column_count(output);
+    if (result_column_count != expected_column_count){
+        elog(ERROR, "Got different col counts: %ld, %ld", result_column_count, expected_column_count);
+    }
+    const uint64_t row_count = duckdb_data_chunk_get_size(result_chunk);
+    for (uint64_t col_idx = 0; col_idx < result_column_count; col_idx++){
+        duckdb_vector result_col = duckdb_data_chunk_get_vector(result_chunk, col_idx);
+        uint64_t *result_col_data = (uint64_t *)duckdb_vector_get_data(result_col);
+        duckdb_vector data_col = duckdb_data_chunk_get_vector(output, col_idx);
+        uint64_t *data_col_data = (uint64_t *)duckdb_vector_get_data(data_col);
+        memcpy(data_col_data, result_col_data, sizeof(uint64_t)*row_count);
+    }
+    duckdb_data_chunk_set_size(output, row_count);
+}
+
+duckdb_table_function traceprov_create_infer_table_func(){
+    auto function = duckdb_create_table_function();
+    duckdb_table_function_set_name(function, "traceprov_infer_table");
+    duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+    duckdb_table_function_add_parameter(function, type);
+    duckdb_destroy_logical_type(&type);
+
+    duckdb_table_function_set_bind(function, traceprov_infer_bind);
+    duckdb_table_function_set_init(function, traceprov_infer_init);
+    duckdb_table_function_set_local_init(function, traceprov_infer_local_init);
+    duckdb_table_function_set_function(function, traceprov_infer_func);
+    return function;
 }
 
 #endif

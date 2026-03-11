@@ -57,6 +57,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_combine_in_memory: bool = False
     extras: list[str] = None
     traceprov_split_combine: bool = False
+    extra_files: list[str] = None
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -92,7 +93,7 @@ class DuckDBDriverOptions(NamedTuple):
             f"--{key} {value}"
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
-            and (key not in ["extra", "extras", "use_part_agg"])
+            and (key not in ["extra", "extras", "use_part_agg", "extra_files"])
             and (key not in ["traceprov_layers_to_derive"])
         ]
         all_extras = [*([self.extra] if self.extra else []), *(self.extras or [])]
@@ -100,6 +101,10 @@ class DuckDBDriverOptions(NamedTuple):
         key_value_options = [
             *key_value_options,
             *[f"--use_part_agg {f}" for f in self.use_part_agg or []],
+        ]
+        key_value_options = [
+            *key_value_options,
+            *[f'--extra_file {file}' for file in self.extra_files or []]
         ]
         if self.traceprov_layers_to_derive:
             key_value_options = [

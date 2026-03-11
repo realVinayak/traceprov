@@ -610,6 +610,7 @@ def run_single(
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)
     traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+    extra_file_paths = []
     if run_inference:
         #traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
         if use_synthetic_infer:
@@ -634,12 +635,18 @@ def run_single(
                     just_write(infer_path, infer_query)
                     extras.append(infer_path)
                 else:
-                    assert not validate
-                    infer_paths = [(Path("/tmp/") / f"infer_{element_idx}_{local_idx}_materialize.sql").as_posix() for local_idx in range(len(infer_queries))]
+                    infer_path_file = (Path("/tmp/") / f"infer_{element_idx}_template.txt")
+                    infer_paths = [(Path("/tmp/") / f"infer_{element_idx}_template_{local_idx}_materialize.sql").as_posix() for local_idx in range(len(infer_queries))]
                     for _infer_query, _infer_query_path in zip(infer_queries, infer_paths):
                         just_write(_infer_query_path, _infer_query)
-                        extras.append(_infer_query_path)
-            capture_options = capture_options._replace(extras=extras)
+                    just_write(infer_path_file, '\n'.join(infer_paths))
+                    infer_query_content = f"select * from traceprov_infer_table({element_idx}::ubigint)"
+                    if validate:
+                        infer_query_content = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query_content})"
+                    file_out = just_write(Path("/tmp/") / f"infer_{element_idx}.sql", infer_query_content)
+                    extras.append(file_out)
+                    extra_file_paths.append(infer_path_file)
+            capture_options = capture_options._replace(extras=extras, extra_files=extra_file_paths, traceprov_perform_derivation=True)
         else:
             capture_options = capture_options._replace(
                 traceprov_perform_derivation=True,

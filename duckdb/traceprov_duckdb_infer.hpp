@@ -15,4 +15,5 @@ std::vector<TraceProvWorkerLayer> *find_combine_layers_across_workers(
     const TraceProvLayerNumber log_layer_number,
     const std::vector<struct local_context *> *worker_local_contexts
 );
+duckdb_table_function traceprov_create_infer_table_func();
 #endif
