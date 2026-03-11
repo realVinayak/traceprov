@@ -91,6 +91,7 @@ def run():
                 root=Path(parsed.root),
                 traceprov_graph_path=graph_dir / query / "graph.bin",
                 threads=parsed.threads,
+                spec=spec[query][0],
                 traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
                 use_optimized=parsed.optimized,
                 validate=is_validate and parsed.sample_inference is None,
@@ -106,7 +107,8 @@ def run():
                 traceprov_use_implicit_union=parsed.traceprov_use_implicit_union,
                 traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation,
                 traceprov_use_merge_chunks=parsed.traceprov_use_merge_chunks,
-                traceprov_combine_in_memory=parsed.traceprov_combine_in_memory
+                traceprov_combine_in_memory=parsed.traceprov_combine_in_memory,
+                traceprov_split_combine=parsed.traceprov_split_combine
             )
 
         if parsed.sample_inference:

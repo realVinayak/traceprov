@@ -67,4 +67,9 @@ def make_duckdb_parse():
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument(
+        "--traceprov_split_combine",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser

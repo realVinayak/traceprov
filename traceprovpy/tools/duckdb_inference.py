@@ -55,6 +55,8 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_layers_to_derive: Tuple[int] | None = None
     traceprov_use_merge_chunks: bool = False
     traceprov_combine_in_memory: bool = False
+    extras: list[str] = None
+    traceprov_split_combine: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -77,7 +79,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_implicit_union",
             "traceprov_dry_run_derivation",
             "traceprov_use_merge_chunks",
-            "traceprov_combine_in_memory"
+            "traceprov_combine_in_memory",
+            "traceprov_split_combine"
         }
 
     def serialize(self) -> str:
@@ -92,7 +95,7 @@ class DuckDBDriverOptions(NamedTuple):
             and (key not in ["extra", "extras", "use_part_agg"])
             and (key not in ["traceprov_layers_to_derive"])
         ]
-        all_extras = [self.extra] if self.extra is not None else []
+        all_extras = [*([self.extra] if self.extra else []), *(self.extras or [])]
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
         key_value_options = [
             *key_value_options,

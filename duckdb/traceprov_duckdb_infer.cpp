@@ -206,7 +206,8 @@ static TraceProvBindData *setup_layers(
     if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size()){
         current_worker_id = 1;
         is_dummy = true;
-        elog(ERROR, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.")
+        elog(INFO, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.");
+        return NULL;
     }
 
     auto current_local_context =  g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
@@ -362,10 +363,26 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         }
         bind_data->rel_args.offset = log_offset;
     }else{
-        bind_data = setup_layers(current_worker_id, layer_number, log_offset, true, partition_idx);
-        bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
-        bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
-        bind_data->worker_bind_data->push_back(bind_data);
+        bind_data = setup_layers(current_worker_id, layer_number, log_offset, false, partition_idx);
+        if (bind_data != NULL){
+            bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
+            bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
+            bind_data->worker_bind_data->push_back(bind_data);
+        }else{
+            bind_data = allocate_bind_data();
+            bind_data->is_dummy = true;
+            // Need to go over all the logs in hopes that we find some,
+            for (auto worker_layer_par : *g_tp_duckdb_state.worker_local_contexts){
+                const auto candidate_layer = &worker_layer_par->cached_layers[layer_number - 1];
+                if(candidate_layer->layer_number == layer_number){
+                    bind_data->column_width = candidate_layer->num_pk_records;
+                    break;
+                }
+            }
+            if (bind_data->column_width == 0){
+                elog(ERROR, "Expected column width to be set!");
+            }
+        }
     }
     bind_data->pointer_column_idx = pointer_column_idx;
     for (uint64_t col_count = 0; col_count < bind_data->column_width; col_count++){
@@ -381,6 +398,11 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
 void traceprov_duckdb_init(duckdb_init_info info){
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
     TraceProvInitData *init_data_inst = allocate_init_data();
+    duckdb_init_set_init_data(info, init_data_inst, free);
+    if (bind_data->is_dummy){
+        init_data_inst->is_dummy = true;
+        return;
+    }
     // TODO: See if it is worth optimization below.
     // Even if we're using 1 thread, we still treat the init data as a "worker" one.
     // This simplifies of the code handling later. But, could, theoreticlaly, be micro-optimized.
@@ -394,19 +416,23 @@ void traceprov_duckdb_init(duckdb_init_info info){
             traceprov_make_init_data(bind_data)
         );
     }
-    duckdb_init_set_init_data(info, init_data_inst, free);
     // This way, all the threads will scan each portion of the init data.
     duckdb_init_set_max_threads(info, max_threads);
 }
 
 void traceprov_duckdb_local_init(duckdb_init_info info){
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
+    TraceProvInitData *init_data_inst = allocate_init_data();
+    init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
+    duckdb_init_set_init_data(info, init_data_inst, free);
+    if (bind_data->is_dummy){
+        init_data_inst->is_dummy = true;
+        return;
+    }
     bool is_dummy = false;
     bind_data->bind_data_mutex->lock();
     const uint64_t self_idx = bind_data->max_worker_idx++;
     bind_data->bind_data_mutex->unlock();
-    TraceProvInitData *init_data_inst = allocate_init_data();
-    init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
     // TODO: Make this smarter.
     // Specificially, see if this thread has a local context, and try "sticking" to that context
     if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
@@ -428,7 +454,6 @@ void traceprov_duckdb_local_init(duckdb_init_info info){
         init_data_inst->idx_in_bind = self_idx;
     }
     init_data_inst->is_dummy = is_dummy;
-    duckdb_init_set_init_data(info, init_data_inst, free);
 }
 
 uint64_t fillup_pointer(

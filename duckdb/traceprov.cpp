@@ -485,28 +485,30 @@ void traceprov_combine_optimized(
                 target_state->extended_state->extended = NULL;
             }
             const uint8_t source_worker = source_state->worker_id - 1;
-            if (!traceprov_split_combine){
-                target_state->extended_state->inline_state->push_back(source_state->group_cnt);
-                target_state->extended_state->total_size++;
-            }else{
-                if (target_state->extended_state->inline_state->at(source_worker) != 0){
-                    // elog(INFO, "Need extra!");
-                    // Need to extend the inline state.
-                    if (target_state->extended_state->extended == NULL)
-                        target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
-                    
-                    if (target_state->extended_state->extended->at(source_worker) == NULL){
-                        target_state->extended_state->extended->at(source_worker) = new std::vector<uint64_t>;
-                    }
-
-                    target_state->extended_state->extended->at(source_worker)->push_back(source_state->group_cnt);
+            if (source_state->group_cnt > 0){
+                if (!traceprov_split_combine){
+                    target_state->extended_state->inline_state->push_back(source_state->group_cnt);
                     target_state->extended_state->total_size++;
                 }else{
-                    target_state->extended_state->inline_state->at(source_worker) = source_state->group_cnt;
+                    if (target_state->extended_state->inline_state->at(source_worker) != 0){
+                        // elog(INFO, "Need extra!");
+                        // Need to extend the inline state.
+                        if (target_state->extended_state->extended == NULL)
+                            target_state->extended_state->extended = new std::vector<std::vector<uint64_t> *>(traceprov_thread_count, NULL);
+                        
+                        if (target_state->extended_state->extended->at(source_worker) == NULL){
+                            target_state->extended_state->extended->at(source_worker) = new std::vector<uint64_t>;
+                        }
+
+                        target_state->extended_state->extended->at(source_worker)->push_back(source_state->group_cnt);
+                        target_state->extended_state->total_size++;
+                    }else{
+                        target_state->extended_state->inline_state->at(source_worker) = source_state->group_cnt;
+                    }
                 }
             }
 
-            if (!target_state->is_combined && !was_copied){
+            if (!target_state->is_combined && !was_copied && target_state->group_cnt > 0){
                 // This is done so that only once the target state value appears.
                 const uint8_t target_worker = target_state->worker_id - 1;
 
@@ -649,7 +651,7 @@ duckdb_aggregate_function *traceprov_create_funcs(
             traceprov_get_state_size,
             traceprov_initialize,
             traceprov_update,
-            traceprov_use_implicit_union ? traceprov_combine_optimized : traceprov_combine,
+            traceprov_combine_optimized,
             traceprov_finalize
         );
         auto base = GetCAggregateFunction(func);

@@ -1,0 +1,26 @@
+{
+    "queries": [
+        1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 21, 22
+    ],
+    "validate": true,
+    "subdirs": [
+        "params_default"
+    ],
+    "_subdirs": [
+        "params_1",
+        "params_2",
+        "params_3",
+        "params_4",
+        "params_5",
+        "params_default"
+    ],
+    "runTimeOptions": {
+        "repeat": 15,
+        "throwaway": 0
+    },
+    "q_config": {
+        "15": {
+            "pre_base": "create_view.sql"
+        }
+    }
+}

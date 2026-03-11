@@ -185,6 +185,11 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 // Bucket count (for hashing.)
 #define TRACEPROV_BUCKET_COUNT 4
 
+typedef struct TraceProvWorkerIdx {
+    uint32_t page;
+    uint64_t offset;
+} TraceProvWorkerIdx;
+
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -239,6 +244,7 @@ struct traceprov_aggregate_layer {
     // If this is a combine layer, also keep track of the maximum times a group has been accummulated.
     uint64_t max_combined_times;
     #endif
+    
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);

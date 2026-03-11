@@ -525,6 +525,7 @@ def run_single(
     traceprov_graph_path: Path,
     threads: int,
     traceprov_layers_to_derive: Tuple[int],
+    spec: dict,
     use_optimized: bool = False,
     validate: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
@@ -540,7 +541,10 @@ def run_single(
     traceprov_use_implicit_union: bool = False,
     traceprov_dry_run_derivation: bool = False,
     traceprov_use_merge_chunks: bool = False,
-    traceprov_combine_in_memory: bool = False
+    traceprov_combine_in_memory: bool = False,
+    traceprov_split_combine: bool = False,
+    use_synthetic_infer: bool = True,
+    use_union_infer: bool = True
 ):
     if validate:
         materialize_infer = True
@@ -599,7 +603,8 @@ def run_single(
         traceprov_materialize_derivation=validate and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_use_merge_chunks=traceprov_use_merge_chunks,
-        traceprov_combine_in_memory=traceprov_combine_in_memory
+        traceprov_combine_in_memory=traceprov_combine_in_memory,
+        traceprov_split_combine=traceprov_split_combine
     )
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
@@ -607,11 +612,36 @@ def run_single(
     traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
     if run_inference:
         #traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
-        capture_options = capture_options._replace(
-            traceprov_perform_derivation=True,
-            traceprov_dry_run_derivation=traceprov_dry_run_derivation,
-            traceprov_use_implicit_union=traceprov_use_implicit_union
-        )
+        if use_synthetic_infer:
+            extras = []
+            for spec_element in spec['elements']:
+                element_idx = spec_element['idx']
+                if element_idx not in traceprov_layers_to_derive: continue
+                print(traceprov_layers_to_derive, element_idx)
+                infer_path = query_dir / f"infer_{element_idx}_template.sql"
+                infer_query = just_read(infer_path)
+                assert infer_query.count(";") == 1
+                infer_query = infer_query.replace(';' ,'')
+                if "WORKER_ID" in infer_query:
+                    infer_queries = [infer_query.replace("WORKER_ID", str(worker_count)) for worker_count in range(1, capture_options.threads + 1 )]
+                else:
+                    infer_queries = [infer_query]
+                if use_union_infer:
+                    infer_query = ' UNION ALL '.join(infer_queries)
+                infer_path = (
+                    Path("/tmp/") / f"infer_{element_idx}_materialize.sql"
+                ).as_posix()
+                if materialize_infer:
+                    infer_query = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query})"
+                just_write(infer_path, infer_query)
+                extras.append(infer_path)
+            capture_options = capture_options._replace(extras=extras)
+        else:
+            capture_options = capture_options._replace(
+                traceprov_perform_derivation=True,
+                traceprov_dry_run_derivation=traceprov_dry_run_derivation,
+                traceprov_use_implicit_union=traceprov_use_implicit_union
+            )
     # if run_inference:
     #     for element in spec_element["elements"]:
     #         element_idx = element["idx"]
