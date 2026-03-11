@@ -628,13 +628,17 @@ def run_single(
                     infer_queries = [infer_query]
                 if use_union_infer:
                     infer_query = ' UNION ALL '.join(infer_queries)
-                infer_path = (
-                    Path("/tmp/") / f"infer_{element_idx}_materialize.sql"
-                ).as_posix()
-                if materialize_infer:
-                    infer_query = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query})"
-                just_write(infer_path, infer_query)
-                extras.append(infer_path)
+                    infer_path = (Path("/tmp/") / f"infer_{element_idx}_materialize.sql").as_posix()
+                    if materialize_infer:
+                        infer_query = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query})"
+                    just_write(infer_path, infer_query)
+                    extras.append(infer_path)
+                else:
+                    assert not validate
+                    infer_paths = [(Path("/tmp/") / f"infer_{element_idx}_{local_idx}_materialize.sql").as_posix() for local_idx in range(len(infer_queries))]
+                    for _infer_query, _infer_query_path in zip(infer_queries, infer_paths):
+                        just_write(_infer_query_path, _infer_query)
+                        extras.append(_infer_query_path)
             capture_options = capture_options._replace(extras=extras)
         else:
             capture_options = capture_options._replace(
