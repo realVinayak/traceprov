@@ -600,7 +600,7 @@ def run_single(
         traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
         traceprov_use_partition_in_log=traceprov_use_partition_in_log,
         traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
-        traceprov_materialize_derivation=validate and run_inference,
+        traceprov_materialize_derivation=(validate or materialize_infer) and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_use_merge_chunks=traceprov_use_merge_chunks,
         traceprov_combine_in_memory=traceprov_combine_in_memory,
@@ -637,12 +637,15 @@ def run_single(
                 else:
                     infer_path_file = (Path("/tmp/") / f"infer_{element_idx}_template.txt")
                     infer_paths = [(Path("/tmp/") / f"infer_{element_idx}_template_{local_idx}_materialize.sql").as_posix() for local_idx in range(len(infer_queries))]
-                    for _infer_query, _infer_query_path in zip(infer_queries, infer_paths):
+                    for _idx, (_infer_query, _infer_query_path) in enumerate(zip(infer_queries, infer_paths)):
+                        if validate or materialize_infer:
+                            # _infer_query  = f"COPY ({_infer_query}) to traceprov_lineage_{element_idx}_part_{_idx}.parquet"
+                            infer_query = f"EXPLAIN (ANALYZE) {_infer_query}"
                         just_write(_infer_query_path, _infer_query)
                     just_write(infer_path_file, '\n'.join(infer_paths))
                     infer_query_content = f"select * from traceprov_infer_table({element_idx}::ubigint)"
-                    if validate:
-                        infer_query_content = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query_content})"
+                    if validate or materialize_infer:
+                        infer_query_content = f"EXPLAIN (ANALYZE) {infer_query_content}"
                     file_out = just_write(Path("/tmp/") / f"infer_{element_idx}.sql", infer_query_content)
                     extras.append(file_out)
                     extra_file_paths.append(infer_path_file)

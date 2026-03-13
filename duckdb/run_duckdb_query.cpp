@@ -593,7 +593,7 @@ Funcs traceprov_add_funcs(duckdb_connection con){
     };
 }
 
-std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threads){
+std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threads, const char *path = NULL){
     auto conns = new std::vector<duckdb_connection>;
     for (uint32_t idx = 0; idx < num_threads; idx++){
         duckdb_database db;
@@ -601,9 +601,11 @@ std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threa
         char *error_msg;
         duckdb_config db_config;
         DUCKDB_EXIT_ON_ERROR(duckdb_create_config(&db_config));
-        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(nullptr, &db, nullptr, &error_msg), error_msg);
+        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_open_ext(path, &db, nullptr, &error_msg), error_msg);
         DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
         DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "doing threads!");
+        // DUCKDB_RUN_SHORT_QUERY(con, "SET streaming_buffer_size='16KiB';", "setting streaming_buffer_size!");
+        DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "unsetting preserve_insertion_order!");
         traceprov_add_funcs(con);
         conns->push_back(con);
     }
@@ -759,7 +761,7 @@ int main(int argc, char **argv){
             #if TRACEPROV_SD_MODE == 0
 
             if (traceprov_split_combine){
-               auto cached_cons = make_duckdb_connections(options.num_threads);
+               auto cached_cons = make_duckdb_connections(options.num_threads, options.db_path.c_str());
                 TraceProvInferExtra *infer_extra = tp_alloc0_object(TraceProvInferExtra);
                 infer_extra->cached_connections = cached_cons;
                 infer_extra->layer_string = options.extra_query_groups->query_map;
@@ -991,13 +993,15 @@ TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, 
         //elog(INFO, "SQL Query: %s", node_sql.c_str());
         if (options->traceprov_materialize_derivation){
             std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
-            node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-            for (auto ddl_string : ddls){
-                std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-                extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-                elog(INFO, "Table: %s", base_table_name.c_str());
-                elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
-            }
+            // node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+            // node_sql = "copy (" + node_sql + ") to " + table_name + ".parquet";
+            node_sql = "EXPLAIN (ANALYZE) " + node_sql;
+            // for (auto ddl_string : ddls){
+            //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+            //     extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+            //     elog(INFO, "Table: %s", base_table_name.c_str());
+            //     elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
+            // }
         }
         // std::string extra_str = "";
         // extra_str += "{";

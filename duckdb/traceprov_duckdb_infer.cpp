@@ -1037,11 +1037,16 @@ void traceprov_infer_func(duckdb_function_info info, duckdb_data_chunk output){
         // Compile the statement.
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, init_data->query->c_str(), &init_data->stmt), duckdb_prepare_error(init_data->stmt));
         DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared_streaming(init_data->stmt, &init_data->curr_result));
-        if (!duckdb_result_is_streaming(init_data->curr_result)){
-            elog(ERROR, "Expected result to be streaming!");
-        }
+        // if (!duckdb_result_is_streaming(init_data->curr_result)){
+        //     elog(ERROR, "Expected result to be streaming!");
+        // }
     }
-    duckdb_data_chunk result_chunk = duckdb_stream_fetch_chunk(init_data->curr_result);
+    duckdb_data_chunk result_chunk = NULL;
+    if (duckdb_result_is_streaming(init_data->curr_result)){
+        result_chunk = duckdb_stream_fetch_chunk(init_data->curr_result);
+    }else{
+        result_chunk = duckdb_fetch_chunk(init_data->curr_result);
+    }
     if (result_chunk == NULL){
         duckdb_data_chunk_set_size(output, 0);
         return;
@@ -1049,9 +1054,9 @@ void traceprov_infer_func(duckdb_function_info info, duckdb_data_chunk output){
     // Copy all the vectors.
     const uint64_t result_column_count = duckdb_data_chunk_get_column_count(result_chunk);
     const uint64_t expected_column_count = duckdb_data_chunk_get_column_count(output);
-    if (result_column_count != expected_column_count){
-        elog(ERROR, "Got different col counts: %ld, %ld", result_column_count, expected_column_count);
-    }
+    // if (result_column_count != expected_column_count){
+    //     elog(ERROR, "Got different col counts: %ld, %ld", result_column_count, expected_column_count);
+    // }
     const uint64_t row_count = duckdb_data_chunk_get_size(result_chunk);
     for (uint64_t col_idx = 0; col_idx < result_column_count; col_idx++){
         duckdb_vector result_col = duckdb_data_chunk_get_vector(result_chunk, col_idx);

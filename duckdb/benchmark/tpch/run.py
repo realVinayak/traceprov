@@ -109,6 +109,7 @@ def run():
                 traceprov_use_merge_chunks=parsed.traceprov_use_merge_chunks,
                 traceprov_combine_in_memory=parsed.traceprov_combine_in_memory,
                 traceprov_split_combine=parsed.traceprov_split_combine,
+                use_synthetic_infer=parsed.use_syn_infer,
                 use_union_infer=parsed.use_union_infer
             )
 
