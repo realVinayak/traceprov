@@ -2,7 +2,7 @@
     "queries": [
         1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 21, 22
     ],
-    "_queries": [1, 2, 3, 4],
+    "queries": [1],
     "validate": false,
     "subdirs": [
         "params_default"
@@ -16,7 +16,7 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 15,
+        "repeat": 1,
         "throwaway": 0
     },
     "q_config": {

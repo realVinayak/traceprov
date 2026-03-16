@@ -140,6 +140,7 @@ struct Options {
     // If non-empty, only these ones will be derived.
     std::vector<uint32_t> *traceprov_layers_to_derive;
     ExtraQueryGroup *extra_query_groups;
+    bool use_extra_threads;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -186,7 +187,8 @@ struct Options parse_args(int argc, char **argv){
         .traceprov_dry_run_derivation = false,
         .initial_page_count = 0,
         .traceprov_layers_to_derive = new std::vector<uint32_t>,
-        .extra_query_groups = tp_alloc0_object(ExtraQueryGroup)
+        .extra_query_groups = tp_alloc0_object(ExtraQueryGroup),
+        .use_extra_threads = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -323,6 +325,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_split_combine")){
             traceprov_split_combine = true;
+            continue;
+        } else if (IS_OPTION("--use_extra_threads")){
+            options.use_extra_threads = true;
             continue;
         }
 
@@ -606,6 +611,7 @@ std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threa
         DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "doing threads!");
         // DUCKDB_RUN_SHORT_QUERY(con, "SET streaming_buffer_size='16KiB';", "setting streaming_buffer_size!");
         DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "unsetting preserve_insertion_order!");
+        DUCKDB_RUN_SHORT_QUERY(con, "set pin_threads=\"on\";", "set pin threads");
         traceprov_add_funcs(con);
         conns->push_back(con);
     }
@@ -637,6 +643,15 @@ int main(int argc, char **argv){
         extra_sqls.push_back(ExtraQuery {.sql = extra_sql, .extra= ""});
     }
 
+    if (!options.use_extra_threads && options.extra_query_groups->query_map != NULL){
+        for (auto extra_sql_group: *options.extra_query_groups->query_map){
+            for (auto extra_sql: *extra_sql_group.second){
+                extra_sqls.push_back(ExtraQuery{.sql = extra_sql->c_str(), .extra = ""});
+            }
+        }
+        options.extra_query_groups = tp_alloc0_object(ExtraQueryGroup);
+    }
+
     duckdb_database db;
     duckdb_connection con;
     char *error_msg;
@@ -651,6 +666,7 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
     DUCKDB_RUN_SHORT_QUERY(con, "load JSON;", "load json");
+    DUCKDB_RUN_SHORT_QUERY(con, "set pin_threads=\"on\";", "set pin threads");
     DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "set insertion order preserve");
 
     if (options.is_new_sd){
@@ -780,6 +796,7 @@ int main(int argc, char **argv){
             uint32_t extra_idx = 0;
 
             for (auto extra_sql: extra_sqls_clone){
+                // traceprov_attempt_prefaults();
                 extra_idx++;
                 Options new_options = options;
                 new_options.no_reinit_state = true;

@@ -58,6 +58,7 @@ class DuckDBDriverOptions(NamedTuple):
     extras: list[str] = None
     traceprov_split_combine: bool = False
     extra_files: list[str] = None
+    use_extra_threads: bool = False
 
     def set_part_agg(self, part_agg: int):
         new_list = self.use_part_agg or []
@@ -81,7 +82,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_dry_run_derivation",
             "traceprov_use_merge_chunks",
             "traceprov_combine_in_memory",
-            "traceprov_split_combine"
+            "traceprov_split_combine",
+            "use_extra_threads"
         }
 
     def serialize(self) -> str:

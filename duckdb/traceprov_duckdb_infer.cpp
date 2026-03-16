@@ -1082,4 +1082,30 @@ duckdb_table_function traceprov_create_infer_table_func(){
     return function;
 }
 
+void traceprov_attempt_prefaults(){
+    initialize_global_context();
+    for (auto entry: *g_tp_duckdb_state.worker_local_contexts){
+        for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
+            if (layer->layer_number == 0 || layer->page_mapping == NULL)  continue;
+            for (int32_t page_idx = layer->page_mapping_size - 1; page_idx >= 0; page_idx--){
+                uint64_t pages_used = 0;
+                if (page_idx > 0 && page_idx < layer->page_mapping_size - 1){
+                    pages_used = TRACEPROV_INCREMENT_TRACE_BY_PG;
+                }else if (page_idx == layer->page_mapping_size - 1){
+                    pages_used = (((uint64_t)layer->current_row - (uint64_t)layer->last_mapping) / TRACEPROV_PAGE_SIZE);
+                }else{
+                    pages_used = 1;
+                }
+                // elog(INFO, "Pointer: %p, %d, %d\n", layer->page_mapping[page_idx], page_idx, pages_used);
+                // const uint64_t pages_used = 
+                int rc =  madvise(layer->page_mapping[page_idx], pages_used * TRACEPROV_PAGE_SIZE, MADV_POPULATE_WRITE);
+                if (rc != 0){
+                    elog(ERROR, "Got error madvise!");
+                }
+            }
+        }
+    }
+}
+
 #endif

@@ -544,7 +544,8 @@ def run_single(
     traceprov_combine_in_memory: bool = False,
     traceprov_split_combine: bool = False,
     use_synthetic_infer: bool = True,
-    use_union_infer: bool = True
+    use_union_infer: bool = True,
+    use_extra_threads: bool = True
 ):
     if validate:
         materialize_infer = True
@@ -640,7 +641,7 @@ def run_single(
                     for _idx, (_infer_query, _infer_query_path) in enumerate(zip(infer_queries, infer_paths)):
                         if validate or materialize_infer:
                             # _infer_query  = f"COPY ({_infer_query}) to traceprov_lineage_{element_idx}_part_{_idx}.parquet"
-                            infer_query = f"EXPLAIN (ANALYZE) {_infer_query}"
+                            _infer_query = f"EXPLAIN (ANALYZE) {_infer_query}"
                         just_write(_infer_query_path, _infer_query)
                     just_write(infer_path_file, '\n'.join(infer_paths))
                     infer_query_content = f"select * from traceprov_infer_table({element_idx}::ubigint)"
@@ -649,7 +650,7 @@ def run_single(
                     file_out = just_write(Path("/tmp/") / f"infer_{element_idx}.sql", infer_query_content)
                     extras.append(file_out)
                     extra_file_paths.append(infer_path_file)
-            capture_options = capture_options._replace(extras=extras, extra_files=extra_file_paths, traceprov_perform_derivation=True)
+            capture_options = capture_options._replace(extras=extras if use_extra_threads else [], extra_files=extra_file_paths, traceprov_perform_derivation=True, use_extra_threads=use_extra_threads)
         else:
             capture_options = capture_options._replace(
                 traceprov_perform_derivation=True,

@@ -62,7 +62,7 @@ int fail_safe_mmap(int fd, size_t size, void **pptr){
     void *ptr = mmap(
         NULL,
         size,
-        PROT_WRITE,
+        PROT_WRITE | PROT_READ,
         MAP_SHARED,
         fd,
         0
@@ -411,7 +411,7 @@ int get_or_create_layer(
         trace_ptr = mmap(
             NULL,
             TRACEPROV_PAGE_SIZE,
-            PROT_WRITE,
+            PROT_WRITE | PROT_READ,
             TRACEPROV_MMAP_FLAGS,
             0,
             0
