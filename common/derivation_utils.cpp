@@ -543,7 +543,7 @@ static std::string traceprov_get_column_select(
         }
         if (context.ddls){
             bool found = false;
-            auto curr_pair = std::pair<uint64_t, uint64_t>(relation->rel_args->worker_id, relation->rel_args->layer_number);
+            auto curr_pair = std::pair<uint64_t, uint64_t>(relation->rel_args->worker_id, (relation->rel_args->layer_number << 32) | relation->rel_args->table_flags);
             for (auto old: *context.added_ddls){
                 if (old == (curr_pair)){
                     found = true;

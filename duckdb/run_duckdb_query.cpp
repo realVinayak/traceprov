@@ -1009,16 +1009,17 @@ TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, 
         );
         //elog(INFO, "SQL Query: %s", node_sql.c_str());
         if (options->traceprov_materialize_derivation){
-            std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+            // std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
             // node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
             // node_sql = "copy (" + node_sql + ") to " + table_name + ".parquet";
-            node_sql = "EXPLAIN (ANALYZE) " + node_sql;
-            // for (auto ddl_string : ddls){
-            //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-            //     extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-            //     elog(INFO, "Table: %s", base_table_name.c_str());
-            //     elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
-            // }
+            // node_sql = "EXPLAIN (ANALYZE) " + node_sql;
+            for (auto ddl_string : ddls){
+                // std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
+                // extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+                // elog(INFO, "Table: %s", base_table_name.c_str());
+                elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
+            }
         }
         // std::string extra_str = "";
         // extra_str += "{";
