@@ -53,6 +53,7 @@ typedef struct TraceProvBindData {
     std::mutex *bind_data_mutex;
     uint64_t max_worker_idx;
     uint32_t pointer_column_idx;
+    std::vector<uint8_t> *sizes;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData {
@@ -390,13 +391,30 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         }
     }
     bind_data->pointer_column_idx = pointer_column_idx;
+    if (extra_info->pointer_spec == NULL){
+        elog(ERROR, "Expected pointer spec to be set!");
+    }
+    const TraceProvPointerContext *pc = (TraceProvPointerContext *)extra_info->pointer_spec;
+    auto sizes = pc->size_map->at(layer_number);
+    bind_data->sizes = sizes;
+    if (table_flags & TRACEPROV_TABLE_COMBINE){
+        bind_data->sizes = new std::vector<uint8_t>(bind_data->column_width, sizeof(uint64_t));
+    }else{
+        if (sizes->size() != bind_data->column_width){
+            elog(ERROR, "Expected the size vector to be of the same length as the column width!");
+        }
+    }
     for (uint64_t col_count = 0; col_count < bind_data->column_width; col_count++){
         const std::string param = std::string("column_") + std::to_string(col_count);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+        const uint8_t column_size = bind_data->sizes->at(col_count);
+        // elog(INFO, "[Infer] Layer: %d, Col: %ld, Size: %d", layer_number, col_count, column_size);
+        // elog(INFO,)
+        duckdb_logical_type type = column_size == sizeof(uint64_t) ? duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT) : duckdb_create_logical_type(DUCKDB_TYPE_UINTEGER);
         duckdb_bind_add_result_column(info, param.c_str(), type);
         duckdb_destroy_logical_type(&type);
     }
     bind_data->rel_args.table_flags = table_flags;
+
     duckdb_bind_set_bind_data(info, bind_data, free);
 }
 
@@ -578,11 +596,12 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                         init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, col_log_size);
                     }
                 }else{
-                    const uint64_t extra_size = num_rows * sizeof(uint64_t);
                     for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                        const uint8_t unit_size = bind_data_combined->sizes->at(col_idx);
+                        const uint64_t extra_size = unit_size*num_rows;
                         traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                        memcpy(&dest_ptr[chunk_size], init_data->col_layer_ptr, extra_size);
+                        void *dest_ptr = (void *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        memcpy(INCR_BY_BYTES(dest_ptr, chunk_size*unit_size), init_data->col_layer_ptr, extra_size);
                         init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
                     }
                 }

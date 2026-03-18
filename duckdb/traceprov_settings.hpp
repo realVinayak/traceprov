@@ -12,5 +12,6 @@ extern bool traceprov_use_merge_chunks;
 extern bool traceprov_combine_in_memory;
 extern uint32_t traceprov_thread_count;
 extern bool traceprov_split_combine;
+extern bool traceprov_use_compact;
 
 #endif

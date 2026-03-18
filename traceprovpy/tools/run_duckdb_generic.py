@@ -545,7 +545,8 @@ def run_single(
     traceprov_split_combine: bool = False,
     use_synthetic_infer: bool = True,
     use_union_infer: bool = True,
-    use_extra_threads: bool = True
+    use_extra_threads: bool = True,
+    traceprov_use_compact: bool = False
 ):
     if validate:
         materialize_infer = True
@@ -564,6 +565,9 @@ def run_single(
             if not captured_sql.exists():
                 assert not strict, "Expected ignore to be set!"
                 captured_sql = None
+        if traceprov_use_compact:
+            captured_sql = query_dir / "capture_new_compact.sql"
+            assert captured_sql.exists(), "Expected compact to be set!"
         if captured_sql is None:
             captured_sql = query_dir / "capture_new.sql"
     else:
@@ -605,7 +609,8 @@ def run_single(
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_use_merge_chunks=traceprov_use_merge_chunks,
         traceprov_combine_in_memory=traceprov_combine_in_memory,
-        traceprov_split_combine=traceprov_split_combine
+        traceprov_split_combine=traceprov_split_combine,
+        traceprov_use_compact=traceprov_use_compact
     )
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent

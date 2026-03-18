@@ -31,3 +31,6 @@ bool traceprov_combine_in_memory = false;
 bool traceprov_split_combine = false;
 
 uint32_t traceprov_thread_count = 1;
+
+// Use compact representation?
+bool traceprov_use_compact = false;

@@ -335,9 +335,10 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 // #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
 // #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
 
-typedef struct TraceProvDuckDbState {
-    bool should_hash;
-} TraceProvDuckDbState;
+// To avoid calling the duckdb function at every row, we try to cache some of that.
+// See, if it'd be a macro, this wouldn't be an issue. but whatever.
+// If the number of cols is more than that, we still cache, just that it is malloced.
+#define TRACEPROV_MAX_INLINE_CACHE_SIZE 64
 
 #define TRACEPROV_SHOULD_HASH(state) (state->should_hash)
 #define TRACEPROV_SHOULD_SORT(state) (false)
@@ -382,10 +383,13 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-// To avoid calling the duckdb function at every row, we try to cache some of that.
-// See, if it'd be a macro, this wouldn't be an issue. but whatever.
-// If the number of cols is more than that, we still cache, just that it is malloced.
-#define TRACEPROV_MAX_INLINE_CACHE_SIZE 64
+typedef uint32_t TraceProvLayerNumber;
+
+typedef struct TraceProvDuckDbState {
+    bool should_hash;
+    std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
+} TraceProvDuckDbState;
+
 
 typedef struct TraceProvAggExtra {
     bool ignore_gn;
@@ -397,9 +401,8 @@ typedef struct TraceProvAggExtra {
     uint64_t *col_cache[TRACEPROV_MAX_INLINE_CACHE_SIZE];
     uint64_t **dynamic_col_cache;
     uint64_t use_part_agg;
+    std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
 } TraceProvAggExtra;
-
-typedef uint32_t TraceProvLayerNumber;
 
 extern uint64_t traceprov_reinit_counter;
 

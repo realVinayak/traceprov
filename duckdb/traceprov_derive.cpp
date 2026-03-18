@@ -111,6 +111,11 @@ void traceprov_infer_pointers(
     const uint32_t start_idx = 0
 );
 
+void traceprov_infer_sizes(
+    const TraceProvDependency *graph,
+    const TraceProvPointerContext *pointer_context
+);
+
 std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
     const TraceProvLayerNumber log_layer_number,
     const std::vector<struct local_context *> *worker_local_contexts,
@@ -309,6 +314,10 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
             p_context,
             worker_local_contexts
         );
+        traceprov_infer_sizes(
+            graph,
+            p_context
+        );
 
     }
     ListCell *sublink_cursor;
@@ -318,6 +327,10 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
             child_sublink,
             p_context,
             worker_local_contexts
+        );
+        traceprov_infer_sizes(
+            child_sublink,
+            p_context
         );
         // If a sublink is being used, don't derive it.
         // It should be automatically be derived as part of generic handling.
@@ -485,7 +498,7 @@ static TraceProvInferAbstractTree *derive_set_on_node(
 static void pointer_context_add_layer(
     const TraceProvPointerContext *pointer_context,
     const TraceProvLayerNumber layer,
-    uint32_t pointer_idx
+    const uint32_t pointer_idx
 ){
     if (pointer_context->map->find(layer) == pointer_context->map->end()){
         pointer_context->map->insert({layer, new std::vector<uint32_t>});
@@ -496,9 +509,22 @@ static void pointer_context_add_layer(
     pointer_context_values->push_back(pointer_idx);
 }
 
+static void pointer_context_add_size(
+    const TraceProvPointerContext *pointer_context,
+    const TraceProvLayerNumber layer,
+    const uint8_t size
+){
+    if (pointer_context->size_map->find(layer) == pointer_context->size_map->end()){
+        pointer_context->size_map->insert({layer, new std::vector<uint8_t>});
+    }
+    auto pointer_context_sizes = pointer_context->size_map->at(layer);
+    pointer_context_sizes->push_back(size);
+}
+
 TraceProvPointerContext *traceprov_make_pointer_context(){
     TraceProvPointerContext *p_context = new TraceProvPointerContext;
     p_context->map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t>*>;
+    p_context->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t>*>;
     return p_context;
 }
 
@@ -536,6 +562,34 @@ void traceprov_infer_pointers(
                 worker_local_contexts,
                 1
             );
+        }
+    }
+}
+
+void traceprov_infer_sizes(
+    const TraceProvDependency *graph,
+    const TraceProvPointerContext *pointer_context
+){
+    ListCell *entry_cursor;
+    if (graph->graph_type == TP_AGGREGATE || graph->graph_type == TP_PURE_AGGREGATE){
+        pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint64_t));
+    }
+    foreach(entry_cursor, graph->entries){
+        const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+        if (te->kind == TP_ENTRY_KIND_POINTER){
+            if (te->is_pointer_for_window) continue;
+            TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
+            traceprov_infer_sizes(
+                child_graph,
+                pointer_context
+            );
+        }
+
+        // Bascially, assume that if it is not base relation, then it is uint64_t.
+        if (te->kind == TP_ENTRY_KIND_BASE_RELATION && traceprov_use_compact){
+            pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint32_t));
+        }else{
+            pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint64_t));
         }
     }
 }

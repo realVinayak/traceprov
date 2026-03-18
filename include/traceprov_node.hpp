@@ -139,9 +139,9 @@ extern "C" {
         bool should_dump;
     } TraceProvEvaluateNodeContext;
 
-
     typedef struct TraceProvPointerContext{
         std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t> *> *map;
+        std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
     } TraceProvPointerContext;
 
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;

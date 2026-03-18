@@ -73,6 +73,11 @@ def make_duckdb_parse():
         default=False,
     )
     parser.add_argument(
+        "--traceprov_use_compact",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument(
         "--use_union_infer",
         action=argparse.BooleanOptionalAction,
         default=False,

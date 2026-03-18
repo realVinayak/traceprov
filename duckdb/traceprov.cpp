@@ -45,6 +45,8 @@ static inline void grow_if_full(struct traceprov_aggregate_layer *layer){
     }
 }
 
+TraceProvAggExtra *clone_extra(const TraceProvAggExtra *extra);
+
 static int initialize_local_and_layer(
     const uint32_t layer_number,
     const uint32_t key_length,
@@ -101,6 +103,19 @@ void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state stat
     } \
     agg_contexts = (struct traceprov_agg_context **)states; \
     main_layer = get_layer(layer_number); \
+    if (unlikely(extra->size_map->find(layer_number) == extra->size_map->end())) { \
+        std::vector<uint8_t> *sizes = new std::vector<uint8_t>; \
+        sizes->push_back(sizeof(uint64_t)); \
+        for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++) { \
+            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx); \
+            void *col_data = (void *)duckdb_vector_get_data(col_vector); \
+            auto col_type = duckdb_vector_get_column_type(col_vector); \
+            auto logical_type = reinterpret_cast<duckdb::LogicalType *>(col_type); \
+            sizes->push_back(logical_type->id() == duckdb::LogicalType::INTEGER ? (sizeof(uint32_t)) : (sizeof(uint64_t))); \
+            duckdb_destroy_logical_type(&col_type); \
+        } \
+        extra->size_map->insert({layer_number, sizes}); \
+    } \
 } \
 
 #define TP_APPEND_CHUNK_SIZE(LAYER, CHUNK_SIZE) { \
@@ -275,13 +290,17 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
         }
     }
 
+    auto sizes = extra->size_map->at(layer_number);
     for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-        uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
-        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
-        memcpy(main_layer->current_row, col_data, chunk_size);
-        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
+        void *col_data = (void *)duckdb_vector_get_data(col_vector);
+        auto compact_chunk_size = (sizes->at(col_idx)*num_rows);
+        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + compact_chunk_size) > main_layer->end_of_memory_zone));
+        memcpy(main_layer->current_row, col_data, compact_chunk_size);
+        main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, compact_chunk_size);
+        // elog(INFO, "Layer: %d, Col: %ld, Size: %d", layer_number, col_idx, sizes->at(col_idx));
     }
+    
 
     // Append the current size..., yuck.
     struct traceprov_aggregate_layer *chunk_size_layer = get_layer(main_layer->rows_layer_number);
@@ -592,6 +611,12 @@ void cleanup_extra(void *data){
     delete extra;
 }
 
+TraceProvAggExtra *clone_extra(const TraceProvAggExtra *extra){
+    TraceProvAggExtra *new_extra = new TraceProvAggExtra;
+    memcpy(new_extra, extra, sizeof(TraceProvAggExtra));
+    return new_extra;
+}
+
 duckdb_aggregate_function *traceprov_create_funcs(
     const uint32_t num_args,
     const bool is_window,
@@ -608,7 +633,7 @@ duckdb_aggregate_function *traceprov_create_funcs(
             func_name += "ignore_gn_";
         }
         func_name += std::to_string(idx + 1);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_ANY);
         duckdb_aggregate_function func = (duckdb_aggregate_function) duckdb_create_aggregate_function();
         PRINT_ON_DEBUG("name: %s", func_name.c_str());
         duckdb_aggregate_function_set_name(func, (new std::string(func_name))->c_str());
@@ -618,7 +643,9 @@ duckdb_aggregate_function *traceprov_create_funcs(
         for (uint32_t arg_idx = 0; arg_idx < total_arg_count; arg_idx++){
             duckdb_aggregate_function_add_parameter(func, type);
         }
-        duckdb_aggregate_function_set_return_type(func, type);
+        duckdb_logical_type return_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        duckdb_aggregate_function_set_return_type(func, return_type);
+        duckdb_destroy_logical_type(&return_type);
         auto extra = new TraceProvAggExtra;
         extra->ignore_gn = ignore_group_number;
         auto tp_duckdb_state = new TraceProvDuckDbState;
@@ -642,6 +669,9 @@ duckdb_aggregate_function *traceprov_create_funcs(
                 extra->slice_vectors[idx] = nullptr;
             }
         }
+        extra->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t>*>;
+        // extra->dynamic_size_cache = nullptr;
+        // memset(extra->size_cache, 0, sizeof(uint8_t)*TRACEPROV_MAX_INLINE_CACHE_SIZE);
 
         duckdb_aggregate_function_set_extra_info(func, extra, cleanup_extra);
         duckdb_destroy_logical_type(&type);
@@ -762,7 +792,7 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     const idx_t num_rows = duckdb_data_chunk_get_size(input);
     const idx_t num_cols = duckdb_data_chunk_get_column_count(input);
     if (num_rows == 0) return;
-    const TraceProvDuckDbState *tp_duckdb_state = (TraceProvDuckDbState *) duckdb_scalar_function_get_extra_info(info);
+    TraceProvDuckDbState *tp_duckdb_state = (TraceProvDuckDbState *) duckdb_scalar_function_get_extra_info(info);
     duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0);
     const uint32_t layer_number = ((uint32_t*)duckdb_vector_get_data(first_col_vector))[0];
     if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true, tp_duckdb_state))){
@@ -770,12 +800,26 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     }
 
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
-    const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
+    if (unlikely(tp_duckdb_state->size_map->find(layer_number) == tp_duckdb_state->size_map->end())) {
+        std::vector<uint8_t> *sizes = new std::vector<uint8_t>;
+        sizes->push_back(sizeof(uint64_t));
+        for (idx_t col_idx = 1; col_idx < num_cols; col_idx++) {
+            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
+            void *col_data = (void *)duckdb_vector_get_data(col_vector);
+            auto col_type = duckdb_vector_get_column_type(col_vector);
+            auto logical_type = reinterpret_cast<duckdb::LogicalType *>(col_type);
+            sizes->push_back(logical_type->id() == duckdb::LogicalType::INTEGER ? (sizeof(uint32_t)) : (sizeof(uint64_t)));
+            duckdb_destroy_logical_type(&col_type);
+        }
+        tp_duckdb_state->size_map->insert({layer_number, sizes});
+    }
+    auto sizes = tp_duckdb_state->size_map->at(layer_number);
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-        uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
+        void *col_data = (void *)duckdb_vector_get_data(col_vector);
+        const uint64_t chunk_size = sizes->at(col_idx) * num_rows;
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
-        memcpy(main_layer->current_row, col_data, sizeof(uint64_t)*num_rows);
+        memcpy(main_layer->current_row, col_data, chunk_size);
         main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
 
@@ -803,7 +847,7 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         duckdb_scalar_function_set_return_type(func, ret_type);
         duckdb_logical_type first_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
         duckdb_scalar_function_add_parameter(func, first_type);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_ANY);
         for (uint32_t arg_idx = 0; arg_idx < idx + 1; arg_idx++){
             duckdb_scalar_function_add_parameter(func, type);
         }
@@ -816,6 +860,8 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         }
         auto tp_duckdb_state = new TraceProvDuckDbState;
         tp_duckdb_state->should_hash = traceprov_use_partition_in_log;
+        tp_duckdb_state->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *>;
+        // memset(tp_duckdb_state->size_cache, 0, sizeof(uint8_t)*TRACEPROV_MAX_INLINE_CACHE_SIZE);
         duckdb_scalar_function_set_extra_info(func, tp_duckdb_state, nullptr);
         funcs[idx] = func;
     }
