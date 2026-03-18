@@ -124,6 +124,9 @@ void traceprov_reset_local(){
                 }
             }
             free(agg_layer->page_mapping);
+            if (agg_layer->layer_fd){
+                close(agg_layer->layer_fd);
+            }
         }
         if (!traceprov_skip_page_cache){
             TraceProvPageCacheEntry *initial_page_entry = &g_page_cache.initial_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
@@ -172,6 +175,8 @@ int initialize_local_context(){
     char buff_2[1024] = {0};
 
     struct traceprov_shared_context *shared_context = NULL;
+    
+    shared_context_mutex.lock();
 
     sprintf(shared_context_file_name, TRACEPROV_SHARED_CONTEXT, DataDir);
 
@@ -186,8 +191,6 @@ int initialize_local_context(){
     }
 
     PRINT_ON_DEBUG("Opened shared context file correctly");
-
-    shared_context_mutex.lock();
 
     if ((rc = flock(shared_context_fd, LOCK_EX))){
         PRINT_ON_DEBUG("Error locking the file. %d", rc);
@@ -799,6 +802,7 @@ std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t
         }
         struct local_context *worker_local_context = (struct local_context *)ptr;
         worker_local_contexts->push_back(worker_local_context);
+        close(fd);
     }
     return worker_local_contexts;
 }

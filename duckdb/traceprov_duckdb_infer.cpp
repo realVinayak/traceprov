@@ -1118,7 +1118,7 @@ void traceprov_attempt_prefaults(){
                 }
                 // elog(INFO, "Pointer: %p, %d, %d\n", layer->page_mapping[page_idx], page_idx, pages_used);
                 // const uint64_t pages_used = 
-                int rc =  madvise(layer->page_mapping[page_idx], pages_used * TRACEPROV_PAGE_SIZE, MADV_POPULATE_WRITE);
+                int rc =  madvise(layer->page_mapping[page_idx], pages_used * TRACEPROV_PAGE_SIZE, MADV_WILLNEED);
                 if (rc != 0){
                     elog(ERROR, "Got error madvise!");
                 }
