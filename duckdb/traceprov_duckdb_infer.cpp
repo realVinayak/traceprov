@@ -1143,6 +1143,8 @@ duckdb_table_function traceprov_create_infer_table_func(){
     return function;
 }
 
+static uint8_t dummy = 0;
+
 void traceprov_attempt_prefaults(){
     initialize_global_context();
     for (auto entry: *g_tp_duckdb_state.worker_local_contexts){
@@ -1170,6 +1172,9 @@ void traceprov_attempt_prefaults(){
                 if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)){
                     elog(ERROR, "Got error mlock all")
                 }
+                // Hopefully setup the TLB too.
+                const auto value = ((uint8_t *)(page_ptr))[0];
+                dummy += value;
             }
         }
     }
