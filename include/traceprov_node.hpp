@@ -142,6 +142,7 @@ extern "C" {
     typedef struct TraceProvPointerContext{
         std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t> *> *map;
         std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
+        std::vector<TraceProvLayerNumber> *aggregate_layers;
     } TraceProvPointerContext;
 
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;

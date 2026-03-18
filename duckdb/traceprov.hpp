@@ -244,7 +244,10 @@ struct traceprov_aggregate_layer {
     // If this is a combine layer, also keep track of the maximum times a group has been accummulated.
     uint64_t max_combined_times;
     #endif
-    
+    uint64_t mask;
+    // This is done so that we can propagate this up later.
+    // TODO: See if this slows down capture.
+    uint64_t record_count;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);

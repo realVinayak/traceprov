@@ -54,6 +54,8 @@ typedef struct TraceProvBindData {
     uint64_t max_worker_idx;
     uint32_t pointer_column_idx;
     std::vector<uint8_t> *sizes;
+    // Needs mask?
+    bool first_mask;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData {
@@ -195,9 +197,12 @@ static TraceProvBindData *setup_layers(
     const uint64_t worker_id,
     uint64_t layer_number,
     const int64_t log_offset,
+    int64_t *record_count,
     const bool expect_present=true,
     const uint64_t partition_idx=0
 ){
+    // -1 so that it can be ignored, if not set.
+    int64_t found_record_count = -1;
 
     initialize_global_context();
     auto my_bind_data = allocate_bind_data();
@@ -278,6 +283,7 @@ static TraceProvBindData *setup_layers(
             my_bind_data->row_count_layer_ptr = rows_layer->page_mapping[0];
         }
         chunk_count = rows_layer->num_rows;
+        found_record_count = rows_layer->record_count;
     }else{
         const void *final_ptr = get_final_ptr(my_bind_data->col_layer_ptr, current_layer);
         chunk_count = ((uint64_t)final_ptr - (uint64_t)my_bind_data->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
@@ -287,6 +293,9 @@ static TraceProvBindData *setup_layers(
     my_bind_data->column_width = column_count;
     my_bind_data->num_rows = chunk_count;
     my_bind_data->is_dummy = is_dummy;
+    if (record_count){
+        *record_count = found_record_count;
+    }
 
     return my_bind_data;
 }
@@ -333,6 +342,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     }
 
     TraceProvBindData *bind_data;
+    int64_t total_record_count = -1;
     if (current_worker_id == 0){
         bind_data = allocate_bind_data();
         bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
@@ -355,7 +365,12 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
             }
             // This assumes that the code before correctly filters those out. Seems 
             if (layer_number_to_search == 0) continue;
-            TraceProvBindData *child_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, false, partition_idx);
+            int64_t child_record_count = -1;
+            TraceProvBindData *child_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, &child_record_count, false, partition_idx);
+            if (child_record_count != -1){
+                if (total_record_count == -1) total_record_count = 0;
+                total_record_count += child_record_count;
+            }
             if (child_bind_data == NULL) continue;
             bind_data->worker_bind_data->push_back(child_bind_data);
             bind_data->is_strict_rows |= child_bind_data->is_strict_rows;
@@ -369,7 +384,12 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         }
         bind_data->rel_args.offset = log_offset;
     }else{
-        bind_data = setup_layers(current_worker_id, layer_number, log_offset, false, partition_idx);
+        int64_t child_record_count = -1;
+        bind_data = setup_layers(current_worker_id, layer_number, log_offset, &child_record_count, false, partition_idx);
+        if (child_record_count != -1){
+            if (total_record_count == -1) total_record_count = 0;
+            total_record_count += child_record_count;
+        }
         if (bind_data != NULL){
             bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
             bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
@@ -400,6 +420,9 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     if (table_flags & TRACEPROV_TABLE_COMBINE){
         bind_data->sizes = new std::vector<uint8_t>(bind_data->column_width, sizeof(uint64_t));
     }else{
+        if (traceprov_use_compact && std::find(pc->aggregate_layers->begin(), pc->aggregate_layers->end(), (uint32_t)layer_number) != pc->aggregate_layers->end()){
+            bind_data->first_mask = true;
+        }
         if (sizes->size() != bind_data->column_width){
             elog(ERROR, "Expected the size vector to be of the same length as the column width!");
         }
@@ -414,6 +437,10 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
         duckdb_destroy_logical_type(&type);
     }
     bind_data->rel_args.table_flags = table_flags;
+
+    if (total_record_count != -1){
+        duckdb_bind_set_cardinality(info, total_record_count, true);
+    }
 
     duckdb_bind_set_bind_data(info, bind_data, free);
 }
@@ -596,7 +623,22 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                         init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, col_log_size);
                     }
                 }else{
-                    for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                    idx_t start_idx = 0;
+                    if (bind_data_combined->first_mask){
+                        // In this case, need to read the first column as 4 bytes, but add the mask in layer.
+                        if (unlikely(bind_data->col_layer->mask == NULL)){
+                            elog(ERROR, "Expected the mask to be present!!");
+                        }
+                        start_idx++;
+                        const uint64_t extra_size = sizeof(uint32_t)*num_rows;
+                        traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
+                        uint64_t *dest_ptr = &((uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0))))[chunk_size];
+                        for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+                            dest_ptr[row_idx] = ((bind_data->col_layer->mask << 32) | (uint64_t)(((uint32_t *)(init_data->col_layer_ptr))[row_idx]));
+                        }
+                        init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
+                    }
+                    for (idx_t col_idx = start_idx; col_idx < bind_data->column_width; col_idx++){
                         const uint8_t unit_size = bind_data_combined->sizes->at(col_idx);
                         const uint64_t extra_size = unit_size*num_rows;
                         traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
@@ -866,7 +908,7 @@ duckdb_scalar_function traceprov_create_table_window_func(
             if (unlikely(window_extra->key_bind_map->find(worker_layer_key) != window_extra->key_bind_map->end())){
                 elog(ERROR, "Expected the key to not be present!");
             }
-            window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1)});
+            window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1, NULL)});
         }
     }
     window_extra->num_cols = num_args;
@@ -875,7 +917,7 @@ duckdb_scalar_function traceprov_create_table_window_func(
 }
 
 void *traceprov_get_partition(const uint64_t worker_id, const uint64_t layer_number, const int64_t log_offset, const uint32_t entry_idx, uint64_t *partition_id){
-    auto bind_data = setup_layers(worker_id, layer_number, log_offset, true);
+    auto bind_data = setup_layers(worker_id, layer_number, log_offset, NULL, true);
     auto value = (uint64_t *)malloc(sizeof(uint64_t)*(bind_data->column_width));
     read_at_offset(log_offset, bind_data, value, NULL);
     if (value == 0)
@@ -1116,11 +1158,17 @@ void traceprov_attempt_prefaults(){
                 }else{
                     pages_used = 1;
                 }
-                // elog(INFO, "Pointer: %p, %d, %d\n", layer->page_mapping[page_idx], page_idx, pages_used);
-                // const uint64_t pages_used = 
-                int rc =  madvise(layer->page_mapping[page_idx], pages_used * TRACEPROV_PAGE_SIZE, MADV_WILLNEED);
+                void *page_ptr = layer->page_mapping[page_idx];
+                const size_t page_size = pages_used * TRACEPROV_PAGE_SIZE;
+                int rc =  madvise(page_ptr, page_size, MADV_WILLNEED);
                 if (rc != 0){
                     elog(ERROR, "Got error madvise!");
+                }
+                if(mlock(page_ptr, page_size)){
+                    elog(ERROR, "Got error mlock!");
+                }
+                if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)){
+                    elog(ERROR, "Got error mlock all")
                 }
             }
         }

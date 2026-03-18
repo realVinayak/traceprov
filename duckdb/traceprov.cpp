@@ -123,6 +123,7 @@ void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state stat
     *((uint64_t *)LAYER->current_row) = CHUNK_SIZE; \
     LAYER->current_row = INCR_BY_BYTES(LAYER->current_row, sizeof(uint64_t)); \
     LAYER->num_rows++; \
+    LAYER->record_count += CHUNK_SIZE; \
 } \
 
 #define TRACPROV_SET_BUCKET_ON_STATE(STATE, LAYER, EXTRA) { \
@@ -275,19 +276,42 @@ void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb
             return traceprov_update_partition(info, input, states);
     }
 
-    const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
+
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
-        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
-        for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-            if (agg_contexts[row_idx]->layer_number == 0){
-                agg_contexts[row_idx]->layer_number = layer_number;
-                // Annotate the group with the worker id.
-                agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
-                agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
+        // Done this way to avoid checking the condition at each iter.
+        if (traceprov_use_compact){
+            const uint64_t chunk_size = sizeof(uint32_t)*num_rows;
+            TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
+            for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+                if (agg_contexts[row_idx]->layer_number == 0){
+                    agg_contexts[row_idx]->layer_number = layer_number;
+                    // Annotate the group with the worker id.
+                    agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
+                    agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
+                }
+                *((uint32_t*)main_layer->current_row) = (uint32_t)agg_contexts[row_idx]->group_cnt;
+                main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint32_t));
+                if (unlikely(main_layer->mask == 0)){
+                    // Extract out the mask.
+                    // During reading, we reapply this mask ;)
+                    main_layer->mask = agg_contexts[row_idx]->group_cnt >> 32;
+                }
             }
-            *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->group_cnt;
-            main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint64_t));
+        }else{
+            const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
+            TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
+            for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+                if (agg_contexts[row_idx]->layer_number == 0){
+                    agg_contexts[row_idx]->layer_number = layer_number;
+                    // Annotate the group with the worker id.
+                    agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
+                    agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
+                }
+                *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->group_cnt;
+                main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint64_t));
+            }
         }
+
     }
 
     auto sizes = extra->size_map->at(layer_number);
@@ -830,6 +854,7 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     grow_if_full(chunk_size_layer);
     *((uint64_t *)chunk_size_layer->current_row) = num_rows;
     chunk_size_layer->current_row = INCR_BY_BYTES(chunk_size_layer->current_row, sizeof(uint64_t));
+    chunk_size_layer->record_count += num_rows;
     chunk_size_layer->num_rows++;
 }
 

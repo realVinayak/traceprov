@@ -9,6 +9,7 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
 typedef struct TraceProvTableExtra {
     void *partition_spec;
     void *pointer_spec;
+    void *aggregate_layers;
 } TraceProvTableExtra;
 
 typedef std::unordered_map<TraceProvLayerNumber, std::vector<std::string *> *> TraceProvLayerString;

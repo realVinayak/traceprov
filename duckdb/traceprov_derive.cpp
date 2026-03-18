@@ -525,6 +525,7 @@ TraceProvPointerContext *traceprov_make_pointer_context(){
     TraceProvPointerContext *p_context = new TraceProvPointerContext;
     p_context->map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t>*>;
     p_context->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t>*>;
+    p_context->aggregate_layers = new std::vector<TraceProvLayerNumber>;
     return p_context;
 }
 
@@ -573,6 +574,7 @@ void traceprov_infer_sizes(
     ListCell *entry_cursor;
     if (graph->graph_type == TP_AGGREGATE || graph->graph_type == TP_PURE_AGGREGATE){
         pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint64_t));
+        pointer_context->aggregate_layers->push_back(graph->headNumber);
     }
     foreach(entry_cursor, graph->entries){
         const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
