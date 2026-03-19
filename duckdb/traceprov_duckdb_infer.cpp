@@ -1147,6 +1147,7 @@ static uint8_t dummy = 0;
 
 void traceprov_attempt_prefaults(){
     initialize_global_context();
+    auto start_time = std::chrono::steady_clock::now();
     for (auto entry: *g_tp_duckdb_state.worker_local_contexts){
         for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
             const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
@@ -1169,15 +1170,18 @@ void traceprov_attempt_prefaults(){
                 if(mlock(page_ptr, page_size)){
                     elog(ERROR, "Got error mlock!");
                 }
-                if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)){
-                    elog(ERROR, "Got error mlock all")
-                }
+                // if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)){
+                //     elog(ERROR, "Got error mlock all")
+                // }
                 // Hopefully setup the TLB too.
                 const auto value = ((uint8_t *)(page_ptr))[0];
                 dummy += value;
             }
         }
     }
+    auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    elog(INFO, "Time for prefaults: %ld", (duration).count());
 }
 
 #endif
