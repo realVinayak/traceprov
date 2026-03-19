@@ -1019,7 +1019,7 @@ TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, 
         if (options->traceprov_materialize_derivation){
             std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
             // node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-            node_sql = "create or replace temporary table " + table_name + " as (" + node_sql + ")";
+            node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
             // node_sql = "copy (" + node_sql + ") to " + table_name + ".parquet";
             // node_sql = "EXPLAIN (ANALYZE) " + node_sql;
             // for (auto ddl_string : ddls){
