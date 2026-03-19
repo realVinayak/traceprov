@@ -87,4 +87,9 @@ def make_duckdb_parse():
         action=argparse.BooleanOptionalAction,
         default=False,
     )
+    parser.add_argument(
+        "--pending",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser

@@ -111,7 +111,8 @@ def run():
                 traceprov_split_combine=parsed.traceprov_split_combine,
                 use_synthetic_infer=parsed.use_syn_infer,
                 use_union_infer=parsed.use_union_infer,
-                traceprov_use_compact=parsed.traceprov_use_compact
+                traceprov_use_compact=parsed.traceprov_use_compact,
+                pending=parsed.pending
             )
 
         if parsed.sample_inference:

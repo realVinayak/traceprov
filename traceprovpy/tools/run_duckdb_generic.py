@@ -546,7 +546,8 @@ def run_single(
     use_synthetic_infer: bool = True,
     use_union_infer: bool = True,
     use_extra_threads: bool = True,
-    traceprov_use_compact: bool = False
+    traceprov_use_compact: bool = False,
+    pending: bool = False
 ):
     if validate:
         materialize_infer = True
@@ -588,7 +589,8 @@ def run_single(
         i=base_sql.as_posix(),
         time="./tmp/base_time.json",
         profile="./tmp/base_profile_%d.json",
-        settings="./tmp/base_settings.json"
+        settings="./tmp/base_settings.json",
+        pending=pending
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
