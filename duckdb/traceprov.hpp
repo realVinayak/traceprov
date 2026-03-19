@@ -50,6 +50,8 @@
 // Whether to map the memory page via huge page.
 #define TRACEPROV_MAP_HUGE_PAGE 1
 
+#define TRACEPROV_DEBUG_PERF 1
+
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
 #endif

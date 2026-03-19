@@ -39,6 +39,8 @@ extern "C" {
 #define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
 #define TP_DISABLE_PROFILING "PRAGMA disable_profiling;"
 
+#define TP_ENABLE_DETAILED_PROFILING "PRAGMA profiling_mode = 'detailed';"
+
 // For OLD SmokedDuck.
 #define TP_ENABLE_LINEAGE "PRAGMA enable_lineage;"
 #define TP_DISABLE_LINEAGE "PRAGMA disable_lineage;"
@@ -451,6 +453,9 @@ void perform_query(
         if (final_profile_out == NULL)
             elog(ERROR, "Expected profile out to be set!");
         DUCKDB_RUN_SHORT_QUERY(con, (options->query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
+        #if TRACEPROV_DEBUG_PERF==1
+        DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_DETAILED_PROFILING, "enable detailed profiling");
+        #endif
         DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
     }
 
