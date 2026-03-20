@@ -369,21 +369,11 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64_t)*layer->num_pk_records))
 
 #if TRACEPROV_SD_MODE==0
-void traceprov_initialize(duckdb_function_info info, duckdb_aggregate_state state);
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
-void traceprov_combine(
-    duckdb_function_info info,
-    duckdb_aggregate_state *source_p,
-    duckdb_aggregate_state *target_p,
-    idx_t count
-);
-void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *source_p, duckdb_vector result, idx_t count, idx_t offset);
-idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
 void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection);
-duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false, const uint64_t use_agg_part = 0);
-duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
+
 duckdb_scalar_function traceprov_create_reinit_state();
 duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
 #endif
