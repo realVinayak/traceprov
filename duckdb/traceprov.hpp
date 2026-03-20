@@ -17,7 +17,12 @@ using namespace duckdb;
 // TODO: Make this customimizable..
 #define DataDir "./"
 #define MyProcPid getpid()
+
+#ifdef __APPLE__
+#define MyProcTid getpid()
+#else
 #define MyProcTid gettid()
+#endif
 
 // TODO: Make this per-process to enable concurrent traceprovs.
 // The prefix here is the base dir (root of data dir.)
@@ -371,24 +376,28 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64_t)*layer->num_pk_records))
 
+typedef uint32_t TraceProvLayerNumber;
+
+typedef std::unordered_map<TraceProvLayerNumber, std::vector<uint64_t> *> TraceProvNullMap;
+
 #if TRACEPROV_SD_MODE==0
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
 
 
-void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection);
+void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map);
 
 duckdb_scalar_function traceprov_create_reinit_state();
-duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile);
+duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile, TraceProvNullMap *null_map);
 #endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-typedef uint32_t TraceProvLayerNumber;
 
 typedef struct TraceProvDuckDbState {
     bool should_hash;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
+    TraceProvNullMap *null_map;
 } TraceProvDuckDbState;
 
 struct TraceProvAggExtra : public AggregateFunctionInfo {
@@ -402,6 +411,7 @@ struct TraceProvAggExtra : public AggregateFunctionInfo {
     uint64_t **dynamic_col_cache;
     uint64_t use_part_agg;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
+    TraceProvNullMap *null_map;
 };
 
 // Simplifies stuff.
@@ -410,24 +420,28 @@ struct TraceProvAggBind : public FunctionData  {
     explicit TraceProvAggBind(
         TraceProvAggExtra *extra,
         TraceProvLayerNumber layer_number,
-        std::vector<uint8_t> *sizes
+        std::vector<uint8_t> *sizes,
+        bool infer_null,
+        std::vector<uint64_t> *cols
     ) :
-        extra(extra), layer_number(layer_number), sizes(sizes) {
+        extra(extra), layer_number(layer_number), sizes(sizes), infer_null(infer_null), cols(cols) {
     }
 
     TraceProvAggExtra *extra;
+    TraceProvLayerNumber layer_number;
     // Sizes of the different columns.
     // This is cached, and used just once.
     std::vector<uint8_t> *sizes;
-    TraceProvLayerNumber layer_number;
+    bool infer_null;
+    std::vector<uint64_t> *cols;
 public:
     unique_ptr<FunctionData> Copy() const override {
-        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes);
+        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes, infer_null, cols);
     }
 
     bool Equals(const FunctionData &other_p) const override {
         auto &other = other_p.Cast<TraceProvAggBind>();
-        return extra == other.extra && layer_number == other.layer_number && sizes == other.sizes;
+        return extra == other.extra && layer_number == other.layer_number && sizes == other.sizes && infer_null == other.infer_null && cols == other.cols;
     }
 };
 

@@ -11,7 +11,7 @@ FROM (
                     traceprov_agg_key_parallel_offset_2 (
                         1,
                         customer.rowid::int,
-                        coalesce(orders.rowid, 0)::int
+                        orders.rowid::int
                     ) as mapped_agg
                 from customer
                     left outer join orders on c_custkey = o_custkey

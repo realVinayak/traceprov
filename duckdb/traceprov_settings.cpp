@@ -34,3 +34,7 @@ uint32_t traceprov_thread_count = 1;
 
 // Use compact representation?
 bool traceprov_use_compact = false;
+
+// Assume that the value can be NULL?
+// If false, it tries looking at the graph to determine if the value in a layer can be NULL or not.
+bool traceprov_assume_null = false;

@@ -7,10 +7,13 @@ from (
         from customer
             left outer join orders on c_custkey = o_custkey
             and o_comment not like '%special%requests%'
-        where (customer.rowid, coalesce(orders.rowid, 0)) in (
-                select column_1_1,
-                    column_2
+        where EXISTS (
+                select *
                 from traceprov_lineage_1
+                where column_1_1 is not distinct
+                from customer.rowid
+                    and column_2 is not distinct
+                from orders.rowid
             )
         group by c_custkey
     ) as c_orders (c_custkey, c_count)

@@ -9,7 +9,8 @@ extern "C" {
     List* deserializeTraceProvDependency(
         TraceProvParseContext **parsed_context,
         char **parsed_back_query,
-        const char *traceprov_graph_file
+        const char *traceprov_graph_file,
+        const bool expect_present=true
     );
     TraceProvInferAbstractTree* makeTraceProvInferAbstractTree(const TraceProvLayerNumber layer_number);
     List *getTraceProvInferAbstractTreeNodes(const TraceProvInferAbstractTree* tree);

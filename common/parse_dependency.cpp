@@ -20,10 +20,20 @@ static TraceProvEntry *_deserializeTraceProvEntry(FILE *input_file);
 List* deserializeTraceProvDependency(
     TraceProvParseContext **parsed_context,
     char **parsed_back_query,
-    const char *traceprov_graph_file
+    const char *traceprov_graph_file,
+    const bool expect_present
 ){
     FILE *fptr = fopen(traceprov_graph_file, "rb"); 
     if (fptr == NULL) {
+        if (!expect_present){
+            if (parsed_back_query){
+                *parsed_back_query = NULL;
+            }
+            if (parsed_context){
+                *parsed_context = NULL;
+            }
+            return NIL;
+        }
         EXIT_WITH_MESSAGE("Error opening file for dumping graph!");
     }
     TraceProvDependencyMetaHeader metaHeader;

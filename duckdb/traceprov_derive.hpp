@@ -20,4 +20,6 @@ typedef struct TraceProvInferExtra {
     std::vector<duckdb_connection> *cached_connections;
 } TraceProvInferExtra;
 
+TraceProvNullMap *traceprov_infer_nulls();
+
 #endif

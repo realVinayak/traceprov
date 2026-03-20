@@ -3,6 +3,7 @@
 #include "utils.hpp"
 #include "derivation_utils.hpp"
 #include "traceprov_settings.hpp"
+#include "traceprov_derive.hpp"
 
 extern "C" {
     #include "utils.h"
@@ -529,6 +530,7 @@ TraceProvPointerContext *traceprov_make_pointer_context(){
     return p_context;
 }
 
+
 void traceprov_infer_pointers(
     const TraceProvDependency *graph,
     const TraceProvPointerContext *pointer_context,
@@ -594,6 +596,49 @@ void traceprov_infer_sizes(
             pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint64_t));
         }
     }
+}
+
+
+static void _traceprov_infer_nulls(const TraceProvDependency *graph, TraceProvNullMap *null_map){
+    const TraceProvLayerNumber layer_number = graph->headNumber;
+    if (null_map->find(layer_number) != null_map->end()){
+        elog(ERROR, "Expected to not find the layer in the null map!");
+    }
+    ListCell *entry_cursor;
+    std::vector<uint64_t> *nullable_cols = new std::vector<uint64_t>;
+    foreach(entry_cursor, graph->entries){
+        const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+        if (te->is_nullable){
+            nullable_cols->push_back(foreach_current_index(entry_cursor));
+        }
+        if (te->kind == TP_ENTRY_KIND_POINTER){
+            TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
+            _traceprov_infer_nulls(child_graph, null_map);
+        }
+    }
+    if (nullable_cols->size()){
+        null_map->insert({layer_number, nullable_cols});
+    }
+}
+
+// Infers which columns are nullable in a graph.
+TraceProvNullMap *traceprov_infer_nulls(){
+    TraceProvParseContext *parsed_back_context = NULL;
+    List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL, TRACEPROV_GRAPH_FILE, false);
+    if (graphs == NIL){
+        return NULL;
+    }
+    ListCell *graph_cursor;
+    auto null_map = new TraceProvNullMap;
+    foreach(graph_cursor, graphs){
+        TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
+        _traceprov_infer_nulls(graph, null_map);
+    }
+    foreach(graph_cursor, parsed_back_context->properties->sublink_map){
+        TraceProvDependency *child_sublink = (TraceProvDependency *)lfirst(graph_cursor);
+        _traceprov_infer_nulls(child_sublink, null_map);
+    }
+    return null_map;
 }
 
 static TraceProvInferAbstractTree* derive_sublinks(

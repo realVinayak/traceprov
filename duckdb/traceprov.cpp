@@ -9,6 +9,7 @@
 #include "traceprov_settings.hpp"
 #include <functional>
 #include <thread>
+#include "traceprov_derive.hpp"
 
 using namespace duckdb;
 
@@ -21,6 +22,12 @@ thread_local struct current_context traceprov_current = {
     .maximum_local_layer_used_copy = 0,
     .page_cache_idx = 0
 };
+
+typedef struct TraceProvLogBind {
+    std::vector<uint64_t> *cols;
+    bool infer_null;
+    TraceProvLayerNumber layer_number;
+} TraceProvLogBind;
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
@@ -286,9 +293,9 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     const idx_t num_cols = duckdb_data_chunk_get_column_count(input);
     if (num_rows == 0) return;
     TraceProvDuckDbState *tp_duckdb_state = (TraceProvDuckDbState *) duckdb_scalar_function_get_extra_info(info);
-    duckdb_vector first_col_vector = duckdb_data_chunk_get_vector(input, 0);
-    const uint32_t layer_number = ((uint32_t*)duckdb_vector_get_data(first_col_vector))[0];
-    const bool can_be_null = true;
+    const TraceProvLogBind *bind_data = (TraceProvLogBind *) duckdb_scalar_function_get_bind_data(info);
+    const TraceProvLayerNumber layer_number = bind_data->layer_number;
+    const bool can_be_null = bind_data->infer_null || bind_data->cols != NULL;
     if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true, tp_duckdb_state, can_be_null))){
         elog(ERROR, "Error setting up local or layer!");
     }
@@ -340,6 +347,10 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
         validity_to_append.reserve(num_cols);
         const uint64_t validity_size = ((num_rows - 1) / 64) + 1;
         for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
+            if (bind_data->cols){
+                const bool is_nullable = std::find(bind_data->cols->begin(), bind_data->cols->end(), col_idx - 1) != bind_data->cols->end();
+                if (!is_nullable) continue;
+            }   
             duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
             uint64_t *validity = duckdb_vector_get_validity(col_vector);
             if (validity == NULL) continue;
@@ -376,13 +387,68 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
             null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, sizeof(uint64_t)*validity_size);
         }
     }
+}
 
+
+
+static void *copy_traceprov_log_bind(void *bind_data){
+    TraceProvLogBind *tp_bind_data = (TraceProvLogBind *)bind_data;
+    TraceProvLogBind *tp_new_bind_data = (TraceProvLogBind *)malloc(sizeof(TraceProvLogBind));
+    *tp_new_bind_data = *tp_bind_data;
+    if (tp_new_bind_data->cols){
+        auto new_cols = new std::vector<uint64_t>;
+        for (auto col: *tp_new_bind_data->cols){
+            new_cols->push_back(col);
+        }
+        tp_new_bind_data->cols = new_cols;
+    }
+    return tp_new_bind_data;
+}
+
+void traceprov_log_bind(duckdb_bind_info info){
+    const TraceProvDuckDbState *state = (TraceProvDuckDbState *)duckdb_scalar_function_bind_get_extra_info(info);
+    TraceProvLogBind *bind_data = (TraceProvLogBind*)malloc(sizeof(TraceProvLogBind));
+    bind_data->infer_null = traceprov_assume_null;
+    bind_data->cols = NULL;
+    bind_data->layer_number = 0;
+
+    auto expr = duckdb_scalar_function_bind_get_argument(info, 0);
+    auto foldable = duckdb_expression_is_foldable(expr);
+    if (!foldable){
+        elog(ERROR, "Expected first arg to be foldable!");
+    }
+    duckdb_client_context context;
+    duckdb_scalar_function_get_client_context(info, &context);
+    duckdb_value value;
+    auto error_data = duckdb_expression_fold(context, expr, &value);
+    auto has_error = duckdb_error_data_has_error(error_data);
+    if (has_error){
+        elog(ERROR, "Error evaluating exprn: %s", duckdb_error_data_message(error_data));
+    }
+    const TraceProvLayerNumber layer_number = duckdb_get_int32(value);
+    duckdb_destroy_value(&value);
+    duckdb_destroy_expression(&expr);
+    duckdb_destroy_client_context(&context);
+
+    bind_data->layer_number = layer_number;
+
+    if (state != NULL && state->null_map != NULL){
+        const bool has_nullables = state->null_map->find(layer_number) != state->null_map->end();
+        if (has_nullables){
+            auto cols = state->null_map->at(layer_number);
+            if (cols->size() > 0){
+                bind_data->cols = cols;
+            }
+        }
+    }
+    duckdb_scalar_function_set_bind_data(info, bind_data, free);
+    duckdb_scalar_function_set_bind_data_copy(info, copy_traceprov_log_bind);
 }
 
 #define TRACEPROV_DUCKDB_LOG_FUNC_NAME          "traceprov_log_entry_%d"
 #define TRACEPROV_DUCKDB_VOLATILE_LOG_FUNC_NAME "traceprov_log_entry_volatile_%d"
 
-duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile){
+duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile, TraceProvNullMap *null_map){
     duckdb_scalar_function *funcs = (duckdb_scalar_function *)malloc(sizeof(duckdb_scalar_function) * num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
         char func_name[256] = {0};
@@ -401,6 +467,7 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         duckdb_destroy_logical_type(&type);
         duckdb_destroy_logical_type(&ret_type);
         duckdb_scalar_function_set_function(func, traceprov_log);
+        duckdb_scalar_function_set_bind(func, traceprov_log_bind);
         if (is_volatile){
             duckdb_scalar_function_set_volatile(func);
         }
@@ -408,6 +475,7 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         auto tp_duckdb_state = new TraceProvDuckDbState;
         tp_duckdb_state->should_hash = traceprov_use_partition_in_log;
         tp_duckdb_state->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *>;
+        tp_duckdb_state->null_map = null_map;
         duckdb_scalar_function_set_extra_info(func, tp_duckdb_state, nullptr);
         funcs[idx] = func;
     }
@@ -444,7 +512,17 @@ unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<E
         }
         sizes->push_back(arg_size);
     }
-    auto bind_ptr = make_uniq<TraceProvAggBind>(extra, layer_number, sizes);
+    std::vector<uint64_t> *null_cols = NULL;
+    if (extra->null_map != NULL){
+        const bool has_null_cols = extra->null_map->find(layer_number) != extra->null_map->end();
+        if (has_null_cols){
+            auto cols = extra->null_map->at(layer_number);
+            if (cols->size() > 0){
+                null_cols = cols;
+            }
+        }
+    }
+    auto bind_ptr = make_uniq<TraceProvAggBind>(extra, layer_number, sizes, traceprov_assume_null, null_cols);
     return bind_ptr;
 }
 
@@ -472,7 +550,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     if (extra->ignore_gn){
         num_cols -= 1;
     }
-    const bool can_be_null = true;
+    const bool can_be_null = bind_data.infer_null || bind_data.cols != NULL;
     if (initialize_local_and_layer(layer_number, num_cols, 1, true, extra->state, can_be_null)){
         elog(ERROR, "Error setting up local or layer!");
         return;
@@ -538,6 +616,11 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
         validity_to_append.reserve(num_cols);
         const uint64_t validity_size = ((num_rows - 1) / 64) + 1;
         for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
+            if (bind_data.cols){
+                const bool is_nullable = std::find(bind_data.cols->begin(), bind_data.cols->end(), col_idx - 1) != bind_data.cols->end();
+                // This way, we are able to skip checking entries that are guaranteed to be not-nullable.
+                if (!is_nullable) continue;
+            }
             auto validity = FlatVector::Validity(inputs[col_idx]);
             if (validity.AllValid()) continue;
             validity_to_append.push_back(col_idx);
@@ -707,7 +790,7 @@ unique_ptr<CreateInfo> TraceProvCreateAggregateFunctionInfo::Copy() const {
     return std::move(result);
 }
 
-void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection){
+void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map){
     auto con = reinterpret_cast<duckdb::Connection *>(connection);
     auto extra = duckdb::make_shared_ptr<TraceProvAggExtra>();
     extra->ignore_gn = false;
@@ -717,6 +800,7 @@ void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_conne
     extra->hasher = std::hash<uint64_t>();
     extra->dynamic_col_cache = nullptr;
     extra->use_part_agg = false;
+    extra->null_map = null_map;
     // Only in this case both creating entries.
     for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
         if (tp_duckdb_state->should_hash) {
