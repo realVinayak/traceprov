@@ -1,5 +1,6 @@
 from collections import defaultdict
 from functools import reduce
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -75,7 +76,9 @@ def extract_bucket_category(file_name: str):
 
 
 def extract_thread_category(file_name: str):
-    match = re.search(r"_thread_(\d+)|_threads_(\d+)", file_name)
+    match = re.search(r"_thread_(\d+)", file_name)
+    if match is None:
+        match = re.search(r"_threads_(\d+)", file_name)
     assert match is not None
     bucket = int(match.groups()[0])
     return str(bucket)
