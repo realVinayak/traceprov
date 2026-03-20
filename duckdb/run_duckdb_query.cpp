@@ -686,20 +686,21 @@ int main(int argc, char **argv){
 
     #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
-    duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
-    duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
-    duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
+    // duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
+    // duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
+    // duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
     duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false);
     duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true);
+    traceprov_create_and_register_agg(num_args, con);
     for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
-        std::cout << "ran aggregate register successfully!" << std::endl;
+        // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
+        // std::cout << "ran aggregate register successfully!" << std::endl;
     
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, ignore_gn_funcs[farg_idx]));
-        std::cout << "ran aggregate register ignore group nums successfully!" << std::endl;
+        // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, ignore_gn_funcs[farg_idx]));
+        // std::cout << "ran aggregate register ignore group nums successfully!" << std::endl;
 
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, window_funcs[farg_idx]));
-        std::cout << "ran aggregate register window successfully!" << std::endl;
+        // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, window_funcs[farg_idx]));
+        // std::cout << "ran aggregate register window successfully!" << std::endl;
 
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, log_funcs[farg_idx]));
         std::cout << "ran top-level log register successfully!" << std::endl;

@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <functional>
 
+using namespace duckdb;
+
 #define TP_STD_VECTOR_SIZE 2048
 
 // TODO: Make this customimizable..
@@ -379,6 +381,7 @@ void traceprov_finalize(duckdb_function_info info, duckdb_aggregate_state *sourc
 idx_t traceprov_get_state_size(duckdb_function_info info);
 
 
+void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection);
 duckdb_aggregate_function *traceprov_create_funcs(uint32_t num_args, const bool is_window = false, const bool ignore_group_number = false, const uint64_t use_agg_part = 0);
 duckdb_aggregate_function *traceprov_create_window_funcs(const uint32_t num_args);
 duckdb_scalar_function traceprov_create_reinit_state();
@@ -395,8 +398,7 @@ typedef struct TraceProvDuckDbState {
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
 } TraceProvDuckDbState;
 
-
-typedef struct TraceProvAggExtra {
+struct TraceProvAggExtra : public AggregateFunctionInfo {
     bool ignore_gn;
     TraceProvDuckDbState *state;
     std::hash<uint64_t> hasher;
@@ -407,7 +409,34 @@ typedef struct TraceProvAggExtra {
     uint64_t **dynamic_col_cache;
     uint64_t use_part_agg;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
-} TraceProvAggExtra;
+};
+
+// Simplifies stuff.
+struct TraceProvAggBind : public FunctionData  {
+
+    explicit TraceProvAggBind(
+        TraceProvAggExtra *extra,
+        TraceProvLayerNumber layer_number,
+        std::vector<uint8_t> *sizes
+    ) :
+        extra(extra), layer_number(layer_number), sizes(sizes) {
+    }
+
+    TraceProvAggExtra *extra;
+    // Sizes of the different columns.
+    // This is cached, and used just once.
+    std::vector<uint8_t> *sizes;
+    TraceProvLayerNumber layer_number;
+public:
+    unique_ptr<FunctionData> Copy() const override {
+        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes);
+    }
+
+    bool Equals(const FunctionData &other_p) const override {
+        auto &other = other_p.Cast<TraceProvAggBind>();
+        return extra == other.extra && layer_number == other.layer_number && sizes == other.sizes;
+    }
+};
 
 extern uint64_t traceprov_reinit_counter;
 
