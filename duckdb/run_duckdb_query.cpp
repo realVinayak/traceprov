@@ -738,7 +738,7 @@ int main(int argc, char **argv){
     #endif
 
     if (options.min_layer_number){
-        traceprov_current.maximum_local_layer_used = options.min_layer_number;
+        traceprov_current.maximum_local_layer_used_copy = options.min_layer_number;
     }
 
     if (options.dry_run)

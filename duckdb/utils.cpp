@@ -158,7 +158,7 @@ void traceprov_reset_local(){
     traceprov_current.traceprov_shared_context_fd  = -1;
     traceprov_current.shared_context = NULL;
     traceprov_current.local_context = NULL;
-    traceprov_current.maximum_local_layer_used = 0;
+    traceprov_current.maximum_local_layer_used = traceprov_current.maximum_local_layer_used_copy;
 }
 
 int initialize_local_context(){
@@ -216,7 +216,7 @@ int initialize_local_context(){
         sprintf(buff, TRACEPROV_GRAPH_FILE, DataDir);
         int graph_file_fd = open(buff, O_RDWR);
         if (graph_file_fd < 0){
-            elog(ERROR, "Error opening the graph file for read!");   
+            elog(INFO, "Error opening the graph file for read!");   
         }else{
             if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32_t))) == -1){
                 elog(ERROR, "Read from graph file failed!");
@@ -486,7 +486,8 @@ int initialize_layer_file(
     // Specifies the length of the record, excluding keys.
     const uint32_t record_length,
     const bool set_current_row,
-    const TraceProvDuckDbState *state
+    const TraceProvDuckDbState *state,
+    const bool can_be_null
 ){
 
     /**
@@ -506,14 +507,22 @@ int initialize_layer_file(
 
     if (is_already_present) return 0;
 
-    uint32_t record_layer_number = 0;
     if (record_length > 0 && layer->rows_layer_number == 0){
-        record_layer_number = ++traceprov_current.maximum_local_layer_used;
+        uint32_t record_layer_number = ++traceprov_current.maximum_local_layer_used;
         if ((rc = get_or_create_layer(record_layer_number, NULL, record_length, set_current_row, &is_already_present))){
             elog(ERROR, "Error creating the layer file (key)");
             return rc;
         }
         layer->rows_layer_number = record_layer_number;
+    }
+
+    if (can_be_null && layer->null_layer_number == 0){
+        uint32_t null_layer_number = ++traceprov_current.maximum_local_layer_used;
+        if ((rc = get_or_create_layer(null_layer_number, NULL, record_length, set_current_row, &is_already_present))){
+            elog(ERROR, "Error creating the null layer file (key)");
+            return rc;
+        }
+        layer->null_layer_number = null_layer_number;
     }
 
     if (state != NULL){
@@ -527,7 +536,7 @@ int initialize_layer_file(
             for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
                 const uint32_t hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
                 layer->buckets[bucket_idx] = hash_bucket_layer_number;
-                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL)){
+                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL, can_be_null)){
                     elog(ERROR, "Error initializing the hash buckets");
                 }
             }

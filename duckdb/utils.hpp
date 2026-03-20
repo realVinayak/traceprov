@@ -41,7 +41,8 @@ int initialize_layer_file(
     // Specifies the length of the record, excluding keys.
     const uint32_t record_length,
     const bool set_current_row,
-    const TraceProvDuckDbState *state
+    const TraceProvDuckDbState *state,
+    const bool can_be_null
 );
 
 extern thread_local struct current_context traceprov_current;

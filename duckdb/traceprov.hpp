@@ -252,6 +252,8 @@ struct traceprov_aggregate_layer {
     // This is done so that we can propagate this up later.
     // TODO: See if this slows down capture.
     uint64_t record_count;
+    // If the values here can be null, it stores the layer where the nulls are stored.
+    uint32_t null_layer_number;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -300,6 +302,7 @@ struct current_context {
     struct local_context *local_context;
     // This is used during the logging of groups (to determine where the combiner layer goes.)
     uint32_t  maximum_local_layer_used;
+    uint32_t  maximum_local_layer_used_copy;
     uint64_t  local_reinit_counter;
     // 1-indexed.
     // Gets set the first time.
