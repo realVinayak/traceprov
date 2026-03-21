@@ -810,7 +810,7 @@ int main(int argc, char **argv){
             uint32_t extra_idx = 0;
 
             for (auto extra_sql: extra_sqls_clone){
-                traceprov_attempt_prefaults();
+                // traceprov_attempt_prefaults();
                 extra_idx++;
                 Options new_options = options;
                 new_options.no_reinit_state = true;
