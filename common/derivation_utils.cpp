@@ -454,34 +454,6 @@ extern "C" {
             flattenTraceProvInferAbstractTree(child, result_map, parse_context);
         }
     }
-
-    std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
-        if (node->tag == T_TP_RELATION){
-            node->alias_name = tp_parse_get_unique_alias(context.context);
-            return traceprov_relation_to_sql((TraceProvRelation *)node, context);
-        }
-        if (node->tag == T_TP_JOIN){
-            node->alias_name = tp_parse_get_unique_alias(context.context);
-            return traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
-        }
-        if (node->tag == T_TP_APPEND){
-            return traceprov_append_to_sql((TraceProvAppend *)node, context);
-        }
-        // if (node->tag == T_TP_WINDOW_READ){
-        //     node->alias_name = tp_parse_get_unique_alias(context.context);
-        //     return traceprov_window_read_to_sql((TraceProvWindowRead *)node, context);
-        // }
-        // if (node->tag == T_TP_FILTER){
-        //     node->alias_name = tp_parse_get_unique_alias(context.context);
-        //     return traceprov_filter_to_sql((TraceProvFilter *)node, context);
-        // }
-        // if (node->tag == T_TP_EXISTS){
-        //     node->alias_name = tp_parse_get_unique_alias(context.context);
-        //     return traceprov_exists_to_sql((TraceProvExists *)node, context);
-        // }
-        EXIT_WITH_MESSAGE("Found handling invalid node in toSQL");
-    }
-
     std::string safe_append(std::string old, char *other){
         std::string new_str = old + (std::string(other));
         tp_free(other);
@@ -679,4 +651,31 @@ static std::string traceprov_get_column_select(
         auto alias_repr = std::string(tp_psprintf("%s(%s)", alias_name, select.c_str()));
         return alias_repr;
     }
+}
+
+std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
+    if (node->tag == T_TP_RELATION){
+        node->alias_name = tp_parse_get_unique_alias(context.context);
+        return traceprov_relation_to_sql((TraceProvRelation *)node, context);
+    }
+    if (node->tag == T_TP_JOIN){
+        node->alias_name = tp_parse_get_unique_alias(context.context);
+        return traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
+    }
+    if (node->tag == T_TP_APPEND){
+        return traceprov_append_to_sql((TraceProvAppend *)node, context);
+    }
+    // if (node->tag == T_TP_WINDOW_READ){
+    //     node->alias_name = tp_parse_get_unique_alias(context.context);
+    //     return traceprov_window_read_to_sql((TraceProvWindowRead *)node, context);
+    // }
+    // if (node->tag == T_TP_FILTER){
+    //     node->alias_name = tp_parse_get_unique_alias(context.context);
+    //     return traceprov_filter_to_sql((TraceProvFilter *)node, context);
+    // }
+    // if (node->tag == T_TP_EXISTS){
+    //     node->alias_name = tp_parse_get_unique_alias(context.context);
+    //     return traceprov_exists_to_sql((TraceProvExists *)node, context);
+    // }
+    EXIT_WITH_MESSAGE("Found handling invalid node in toSQL");
 }

@@ -182,7 +182,7 @@ void traceprov_update_partition(duckdb_function_info info, duckdb_data_chunk inp
         if (idx > 0){
             current_layer = get_layer(main_layer->buckets[idx - 1]);
         }
-        TRACEPROV_GROW_IF_TRUE(current_layer, ((current_layer->current_row + chunk_size) > current_layer->end_of_memory_zone));
+        TRACEPROV_GROW_IF_TRUE(current_layer, (((uint64_t)current_layer->current_row + chunk_size) > (uint64_t)current_layer->end_of_memory_zone));
         for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
             *((uint64_t*)current_layer->current_row) = agg_contexts[slice_idx[curr_slice_idx]]->group_cnt;
             current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
@@ -190,7 +190,7 @@ void traceprov_update_partition(duckdb_function_info info, duckdb_data_chunk inp
         for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
             duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
             uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
-            TRACEPROV_GROW_IF_TRUE(current_layer, ((current_layer->current_row + chunk_size) > current_layer->end_of_memory_zone));
+            TRACEPROV_GROW_IF_TRUE(current_layer, (((uint64_t)current_layer->current_row + chunk_size) > (uint64_t)current_layer->end_of_memory_zone));
             for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
                 *((uint64_t*)current_layer->current_row) = col_data[slice_idx[curr_slice_idx]];
                 current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
@@ -308,7 +308,7 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
         void *col_data = (void *)duckdb_vector_get_data(col_vector);
         // elog(INFO, "Layer: %d, Col Idx: %d, Size: %d", layer_number, col_idx - 1, sizes->at(col_idx - 1));
         const uint64_t chunk_size = sizes->at(col_idx - 1) * num_rows;
-        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
+        TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, chunk_size);
         main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, chunk_size);
     }
@@ -355,7 +355,7 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
             if (!null_present) continue;
             validity_to_append.push_back(col_idx);
         }
-        TRACEPROV_GROW_IF_TRUE(null_layer, ((null_layer->current_row + 2*sizeof(uint64_t)) > null_layer->end_of_memory_zone));
+        TRACEPROV_GROW_IF_TRUE(null_layer, (((uint64_t)null_layer->current_row + 2*sizeof(uint64_t)) > (uint64_t)null_layer->end_of_memory_zone));
         ((uint64_t*)null_layer->current_row)[0] = current_chunk_idx;
         ((uint64_t*)null_layer->current_row)[1] = validity_to_append.size();
         null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, 2*sizeof(uint64_t));
@@ -369,7 +369,7 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
 
             // Need to write out the col idx where we say the null.
             // We have validity_size + 1 because also need to write out the column that has null values.
-            TRACEPROV_GROW_IF_TRUE(null_layer, ((null_layer->current_row + (validity_size + 1)*sizeof(uint64_t)) > null_layer->end_of_memory_zone));
+            TRACEPROV_GROW_IF_TRUE(null_layer, (((uint64_t)null_layer->current_row + (validity_size + 1)*sizeof(uint64_t)) > (uint64_t)null_layer->end_of_memory_zone));
             ((uint64_t*)null_layer->current_row)[0] = col_idx - 1;
             null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, sizeof(uint64_t));
             memcpy(null_layer->current_row, validity, sizeof(uint64_t)*validity_size);
@@ -570,7 +570,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
         if (traceprov_use_compact){
             const uint64_t chunk_size = sizeof(uint32_t)*num_rows;
-            TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
+            TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
             for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
                 if (agg_contexts[row_idx]->layer_number == 0){
                     agg_contexts[row_idx]->layer_number = layer_number;
@@ -588,7 +588,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
             }
         } else{
             const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
-            TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
+            TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
             for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
                 if (agg_contexts[row_idx]->layer_number == 0){
                     agg_contexts[row_idx]->layer_number = layer_number;
@@ -607,7 +607,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
         inputs[col_idx].Flatten(count);
         void *col_data = FlatVector::GetDataUnsafe<void>(inputs[col_idx]);
         auto compact_chunk_size = (sizes->at(col_idx - 1)*num_rows);
-        TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + compact_chunk_size) > main_layer->end_of_memory_zone));
+        TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + compact_chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, compact_chunk_size);
         main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, compact_chunk_size);
     }
@@ -633,14 +633,14 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
             if (validity.AllValid()) continue;
             validity_to_append.push_back(col_idx);
         }
-        TRACEPROV_GROW_IF_TRUE(null_layer, ((null_layer->current_row + 2*sizeof(uint64_t)) > null_layer->end_of_memory_zone));
+        TRACEPROV_GROW_IF_TRUE(null_layer, (((uint64_t)null_layer->current_row + 2*sizeof(uint64_t)) > (uint64_t)null_layer->end_of_memory_zone));
         ((uint64_t*)null_layer->current_row)[0] = current_chunk_idx;
         ((uint64_t*)null_layer->current_row)[1] = validity_to_append.size();
         null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, 2*sizeof(uint64_t));
         for (auto col_idx : validity_to_append)
         {
             auto validity = FlatVector::Validity(inputs[col_idx]);
-            TRACEPROV_GROW_IF_TRUE(null_layer, ((null_layer->current_row + (validity_size + 1)*sizeof(uint64_t)) > null_layer->end_of_memory_zone));
+            TRACEPROV_GROW_IF_TRUE(null_layer, (((uint64_t)null_layer->current_row + (validity_size + 1)*sizeof(uint64_t)) > (uint64_t)null_layer->end_of_memory_zone));
             // In this case, we are using the col_idx directly (rather than -1, because the col_idx = 0 will be the group number)
             ((uint64_t*)null_layer->current_row)[0] = col_idx;
             null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, sizeof(uint64_t));
@@ -692,7 +692,7 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
     }
 
     const uint64_t chunk_size = sizeof(uint64_t)*count;
-    TRACEPROV_GROW_IF_TRUE(combined_layer, ((combined_layer->current_row + 2*chunk_size) > combined_layer->end_of_memory_zone));
+    TRACEPROV_GROW_IF_TRUE(combined_layer, (((uint64_t)combined_layer->current_row + 2*chunk_size) > (uint64_t)combined_layer->end_of_memory_zone));
 
     uint64_t *target_write_ptr = (uint64_t*)combined_layer->current_row;
     uint64_t *source_write_ptr = &(((uint64_t*)combined_layer->current_row)[count]);

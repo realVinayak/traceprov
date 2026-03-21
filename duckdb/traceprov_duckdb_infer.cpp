@@ -102,14 +102,14 @@ static inline void traceprov_grow_row_count_page_mapping(TraceProvInitData *init
 }
 
 static inline void traceprov_grow_col_page_mapping(const uint64_t extra_size, TraceProvInitData *init, TraceProvBindData *bind){
-    if ((init->col_layer_ptr + extra_size) > init->col_layer_ptr_end){
+    if (((uint64_t)init->col_layer_ptr + extra_size) > (uint64_t)init->col_layer_ptr_end){
         init->col_layer_ptr = bind->col_layer->page_mapping[++init->col_page_idx];
         init->col_layer_ptr_end = &((uint8_t *)init->col_layer_ptr)[TRACEPROV_INCREMENT_TRACE_BY_PG*TRACEPROV_PAGE_SIZE];
     }
 }
 
 static inline void traceprov_grow_col_page_mapping_file(const uint64_t extra_size, TraceProvInitData *init, TraceProvBindData *bind){
-    if ((init->col_layer_ptr + extra_size) > init->col_layer_ptr_end){
+    if (((uint64_t)init->col_layer_ptr + extra_size) > (uint64_t)init->col_layer_ptr_end){
         // We don't need to consult any page mapping in that case.
         init->col_layer_ptr = init->col_layer_ptr_end;
         init->col_layer_ptr_end = &((uint8_t *)init->col_layer_ptr_end)[TRACEPROV_INCREMENT_TRACE_BY_PG*TRACEPROV_PAGE_SIZE];
@@ -128,9 +128,9 @@ TraceProvInitData *traceprov_make_init_data(TraceProvBindData *bind_data){
     init_data_inst->is_single = (bind_data->rel_args.offset != -1);
     init_data_inst->offset_in_chunk = 0;
     init_data_inst->col_layer_ptr = bind_data->col_layer_ptr;
-    init_data_inst->col_layer_ptr_end = init_data_inst->col_layer_ptr + TRACEPROV_PAGE_SIZE;
+    init_data_inst->col_layer_ptr_end = INCR_BY_BYTES(init_data_inst->col_layer_ptr, TRACEPROV_PAGE_SIZE);
     init_data_inst->row_count_layer_ptr = bind_data->row_count_layer_ptr;
-    init_data_inst->row_count_layer_ptr_end = bind_data->row_count_layer_ptr + TRACEPROV_PAGE_SIZE;
+    init_data_inst->row_count_layer_ptr_end = INCR_BY_BYTES(bind_data->row_count_layer_ptr, TRACEPROV_PAGE_SIZE);
     init_data_inst->is_dummy = bind_data->is_dummy;
     if (bind_data->col_layer->null_layer_number){
         if (bind_data->rel_args.worker_id == 0){
