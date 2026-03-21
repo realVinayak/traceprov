@@ -27,6 +27,7 @@ typedef struct TraceProvLogBind {
     std::vector<uint64_t> *cols;
     bool infer_null;
     TraceProvLayerNumber layer_number;
+    std::vector<uint8_t> *sizes;
 } TraceProvLogBind;
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
@@ -301,23 +302,11 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     }
 
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
-    if (unlikely(tp_duckdb_state->size_map->find(layer_number) == tp_duckdb_state->size_map->end())) {
-        std::vector<uint8_t> *sizes = new std::vector<uint8_t>;
-        sizes->push_back(sizeof(uint64_t));
-        for (idx_t col_idx = 1; col_idx < num_cols; col_idx++) {
-            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-            void *col_data = (void *)duckdb_vector_get_data(col_vector);
-            auto col_type = duckdb_vector_get_column_type(col_vector);
-            auto logical_type = reinterpret_cast<duckdb::LogicalType *>(col_type);
-            sizes->push_back(logical_type->id() == duckdb::LogicalType::INTEGER ? (sizeof(uint32_t)) : (sizeof(uint64_t)));
-            duckdb_destroy_logical_type(&col_type);
-        }
-        tp_duckdb_state->size_map->insert({layer_number, sizes});
-    }
-    auto sizes = tp_duckdb_state->size_map->at(layer_number);
+    auto sizes = bind_data->sizes;
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
         duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
         void *col_data = (void *)duckdb_vector_get_data(col_vector);
+        // elog(INFO, "Layer: %d, Col Idx: %d, Size: %d", layer_number, col_idx - 1, sizes->at(col_idx - 1));
         const uint64_t chunk_size = sizes->at(col_idx - 1) * num_rows;
         TRACEPROV_GROW_IF_TRUE(main_layer, ((main_layer->current_row + chunk_size) > main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, chunk_size);
@@ -402,6 +391,13 @@ static void *copy_traceprov_log_bind(void *bind_data){
         }
         tp_new_bind_data->cols = new_cols;
     }
+    if (tp_new_bind_data->sizes){
+        auto new_sizes = new std::vector<uint8_t>;
+        for (auto size: *tp_new_bind_data->sizes){
+            new_sizes->push_back(size);
+        }
+        tp_new_bind_data->sizes = new_sizes;
+    }
     return tp_new_bind_data;
 }
 
@@ -411,6 +407,7 @@ void traceprov_log_bind(duckdb_bind_info info){
     bind_data->infer_null = traceprov_assume_null;
     bind_data->cols = NULL;
     bind_data->layer_number = 0;
+    bind_data->sizes = new std::vector<uint8_t>;
 
     auto expr = duckdb_scalar_function_bind_get_argument(info, 0);
     auto foldable = duckdb_expression_is_foldable(expr);
@@ -441,6 +438,18 @@ void traceprov_log_bind(duckdb_bind_info info){
             }
         }
     }
+
+    for (idx_t arg_idx = 1; arg_idx < duckdb_scalar_function_bind_get_argument_count(info); arg_idx++){
+        auto arg_expr = duckdb_scalar_function_bind_get_argument(info, arg_idx);
+        auto arg_type = duckdb_expression_return_type(arg_expr);
+        auto logical_type_id = LogicalTypeIdFromC(duckdb_get_type_id(arg_type));
+        if (logical_type_id == LogicalTypeId::UINTEGER || logical_type_id == LogicalTypeId::INTEGER){
+            bind_data->sizes->push_back(sizeof(uint32_t));
+        }else{
+            bind_data->sizes->push_back(sizeof(uint64_t));
+        }
+    }
+
     duckdb_scalar_function_set_bind_data(info, bind_data, free);
     duckdb_scalar_function_set_bind_data_copy(info, copy_traceprov_log_bind);
 }
@@ -474,7 +483,6 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
         duckdb_scalar_function_set_special_handling(func);
         auto tp_duckdb_state = new TraceProvDuckDbState;
         tp_duckdb_state->should_hash = traceprov_use_partition_in_log;
-        tp_duckdb_state->size_map = new std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *>;
         tp_duckdb_state->null_map = null_map;
         duckdb_scalar_function_set_extra_info(func, tp_duckdb_state, nullptr);
         funcs[idx] = func;

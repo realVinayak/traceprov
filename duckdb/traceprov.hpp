@@ -396,7 +396,6 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
 
 typedef struct TraceProvDuckDbState {
     bool should_hash;
-    std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
     TraceProvNullMap *null_map;
 } TraceProvDuckDbState;
 
