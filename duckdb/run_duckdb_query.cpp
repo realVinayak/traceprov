@@ -401,7 +401,7 @@ static void populate_traceprov_data(
 }
 
 static void populate_log_offset(TraceProvLayerPartition *parition, std::string extra_sql);
-static std::string serialize_option(Options *option);
+static std::string serialize_option(Options *option, const TraceProvNullMap *null_map);
 
 typedef struct PerformQueryResult {
     int64_t computed_time;
@@ -687,12 +687,13 @@ int main(int argc, char **argv){
         DUCKDB_RUN_SHORT_QUERY(con, load_str.c_str(), "load new sd extension");
     }
 
+    TraceProvNullMap *null_map = traceprov_infer_nulls();
+
     #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
     // duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
     // duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
     // duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
-    TraceProvNullMap *null_map = traceprov_infer_nulls();
     duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false, null_map);
     duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map);
     traceprov_create_and_register_agg(num_args, con, null_map);
@@ -915,7 +916,7 @@ int main(int argc, char **argv){
             time_out_json += ",";
             time_out_json += "\"row_count\": " + std::to_string(row_count);
             time_out_json += ",";
-            time_out_json += "\"option\": " + serialize_option(&current->option);
+            time_out_json += "\"option\": " + serialize_option(&current->option, null_map);
             time_out_json += "}";
         }
         time_out_json += "]";
@@ -960,8 +961,8 @@ static void populate_log_offset(TraceProvLayerPartition *partition, std::string 
 }
 
 // This doesn't do all of option (that'll be too much)
-static std::string serialize_option(Options *option){
-    if (option->_extra == NULL && !IS_SET(option->_extra_output))
+static std::string serialize_option(Options *option, const TraceProvNullMap *null_map){
+    if (option->_extra == NULL && !IS_SET(option->_extra_output) && (null_map == NULL))
         return "{}";
     std::string option_serialized;
     option_serialized += "{";
@@ -972,11 +973,40 @@ static std::string serialize_option(Options *option){
         option_serialized += "null";
     }
     option_serialized += ",";
-    option_serialized += "\"extra\": ";
+    option_serialized += "\"extra\": [";
     if (IS_SET(option->_extra_output)){
         option_serialized += "\"";
         option_serialized += option->_extra_output;
         option_serialized += "\"";
+    }
+    option_serialized += "]";
+    option_serialized += ",";
+    option_serialized += "\"traceprov_assume_null\": ";
+    option_serialized += traceprov_assume_null ? "true" : "false";
+    if (null_map != NULL){
+        option_serialized += ",";
+        option_serialized += "\"null_map\": {";
+        bool needs_sep = false;
+        for (auto null_map_entry: *null_map){
+            if (needs_sep){
+                option_serialized += ",";
+            }
+            needs_sep = true;
+            option_serialized += "\"";
+            option_serialized += std::to_string(null_map_entry.first);
+            option_serialized += "\": ";
+            option_serialized += "[";
+            bool needs_inner_sep = false;
+            for (auto col_idx: *null_map_entry.second){
+                if (needs_inner_sep){
+                    option_serialized += ",";
+                }
+                needs_inner_sep = true;
+                option_serialized += std::to_string(col_idx);
+            }
+            option_serialized += "]";
+        }
+        option_serialized += "}";
     }
     option_serialized += "}";
     return option_serialized;
