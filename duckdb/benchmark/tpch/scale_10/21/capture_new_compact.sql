@@ -28,7 +28,7 @@ FROM (
                         WHEN (
                             (l2.l_orderkey = l1.l_orderkey)
                             AND (l2.l_suppkey <> l1.l_suppkey)
-                        ) THEN traceprov_log_entry_2 (1, (l1.rowid::int), (l2.rowid::int))
+                        ) THEN traceprov_log_entry_bool_2 (1, (l1.rowid::int), (l2.rowid::int))
                         ELSE false
                     END
             )

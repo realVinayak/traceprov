@@ -1,26 +1,20 @@
-SELECT
-    tp_table_0.o_orderpriority,
+SELECT tp_table_0.o_orderpriority,
     tp_table_0.order_count,
     tp_table_0.mapped_agg,
     traceprov_log_entry_1 (3, tp_table_0.mapped_agg) AS tp_table_1
-FROM
-    (
-        SELECT
-            orders.o_orderpriority,
+FROM (
+        SELECT orders.o_orderpriority,
             count(*) AS order_count,
             traceprov_agg_key_parallel_offset_1 (2, (orders.o_orderkey)::bigint) AS mapped_agg
-        FROM
-            orders
-        WHERE
-            (
+        FROM orders
+        WHERE (
                 (orders.o_orderdate >= '1993-07-01'::date)
                 AND (
                     orders.o_orderdate < ('1993-07-01'::date + '3 mons'::interval month)
                 )
                 AND (
                     EXISTS (
-                        SELECT
-                            lineitem.l_orderkey,
+                        SELECT lineitem.l_orderkey,
                             lineitem.l_partkey,
                             lineitem.l_suppkey,
                             lineitem.l_linenumber,
@@ -38,10 +32,8 @@ FROM
                             lineitem.l_comment,
                             lineitem.l_orderkey AS tp_l_orderkey,
                             lineitem.l_linenumber AS tp_l_linenumber
-                        FROM
-                            lineitem
-                        WHERE
-                            (
+                        FROM lineitem
+                        WHERE (
                                 (
                                     (lineitem.l_orderkey = orders.o_orderkey)
                                     AND (lineitem.l_commitdate < lineitem.l_receiptdate)
@@ -50,7 +42,7 @@ FROM
                                     WHEN (
                                         (lineitem.l_orderkey = orders.o_orderkey)
                                         AND (lineitem.l_commitdate < lineitem.l_receiptdate)
-                                    ) THEN traceprov_log_entry_3 (
+                                    ) THEN traceprov_log_entry_bool_3 (
                                         1,
                                         (orders.o_orderkey)::bigint,
                                         (lineitem.l_orderkey)::bigint,
@@ -62,8 +54,6 @@ FROM
                     )
                 )
             )
-        GROUP BY
-            orders.o_orderpriority
-        ORDER BY
-            orders.o_orderpriority
+        GROUP BY orders.o_orderpriority
+        ORDER BY orders.o_orderpriority
     ) tp_table_0

@@ -17,7 +17,7 @@ FROM (
                         WHEN (
                             (lineitem.l_orderkey = orders.o_orderkey)
                             AND (lineitem.l_commitdate < lineitem.l_receiptdate)
-                        ) THEN traceprov_log_entry_2 (1, (orders.rowid::int), (lineitem.rowid::int))
+                        ) THEN traceprov_log_entry_bool_2 (1, (orders.rowid::int), (lineitem.rowid::int))
                         ELSE false
                     END
             )

@@ -1,12 +1,9 @@
-SELECT
-    tp_table_0.s_name,
+SELECT tp_table_0.s_name,
     tp_table_0.numwait,
     tp_table_0.mapped_agg,
     traceprov_log_entry_1 (3, tp_table_0.mapped_agg) AS tp_table_1
-FROM
-    (
-        SELECT
-            supplier.s_name,
+FROM (
+        SELECT supplier.s_name,
             count(*) AS numwait,
             traceprov_agg_key_parallel_offset_5 (
                 2,
@@ -16,21 +13,18 @@ FROM
                 (orders.o_orderkey)::bigint,
                 (nation.n_nationkey)::bigint
             ) AS mapped_agg
-        FROM
-            supplier,
+        FROM supplier,
             lineitem l1,
             orders,
             nation
-        WHERE
-            (
+        WHERE (
                 (supplier.s_suppkey = l1.l_suppkey)
                 AND (orders.o_orderkey = l1.l_orderkey)
                 AND (orders.o_orderstatus = 'F'::bpchar)
                 AND (l1.l_receiptdate > l1.l_commitdate)
                 AND (
                     EXISTS (
-                        SELECT
-                            l2.l_orderkey,
+                        SELECT l2.l_orderkey,
                             l2.l_partkey,
                             l2.l_suppkey,
                             l2.l_linenumber,
@@ -48,10 +42,8 @@ FROM
                             l2.l_comment,
                             l2.l_orderkey AS tp_l_orderkey,
                             l2.l_linenumber AS tp_l_linenumber
-                        FROM
-                            lineitem l2
-                        WHERE
-                            (
+                        FROM lineitem l2
+                        WHERE (
                                 (
                                     (l2.l_orderkey = l1.l_orderkey)
                                     AND (l2.l_suppkey <> l1.l_suppkey)
@@ -60,7 +52,7 @@ FROM
                                     WHEN (
                                         (l2.l_orderkey = l1.l_orderkey)
                                         AND (l2.l_suppkey <> l1.l_suppkey)
-                                    ) THEN traceprov_log_entry_4 (
+                                    ) THEN traceprov_log_entry_bool_4 (
                                         1,
                                         (l1.l_orderkey)::bigint,
                                         (l1.l_linenumber)::bigint,
@@ -75,8 +67,7 @@ FROM
                 AND (
                     NOT (
                         EXISTS (
-                            SELECT
-                                l3.l_orderkey,
+                            SELECT l3.l_orderkey,
                                 l3.l_partkey,
                                 l3.l_suppkey,
                                 l3.l_linenumber,
@@ -92,10 +83,8 @@ FROM
                                 l3.l_shipinstruct,
                                 l3.l_shipmode,
                                 l3.l_comment
-                            FROM
-                                lineitem l3
-                            WHERE
-                                (
+                            FROM lineitem l3
+                            WHERE (
                                     (l3.l_orderkey = l1.l_orderkey)
                                     AND (l3.l_suppkey <> l1.l_suppkey)
                                     AND (l3.l_receiptdate > l3.l_commitdate)
@@ -106,11 +95,8 @@ FROM
                 AND (supplier.s_nationkey = nation.n_nationkey)
                 AND (nation.n_name = 'SAUDI ARABIA'::bpchar)
             )
-        GROUP BY
+        GROUP BY supplier.s_name
+        ORDER BY (count(*)) DESC,
             supplier.s_name
-        ORDER BY
-            (count(*)) DESC,
-            supplier.s_name
-        LIMIT
-            100
+        LIMIT 100
     ) tp_table_0
