@@ -2,6 +2,7 @@
 #include "traceprov_node.hpp"
 duckdb_table_function traceprov_create_table_func();
 duckdb_table_function traceprov_create_table_offset_func();
+duckdb_table_function traceprov_create_table_offset_partition_func();
 typedef struct TraceProvDuckDbGlobalState {
     bool did_initialize;
     std::vector<struct local_context *> *worker_local_contexts;

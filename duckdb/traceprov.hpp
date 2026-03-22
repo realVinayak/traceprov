@@ -259,6 +259,7 @@ struct traceprov_aggregate_layer {
     uint64_t record_count;
     // If the values here can be null, it stores the layer where the nulls are stored.
     uint32_t null_layer_number;
+    void *slice_vectors[TRACEPROV_BUCKET_COUNT];
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -379,15 +380,21 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 typedef uint32_t TraceProvLayerNumber;
 
 typedef std::unordered_map<TraceProvLayerNumber, std::vector<uint64_t> *> TraceProvNullMap;
+typedef std::vector<TraceProvLayerNumber> TraceProvPartitionLayers;
 
 #if TRACEPROV_SD_MODE==0
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
 
 
-void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map);
+void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map, TraceProvPartitionLayers *partition_layers);
 
 duckdb_scalar_function traceprov_create_reinit_state();
-duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile, TraceProvNullMap *null_map);
+duckdb_scalar_function* traceprov_create_log_function(
+    const uint32_t num_args,
+    const bool is_volatile,
+    TraceProvNullMap *null_map,
+    const bool is_boolean
+);
 #endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -397,20 +404,15 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
 typedef struct TraceProvDuckDbState {
     bool should_hash;
     TraceProvNullMap *null_map;
+    bool is_bool_return;
 } TraceProvDuckDbState;
 
 struct TraceProvAggExtra : public AggregateFunctionInfo {
     bool ignore_gn;
-    TraceProvDuckDbState *state;
-    std::hash<uint64_t> hasher;
-    // The indexes at which each bucket is present.
-    // Done like this because it keeps the rest of the read logic nice.
-    void *slice_vectors[TRACEPROV_BUCKET_COUNT];
-    uint64_t *col_cache[TRACEPROV_MAX_INLINE_CACHE_SIZE];
-    uint64_t **dynamic_col_cache;
     uint64_t use_part_agg;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
     TraceProvNullMap *null_map;
+    TraceProvPartitionLayers *partition_layers;
 };
 
 // Simplifies stuff.
@@ -421,10 +423,16 @@ struct TraceProvAggBind : public FunctionData  {
         TraceProvLayerNumber layer_number,
         std::vector<uint8_t> *sizes,
         bool infer_null,
-        std::vector<uint64_t> *cols
+        std::vector<uint64_t> *cols,
+        bool should_hash
     ) :
-        extra(extra), layer_number(layer_number), sizes(sizes), infer_null(infer_null), cols(cols) {
-    }
+        extra(extra),
+        layer_number(layer_number),
+        sizes(sizes),
+        infer_null(infer_null),
+        cols(cols),
+        should_hash(should_hash)
+        {}
 
     TraceProvAggExtra *extra;
     TraceProvLayerNumber layer_number;
@@ -433,14 +441,22 @@ struct TraceProvAggBind : public FunctionData  {
     std::vector<uint8_t> *sizes;
     bool infer_null;
     std::vector<uint64_t> *cols;
+    bool should_hash;
 public:
     unique_ptr<FunctionData> Copy() const override {
-        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes, infer_null, cols);
+        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes, infer_null, cols, should_hash);
     }
 
     bool Equals(const FunctionData &other_p) const override {
         auto &other = other_p.Cast<TraceProvAggBind>();
-        return extra == other.extra && layer_number == other.layer_number && sizes == other.sizes && infer_null == other.infer_null && cols == other.cols;
+        return (
+            extra == other.extra 
+            && layer_number == other.layer_number 
+            && sizes == other.sizes 
+            && infer_null == other.infer_null 
+            && cols == other.cols
+            && should_hash == other.should_hash
+        );
     }
 };
 

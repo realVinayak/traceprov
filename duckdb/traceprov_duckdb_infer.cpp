@@ -342,9 +342,6 @@ TraceProvBindData *setup_layers(
 
 void traceprov_duckdb_bind(duckdb_bind_info info){
     initialize_global_context();
-    if (duckdb_bind_get_parameter_count(info) != 3 && duckdb_bind_get_parameter_count(info) != 4){
-        elog(ERROR, "Expected 3 or 4 params!");
-    }
 
     auto param_1 = duckdb_bind_get_parameter(info, 0);
     const uint64_t table_flags = duckdb_get_int64(param_1);
@@ -359,12 +356,19 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     duckdb_destroy_value(&param_3);
 
     int64_t log_offset = -1;
-    if (duckdb_bind_get_parameter_count(info) == 4){
-        auto param_4 = duckdb_bind_get_parameter(info, 2);
+    if (duckdb_bind_get_parameter_count(info) >= 4){
+        auto param_4 = duckdb_bind_get_parameter(info, 3);
         log_offset = duckdb_get_int64(param_4);
         duckdb_destroy_value(&param_4);
     }
+
     uint64_t partition_idx = 0;
+    if (duckdb_bind_get_parameter_count(info) == 5){
+        auto param_4 = duckdb_bind_get_parameter(info, 4);
+        partition_idx = duckdb_get_int64(param_4);
+        duckdb_destroy_value(&param_4);
+    }
+
     // This, for now, assumes that the bind infrastructure in DuckDB is correct.
     // That is, if the arguments are different, then this bind gets called multiple times.
     TraceProvTableExtra *extra_info = (TraceProvTableExtra *)duckdb_bind_get_extra_info(info);
@@ -834,6 +838,18 @@ duckdb_table_function traceprov_create_table_offset_func(){
     duckdb_table_function_set_extra_info(function, NULL, nullptr);
     return function;
 }
+
+duckdb_table_function traceprov_create_table_offset_partition_func(){
+    auto function = traceprov_create_table_func();
+    duckdb_table_function_set_name(function, "traceprov_read_worker_layer_partition");
+    duckdb_logical_type offset_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+    duckdb_table_function_add_parameter(function, offset_type);
+    duckdb_table_function_add_parameter(function, offset_type);
+    duckdb_destroy_logical_type(&offset_type);
+    duckdb_table_function_set_extra_info(function, NULL, nullptr);
+    return function;
+}
+
 
 // Worker and Layer will fit in uint32_t. Two of them are unique enough to distinguish any combination.
 // So they are combined here togther to form a key into the context map of layers.

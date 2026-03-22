@@ -16,6 +16,10 @@
 
 static const uint32_t traceprov_shared_context_magic = 0xBADB00DE;
 
+void *request_simple_page();
+
+std::mutex simple_page_lock;
+
 void portable_elog(int level){
     if (level == INFO) return;
     if (level == ERROR){
@@ -486,7 +490,7 @@ int initialize_layer_file(
     // Specifies the length of the record, excluding keys.
     const uint32_t record_length,
     const bool set_current_row,
-    const TraceProvDuckDbState *state,
+    const bool should_hash,
     const bool can_be_null
 ){
 
@@ -525,22 +529,30 @@ int initialize_layer_file(
         layer->null_layer_number = null_layer_number;
     }
 
-    if (state != NULL){
-        // If the entries in this file will be hashed, need to also make the hash buckets for them.
-        // This effectively makes a recursive call (but the state of the next is always null)
-        // Technically, the recursive call can be used to implement a multi-level partitioning...
-        if (TRACEPROV_SHOULD_HASH(state) && layer->buckets[0] == 0){
-            // Need to make the new levels
-            // Note that we only need to construct buckets after the current layer.
-            // because the current layer acts as the buckets for the other ones..
-            for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
-                const uint32_t hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
-                layer->buckets[bucket_idx] = hash_bucket_layer_number;
-                if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, NULL, can_be_null)){
-                    elog(ERROR, "Error initializing the hash buckets");
-                }
+    // If the entries in this file will be hashed, need to also make the hash buckets for them.
+    // This effectively makes a recursive call (but the state of the next is always null)
+    // Technically, the recursive call can be used to implement a multi-level partitioning...
+    if (should_hash && layer->buckets[0] == 0){
+        // Need to make the new levels
+        // Note that we only need to construct buckets after the current layer.
+        // because the current layer acts as the buckets for the other ones..
+        for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT - 1; bucket_idx++){
+            const uint32_t hash_bucket_layer_number = ++traceprov_current.maximum_local_layer_used;
+            layer->buckets[bucket_idx] = hash_bucket_layer_number;
+            if (initialize_layer_file(hash_bucket_layer_number, key_length, record_length, true, false, can_be_null)){
+                elog(ERROR, "Error initializing the hash buckets");
             }
         }
+        // Here, need to also set up the slice vectors.
+        // An extra lock is acquired so that we attempt to fragment only 1 page.
+        // Otherwise, things will still work, but we might get slices across different pages, which is bad for performance.
+        simple_page_lock.lock();
+        for (int bucket_idx = 0; bucket_idx < TRACEPROV_BUCKET_COUNT; bucket_idx += 2){
+            void *slice_ptr = request_simple_page();
+            layer->slice_vectors[bucket_idx] = slice_ptr;
+            layer->slice_vectors[bucket_idx + 1] = INCR_BY_BYTES(slice_ptr, 4096);
+        }
+        simple_page_lock.unlock();
     }
     return 0;
 }
@@ -883,12 +895,19 @@ std::string traceprov_get_layer_info_query(){
             record.push_back(construct_string_record(*serialize_int_vector(&page_mappings), "page_mapping"));
             record.push_back(construct_int_record(layer->page_mapping_capacity, "page_mapping_capacity"));
             record.push_back(construct_int_record(layer->page_mapping_size, "page_mapping_size"));
-            record.push_back(
-                construct_string_record(
-                    get_layer_count((uint64_t)local_context->worker_id, (uint64_t)layer->layer_number),
-                    "layer_record_count"
-                )
-            );
+            if (layer->rows_layer_number){
+                // Get the record count from the rows layer.
+                const struct traceprov_aggregate_layer *rows_layer = &local_context->cached_layers[layer->rows_layer_number - 1];
+                record.push_back(construct_int_record(rows_layer->record_count, "layer_record_count"));
+            }else{
+                record.push_back(construct_int_record(layer->num_rows, "layer_record_count"));
+            }
+            // record.push_back(
+            //     construct_string_record(
+            //         get_layer_count((uint64_t)local_context->worker_id, (uint64_t)layer->layer_number),
+            //         "layer_record_count"
+            //     )
+            // );
             #if TRACEPROV_COLLECT_STATS_MODE == 1
             record.push_back(construct_int_record(layer->max_combined_times, "max_combined_times"));
             #endif
@@ -899,10 +918,10 @@ std::string traceprov_get_layer_info_query(){
     return combine_string_vector(rows, " UNION ALL ");
 }
 
-
 TraceProvPageCache g_page_cache = {
     .initial_entries = NULL,
-    .later_entries = NULL
+    .later_entries = NULL,
+    .raw_page_cache = NULL
 };
 
 void traceprov_setup_page_cache(const uint32_t num_threads, const uint32_t page_count){
@@ -937,4 +956,44 @@ void traceprov_setup_page_cache(const uint32_t num_threads, const uint32_t page_
             entry->size = page_count;
        }
     }
+    auto raw_page_cache = new TraceProvRawPageCache;
+    raw_page_cache->lock = new std::mutex;
+    raw_page_cache->raw_page_entries = new std::list<TraceProvRawPageEntry *>;
+    raw_page_cache->max_page_count = TRACEPROV_PAGE_SIZE / 4096;
+    g_page_cache.raw_page_cache = raw_page_cache;
+}
+
+// Gets a 4k-page.
+// Tries to be smart (fragments already existing page).
+// Handles huge-pages, and MacOS 16K page size easily.
+void *request_simple_page(){
+    auto raw_page_cache = g_page_cache.raw_page_cache;
+    raw_page_cache->lock->lock();
+    // This is the only case where we need to add a new page.
+    // Bcuz we remove the page entry entirely when all the pages from that entry have been used.
+    const bool needs_new_page = raw_page_cache->raw_page_entries->size() == 0;
+    if (needs_new_page){
+        void *trace_ptr = mmap(
+            NULL,
+            TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
+            PROT_WRITE,
+            TRACEPROV_MMAP_FLAGS,
+            0,
+            0
+        );
+        if (trace_ptr == MAP_FAILED){
+            elog(ERROR, "remap failed for huge.");
+        }
+        TraceProvRawPageEntry *raw_page_entry = new TraceProvRawPageEntry;
+        raw_page_entry->page = trace_ptr;
+        raw_page_entry->page_used = 0;
+        raw_page_cache->raw_page_entries->push_back(raw_page_entry);
+    }
+    auto raw_page_entry = raw_page_cache->raw_page_entries->front();
+    void *return_ptr = INCR_BY_BYTES(raw_page_entry->page, (4096)*(raw_page_entry->page_used++));
+    if (raw_page_entry->page_used == raw_page_cache->max_page_count){
+        raw_page_cache->raw_page_entries->pop_front();
+    }
+    raw_page_cache->lock->unlock();
+    return return_ptr;
 }

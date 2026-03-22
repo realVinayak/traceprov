@@ -41,7 +41,7 @@ int initialize_layer_file(
     // Specifies the length of the record, excluding keys.
     const uint32_t record_length,
     const bool set_current_row,
-    const TraceProvDuckDbState *state,
+    const bool should_hash,
     const bool can_be_null
 );
 
@@ -64,9 +64,26 @@ typedef struct TraceProvPageCacheEntry {
     void **pages;
 } TraceProvPageCacheEntry;
 
+typedef struct TraceProvRawPageEntry {
+    void *page;
+    uint32_t page_used;
+} TraceProvRawPageEntry;
+
+typedef struct TraceProvRawPageCache {
+    std::mutex *lock;
+    // Raw pages used for misc stuff.
+    // Currently only used for slice vectors.
+    // These are cached, and end up getting reused.
+    std::list<TraceProvRawPageEntry *> *raw_page_entries;
+    // Maximum number of 4k pages can be used from a single page.
+    // Constant, since each page is of the same size.
+    uint32_t max_page_count;
+} TraceProvRawPageCache;
+
 typedef struct TraceProvPageCache {
     TraceProvPageCacheEntry *initial_entries;
     TraceProvPageCacheEntry *later_entries;
+    TraceProvRawPageCache *raw_page_cache;
 } TraceProvPageCache;
 
 extern TraceProvPageCache g_page_cache;

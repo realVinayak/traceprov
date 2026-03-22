@@ -641,6 +641,33 @@ TraceProvNullMap *traceprov_infer_nulls(){
     return null_map;
 }
 
+// We don't do partitioning for all the layers (yet.)
+// We only do so for top level aggregate (not pure aggregate)
+TraceProvPartitionLayers *traceprov_layers_to_partition(){
+    TraceProvParseContext *parsed_back_context = NULL;
+    List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL, TRACEPROV_GRAPH_FILE, false);
+    if (graphs == NIL){
+        return NULL;
+    }
+    auto partition_layers = new TraceProvPartitionLayers;
+    ListCell *graph_cursor;
+    foreach(graph_cursor, graphs){
+        TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
+        ListCell *entry_cursor;
+        foreach(entry_cursor, graph->entries){
+            TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+            if (te->kind == TP_ENTRY_KIND_POINTER){
+                // It is of kind pointer.
+                TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
+                if (child_graph->graph_type == TP_AGGREGATE){
+                    partition_layers->push_back(child_graph->headNumber);
+                }
+            }
+        }
+    }
+    return partition_layers;
+}
+
 static TraceProvInferAbstractTree* derive_sublinks(
     TraceProvNode *node,
     const TraceProvDependency *graph,

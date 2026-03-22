@@ -596,6 +596,9 @@ Funcs traceprov_add_funcs(duckdb_connection con){
 
     duckdb_table_function tp_read_offset_func = traceprov_create_table_offset_func();
     DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_func));
+
+    duckdb_table_function tp_read_offset_partition_func = traceprov_create_table_offset_partition_func();
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_partition_func));
     
     duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
     DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
@@ -688,15 +691,17 @@ int main(int argc, char **argv){
     }
 
     TraceProvNullMap *null_map = traceprov_infer_nulls();
+    TraceProvPartitionLayers *partition_layers = traceprov_layers_to_partition();
 
     #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
     // duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
     // duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
     // duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
-    duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false, null_map);
-    duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map);
-    traceprov_create_and_register_agg(num_args, con, null_map);
+    duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false, null_map, false);
+    duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map, false);
+    duckdb_scalar_function *boolean_log_funcs = traceprov_create_log_function(num_args, false, null_map, true);
+    traceprov_create_and_register_agg(num_args, con, null_map, partition_layers);
     for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
         // std::cout << "ran aggregate register successfully!" << std::endl;
@@ -712,6 +717,9 @@ int main(int argc, char **argv){
 
         DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, volatile_log_funcs[farg_idx]));
         std::cout << "ran top-level volatile log register successfully!" << std::endl;
+
+        DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, boolean_log_funcs[farg_idx]));
+        std::cout << "ran top-level boolean log register successfully!" << std::endl;
     }
 
     Funcs table_funcs = traceprov_add_funcs(con);

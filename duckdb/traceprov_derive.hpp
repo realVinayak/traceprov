@@ -21,5 +21,6 @@ typedef struct TraceProvInferExtra {
 } TraceProvInferExtra;
 
 TraceProvNullMap *traceprov_infer_nulls();
+TraceProvPartitionLayers *traceprov_layers_to_partition();
 
 #endif
