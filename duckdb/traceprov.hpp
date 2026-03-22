@@ -368,7 +368,7 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64_t) W) << 56) | X)
 #define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
-#define TRACEPROV_STRIP_WORKER_ID(X) ((((uint64_t)(~((uint8_t)0))) << 56) & X)
+#define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 56)) & X)
 
 // TODO: Use this everywhere.
 #define INCR_BY_BYTES(X, Y) (&(((uint8_t*)X)[Y]))
@@ -380,7 +380,13 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 typedef uint32_t TraceProvLayerNumber;
 
 typedef std::unordered_map<TraceProvLayerNumber, std::vector<uint64_t> *> TraceProvNullMap;
-typedef std::vector<TraceProvLayerNumber> TraceProvPartitionLayers;
+
+typedef struct TraceProvPartitionLayerItem {
+    uint32_t entry_idx;
+    TraceProvLayerNumber layer;
+} TraceProvPartitionLayerItem;
+
+typedef std::vector<TraceProvPartitionLayerItem> TraceProvPartitionLayers;
 
 #if TRACEPROV_SD_MODE==0
 void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
@@ -470,5 +476,17 @@ extern uint64_t traceprov_reinit_counter;
 // It, in all the cases, only one column is the pointer. So, this is fine.
 #define TRACEPROV_SET_POINTER_COLUMN(COL, FLAG) ((((uint64_t)COL) << 8) | ((uint64_t)FLAG))
 #define TRACEPROV_GET_POINTER_COLUMN(COL, FLAG) ((uint64_t)((uint8_t)(((uint64_t)FLAG) >> 8)))
+
+typedef std::unordered_map<uint8_t, uint8_t> TraceProvWorkerPartition;
+
+typedef struct TraceProvPartitionInfo {
+    // Top level log cached data.
+    // Generally safe to cache.
+    std::unordered_map<TraceProvLayerNumber, void *> *cached_data;
+    // This needs to be a nested data (for each layer, we can, in general, have multiple partitions for different workers.)
+    // If a worker is not in the nested entry, it implies the worker doesn't have any relevant partition :)
+    std::unordered_map<TraceProvLayerNumber, TraceProvWorkerPartition*> *partition_data;
+    std::unordered_map<TraceProvLayerNumber, uint64_t> *layer_log_map;
+} TraceProvPartitionInfo;
 
 #endif

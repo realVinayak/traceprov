@@ -171,8 +171,7 @@ static void read_at_offset(
     TraceProvBindData *bind_data,
     // Values are written here.
     uint64_t *values,
-    // Whether the values are bool or not. (not used now, for the future)
-    uint64_t *bool_values
+    std::vector<uint8_t> *sizes
 ){
     auto init_data = traceprov_make_init_data(bind_data);
     const bool can_jump_row_page = bind_data->row_layer->page_mapping != NULL;
@@ -184,13 +183,18 @@ static void read_at_offset(
         }
         const uint64_t num_rows = *((uint64_t*)init_data->row_count_layer_ptr);
         init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t));
-        const uint64_t extra_size = num_rows * sizeof(uint64_t);
         const bool is_in_current = (log_offset >= accum_size) && (log_offset < (num_rows + accum_size));
         const uint64_t local_offset = log_offset - accum_size;
         for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+            const uint8_t curr_size = sizes->at(col_idx);
+            const uint64_t extra_size = num_rows * curr_size;
             col_grow_func(extra_size, init_data, bind_data);
             if (is_in_current) {
-                values[col_idx]  = ((uint64_t*)init_data->col_layer_ptr)[local_offset];
+                if (curr_size == sizeof(uint32_t)){
+                    values[col_idx] = ((uint32_t*)init_data->col_layer_ptr)[local_offset];
+                }else{
+                    values[col_idx] = ((uint64_t*)init_data->col_layer_ptr)[local_offset];
+                }
             }
             init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
         }
@@ -340,6 +344,46 @@ TraceProvBindData *setup_layers(
     return my_bind_data;
 }
 
+void extract_partition_info(
+    TraceProvTableExtra *extra_info, 
+    bool &will_be_dummy, 
+    uint64_t &partition_idx, 
+    uint64_t table_flags, 
+    uint64_t worker_idx, 
+    uint32_t layer_number,
+    int64_t &log_offset
+){
+    will_be_dummy = false;
+    log_offset = -1;
+    if (extra_info->partition_spec != NULL & ((table_flags & TRACEPROV_TABLE_COMBINE) == 0)){
+        auto partition_data = extra_info->partition_spec->partition_data;
+        if (partition_data != NULL){
+            if (partition_data->find(layer_number) != partition_data->end()){
+                auto layer_data = partition_data->at(layer_number);
+                if (layer_data->find(worker_idx) == layer_data->end()){
+                    will_be_dummy = true;
+                } else{
+                    partition_idx = partition_data->at(layer_number)->at(worker_idx);
+                }
+            }
+        }
+        auto layer_log_data = extra_info->partition_spec->layer_log_map;
+        if (layer_log_data != NULL){
+            if (layer_log_data->find(layer_number) != layer_log_data->end()){
+                auto log_entry = layer_log_data->at(layer_number);
+                auto log_worker_id = TRACEPROV_GET_WORKER_ID(log_entry);
+                if (log_worker_id == 0){
+                    elog(ERROR, "Got 0 as the worker id!");
+                }
+                log_entry = TRACEPROV_STRIP_WORKER_ID(log_entry);
+                if (log_worker_id == worker_idx){
+                    log_offset = log_entry;
+                }
+            }
+        }
+    }
+}
+
 void traceprov_duckdb_bind(duckdb_bind_info info){
     initialize_global_context();
 
@@ -372,23 +416,12 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     // This, for now, assumes that the bind infrastructure in DuckDB is correct.
     // That is, if the arguments are different, then this bind gets called multiple times.
     TraceProvTableExtra *extra_info = (TraceProvTableExtra *)duckdb_bind_get_extra_info(info);
-    uint32_t pointer_column_idx = 0;
-    if (extra_info != nullptr){
-        auto partition_spec = (TraceProvLayerPartition *)extra_info->partition_spec;
-        if (partition_spec != NULL){
-            if (partition_spec->map->find(layer_number) != partition_spec->map->end()){
-                auto partitions = partition_spec->map->at(layer_number)->parition_idx;
-                if (partitions != nullptr){
-                    partition_idx = partitions->at(0);
-                }
-            }
-        }
-    }
 
     TraceProvBindData *bind_data;
     int64_t total_record_count = -1;
     if (current_worker_id == 0){
         bind_data = allocate_bind_data();
+        bind_data->rel_args.offset = log_offset;
         bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
         const uint64_t worker_count = g_tp_duckdb_state.worker_local_contexts->size();
         std::unordered_map<uint64_t, uint64_t> worker_layer_map;
@@ -410,7 +443,12 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
             // This assumes that the code before correctly filters those out. Seems 
             if (layer_number_to_search == 0) continue;
             int64_t child_record_count = -1;
-            TraceProvBindData *child_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, &child_record_count, false, partition_idx);
+            uint64_t local_partition = partition_idx;
+            // Don't do this for combine, even though they have the same layer number
+            bool will_be_dummy = false;
+            int64_t local_offset = log_offset;
+            extract_partition_info(extra_info, will_be_dummy, local_partition, table_flags, worker_idx + 1, layer_number, local_offset);
+            TraceProvBindData *child_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, &child_record_count, false, local_partition);
             if (child_record_count != -1){
                 if (total_record_count == -1) total_record_count = 0;
                 total_record_count += child_record_count;
@@ -424,12 +462,17 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
                 elog(ERROR, "Got inconsitent size!");
             }
             bind_data->column_width = child_bind_data->column_width;
-            child_bind_data->pointer_column_idx = pointer_column_idx;
+            child_bind_data->is_dummy |= will_be_dummy;
+            child_bind_data->rel_args.offset = local_offset;
         }
         bind_data->rel_args.offset = log_offset;
     }else{
         int64_t child_record_count = -1;
-        bind_data = setup_layers(current_worker_id, layer_number, log_offset, &child_record_count, false, partition_idx);
+        bool will_be_dummy = false;
+        uint64_t local_partition = partition_idx;
+        int64_t local_offset = log_offset;
+        extract_partition_info(extra_info, will_be_dummy, local_partition, table_flags, current_worker_id, layer_number, local_offset);
+        bind_data = setup_layers(current_worker_id, layer_number, log_offset, &child_record_count, false, local_partition);
         if (child_record_count != -1){
             if (total_record_count == -1) total_record_count = 0;
             total_record_count += child_record_count;
@@ -453,13 +496,14 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
                 elog(ERROR, "Expected column width to be set!");
             }
         }
+        bind_data->is_dummy |= will_be_dummy;
+        bind_data->rel_args.offset = local_offset;
     }
-    bind_data->pointer_column_idx = pointer_column_idx;
     std::vector<uint8_t> *sizes = NULL;
     if (extra_info == NULL || (extra_info->pointer_spec == NULL)){
         sizes = new std::vector<uint8_t>(bind_data->column_width, sizeof(uint64_t));
     }else{
-        const TraceProvPointerContext *pc = (TraceProvPointerContext *)extra_info->pointer_spec;
+        const TraceProvPointerContext *pc = extra_info->pointer_spec;
         sizes = pc->size_map->at(layer_number);
         if (table_flags & TRACEPROV_TABLE_COMBINE){
             sizes = new std::vector<uint8_t>(bind_data->column_width, sizeof(uint64_t));
@@ -629,6 +673,34 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
 
     auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
 
+    if (bind_data->rel_args.offset != -1){
+        uint64_t *values = NULL;
+        bool new_allocated = false;
+        if (values == NULL){
+            // This allows caching the value, if determined at partition pruning time.
+            // alloc buffer for the values.
+            values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
+            read_at_offset(bind_data->rel_args.offset, bind_data, values, bind_data_combined->sizes);
+            new_allocated = true;
+        }
+        for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+            const uint8_t col_size = bind_data_combined->sizes->at(col_idx);
+            if (col_size == sizeof(uint32_t)){
+                uint32_t *dest_ptr = (uint32_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                dest_ptr[0] = values[col_idx];
+            }else{
+                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                dest_ptr[0] = values[col_idx];
+            }
+        }
+        duckdb_data_chunk_set_size(output, 1);
+        if (new_allocated)
+            free(values);
+        init_data->is_dummy = true;
+        init_data_combined->is_dummy = true;
+        return;
+    }
+
     uint64_t chunk_size = 0;
     if (!bind_data->is_strict_rows){
         // Haven't emitted all chunks yet.
@@ -758,31 +830,6 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
 
     if (init_data->is_dummy){
         duckdb_data_chunk_set_size(output, 0);
-        return;
-    }
-
-    if (bind_data->rel_args.offset != -1){
-        TraceProvLayerPartition *part_info = (TraceProvLayerPartition *)duckdb_function_get_extra_info(info);
-        uint64_t *values = NULL;
-        if (part_info != nullptr){
-            values = (uint64_t *)part_info->map->at(bind_data->rel_args.layer_number)->cached_value;
-        }
-        bool new_allocated = false;
-        if (values == NULL){
-            // This allows caching the value, if determined at partition pruning time.
-            // alloc buffer for the values.
-            values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
-            read_at_offset(bind_data->rel_args.offset, bind_data, values, NULL);
-            new_allocated = true;
-        }
-        for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
-            uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-            dest_ptr[0] = values[col_idx];
-        }
-        duckdb_data_chunk_set_size(output, 1);
-        if (new_allocated)
-            free(values);
-        init_data->is_dummy = true;
         return;
     }
 
@@ -1003,15 +1050,18 @@ duckdb_scalar_function traceprov_create_table_window_func(
     return func;
 }
 
-void *traceprov_get_partition(const uint64_t worker_id, const uint64_t layer_number, const int64_t log_offset, const uint32_t entry_idx, uint64_t *partition_id){
-    auto bind_data = setup_layers(worker_id, layer_number, log_offset, NULL, true);
+void *traceprov_get_row(
+    const uint64_t worker_id,
+    const uint64_t layer_number,
+    const uint64_t log_probe_value,
+    std::vector<uint8_t> *sizes
+){
+    auto bind_data = setup_layers(worker_id, layer_number, log_probe_value, NULL, true);
+    bind_data->sizes = sizes;
     auto value = (uint64_t *)malloc(sizeof(uint64_t)*(bind_data->column_width));
-    read_at_offset(log_offset, bind_data, value, NULL);
+    read_at_offset(log_probe_value, bind_data, value, sizes);
     if (value == 0)
         elog(ERROR, "Expected value to be something!!");
-    const uint64_t log_value = value[entry_idx];
-    *partition_id = TRACEPROV_GET_BUCKET(log_value);
-    elog(INFO, "Using bucket: %ld", *partition_id);
     return value;
 }
 

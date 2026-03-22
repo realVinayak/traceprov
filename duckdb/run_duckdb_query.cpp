@@ -143,6 +143,7 @@ struct Options {
     std::vector<uint32_t> *traceprov_layers_to_derive;
     ExtraQueryGroup *extra_query_groups;
     bool use_extra_threads;
+    std::vector<uint64_t> *log_offsets;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -190,7 +191,8 @@ struct Options parse_args(int argc, char **argv){
         .initial_page_count = 0,
         .traceprov_layers_to_derive = new std::vector<uint32_t>,
         .extra_query_groups = tp_alloc0_object(ExtraQueryGroup),
-        .use_extra_threads = false
+        .use_extra_threads = false,
+        .log_offsets = new std::vector<uint64_t>
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -337,6 +339,9 @@ struct Options parse_args(int argc, char **argv){
         }  else if (IS_OPTION("--traceprov_assume_null")){
             traceprov_assume_null = true;
             continue;
+        } else if (IS_OPTION("--log_offset")){
+            options.log_offsets->push_back(std::atol(argv[++i]));
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -400,7 +405,13 @@ static void populate_traceprov_data(
     // }
 }
 
-static void populate_log_offset(TraceProvLayerPartition *parition, std::string extra_sql);
+static void populate_log_offset(
+    const uint64_t log_offset,
+    TraceProvPointerContext *pc,
+    TraceProvPartitionLayers *partition_layers,
+    TraceProvPartitionInfo *partition_info
+);
+
 static std::string serialize_option(Options *option, const TraceProvNullMap *null_map);
 
 typedef struct PerformQueryResult {
@@ -564,7 +575,13 @@ typedef struct ExtraQuery {
     std::string extra;
 } ExtraQuery;
 
-TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_extra);
+TraceProvDerivationSpec* augment_extra_sql(
+    std::vector<ExtraQuery> &extra_sqls,
+    Options *options,
+    std::vector<TraceProvTableExtra *> *table_func_extra,
+    std::vector<uint64_t> *log_offsets,
+    TraceProvPartitionLayers *partition_layers
+);
 
 TraceProvTableExtra *make_table_extra(){
     TraceProvTableExtra *table_extra = (TraceProvTableExtra *)malloc(sizeof(TraceProvTableExtra));
@@ -793,31 +810,21 @@ int main(int argc, char **argv){
             perform_query(&options, con, in_sql, agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
 
             auto extra_sqls_clone = (extra_sqls);
-            void *table_func_extra = NULL;
-            auto spec = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
-
-            #if TRACEPROV_SD_MODE == 0
-
-            if (traceprov_split_combine){
-               auto cached_cons = make_duckdb_connections(options.num_threads, options.db_path.c_str());
-                TraceProvInferExtra *infer_extra = tp_alloc0_object(TraceProvInferExtra);
-                infer_extra->cached_connections = cached_cons;
-                infer_extra->layer_string = options.extra_query_groups->query_map;
-                infer_extra->spec = spec;
-                duckdb_table_function_set_extra_info(infer_table_func, infer_extra, free);
-            }
-
-            auto extra = make_table_extra();
-            extra->pointer_spec = table_func_extra;
-            duckdb_table_function_set_extra_info(table_funcs.tp_read_func, extra, free); // whatever
-            duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, extra, free);
-
-
-            #endif
+            std::vector<TraceProvTableExtra *> table_func_extra;
+            augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
 
             uint32_t extra_idx = 0;
 
             for (auto extra_sql: extra_sqls_clone){
+                #if TRACEPROV_SD_MODE == 0
+
+                auto extra = table_func_extra.at(extra_idx);
+
+                duckdb_table_function_set_extra_info(table_funcs.tp_read_func, extra, free); // whatever
+                duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, extra, free);
+
+
+                #endif
                 // traceprov_attempt_prefaults();
                 extra_idx++;
                 Options new_options = options;
@@ -835,6 +842,12 @@ int main(int argc, char **argv){
                     NULL,
                     ""
                 );
+
+                #if TRACEPROV_SD_MODE == 0
+                // eh, so that the state is still consistent later.
+                duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
+                duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
+                #endif
             }
         }
     }else{
@@ -855,21 +868,15 @@ int main(int argc, char **argv){
 
 
         auto extra_sqls_clone = (extra_sqls);
-        void *table_func_extra = NULL;
-        augment_extra_sql(extra_sqls_clone, &options, &table_func_extra);
+        std::vector<TraceProvTableExtra *> table_func_extra;
+        augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
 
         // Run extra all ;)
         for (auto extra_sql: extra_sqls_clone){
 
-            // This way, the life cycle of partition_spec is just 1 query.
-            auto partition_spec = traceprov_make_layer_partition_info();
-
-            populate_log_offset(partition_spec, extra_sql.sql);
-
             #if TRACEPROV_SD_MODE == 0
-            auto extra = make_table_extra();
-            extra->partition_spec = partition_spec;
-            extra->pointer_spec = table_func_extra;
+
+            auto extra = table_func_extra.at(extra_sql_idx);
 
             duckdb_table_function_set_extra_info(table_funcs.tp_read_func, (void *)extra, free);
             duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, (void *)extra, free);
@@ -880,7 +887,6 @@ int main(int argc, char **argv){
             extra_options.no_reinit_state = true;
             extra_options.capture_lineage = false;
             extra_options.stats_path = "";
-            extra_options._extra = partition_spec;
             char final_profile_out[256] = {0};
             duckdb_prepared_statement stmt = NULL;
             for (int i = 0; i < extra_options.repeat; i++){
@@ -937,35 +943,88 @@ int main(int argc, char **argv){
     duckdb_close(&db);   
 }
 
-#define LOG_TICKER "/*(traceprov_log_offset): "
-#define LOG_TICKER_REST "%d:%d:%d:%ld*/"
+static void populate_log_offset(
+    uint64_t log_offset,
+    TraceProvPointerContext *pc,
+    TraceProvPartitionLayers *partition_layers,
+    TraceProvPartitionInfo *partition_info
+){
+    initialize_global_context();
 
-#define LOG_TICKER_ALL (LOG_TICKER LOG_TICKER_REST)
+    // Need to, now, check which partitions to consider, for which rows.
+    // The partition will be different for each worker (if there are some)
+    // Ugh.
 
-// To allow for running the experiments multiple times, on the same offset, we try parsing it from the SQL itself.
-static void populate_log_offset(TraceProvLayerPartition *partition, std::string extra_sql){
-    if (extra_sql.find(LOG_TICKER) == std::string::npos){
-        // Maybe throw error here??
-        return;
+    // To do so, we first determine which entries in the top level log are pointers to aggregates.
+    // If they were combined, things get a bit more complicated (need to join to the combine layer, and then read the partitions)
+    TraceProvParseContext *parsed_back_context = NULL;
+    List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL, TRACEPROV_GRAPH_FILE, false);
+    if (list_length(graphs) != 1){
+        elog(ERROR, "Expected only 1 graph!");
     }
-    TraceProvLayerNumber layer_number, child_layer_number;
-    uint64_t offset = 0;
-    uint32_t entry_idx = 0;
-    if (sscanf(extra_sql.c_str(), LOG_TICKER_ALL, &layer_number, &child_layer_number, &entry_idx, &offset) == EOF)
-        elog(ERROR, "Expected full conversion!!");
+    const TraceProvDependency *graph = (TraceProvDependency*)lfirst(list_head(graphs));
 
-    
-    uint64_t partition_idx = 0;
-    // Cache the data, so it doesn't have to be recomputed again later.
-    void *cached_data = traceprov_get_partition(1, layer_number, offset, entry_idx, &partition_idx);
+    auto worker_id = TRACEPROV_GET_WORKER_ID(log_offset);
+    if (worker_id == 0){
+        auto worker_layers = find_layers_across_workers(
+            graph->headNumber,
+            g_tp_duckdb_state.worker_local_contexts,
+            0
+        );
+        if (worker_layers->size() != 1){
+            elog(ERROR, "Expected worker id to be set!!");
+        }
+        auto worker_layer = worker_layers->at(0);
+        worker_id = worker_layer.first;
+        log_offset = TRACEPROV_SET_WORKER_ID(log_offset, worker_id);
+    }
 
-    traceprov_add_layer_partition_info(
-        partition,
-        layer_number,
-        child_layer_number,
-        partition_idx,
-        cached_data
+    auto stripped_log_entry = TRACEPROV_STRIP_WORKER_ID(log_offset);
+
+    void *row = traceprov_get_row(
+        worker_id,
+        graph->headNumber,
+        TRACEPROV_STRIP_WORKER_ID(log_offset),
+        pc->size_map->at(graph->headNumber)
     );
+
+    if (partition_info->cached_data == NULL){
+        partition_info->cached_data = new std::unordered_map<TraceProvLayerNumber, void *>;
+    }
+    partition_info->cached_data->insert({graph->headNumber, row});
+    if (partition_info->layer_log_map == NULL){
+        partition_info->layer_log_map = new std::unordered_map<TraceProvLayerNumber, uint64_t>;
+    }
+    partition_info->layer_log_map->insert({graph->headNumber, log_offset});
+
+    if (!traceprov_use_partition_in_agg) return;
+
+    for (auto pl_item: *partition_layers){
+        const uint64_t logged_entry = ((uint64_t *)row)[pl_item.entry_idx];
+        if (TRACEPROV_GET_IS_COMBINED(logged_entry)){
+            // In this case, need to look at the combine logs to correctly figure out which partitions to prune.
+            elog(ERROR, "Not handling this case for now.")
+        }else{
+            // In this case, the partition is embedded in the log entry.
+            auto log_worker_id = TRACEPROV_GET_WORKER_ID(logged_entry);
+            if (log_worker_id == 0){
+                log_worker_id = 1;
+            }
+            auto log_bucket_id = TRACEPROV_GET_BUCKET(logged_entry);
+            elog(INFO, "Using bucket: %d", log_bucket_id);
+            if (partition_info->partition_data == NULL){
+                partition_info->partition_data = new std::unordered_map<TraceProvLayerNumber, TraceProvWorkerPartition*>;
+            }
+            if (partition_info->partition_data->find(pl_item.layer) == partition_info->partition_data->end()){
+                partition_info->partition_data->insert({pl_item.layer, new TraceProvWorkerPartition});
+            }
+            auto worker_partition_map = partition_info->partition_data->at(pl_item.layer);
+            if (worker_partition_map->find(log_worker_id) != worker_partition_map->end()){
+                elog(ERROR, "Expected to not find the worker in the map yet!");
+            }
+            worker_partition_map->insert({log_worker_id, log_bucket_id});
+        }
+    }
 }
 
 // This doesn't do all of option (that'll be too much)
@@ -1022,68 +1081,77 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
 
 static int global_counter = 0;
 
-TraceProvDerivationSpec* augment_extra_sql(std::vector<ExtraQuery> &extra_sqls, Options *options, void **table_func_extra){
+TraceProvDerivationSpec* augment_extra_sql(
+    std::vector<ExtraQuery> &extra_sqls,
+    Options *options,
+    std::vector<TraceProvTableExtra *> *table_func_extra,
+    std::vector<uint64_t> *log_offsets,
+    TraceProvPartitionLayers *partition_layers
+){
     if (!options->traceprov_perform_derivation) return NULL;
 
     TraceProvParseContext *parsed_back_context;
     char *parsed_sql = NULL;
     auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
-    *table_func_extra = result_spec->p_context;
-    for (auto result_map_pair: *result_spec->result_map){
-        if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
-            // In this case, it is a simple scan.
-            // Apparently, for some reason, DuckDB does not parallelise this????
-            // Anyways, right now, that breaks things.
-            // So, remember that it was a simple scan.
-            TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
-            relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
+    for (auto log_offset: *log_offsets){
+        TraceProvPartitionInfo *info = NULL;
+        if (log_offset != -1){
+            info = new TraceProvPartitionInfo;
+            info->cached_data = NULL;
+            info->partition_data = NULL;
+            info->layer_log_map = NULL;
+            populate_log_offset(log_offset, result_spec->p_context, partition_layers, info);
         }
-        std::vector<std::string> ddls;
-        std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
-        if ((options->traceprov_layers_to_derive->size() != 0) &&
-            (std::find(
-                options->traceprov_layers_to_derive->begin(), 
-                options->traceprov_layers_to_derive->end(), result_map_pair.first
-            )) == options->traceprov_layers_to_derive->end())
-            {
-                continue;
+        for (auto result_map_pair: *result_spec->result_map){
+            auto table_extra = make_table_extra();
+            if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
+                // In this case, it is a simple scan.
+                // Apparently, for some reason, DuckDB does not parallelise this????
+                // Anyways, right now, that breaks things.
+                // So, remember that it was a simple scan.
+                TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
+                relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
             }
-        auto node_sql = traceprov_node_to_sql(
-            result_map_pair.second, 
-            TraceProvToSQLContext{
-                .context = parsed_back_context,
-                .use_table_def = true,
-                .ddls = &ddls,
-                .added_ddls = &added_ddls,
-                .pointer_context = traceprov_combine_in_memory ? result_spec->p_context : NULL
+            std::vector<std::string> ddls;
+            std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+            if ((options->traceprov_layers_to_derive->size() != 0) &&
+                (std::find(
+                    options->traceprov_layers_to_derive->begin(), 
+                    options->traceprov_layers_to_derive->end(), result_map_pair.first
+                )) == options->traceprov_layers_to_derive->end())
+                {
+                    continue;
+                }
+            auto node_sql = traceprov_node_to_sql(
+                result_map_pair.second, 
+                TraceProvToSQLContext{
+                    .context = parsed_back_context,
+                    .use_table_def = true,
+                    .ddls = &ddls,
+                    .added_ddls = &added_ddls,
+                    .pointer_context = NULL
+                }
+            );
+            //elog(INFO, "SQL Query: %s", node_sql.c_str());
+            if (options->traceprov_materialize_derivation){
+                std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+                node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+                // for (auto ddl_string : ddls){
+                //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                //     extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
+                //     extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+                //     elog(INFO, "Table: %s", base_table_name.c_str());
+                //     elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
+                // }
             }
-        );
-        //elog(INFO, "SQL Query: %s", node_sql.c_str());
-        if (options->traceprov_materialize_derivation){
-            std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
-            // node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-            node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-            // node_sql = "copy (" + node_sql + ") to " + table_name + ".parquet";
-            // node_sql = "EXPLAIN (ANALYZE) " + node_sql;
-            // for (auto ddl_string : ddls){
-            //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-            //     extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
-            //     extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-            //     elog(INFO, "Table: %s", base_table_name.c_str());
-            //     elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
-            // }
-        }
-        // std::string extra_str = "";
-        // extra_str += "{";
-        // extra_str += "\"layer\": ";
-        // extra_str += std::to_string(result_map_pair.first);
-        // extra_str += ",";
-        // extra_str += "\"sql\": ";
-        // extra_str += "\"" + std::string(parsed_sql) + "\""
-        if (options->traceprov_dry_run_derivation){
-            elog(INFO, "SQL Query: %s", node_sql.c_str());
-        }else if (!traceprov_split_combine){
-            extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+            if (options->traceprov_dry_run_derivation){
+                elog(INFO, "SQL Query: %s", node_sql.c_str());
+            }else {
+                table_extra->pointer_spec = result_spec->p_context;
+                table_extra->partition_spec = info;
+                table_func_extra->push_back(table_extra);
+                extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+            }
         }
     }
 

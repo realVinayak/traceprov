@@ -658,9 +658,15 @@ TraceProvPartitionLayers *traceprov_layers_to_partition(){
             TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
             if (te->kind == TP_ENTRY_KIND_POINTER){
                 // It is of kind pointer.
-                TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
+                auto curr_idx = (uint32_t)foreach_current_index(entry_cursor);
+                TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, curr_idx);
                 if (child_graph->graph_type == TP_AGGREGATE){
-                    partition_layers->push_back(child_graph->headNumber);
+                    partition_layers->push_back(
+                        TraceProvPartitionLayerItem{
+                            .entry_idx = curr_idx,
+                            .layer = child_graph->headNumber
+                        }
+                    );
                 }
             }
         }

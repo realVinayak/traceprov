@@ -532,11 +532,12 @@ unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<E
     }
     bool will_hash = false;
     if (extra->partition_layers && traceprov_use_partition_in_agg){
-        will_hash = std::find(
-            extra->partition_layers->begin(),
-            extra->partition_layers->end(),
-            layer_number
-        ) != extra->partition_layers->end();
+        for (auto partition_layer_item: *extra->partition_layers){
+            if (partition_layer_item.layer == layer_number){
+                will_hash = true;
+                break;
+            }
+        }
     }
 
     auto bind_ptr = make_uniq<TraceProvAggBind>(
@@ -908,7 +909,8 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
         struct traceprov_agg_context *target_state = target_states[idx];
 
         if (!target_state->is_combined){
-            target_state->group_cnt = TRACEPROV_SET_IS_COMBINED(target_state->group_cnt);
+            // We set the current worker id as the worker, so that it can be used when filtering easily.
+            target_state->group_cnt = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_WORKER_ID(TRACEPROV_STRIP_WORKER_ID(target_state->group_cnt), traceprov_current.my_worker_id));
             target_state->is_combined = true;
         }
 
