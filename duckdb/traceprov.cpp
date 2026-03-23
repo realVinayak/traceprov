@@ -13,6 +13,11 @@
 
 using namespace duckdb;
 
+
+// This is done this way because the earlier version (of which SmokedDuck is based)
+// does not have the extra info API.
+TraceProvAggExtra *g_tp_agg_extra = NULL;
+
 thread_local struct current_context traceprov_current = {
     .my_worker_id = 0,
     .traceprov_shared_context_fd = -1,
@@ -32,7 +37,6 @@ typedef struct TraceProvLogBind {
 
 #define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 
-#if TRACEPROV_SD_MODE==0
 static void bp(){
 
 }
@@ -104,135 +108,144 @@ static int initialize_local_and_layer(
     STATE->group_cnt = TRACEPROV_SET_WORKER_ID((TRACEPROV_SET_BUCKET(original_group_number, bucket)), traceprov_current.my_worker_id); \
 } \
 
+unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<Expression>> &arguments, TraceProvAggExtra *extra);
 
 static void traceprov_direct_update_partition(Vector inputs[], AggregateInputData &aggr_input_data, idx_t input_count, Vector &states, idx_t count);
-// // Partition version of update.
-// // They both share a lot of things.
-// // But, separating the code still helps
-// // Common things are put in macros.
-// void traceprov_update_partition(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states){
-//     const idx_t num_rows = duckdb_data_chunk_get_size(input);
-//     PRINT_ON_DEBUG("Number of rows: %ld", num_rows);
-//     if (num_rows == 0) return;
 
-//     TraceProvAggExtra *extra;
-//     idx_t orig_num_cols, num_cols;
-//     struct traceprov_agg_context **agg_contexts;
-//     struct traceprov_aggregate_layer *main_layer;
-//     uint32_t layer_number;
-
-//     // TP_UPDATE_SETUP_MAIN(1);
-
-//     if (unlikely(agg_contexts == NULL || extra->ignore_gn))
-//         elog(ERROR, "Invalid options!");
-    
-//     uint32_t cursors[TRACEPROV_BUCKET_COUNT] = {0};
-
-//     for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-//         struct traceprov_agg_context *curr_state = agg_contexts[row_idx];
-
-//         if (unlikely(curr_state->layer_number == 0)){
-//             TRACPROV_SET_BUCKET_ON_STATE(curr_state, main_layer, extra);
-//         }
-
-//         const uint64_t local_bucket = TRACEPROV_GET_BUCKET(curr_state->group_cnt);
-//         // This "collects" the row ids that correspond to this bucket.
-//         const uint64_t cursor = cursors[local_bucket]++;
-//         uint32_t *slice_vector = ((uint32_t *)(extra->slice_vectors[local_bucket]));
-//         slice_vector[cursor] = row_idx;
-//     }
-
-//     for (uint32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
-//         // Nothing to do for this bucket.
-//         // Will happen when nothing gets hashed into for this bucket.
-//         const uint32_t slice_size = cursors[idx];
-//         if (slice_size == 0) continue;
-//         // avoids the function call overhead. But ig compiler can do it??
-//         uint32_t *slice_idx = (uint32_t *)extra->slice_vectors[idx];
-//         // This will be the size of this chunk.
-//         const uint64_t chunk_size = sizeof(uint64_t)*slice_size;
-//         struct traceprov_aggregate_layer *current_layer = main_layer;
-//         if (idx > 0){
-//             current_layer = get_layer(main_layer->buckets[idx - 1]);
-//         }
-//         TRACEPROV_GROW_IF_TRUE(current_layer, (((uint64_t)current_layer->current_row + chunk_size) > (uint64_t)current_layer->end_of_memory_zone));
-//         for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-//             *((uint64_t*)current_layer->current_row) = agg_contexts[slice_idx[curr_slice_idx]]->group_cnt;
-//             current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
-//         }
-//         for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
-//             duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-//             uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col_vector);
-//             TRACEPROV_GROW_IF_TRUE(current_layer, (((uint64_t)current_layer->current_row + chunk_size) > (uint64_t)current_layer->end_of_memory_zone));
-//             for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-//                 *((uint64_t*)current_layer->current_row) = col_data[slice_idx[curr_slice_idx]];
-//                 current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
-//             }
-//         }
-
-//         struct traceprov_aggregate_layer *curr_rows_layer = get_layer(current_layer->rows_layer_number);
-//         TP_APPEND_CHUNK_SIZE(curr_rows_layer, slice_size);
-//     }
+// // Taken from duckdb src.
+// duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function function) {
+//     return reinterpret_cast<duckdb::AggregateFunction *>(function);
 // }
 
 
-// Taken from duckdb src.
-duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function function) {
-    return reinterpret_cast<duckdb::AggregateFunction *>(function);
-}
+// inline bool RowIsVisible(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+//     return (row_idx < scan->next_row_index && scan->current_row_index <= row_idx);
+// }
 
+// inline sel_t RowOffset(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+//     return duckdb::UnsafeNumericCast<sel_t>(row_idx - scan->current_row_index);
+// }
+// // Inspired from implementation in mode.cpp, but without any class stuff
+// // since we don't need that.
+// void traceprov_window(
+//     duckdb::AggregateInputData &aggr_input_data,
+//     const duckdb::WindowPartitionInput &partition,
+//     duckdb::const_data_ptr_t g_state,
+//     duckdb::data_ptr_t l_state,
+//     const duckdb::SubFrames &subframes,
+//     duckdb::Vector &result,
+//     duckdb::idx_t rid
+// ){
+//     if (partition.count == 0){
+//         elog(INFO, "Skipping window because output is empty!");
+//         return;
+//     }
+//     if (subframes.size() != 1)
+//         elog(ERROR, "Expected the subframe size to be 1!");
 
-inline bool RowIsVisible(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
-    return (row_idx < scan->next_row_index && scan->current_row_index <= row_idx);
-}
+//     auto frame = subframes.at(0);
+//     // elog(INFO, "Start: %ld, End: %ld, RID: %ld, Count: %ld", frame.start, frame.end, rid, partition.count);
+//     // Don't do anything if the frame end is not the row end.
+//     if (frame.end < partition.count) return;
+//     // Now, need to do all the bulk stuff.
 
-inline sel_t RowOffset(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
-    return duckdb::UnsafeNumericCast<sel_t>(row_idx - scan->current_row_index);
-}
-// Inspired from implementation in mode.cpp, but without any class stuff
-// since we don't need that.
-void traceprov_window(
-    duckdb::AggregateInputData &aggr_input_data,
-    const duckdb::WindowPartitionInput &partition,
-    duckdb::const_data_ptr_t g_state,
-    duckdb::data_ptr_t l_state,
-    const duckdb::SubFrames &subframes,
-    duckdb::Vector &result,
-    duckdb::idx_t rid
-){
-    if (partition.count == 0){
-        elog(INFO, "Skipping window because output is empty!");
-        return;
+//     auto scan = new duckdb::ColumnDataScanState();
+//     auto inputs = partition.inputs;
+//     inputs->InitializeScan(*scan, partition.column_ids);
+//     duckdb::DataChunk page;
+//     inputs->InitializeScanChunk(*scan, page);
+
+//     int64_t last_chunk_idx = -1;
+//     for (idx_t row_id = frame.start; row_id < frame.end; row_id++){
+//         if(!inputs->Seek(row_id, *scan, page)){
+//             elog(ERROR, "Expected seek to always be fine!")
+//         }
+//         // In this case, we'll have already written  up this chunk.
+//         // So, continue in this case.
+//         if ((int64_t)scan->chunk_index == last_chunk_idx) continue;
+//         // traceprov_update(NULL, reinterpret_cast<duckdb_data_chunk>(&page), NULL);
+//         last_chunk_idx = scan->chunk_index;
+//     }
+// }
+
+#define TP_NO_EXPECT elog(ERROR, "Didn't expect to be called!")
+
+// This is hacky.
+// Because we need to support DuckDB version that don't have bind info API.
+class TraceProvBoundFunctionExpression : public Expression {
+public:
+	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_FUNCTION;
+
+public:
+    TraceProvBoundFunctionExpression(LogicalType return_type, ScalarFunction bound_function,
+                                                 vector<unique_ptr<Expression>> arguments,
+                                                 unique_ptr<FunctionData> bind_info, bool is_operator);
+
+    //! The bound function expression
+    ScalarFunction function;
+    //! List of child-expressions of the function
+    vector<unique_ptr<Expression>> children;
+    //! The bound function data (if any)
+    unique_ptr<FunctionData> bind_info;
+    //! Whether or not the function is an operator, only used for rendering
+    bool is_operator;
+
+public:
+    bool IsVolatile() {
+        TP_NO_EXPECT;
+        return false;
+    };
+    bool IsConsistent() {
+        TP_NO_EXPECT;
+        return false;
     }
-    if (subframes.size() != 1)
-        elog(ERROR, "Expected the subframe size to be 1!");
-
-    auto frame = subframes.at(0);
-    // elog(INFO, "Start: %ld, End: %ld, RID: %ld, Count: %ld", frame.start, frame.end, rid, partition.count);
-    // Don't do anything if the frame end is not the row end.
-    if (frame.end < partition.count) return;
-    // Now, need to do all the bulk stuff.
-
-    auto scan = new duckdb::ColumnDataScanState();
-    auto inputs = partition.inputs;
-    inputs->InitializeScan(*scan, partition.column_ids);
-    duckdb::DataChunk page;
-    inputs->InitializeScanChunk(*scan, page);
-
-    int64_t last_chunk_idx = -1;
-    for (idx_t row_id = frame.start; row_id < frame.end; row_id++){
-        if(!inputs->Seek(row_id, *scan, page)){
-            elog(ERROR, "Expected seek to always be fine!")
-        }
-        // In this case, we'll have already written  up this chunk.
-        // So, continue in this case.
-        if ((int64_t)scan->chunk_index == last_chunk_idx) continue;
-        // traceprov_update(NULL, reinterpret_cast<duckdb_data_chunk>(&page), NULL);
-        last_chunk_idx = scan->chunk_index;
+    bool IsFoldable() const {
+        TP_NO_EXPECT;
+        return false;
     }
-}
+    string ToString() const {
+        TP_NO_EXPECT;
+        return "";
+    };
+    bool PropagatesNullValues() const {
+        TP_NO_EXPECT;
+        return false;
+    };
+    hash_t Hash() const {
+        TP_NO_EXPECT;
+        return 0;
+    };
+    bool Equals(const BaseExpression &other) const {
+        TP_NO_EXPECT;
+        return false;
+    };
 
-void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckdb_vector output){
+    unique_ptr<Expression> Copy() {
+        TP_NO_EXPECT;
+        return nullptr;
+    };
+    void Verify() const {
+        TP_NO_EXPECT;
+    };
+
+    void Serialize(Serializer &serializer) const {
+        TP_NO_EXPECT;
+    };
+    static unique_ptr<Expression> Deserialize(Deserializer &deserializer){
+        TP_NO_EXPECT;
+    }
+};
+
+
+TraceProvBoundFunctionExpression::TraceProvBoundFunctionExpression(LogicalType return_type, ScalarFunction bound_function,
+                                                 vector<unique_ptr<Expression>> arguments,
+                                                 unique_ptr<FunctionData> bind_info, bool is_operator)
+    : Expression(ExpressionType::BOUND_FUNCTION, ExpressionClass::BOUND_FUNCTION, std::move(return_type)),
+      function(std::move(bound_function)), children(std::move(arguments)), bind_info(std::move(bind_info)),
+      is_operator(is_operator) {
+	
+}
+void traceprov_reinit_state_direct(DataChunk &input, ExpressionState &state, Vector &result){
 
     traceprov_reset_local();
 
@@ -241,7 +254,11 @@ void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckd
     memset(traceprov_data_dir, 0, sizeof(char)*512);
     sprintf(traceprov_data_dir, TRACE_PROV_DIR, DataDir);
     int rc = 0;
-    uint64_t* result_data = (uint64_t *)duckdb_vector_get_data(output);
+    #if TRACEPROV_SD_MODE==0
+    uint64_t* result_data = FlatVector::GetDataUnsafe<uint64_t>(result);
+    #else
+    uint64_t* result_data = (uint64_t*)FlatVector::GetData<void>(result);
+    #endif
     if ((rc = create_dir_if_not_exists(traceprov_data_dir, (S_IRWXU | S_IRGRP | S_IXGRP)))){
         elog(ERROR, "Error creating traceprovdir!");
     }
@@ -252,33 +269,38 @@ void traceprov_reinit_state(duckdb_function_info, duckdb_data_chunk input, duckd
     free(traceprov_data_dir);
 }
 
-duckdb_scalar_function traceprov_create_reinit_state(){
-    duckdb_scalar_function func = duckdb_create_scalar_function();
-    duckdb_scalar_function_set_name(func, "reinit_state");
-    duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
-    duckdb_scalar_function_set_return_type(func, type);
-    duckdb_destroy_logical_type(&type);
-    duckdb_scalar_function_set_function(func, traceprov_reinit_state);
+ScalarFunction *traceprov_create_reinit_state(){
+    auto func = new ScalarFunction(
+        "reinit_state",
+        {},
+        LogicalType::BIGINT,
+        traceprov_reinit_state_direct
+    );
     return func;
 }
 
-void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
-    const idx_t num_rows = duckdb_data_chunk_get_size(input);
-    const idx_t num_cols = duckdb_data_chunk_get_column_count(input);
+void traceprov_log_direct(DataChunk &input, ExpressionState &state, Vector &result){
+    auto &function = state.expr.Cast<TraceProvBoundFunctionExpression>();
+    auto &bind_info = function.bind_info;
+    auto &bind_data = bind_info->Cast<TraceProvAggBind>();
+    input.Flatten();
+    const idx_t num_rows = input.size();
+    const idx_t num_cols = input.ColumnCount();
     if (num_rows == 0) return;
-    TraceProvDuckDbState *tp_duckdb_state = (TraceProvDuckDbState *) duckdb_scalar_function_get_extra_info(info);
-    const TraceProvLogBind *bind_data = (TraceProvLogBind *) duckdb_scalar_function_get_bind_data(info);
-    const TraceProvLayerNumber layer_number = bind_data->layer_number;
-    const bool can_be_null = bind_data->infer_null || bind_data->cols != NULL;
-    if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true, tp_duckdb_state->should_hash, can_be_null))){
+    const TraceProvLayerNumber layer_number = bind_data.layer_number;
+    const bool can_be_null = bind_data.infer_null || bind_data.cols != NULL;
+    if ((initialize_local_and_layer(layer_number, num_cols - 1, 1, true, false, can_be_null))){
         elog(ERROR, "Error setting up local or layer!");
     }
 
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
-    auto sizes = bind_data->sizes;
+    auto sizes = bind_data.sizes;
     for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
-        duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-        void *col_data = (void *)duckdb_vector_get_data(col_vector);
+        #if TRACEPROV_SD_MODE==1
+        void *col_data = FlatVector::GetData<void>(input.data[col_idx]);
+        #else
+        void *col_data = FlatVector::GetDataUnsafe<void>(input.data[col_idx]);
+        #endif
         // elog(INFO, "Layer: %d, Col Idx: %d, Size: %d", layer_number, col_idx - 1, sizes->at(col_idx - 1));
         const uint64_t chunk_size = sizes->at(col_idx - 1) * num_rows;
         TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
@@ -295,15 +317,26 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
     chunk_size_layer->record_count = existing_record_count + num_rows;
     chunk_size_layer->num_rows++;
 
-    if (tp_duckdb_state->is_bool_return){
-        memset(((bool*)duckdb_vector_get_data(output)), true, sizeof(bool)*num_rows);
+    const bool is_bool_return = result.GetType() == LogicalType::BOOLEAN;
+    if (is_bool_return){
+        #if TRACEPROV_SD_MODE==1
+        bool *out_data = FlatVector::GetData<bool>(result);
+        #else
+        bool *out_data = FlatVector::GetDataUnsafe<bool>(result);
+        #endif
+        memset(out_data, true, sizeof(bool)*num_rows);
     }else{
         const uint64_t start_idx = chunk_size_layer->record_count;
-        uint64_t *output_data = (uint64_t*)duckdb_vector_get_data(output);
+        #if TRACEPROV_SD_MODE==1
+        uint64_t *out_data = FlatVector::GetData<uint64_t>(result);
+        #else
+        uint64_t *out_data = FlatVector::GetDataUnsafe<uint64_t>(result);
+        #endif
+        memset(out_data, true, sizeof(bool)*num_rows);
         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
             // This way, the final output of the log is unique (used for point queries)
             // Technically, this can be optimized a lot more (only do this for )
-            output_data[row_idx] = (TRACEPROV_SET_WORKER_ID((row_idx + start_idx), traceprov_current.my_worker_id));
+            out_data[row_idx] = (TRACEPROV_SET_WORKER_ID((row_idx + start_idx), traceprov_current.my_worker_id));
         }
     }
 
@@ -320,23 +353,12 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
         validity_to_append.reserve(num_cols);
         const uint64_t validity_size = ((num_rows - 1) / 64) + 1;
         for (idx_t col_idx = 1; col_idx < num_cols; col_idx++){
-            if (bind_data->cols){
-                const bool is_nullable = std::find(bind_data->cols->begin(), bind_data->cols->end(), col_idx - 1) != bind_data->cols->end();
+            if (bind_data.cols){
+                const bool is_nullable = std::find(bind_data.cols->begin(), bind_data.cols->end(), col_idx - 1) != bind_data.cols->end();
                 if (!is_nullable) continue;
-            }   
-            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-            uint64_t *validity = duckdb_vector_get_validity(col_vector);
-            if (validity == NULL) continue;
-
-            bool null_present = false;
-            for (idx_t validity_idx = 0; validity_idx < validity_size; validity_idx++){
-                if (validity[validity_idx] != (uint64_t)-1){
-                    null_present = true;
-                    elog(INFO, "Found nulls!");
-                    break;
-                }
             }
-            if (!null_present) continue;
+            auto validity = FlatVector::Validity(input.data[col_idx]);
+            if (validity.AllValid()) continue;
             validity_to_append.push_back(col_idx);
         }
         TRACEPROV_GROW_IF_TRUE(null_layer, (((uint64_t)null_layer->current_row + 2*sizeof(uint64_t)) > (uint64_t)null_layer->end_of_memory_zone));
@@ -345,8 +367,8 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
         null_layer->current_row = INCR_BY_BYTES(null_layer->current_row, 2*sizeof(uint64_t));
         for (auto col_idx : validity_to_append)
         {
-            duckdb_vector col_vector = duckdb_data_chunk_get_vector(input, col_idx);
-            uint64_t *validity = duckdb_vector_get_validity(col_vector);
+            auto validity_mask = FlatVector::Validity(input.data[col_idx]);
+            uint64_t *validity = validity_mask.GetData();
             // Need to write this column vector's validity.
             // We already know what the size of this vector is (so don't need to write it again)
 
@@ -363,87 +385,17 @@ void traceprov_log(duckdb_function_info info, duckdb_data_chunk input, duckdb_ve
 }
 
 
-
-static void *copy_traceprov_log_bind(void *bind_data){
-    TraceProvLogBind *tp_bind_data = (TraceProvLogBind *)bind_data;
-    TraceProvLogBind *tp_new_bind_data = (TraceProvLogBind *)malloc(sizeof(TraceProvLogBind));
-    *tp_new_bind_data = *tp_bind_data;
-    if (tp_new_bind_data->cols){
-        auto new_cols = new std::vector<uint64_t>;
-        for (auto col: *tp_new_bind_data->cols){
-            new_cols->push_back(col);
-        }
-        tp_new_bind_data->cols = new_cols;
-    }
-    if (tp_new_bind_data->sizes){
-        auto new_sizes = new std::vector<uint8_t>;
-        for (auto size: *tp_new_bind_data->sizes){
-            new_sizes->push_back(size);
-        }
-        tp_new_bind_data->sizes = new_sizes;
-    }
-    return tp_new_bind_data;
-}
-
-void traceprov_log_bind(duckdb_bind_info info){
-    const TraceProvDuckDbState *state = (TraceProvDuckDbState *)duckdb_scalar_function_bind_get_extra_info(info);
-    TraceProvLogBind *bind_data = (TraceProvLogBind*)malloc(sizeof(TraceProvLogBind));
-    bind_data->infer_null = traceprov_assume_null;
-    bind_data->cols = NULL;
-    bind_data->layer_number = 0;
-    bind_data->sizes = new std::vector<uint8_t>;
-
-    auto expr = duckdb_scalar_function_bind_get_argument(info, 0);
-    auto foldable = duckdb_expression_is_foldable(expr);
-    if (!foldable){
-        elog(ERROR, "Expected first arg to be foldable!");
-    }
-    duckdb_client_context context;
-    duckdb_scalar_function_get_client_context(info, &context);
-    duckdb_value value;
-    auto error_data = duckdb_expression_fold(context, expr, &value);
-    auto has_error = duckdb_error_data_has_error(error_data);
-    if (has_error){
-        elog(ERROR, "Error evaluating exprn: %s", duckdb_error_data_message(error_data));
-    }
-    const TraceProvLayerNumber layer_number = duckdb_get_int32(value);
-    duckdb_destroy_value(&value);
-    duckdb_destroy_expression(&expr);
-    duckdb_destroy_client_context(&context);
-
-    bind_data->layer_number = layer_number;
-
-    if (state != NULL && state->null_map != NULL){
-        const bool has_nullables = state->null_map->find(layer_number) != state->null_map->end();
-        if (has_nullables){
-            auto cols = state->null_map->at(layer_number);
-            if (cols->size() > 0){
-                bind_data->cols = cols;
-            }
-        }
-    }
-
-    for (idx_t arg_idx = 1; arg_idx < duckdb_scalar_function_bind_get_argument_count(info); arg_idx++){
-        auto arg_expr = duckdb_scalar_function_bind_get_argument(info, arg_idx);
-        auto arg_type = duckdb_expression_return_type(arg_expr);
-        auto logical_type_id = LogicalTypeIdFromC(duckdb_get_type_id(arg_type));
-        if (logical_type_id == LogicalTypeId::UINTEGER || logical_type_id == LogicalTypeId::INTEGER){
-            bind_data->sizes->push_back(sizeof(uint32_t));
-        }else{
-            bind_data->sizes->push_back(sizeof(uint64_t));
-        }
-    }
-
-    duckdb_scalar_function_set_bind_data(info, bind_data, free);
-    duckdb_scalar_function_set_bind_data_copy(info, copy_traceprov_log_bind);
+unique_ptr<FunctionData> traceprov_log_direct_bind(ClientContext &context, ScalarFunction &bound_function, vector<unique_ptr<Expression>> &arguments){
+    return shared_bind(context, arguments, g_tp_agg_extra);
 }
 
 #define TRACEPROV_DUCKDB_LOG_FUNC_NAME          "traceprov_log_entry_%d"
 #define TRACEPROV_DUCKDB_VOLATILE_LOG_FUNC_NAME "traceprov_log_entry_volatile_%d"
 #define TRACEPROV_DUCKDB_BOOLEAN_LOG_FUNC_NAME "traceprov_log_entry_bool_%d"
 
-duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, const bool is_volatile, TraceProvNullMap *null_map, const bool is_boolean){
-    duckdb_scalar_function *funcs = (duckdb_scalar_function *)malloc(sizeof(duckdb_scalar_function) * num_args);
+
+ScalarFunction **traceprov_create_log_function(const uint32_t num_args, const bool is_volatile, TraceProvNullMap *null_map, const bool is_boolean){
+    ScalarFunction** funcs = (ScalarFunction **)malloc(sizeof(ScalarFunction *) * num_args);
     for (uint32_t idx = 0; idx < num_args; idx++){
         char func_name[256] = {0};
         char *func_name_str = "";
@@ -456,40 +408,42 @@ duckdb_scalar_function* traceprov_create_log_function(const uint32_t num_args, c
             func_name_str = TRACEPROV_DUCKDB_LOG_FUNC_NAME;
         }
         sprintf(func_name, func_name_str, idx + 1);
-        duckdb_scalar_function func = duckdb_create_scalar_function();
-        duckdb_scalar_function_set_name(func, func_name);
-        duckdb_logical_type ret_type;
+        auto func = new ScalarFunction("", {}, duckdb::LogicalType::INVALID, nullptr, nullptr);
+        func->name = func_name;
         if (is_boolean_return){
-            ret_type = duckdb_create_logical_type(DUCKDB_TYPE_BOOLEAN);
+            func->return_type = duckdb::LogicalType::BOOLEAN;
         }else{
-            ret_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+            func->return_type = duckdb::LogicalType::UBIGINT;
         }
-        duckdb_scalar_function_set_return_type(func, ret_type);
-        duckdb_logical_type layer_number_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-        duckdb_scalar_function_add_parameter(func, layer_number_type);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_ANY);
+        func->arguments.push_back(duckdb::LogicalType::INTEGER);
         for (uint32_t arg_idx = 0; arg_idx < idx + 1; arg_idx++){
-            duckdb_scalar_function_add_parameter(func, type);
+            func->arguments.push_back(duckdb::LogicalType::ANY);
         }
-        duckdb_destroy_logical_type(&layer_number_type);
-        duckdb_destroy_logical_type(&type);
-        duckdb_destroy_logical_type(&ret_type);
-        duckdb_scalar_function_set_function(func, traceprov_log);
-        duckdb_scalar_function_set_bind(func, traceprov_log_bind);
+        func->function = traceprov_log_direct;
+        func->bind = traceprov_log_direct_bind;
         if (is_volatile){
-            duckdb_scalar_function_set_volatile(func);
+            func->stability = FunctionStability::VOLATILE;
+        }else{
+            func->stability = FunctionStability::CONSISTENT_WITHIN_QUERY;
         }
-        duckdb_scalar_function_set_special_handling(func);
-        auto tp_duckdb_state = new TraceProvDuckDbState;
-        tp_duckdb_state->should_hash = traceprov_use_partition_in_log;
-        tp_duckdb_state->null_map = null_map;
-        tp_duckdb_state->is_bool_return = is_boolean_return;
-        duckdb_scalar_function_set_extra_info(func, tp_duckdb_state, nullptr);
+        func->null_handling = duckdb::FunctionNullHandling::SPECIAL_HANDLING;
         funcs[idx] = func;
     }
     return funcs;
 }
 
+#if TRACEPROV_SD_MODE==1
+
+static idx_t traceprov_direct_state_size() {
+    return sizeof(struct traceprov_agg_context);
+}
+
+static void traceprov_direct_state_init( data_ptr_t state) {
+    auto state_ptr = reinterpret_cast<struct traceprov_agg_context *>(state);
+    memset(state_ptr, 0, sizeof(struct traceprov_agg_context));
+}
+
+#else
 static idx_t traceprov_direct_state_size(const AggregateFunction &function) {
     return sizeof(struct traceprov_agg_context);
 }
@@ -498,6 +452,7 @@ static void traceprov_direct_state_init(const AggregateFunction &function, data_
     auto state_ptr = reinterpret_cast<struct traceprov_agg_context *>(state);
     memset(state_ptr, 0, sizeof(struct traceprov_agg_context));
 }
+#endif
 
 unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<Expression>> &arguments, TraceProvAggExtra *extra){
     if (!arguments[0]->IsScalar()){
@@ -541,7 +496,6 @@ unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<E
     }
 
     auto bind_ptr = make_uniq<TraceProvAggBind>(
-        extra,
         layer_number,
         sizes,
         traceprov_assume_null,
@@ -552,8 +506,7 @@ unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<E
 }
 
 unique_ptr<FunctionData> traceprov_direct_bind(ClientContext &context, AggregateFunction &function, vector<unique_ptr<Expression>> &arguments){
-    auto extras = &function.function_info->Cast<TraceProvAggExtra>();
-    return shared_bind(context, arguments, extras);
+    return shared_bind(context, arguments, g_tp_agg_extra);
 }
 
 static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_input_data, idx_t input_count, Vector &states, idx_t count){
@@ -565,7 +518,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
         return traceprov_direct_update_partition(inputs, aggr_input_data, input_count, states, count);
     }
 
-    TraceProvAggExtra *extra = bind_data.extra;
+    TraceProvAggExtra *extra = g_tp_agg_extra;
     const TraceProvLayerNumber layer_number = bind_data.layer_number;
 
     const idx_t orig_num_cols = input_count;
@@ -581,7 +534,11 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
         return;
     }
 
+    #if TRACEPROV_SD_MODE==1
+    struct traceprov_agg_context **agg_contexts = FlatVector::GetData<struct traceprov_agg_context *>(states);
+    #else
     struct traceprov_agg_context **agg_contexts = FlatVector::GetDataUnsafe<struct traceprov_agg_context *>(states);
+    #endif
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
 
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
@@ -622,7 +579,11 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     auto sizes = bind_data.sizes;
     for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
         inputs[col_idx].Flatten(count);
+        #if TRACEPROV_SD_MODE==1
+        void *col_data = FlatVector::GetData<void>(inputs[col_idx]);
+        #else
         void *col_data = FlatVector::GetDataUnsafe<void>(inputs[col_idx]);
+        #endif
         auto compact_chunk_size = (sizes->at(col_idx - 1)*num_rows);
         TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + compact_chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
         memcpy(main_layer->current_row, col_data, compact_chunk_size);
@@ -683,7 +644,11 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
     }
 
     uint32_t cursors[TRACEPROV_BUCKET_COUNT] = {0};
+    #if TRACEPROV_SD_MODE==1
+    struct traceprov_agg_context **agg_contexts = FlatVector::GetData<struct traceprov_agg_context *>(states);
+    #else
     struct traceprov_agg_context **agg_contexts = FlatVector::GetDataUnsafe<struct traceprov_agg_context *>(states);
+    #endif
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
 
     for (uint16_t row_idx = 0; row_idx < num_rows; row_idx++){
@@ -787,7 +752,11 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
         auto sizes = bind_data.sizes;
         for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
             inputs[col_idx].Flatten(count);
+            #if TRACEPROV_SD_MODE==1
+            void *col_data = FlatVector::GetData<void>(inputs[col_idx]);
+            #else
             void *col_data = FlatVector::GetDataUnsafe<void>(inputs[col_idx]);
+            #endif
             const uint8_t curr_column_size = sizes->at(col_idx - 1);
             const uint32_t compact_chunk_size = (curr_column_size*slice_size);
             TRACEPROV_GROW_IF_TRUE(
@@ -851,13 +820,19 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
 static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateInputData &aggr_input_data, idx_t count){
     state.Flatten(count);
     auto &bind_data = aggr_input_data.bind_data->Cast<TraceProvAggBind>();
-    auto extra = bind_data.extra;
+    auto extra = g_tp_agg_extra;
     // If we're ignoring group numbers, don't do anything.
     if (extra->ignore_gn){
         return;
     }
+
+    #if TRACEPROV_SD_MODE==1
+    struct traceprov_agg_context **source_states = FlatVector::GetData<struct traceprov_agg_context *>(state);
+    struct traceprov_agg_context **target_states = FlatVector::GetData<struct traceprov_agg_context *>(combined);
+    #else
     struct traceprov_agg_context **source_states = FlatVector::GetDataUnsafe<struct traceprov_agg_context *>(state);
     struct traceprov_agg_context **target_states = FlatVector::GetDataUnsafe<struct traceprov_agg_context *>(combined);
+    #endif
 
     if (initialize_local_context() != 0){
         elog(ERROR, "Error setting up local context!");
@@ -933,14 +908,20 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
 
 static void traceprov_direct_finalize(Vector &state, AggregateInputData &aggr_input_data, Vector &result, idx_t count, idx_t offset){
     state.Flatten(count);
+    #if TRACEPROV_SD_MODE==1
+    struct traceprov_agg_context **source_states = FlatVector::GetData<struct traceprov_agg_context *>(state);
+    uint64_t *result_data = FlatVector::GetData<uint64_t>(result);
+    #else
     struct traceprov_agg_context **source_states = FlatVector::GetDataUnsafe<struct traceprov_agg_context *>(state);
     uint64_t *result_data = FlatVector::GetDataUnsafe<uint64_t>(result);
+    #endif
+
     for (idx_t i = 0; i < count; i++){
         result_data[offset + i] = source_states[i]->group_cnt;
     }
 }
 
-AggregateFunction *traceprov_create_agg_direct_functions(const uint32_t num_args, duckdb::shared_ptr<TraceProvAggExtra> extra){
+AggregateFunction *traceprov_create_agg_direct_functions(const uint32_t num_args){
     vector<LogicalType> args = {};
     args.push_back(LogicalType(LogicalTypeId::INTEGER));
     for (uint32_t arg_idx = 0; arg_idx < num_args; arg_idx++){
@@ -961,40 +942,7 @@ AggregateFunction *traceprov_create_agg_direct_functions(const uint32_t num_args
         nullptr,
         traceprov_direct_bind
     );
-    function->function_info = extra;
     return function;
-}
-
-struct TraceProvCreateAggregateFunctionInfo : public CreateFunctionInfo {
-	explicit TraceProvCreateAggregateFunctionInfo(AggregateFunction function);
-    explicit TraceProvCreateAggregateFunctionInfo(AggregateFunctionSet set);
-
-	AggregateFunctionSet functions;
-
-public:
-	unique_ptr<CreateInfo> Copy() const override;
-};
-
-TraceProvCreateAggregateFunctionInfo::TraceProvCreateAggregateFunctionInfo(AggregateFunction function)
-    : CreateFunctionInfo(CatalogType::AGGREGATE_FUNCTION_ENTRY), functions(function.name) {
-	name = function.name;
-	functions.AddFunction(std::move(function));
-	internal = true;
-}
-
-TraceProvCreateAggregateFunctionInfo::TraceProvCreateAggregateFunctionInfo(AggregateFunctionSet set)
-    : CreateFunctionInfo(CatalogType::AGGREGATE_FUNCTION_ENTRY), functions(std::move(set)) {
-    name = functions.name;
-    for (auto &func : functions.functions) {
-        func.name = functions.name;
-    }
-    internal = true;
-}
-
-unique_ptr<CreateInfo> TraceProvCreateAggregateFunctionInfo::Copy() const {
-    auto result = make_uniq<TraceProvCreateAggregateFunctionInfo>(functions);
-    CopyFunctionProperties(*result);
-    return std::move(result);
 }
 
 void traceprov_create_and_register_agg(
@@ -1004,17 +952,13 @@ void traceprov_create_and_register_agg(
     TraceProvPartitionLayers *partition_layers
 ){
     auto con = reinterpret_cast<duckdb::Connection *>(connection);
-    auto extra = duckdb::make_shared_ptr<TraceProvAggExtra>();
+    auto extra = new TraceProvAggExtra;
     extra->ignore_gn = false;
     extra->null_map = null_map;
     extra->partition_layers = partition_layers;
+    g_tp_agg_extra = extra;
     for (uint32_t max_arg_limit = 1; max_arg_limit < max_num_args + 1; max_arg_limit++){
-        auto agg_func = traceprov_create_agg_direct_functions(max_arg_limit, extra);
-        con->BeginTransaction();
-        auto &catalog = duckdb::Catalog::GetSystemCatalog(*con->context);
-        TraceProvCreateAggregateFunctionInfo sf_info(*agg_func);
-        catalog.CreateFunction(*con->context, sf_info);
-        con->Commit();
+        auto agg_func = traceprov_create_agg_direct_functions(max_arg_limit);
+        UDFWrapper::RegisterAggrFunction(*agg_func, *con->context);
     }
 }
-#endif

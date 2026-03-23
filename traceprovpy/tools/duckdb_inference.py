@@ -1,3 +1,5 @@
+from argparse import ArgumentParser
+import argparse
 import json
 from pathlib import Path
 from typing import Callable, NamedTuple, Set, Tuple
@@ -42,51 +44,69 @@ class DuckDBDriverOptions(NamedTuple):
     is_new_sd: bool = False
     sd_extension_path: str | None = None
     traceprov_use_partition_in_agg: bool = False
-    traceprov_use_partition_in_log: bool = False
-    traceprov_use_row_in_agg_partition: bool = False
-    top_log_num: int | None = None
     log_offset: int | None = None
-    use_part_agg: list[int] | None = None
     traceprov_perform_derivation: bool = False
     traceprov_materialize_derivation: bool = False
     traceprov_skip_page_cache: bool = False
-    traceprov_use_implicit_union: bool = False
     traceprov_dry_run_derivation: bool = False
     traceprov_layers_to_derive: Tuple[int] | None = None
     traceprov_use_merge_chunks: bool = False
-    traceprov_combine_in_memory: bool = False
+    traceprov_use_implicit_union: bool = True
     extras: list[str] = None
-    traceprov_split_combine: bool = False
     extra_files: list[str] = None
-    use_extra_threads: bool = False
     traceprov_use_compact: bool = False
+    log_offsets: list[str] = None
 
-    def set_part_agg(self, part_agg: int):
-        new_list = self.use_part_agg or []
-        return self._replace(use_part_agg=[*new_list, part_agg])
+    @staticmethod
+    def _optimizations():
+        return {
+            "traceprov_use_partition_in_agg",
+            "traceprov_use_merge_chunks",
+            "traceprov_use_compact",
+            "traceprov_skip_page_cache",
+        }
 
     def _boolean_options(self):
-        return {
+        optimizations = DuckDBDriverOptions._optimizations()
+        base_options = {
             "lineage",
             "pending",
             "no_reinit",
             "disable_col_opt",
             "main_once_extra_all",
             "is_new_sd",
-            "traceprov_use_partition_in_agg",
-            "traceprov_use_partition_in_log",
-            "traceprov_use_row_in_agg_partition",
             "traceprov_perform_derivation",
             "traceprov_materialize_derivation",
-            "traceprov_skip_page_cache",
-            "traceprov_use_implicit_union",
             "traceprov_dry_run_derivation",
-            "traceprov_use_merge_chunks",
-            "traceprov_combine_in_memory",
-            "traceprov_split_combine",
-            "use_extra_threads",
-            "traceprov_use_compact"
+            "traceprov_use_implicit_union"
         }
+        assert len(optimizations.intersection(base_options)) == 0, "Expected no common ones"
+        return base_options | optimizations
+
+    @staticmethod
+    def add_parse_options(parser: ArgumentParser):
+        optimizations = DuckDBDriverOptions._optimizations()
+        misc_bool_options = {
+            "pending",
+            "traceprov_dry_run_derivation"
+        }
+        for optimization in optimizations | misc_bool_options: 
+            parser.add_argument(
+                f"--{optimization}",
+                action=argparse.BooleanOptionalAction,
+                default=False,
+            )
+
+        parser.add_argument("--threads", type=int, default=1)
+        parser.add_argument("--db", required=True)
+
+    def parse_optimizations(self, parsed):
+        optimizations = self._optimizations()
+        kwargs = {
+            optimization: getattr(parsed, optimization)
+            for optimization in optimizations
+        }
+        return self._replace(**kwargs)
 
     def serialize(self) -> str:
         options = self._asdict()
@@ -97,15 +117,12 @@ class DuckDBDriverOptions(NamedTuple):
             f"--{key} {value}"
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
-            and (key not in ["extra", "extras", "use_part_agg", "extra_files"])
+            and (key not in ["extra", "extras", "extra_files"])
             and (key not in ["traceprov_layers_to_derive"])
+            and (key not in ['log_offsets'])
         ]
         all_extras = [*([self.extra] if self.extra else []), *(self.extras or [])]
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
-        key_value_options = [
-            *key_value_options,
-            *[f"--use_part_agg {f}" for f in self.use_part_agg or []],
-        ]
         key_value_options = [
             *key_value_options,
             *[f'--extra_file {file}' for file in self.extra_files or []]
@@ -114,6 +131,11 @@ class DuckDBDriverOptions(NamedTuple):
             key_value_options = [
                 *key_value_options, 
                 *[f"--traceprov_layers_to_derive {layer_to_derive}" for layer_to_derive in self.traceprov_layers_to_derive]
+            ]
+        if self.log_offsets:
+            key_value_options = [
+                *key_value_options, 
+                *[f"--log_offset {log_offset}" for log_offset in self.log_offsets]
             ]
 
         print(key_value_options)

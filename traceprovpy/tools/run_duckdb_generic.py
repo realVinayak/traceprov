@@ -3,6 +3,7 @@
 
 
 import argparse
+import enum
 from itertools import product
 import json
 import os
@@ -21,7 +22,6 @@ random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
 TP_OUT_ID_TICKER = "%OUT_ID%"
-TP_ELEMENT_ID_TICKER = "%ELEM_ID%"
 
 
 def make_dump_query(in_query: str, out_path: str):
@@ -49,31 +49,31 @@ def run_sample_inference(
     query_num: str,
     root: Path,
     spec_element: dict,
-    partition_spec_element: dict,
     samples: Iterable[int],
+    parsed,
     use_optimized: bool = False,
+    use_aggresive_optimized: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
     disable_col_opt: bool = False,
     profile: bool = True,
     settings: bool = True,
     validate: bool = False,
-    traceprov_use_partition_in_agg: bool = False,
-    traceprov_use_row_in_agg_partition: bool = False,
     mat_infer: bool = False,
     table_suff: str = "",
 ):
 
-    # samples = [0]
-
     if validate:
+        mat_infer = True
         iters = 1
 
     query_dir = root / query_num
-    if use_optimized:
-        captured_sql = query_dir / "capture_new.sql"
-    else:
-        captured_sql = query_dir / "capture.sql"
+    captured_sql = extract_capture_query(
+        query_dir,
+        parsed,
+        use_optimized,
+        use_aggresive_optimized
+    )
     min_layer_used = spec_element["min_local_used"]
     exec_str = exec.as_posix()
     if pre_base:
@@ -82,39 +82,14 @@ def run_sample_inference(
         )
         traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
 
-    sample_q_dir = Path("/tmp/")
-    extra_sqls = []
     sql_spec_map = []
-    agg_use_part_agg = partition_spec_element["use_part_agg"]
-    top_level_log = partition_spec_element["top_level_log"]
-    entry_id = partition_spec_element.get("entry_id", 0)
-    for idx, element in enumerate(spec_element["elements"]):
-        element_idx = element["idx"]
-        if not element_idx in partition_spec_element["layers"]:
-            continue
-        if use_optimized:
-            infer_path = query_dir / f"infer_{element_idx}_new_offset.sql"
-        else:
-            infer_path = query_dir / f"infer_{element_idx}_offset.sql"
+    
+    log_offsets = []
+    for sample_id, out_id in enumerate(samples):
+        for element in spec_element['elements']:
+            sql_spec_map.append((element['idx'], sample_id, out_id))
+        log_offsets.append(out_id)
 
-        assert infer_path.exists()
-        infer_query = just_read(infer_path)
-        assert TP_OFFSET_TICKER in infer_query
-        sample_element_q_dir = sample_q_dir / str(idx)
-        os.makedirs(sample_element_q_dir, exist_ok=True)
-        for sample_id, out_id in enumerate(samples):
-            infer_with_offset = infer_query.replace(TP_OFFSET_TICKER, str(out_id))
-            if mat_infer:
-                infer_with_offset = f"create or replace table {table_suff}_LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
-            if validate:
-                infer_with_offset = f"create or replace table LAYER_{element_idx}_{sample_id} AS ({infer_with_offset})"
-            infer_with_offset = f"/*(traceprov_log_offset): {top_level_log}:{agg_use_part_agg[0]}:{entry_id}:{out_id}*/ {infer_with_offset}"
-            final_q_path = sample_element_q_dir / f"infer_{sample_id}.sql"
-            just_write(final_q_path, infer_with_offset)
-            extra_sqls.append(final_q_path.as_posix())
-            sql_spec_map.append((element_idx, sample_id, out_id))
-
-    just_write("/tmp/extra_file.txt", "\n".join(extra_sqls))
     sql_spec_map = product(sql_spec_map, range(iters))
     sql_spec_map = [("capture", 0, 0), *sql_spec_map]
 
@@ -128,23 +103,20 @@ def run_sample_inference(
         profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
         settings=("/tmp/capture_settings.json" if settings else None),
         disable_col_opt=disable_col_opt,
-        extra_file="/tmp/extra_file.txt",
         main_once_extra_all=True,
-        use_part_agg=agg_use_part_agg,
+        log_offsets=log_offsets,
+        traceprov_perform_derivation=True,
+        traceprov_materialize_derivation=mat_infer
     )
 
-    if traceprov_use_partition_in_agg:
-        capture_options = capture_options._replace(
-            traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
-            traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
-        )
+    capture_options = capture_options.parse_optimizations(parsed)
 
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
     capture_result_time: list = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
             capture_options.profile,
-            range(1, len(extra_sqls) + 1),
+            range(1, len(log_offsets) + 1),
             range(capture_options.repeat),
         )
     else:
@@ -154,7 +126,7 @@ def run_sample_inference(
     else:
         capture_settings = None
 
-    assert len(capture_result_time) == len(sql_spec_map)
+    assert len(capture_result_time) == len(sql_spec_map), f"Len: {capture_result_time}, {len(sql_spec_map)}"
 
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
@@ -174,12 +146,10 @@ def run_sample_inference(
             base_out = query_dir / "replaced_base.tmp.sql"
 
             query_str = just_read(validate_query_offset)
-            query_str = query_str.replace(TP_ELEMENT_ID_TICKER, str(element_idx))
-            query_str = query_str.replace(TP_OUT_ID_TICKER, str(sample_id))
+            query_str = query_str.replace(TP_OUT_ID_TICKER, str(out_id))
+            query_str = query_str.replace("LAYER", "traceprov_lineage")
 
             just_write(validate_out, query_str)
-
-            query_str = query_str.replace(TP_OFFSET_TICKER, str(out_id))
 
             base_offset = query_dir / "base_offset.sql"
             just_write(
@@ -360,6 +330,7 @@ def run_sample_inference_smokedduck(
     root: Path,
     samples: list[int],
     query_id: int,
+    parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
     profile: bool = True,
@@ -375,6 +346,7 @@ def run_sample_inference_smokedduck(
         root,
         samples,
         query_id,
+        parsed,
         iters,
         pre_base,
         profile,
@@ -383,10 +355,6 @@ def run_sample_inference_smokedduck(
         mat_infer,
     )
 
-    if validate:
-        validate_query(
-            base_root / query_num, "validate_sd.sql", db.as_posix(), exec.as_posix()
-        )
     return sample_results
 
 
@@ -398,6 +366,7 @@ def _run_sample_inference_smokedduck(
     root: Path,
     samples: list[int],
     query_id: int,
+    parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
     profile: bool = True,
@@ -405,7 +374,9 @@ def _run_sample_inference_smokedduck(
     validate: bool = False,
     mat_infer: bool = False,
 ):
+    samples = [0]
     base_dir = base_root / query_num
+    query_dir = root / query_num
     base_sql = base_dir / "base.sql"
     exec_str = exec.as_posix()
     if validate:
@@ -427,13 +398,9 @@ def _run_sample_inference_smokedduck(
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
         infer_with_offset = f"select * from lineage_query(1, 100, {out_id}::UINTEGER)"
         if validate or mat_infer:
-            if sample_id == 0:
-                infer_with_offset = (
-                    f"create or replace table LAYER_1_SD AS ({infer_with_offset})"
-                )
-            else:
-                infer_with_offset = f"insert into LAYER_1_SD ({infer_with_offset})"
-
+            infer_with_offset = (
+                f"create or replace table LAYER_1_SD_{out_id} AS ({infer_with_offset})"
+            )
         just_write(final_q_path, infer_with_offset)
         extra_sqls.append(final_q_path.as_posix())
         sql_spec_map.append((sample_id, out_id))
@@ -447,7 +414,7 @@ def _run_sample_inference_smokedduck(
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
-        threads=1,
+        threads=parsed.threads,
         i=base_sql.as_posix(),
         time="./tmp/infer_time.json",
         profile=("./tmp/infer_profile_%d_%d.json" if profile else None),
@@ -474,6 +441,36 @@ def _run_sample_inference_smokedduck(
         capture_settings = None
 
     assert len(capture_result_time) == len(sql_spec_map)
+
+    if validate:
+        for map_idx, map_entry in enumerate(sql_spec_map):
+            if map_idx == 0:
+                continue
+            (sample_id, out_id), iter_id = map_entry
+            if iter_id > 0:
+                continue
+            validate_out = query_dir / "replaced_validate.tmp.sql"
+            base_out = query_dir / "replaced_base.tmp.sql"
+
+            validate_query_offset = query_dir / "validate_sd.sql"
+            query_str = just_read(validate_query_offset)
+            assert TP_OUT_ID_TICKER in query_str
+            query_str = query_str.replace(TP_OUT_ID_TICKER, str(out_id))
+            just_write(validate_out, query_str)
+            base_offset = query_dir / "base_offset.sql"
+            just_write(
+                base_out,
+                just_read(base_offset).replace(TP_OFFSET_TICKER, str(out_id)),
+            )
+            validate_query(
+                query_dir,
+                validate_out.parts[-1],
+                capture_options.db,
+                exec_str,
+                base_out.parts[-1],
+            )
+
+
     return dict(
         result_time=capture_result_time,
         profile=capture_profile_out,
@@ -515,10 +512,30 @@ def extract_extras(
     ]
     return capture_result_time, infer_results
 
+def extract_capture_query(query_dir: Path, parsed, use_optimized: bool, use_aggresive_optimized: bool):
+    traceprov_use_compact = parsed.traceprov_use_compact
+    if use_optimized:
+        captured_sql = None
+        if use_aggresive_optimized:
+            captured_sql = query_dir / "capture_ignore_gn.sql"
+            if not captured_sql.exists():
+                assert False, "Expected ignore to be set!"
+                captured_sql = None
+        if traceprov_use_compact:
+            captured_sql = query_dir / "capture_new_compact.sql"
+            assert captured_sql.exists(), "Expected compact to be set!"
+        if captured_sql is None:
+            captured_sql = query_dir / "capture_new.sql"
+    else:
+        captured_sql = query_dir / "capture.sql"
+
+    assert captured_sql is not None
+    assert captured_sql.exists(), f"Expected capture query to exist: {captured_sql.as_posix()}"
+    return captured_sql
 
 def run_single(
-    exe: Path,
     db: Path,
+    exe: Path,
     query_num: str,
     base_root: Path,
     root: Path,
@@ -526,6 +543,7 @@ def run_single(
     threads: int,
     traceprov_layers_to_derive: Tuple[int],
     spec: dict,
+    parsed,
     use_optimized: bool = False,
     validate: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
@@ -535,18 +553,6 @@ def run_single(
     run_inference: bool = True,
     use_aggresive_optimized: bool = False,
     strict: bool = False,
-    traceprov_use_partition_in_agg: bool = False,
-    traceprov_use_partition_in_log: bool = False,
-    traceprov_use_row_in_agg_partition: bool = False,
-    traceprov_use_implicit_union: bool = False,
-    traceprov_dry_run_derivation: bool = False,
-    traceprov_use_merge_chunks: bool = False,
-    traceprov_combine_in_memory: bool = False,
-    traceprov_split_combine: bool = False,
-    use_synthetic_infer: bool = True,
-    use_union_infer: bool = True,
-    use_extra_threads: bool = True,
-    traceprov_use_compact: bool = False,
     pending: bool = False
 ):
     if validate:
@@ -559,20 +565,7 @@ def run_single(
     base_sql = base_root / query_num / "base.sql"
 
     query_dir = root / query_num
-    if use_optimized:
-        captured_sql = None
-        if use_aggresive_optimized:
-            captured_sql = query_dir / "capture_ignore_gn.sql"
-            if not captured_sql.exists():
-                assert not strict, "Expected ignore to be set!"
-                captured_sql = None
-        if traceprov_use_compact:
-            captured_sql = query_dir / "capture_new_compact.sql"
-            assert captured_sql.exists(), "Expected compact to be set!"
-        if captured_sql is None:
-            captured_sql = query_dir / "capture_new.sql"
-    else:
-        captured_sql = query_dir / "capture.sql"
+    captured_sql = extract_capture_query(query_dir, parsed, use_optimized, use_aggresive_optimized)
 
     exec_str = exe.as_posix()
 
@@ -604,94 +597,19 @@ def run_single(
         profile="./tmp/capture_profile_%d.json",
         disable_col_opt=disable_col_opt,
         settings="./tmp/capture_settings.json",
-        traceprov_use_partition_in_agg=traceprov_use_partition_in_agg,
-        traceprov_use_partition_in_log=traceprov_use_partition_in_log,
-        traceprov_use_row_in_agg_partition=traceprov_use_row_in_agg_partition,
         traceprov_materialize_derivation=(validate or materialize_infer) and run_inference,
-        traceprov_layers_to_derive=traceprov_layers_to_derive,
-        traceprov_use_merge_chunks=traceprov_use_merge_chunks,
-        traceprov_combine_in_memory=traceprov_combine_in_memory,
-        traceprov_split_combine=traceprov_split_combine,
-        traceprov_use_compact=traceprov_use_compact
-    )
+        traceprov_layers_to_derive=traceprov_layers_to_derive
+    ).parse_optimizations(parsed)
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)
     traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
     extra_file_paths = []
     if run_inference:
-        #traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
-        if use_synthetic_infer:
-            extras = []
-            for spec_element in spec['elements']:
-                element_idx = spec_element['idx']
-                if element_idx not in traceprov_layers_to_derive: continue
-                print(traceprov_layers_to_derive, element_idx)
-                infer_path = query_dir / f"infer_{element_idx}_template.sql"
-                infer_query = just_read(infer_path)
-                assert infer_query.count(";") == 1
-                infer_query = infer_query.replace(';' ,'')
-                if "WORKER_ID" in infer_query:
-                    infer_queries = [infer_query.replace("WORKER_ID", str(worker_count)) for worker_count in range(1, capture_options.threads + 1 )]
-                else:
-                    infer_queries = [infer_query]
-                if use_union_infer:
-                    infer_query = ' UNION ALL '.join(infer_queries)
-                    infer_path = (Path("/tmp/") / f"infer_{element_idx}_materialize.sql").as_posix()
-                    if materialize_infer:
-                        infer_query = f"create or replace table traceprov_lineage_{element_idx} as ({infer_query})"
-                    just_write(infer_path, infer_query)
-                    extras.append(infer_path)
-                else:
-                    infer_path_file = (Path("/tmp/") / f"infer_{element_idx}_template.txt")
-                    infer_paths = [(Path("/tmp/") / f"infer_{element_idx}_template_{local_idx}_materialize.sql").as_posix() for local_idx in range(len(infer_queries))]
-                    for _idx, (_infer_query, _infer_query_path) in enumerate(zip(infer_queries, infer_paths)):
-                        if validate or materialize_infer:
-                            # _infer_query  = f"COPY ({_infer_query}) to traceprov_lineage_{element_idx}_part_{_idx}.parquet"
-                            _infer_query = f"EXPLAIN (ANALYZE) {_infer_query}"
-                        just_write(_infer_query_path, _infer_query)
-                    just_write(infer_path_file, '\n'.join(infer_paths))
-                    infer_query_content = f"select * from traceprov_infer_table({element_idx}::ubigint)"
-                    if validate or materialize_infer:
-                        infer_query_content = f"EXPLAIN (ANALYZE) {infer_query_content}"
-                    file_out = just_write(Path("/tmp/") / f"infer_{element_idx}.sql", infer_query_content)
-                    extras.append(file_out)
-                    extra_file_paths.append(infer_path_file)
-            capture_options = capture_options._replace(extras=extras if use_extra_threads else [], extra_files=extra_file_paths, traceprov_perform_derivation=True, use_extra_threads=use_extra_threads)
-        else:
-            capture_options = capture_options._replace(
-                traceprov_perform_derivation=True,
-                traceprov_dry_run_derivation=traceprov_dry_run_derivation,
-                traceprov_use_implicit_union=traceprov_use_implicit_union
-            )
-    # if run_inference:
-    #     for element in spec_element["elements"]:
-    #         element_idx = element["idx"]
-    #         if use_optimized:
-    #             infer_path = None
-    #             if use_aggresive_optimized:
-    #                 infer_path = query_dir / f"infer_{element_idx}_new_ignore_gn.sql"
-    #                 if not infer_path.exists():
-    #                     infer_path = None
-    #             if infer_path is None:
-    #                 infer_path = query_dir / f"infer_{element_idx}_new.sql"
-    #         else:
-    #             infer_path = query_dir / f"infer_{element_idx}.sql"
-
-    #         assert infer_path.exists()
-    #         infer_path = infer_path.as_posix()
-    #         if materialize_infer:
-    #             contents = just_read(infer_path)
-    #             table_name = f"LAYER_{element_idx}"
-    #             infer_path = (
-    #                 Path("/tmp/") / f"infer_{element_idx}_materialize.sql"
-    #             ).as_posix()
-    #             mat_contents = f"create or replace table {table_name} AS ({contents});"
-    #             just_write(infer_path, mat_contents)
-    #         infer_paths = [*infer_paths, infer_path]
-
-    # if infer_paths:
-    #     capture_options = capture_options._replace(extras=infer_paths)
+        capture_options = capture_options._replace(
+            traceprov_perform_derivation=True,
+            traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation
+        )
 
     traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
     capture_result_time = json_read_file(capture_options.time)

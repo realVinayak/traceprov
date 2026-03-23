@@ -1,6 +1,5 @@
 // implements table scan functions, for duckdb-based traceprov files.
 
-#if TRACEPROV_SD_MODE==0
 #include <stdlib.h>
 #include <vector>
 
@@ -908,147 +907,129 @@ typedef struct TraceProvWindowFuncExtra {
     uint64_t num_cols;
 } TraceProvWindowFuncExtra;
 
-void traceprov_window_func(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
-    TraceProvWindowFuncExtra *window_extra = (TraceProvWindowFuncExtra *)duckdb_scalar_function_get_extra_info(info);
-    if (unlikely(window_extra == NULL)){
-        elog(ERROR, "Expected window func extra to be set!");
-    }
-    duckdb_vector worker_id_vector = duckdb_data_chunk_get_vector(input, 0);
-    uint32_t *worker_id_data = (uint32_t *)duckdb_vector_get_data(worker_id_vector);
+// void traceprov_window_func(duckdb_function_info info, duckdb_data_chunk input, duckdb_vector output){
+//     TraceProvWindowFuncExtra *window_extra = (TraceProvWindowFuncExtra *)duckdb_scalar_function_get_extra_info(info);
+//     if (unlikely(window_extra == NULL)){
+//         elog(ERROR, "Expected window func extra to be set!");
+//     }
+//     duckdb_vector worker_id_vector = duckdb_data_chunk_get_vector(input, 0);
+//     uint32_t *worker_id_data = (uint32_t *)duckdb_vector_get_data(worker_id_vector);
     
-    duckdb_vector layer_number_vector = duckdb_data_chunk_get_vector(input, 1);
-    uint32_t *layer_number_data = (uint32_t *)duckdb_vector_get_data(layer_number_vector);
+//     duckdb_vector layer_number_vector = duckdb_data_chunk_get_vector(input, 1);
+//     uint32_t *layer_number_data = (uint32_t *)duckdb_vector_get_data(layer_number_vector);
     
-    duckdb_vector frame_start_vector = duckdb_data_chunk_get_vector(input, 2);
-    uint64_t *frame_start_data = (uint64_t *)duckdb_vector_get_data(frame_start_vector);
+//     duckdb_vector frame_start_vector = duckdb_data_chunk_get_vector(input, 2);
+//     uint64_t *frame_start_data = (uint64_t *)duckdb_vector_get_data(frame_start_vector);
 
-    duckdb_vector frame_end_vector = duckdb_data_chunk_get_vector(input, 3);
-    uint64_t *frame_end_data = (uint64_t *)duckdb_vector_get_data(frame_end_vector);
+//     duckdb_vector frame_end_vector = duckdb_data_chunk_get_vector(input, 3);
+//     uint64_t *frame_end_data = (uint64_t *)duckdb_vector_get_data(frame_end_vector);
 
-    const idx_t row_count = duckdb_data_chunk_get_size(input);
+//     const idx_t row_count = duckdb_data_chunk_get_size(input);
 
-    idx_t expected_size = 0;
-    for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
-        if (unlikely(frame_end_data[row_idx] < frame_start_data[row_idx])){
-            elog(ERROR, "Expected end to never be less than start!");
-        }
-        // Since a frame always includes the current row, also need to add 1.
-        // This could be an upper bound in the cases where the worker is simply not present..
-        expected_size += (frame_end_data[row_idx] - frame_start_data[row_idx]) + 1;
-    }
+//     idx_t expected_size = 0;
+//     for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
+//         if (unlikely(frame_end_data[row_idx] < frame_start_data[row_idx])){
+//             elog(ERROR, "Expected end to never be less than start!");
+//         }
+//         // Since a frame always includes the current row, also need to add 1.
+//         // This could be an upper bound in the cases where the worker is simply not present..
+//         expected_size += (frame_end_data[row_idx] - frame_start_data[row_idx]) + 1;
+//     }
         
-    if(duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
-        elog(ERROR, "Error reserving!");
-    }
+//     if(duckdb_list_vector_reserve(output, expected_size) == DuckDBError){
+//         elog(ERROR, "Error reserving!");
+//     }
     
-    if(duckdb_list_vector_set_size(output, expected_size) == DuckDBError){
-        elog(ERROR, "Error setting size!");
-    }
+//     if(duckdb_list_vector_set_size(output, expected_size) == DuckDBError){
+//         elog(ERROR, "Error setting size!");
+//     }
 
-    auto entries = (duckdb_list_entry *)duckdb_vector_get_data(output);
+//     auto entries = (duckdb_list_entry *)duckdb_vector_get_data(output);
 
-    duckdb_vector child_structs = duckdb_list_vector_get_child(output);
-    uint64_t generic_idx = 0;
-    for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
-        const uint32_t worker_id = worker_id_data[row_idx];
-        const uint32_t layer_number = layer_number_data[row_idx];
-        TraceProvBindData *curr_bind_data = window_extra->key_bind_map->at(TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number));
+//     duckdb_vector child_structs = duckdb_list_vector_get_child(output);
+//     uint64_t generic_idx = 0;
+//     for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+//         const uint32_t worker_id = worker_id_data[row_idx];
+//         const uint32_t layer_number = layer_number_data[row_idx];
+//         TraceProvBindData *curr_bind_data = window_extra->key_bind_map->at(TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number));
 
-        const uint64_t frame_start = frame_start_data[row_idx];
-        const uint64_t frame_end = frame_end_data[row_idx];
-        const idx_t generic_start_idx = generic_idx;
-        // For a given layer, number of cols is predetermined.
-        // SO, this is fine being allocated here and reused.
-        uint64_t *values = (uint64_t *) malloc(sizeof(uint64_t)*window_extra->num_cols);
-        for (uint64_t row_to_return = frame_start; row_to_return < frame_end + 1; row_to_return++, generic_idx++){
-            const int64_t logged_row_idx = row_to_return - 1;
-            if (unlikely(logged_row_idx < 0))
-                elog(ERROR, "any idx can never be < 0!");
+//         const uint64_t frame_start = frame_start_data[row_idx];
+//         const uint64_t frame_end = frame_end_data[row_idx];
+//         const idx_t generic_start_idx = generic_idx;
+//         // For a given layer, number of cols is predetermined.
+//         // SO, this is fine being allocated here and reused.
+//         uint64_t *values = (uint64_t *) malloc(sizeof(uint64_t)*window_extra->num_cols);
+//         for (uint64_t row_to_return = frame_start; row_to_return < frame_end + 1; row_to_return++, generic_idx++){
+//             const int64_t logged_row_idx = row_to_return - 1;
+//             if (unlikely(logged_row_idx < 0))
+//                 elog(ERROR, "any idx can never be < 0!");
 
-            read_at_offset(logged_row_idx, curr_bind_data, values, NULL);            
-            for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
-                duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
-                uint64_t *child_data = (uint64_t*) duckdb_vector_get_data(member_data);
-                child_data[generic_idx] = values[col_idx];
-            }
-        }
-        free(values);
-        const uint64_t generic_end_idx = generic_idx;
-        entries[row_idx].offset = generic_start_idx;
-        entries[row_idx].length = generic_end_idx - generic_start_idx;
-    }
-    // for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
-    //     duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
-    //     uint64_t *child_data = (uint64_t*) duckdb_vector_get_data(member_data);
-    //     idx_t generic_idx = 0;
-    //     for (idx_t row_idx = 0; row_idx < row_count; row_idx++){
-    //         const uint64_t frame_start = frame_start_data[row_idx];
-    //         const uint64_t frame_end = frame_end_data[row_idx];
-    //         const idx_t generic_start_idx = generic_idx;
-    //         for (idx_t value_start = frame_start; value_start < frame_end + 1; value_start++, generic_idx++){
-    //             child_data[generic_idx] = value_start + (10*col_idx);
-    //         }
-    //         const idx_t generic_end_idx = generic_idx;
-    //         if (col_idx == 0){
-    //             entries[row_idx].offset = generic_start_idx;
-    //             entries[row_idx].length = generic_end_idx - generic_start_idx;
-    //         }
-    //     }
-    // }
-}
+//             read_at_offset(logged_row_idx, curr_bind_data, values, NULL);            
+//             for (uint64_t col_idx = 0; col_idx < window_extra->num_cols; col_idx++){
+//                 duckdb_vector member_data = duckdb_struct_vector_get_child(child_structs, col_idx);
+//                 uint64_t *child_data = (uint64_t*) duckdb_vector_get_data(member_data);
+//                 child_data[generic_idx] = values[col_idx];
+//             }
+//         }
+//         free(values);
+//         const uint64_t generic_end_idx = generic_idx;
+//         entries[row_idx].offset = generic_start_idx;
+//         entries[row_idx].length = generic_end_idx - generic_start_idx;
+//     }
+// }
 
-// Creates a window function, returning num_args in the struct.
-duckdb_scalar_function traceprov_create_table_window_func(
-    const uint64_t num_args,
-    // The layer numbers that'll contain this many number of args.
-    // This is done this way so we don't need to any strict checks later...
-    const uint32_t worker_count,
-    std::vector<uint32_t> *expected_layers
-){
-    duckdb_scalar_function func = duckdb_create_scalar_function();
-    std::string *func_name = new std::string(("traceprov_window_func" + std::to_string(num_args)).c_str());
-    duckdb_scalar_function_set_name(func, func_name->c_str());
-    duckdb_logical_type basic_arg_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
-    duckdb_logical_type arg_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
-    // Worker id.
-    duckdb_scalar_function_add_parameter(func, basic_arg_type);
-    // Layer id.
-    duckdb_scalar_function_add_parameter(func, basic_arg_type);
-    // Frame start
-    duckdb_scalar_function_add_parameter(func, arg_type);
-    // Frame end.
-    duckdb_scalar_function_add_parameter(func, arg_type);
+// // Creates a window function, returning num_args in the struct.
+// duckdb_scalar_function traceprov_create_table_window_func(
+//     const uint64_t num_args,
+//     // The layer numbers that'll contain this many number of args.
+//     // This is done this way so we don't need to any strict checks later...
+//     const uint32_t worker_count,
+//     std::vector<uint32_t> *expected_layers
+// ){
+//     duckdb_scalar_function func = duckdb_create_scalar_function();
+//     std::string *func_name = new std::string(("traceprov_window_func" + std::to_string(num_args)).c_str());
+//     duckdb_scalar_function_set_name(func, func_name->c_str());
+//     duckdb_logical_type basic_arg_type = duckdb_create_logical_type(DUCKDB_TYPE_INTEGER);
+//     duckdb_logical_type arg_type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+//     // Worker id.
+//     duckdb_scalar_function_add_parameter(func, basic_arg_type);
+//     // Layer id.
+//     duckdb_scalar_function_add_parameter(func, basic_arg_type);
+//     // Frame start
+//     duckdb_scalar_function_add_parameter(func, arg_type);
+//     // Frame end.
+//     duckdb_scalar_function_add_parameter(func, arg_type);
 
-    duckdb_logical_type *struct_member_types = (duckdb_logical_type *)malloc(sizeof(duckdb_logical_type)*num_args);
-    const char **member_names = (const char **)malloc(sizeof(char *)*num_args);
-    for (uint64_t col_idx = 0; col_idx < num_args; col_idx++){
-        std::string *column_str = new std::string((std::string("column_") + std::to_string(col_idx)).c_str());
-        member_names[col_idx] = column_str->c_str();
-        struct_member_types[col_idx] = arg_type;
-    }
-    duckdb_logical_type struct_type = duckdb_create_struct_type(struct_member_types, member_names, num_args);
-    duckdb_logical_type list_type = duckdb_create_list_type(struct_type);
-    duckdb_scalar_function_set_return_type(func, list_type);
-    duckdb_destroy_logical_type(&list_type);
-    duckdb_scalar_function_set_function(func, traceprov_window_func);
-    duckdb_destroy_logical_type(&arg_type);
+//     duckdb_logical_type *struct_member_types = (duckdb_logical_type *)malloc(sizeof(duckdb_logical_type)*num_args);
+//     const char **member_names = (const char **)malloc(sizeof(char *)*num_args);
+//     for (uint64_t col_idx = 0; col_idx < num_args; col_idx++){
+//         std::string *column_str = new std::string((std::string("column_") + std::to_string(col_idx)).c_str());
+//         member_names[col_idx] = column_str->c_str();
+//         struct_member_types[col_idx] = arg_type;
+//     }
+//     duckdb_logical_type struct_type = duckdb_create_struct_type(struct_member_types, member_names, num_args);
+//     duckdb_logical_type list_type = duckdb_create_list_type(struct_type);
+//     duckdb_scalar_function_set_return_type(func, list_type);
+//     duckdb_destroy_logical_type(&list_type);
+//     duckdb_scalar_function_set_function(func, traceprov_window_func);
+//     duckdb_destroy_logical_type(&arg_type);
 
-    auto window_extra = new TraceProvWindowFuncExtra;
-    window_extra->key_bind_map = new std::unordered_map<uint64_t, TraceProvBindData *>;
+//     auto window_extra = new TraceProvWindowFuncExtra;
+//     window_extra->key_bind_map = new std::unordered_map<uint64_t, TraceProvBindData *>;
 
-    for (uint32_t worker_id = 1; worker_id < worker_count + 1; worker_id++){
-        for (auto layer_number: *expected_layers){
-            const uint64_t worker_layer_key = TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number);
-            if (unlikely(window_extra->key_bind_map->find(worker_layer_key) != window_extra->key_bind_map->end())){
-                elog(ERROR, "Expected the key to not be present!");
-            }
-            window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1, NULL)});
-        }
-    }
-    window_extra->num_cols = num_args;
-    duckdb_scalar_function_set_extra_info(func, window_extra, nullptr);
-    return func;
-}
+//     for (uint32_t worker_id = 1; worker_id < worker_count + 1; worker_id++){
+//         for (auto layer_number: *expected_layers){
+//             const uint64_t worker_layer_key = TRACEPROV_MAKE_WORKER_LAYER_KEY(worker_id, layer_number);
+//             if (unlikely(window_extra->key_bind_map->find(worker_layer_key) != window_extra->key_bind_map->end())){
+//                 elog(ERROR, "Expected the key to not be present!");
+//             }
+//             window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1, NULL)});
+//         }
+//     }
+//     window_extra->num_cols = num_args;
+//     duckdb_scalar_function_set_extra_info(func, window_extra, nullptr);
+//     return func;
+// }
 
 void *traceprov_get_row(
     const uint64_t worker_id,
@@ -1148,138 +1129,22 @@ void traceprov_read_int_vector_func(duckdb_function_info info, duckdb_data_chunk
     }
 }
 
-duckdb_scalar_function traceprov_create_read_vector_func(){
-    duckdb_scalar_function func = duckdb_create_scalar_function();
-    std::string *func_name = new std::string("traceprov_read_int_vector");
-    duckdb_scalar_function_set_name(func, func_name->c_str());
-    duckdb_logical_type ubigint_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
-    duckdb_scalar_function_add_parameter(func, ubigint_type);
-    duckdb_scalar_function_add_parameter(func, ubigint_type);
+// duckdb_scalar_function traceprov_create_read_vector_func(){
+//     duckdb_scalar_function func = duckdb_create_scalar_function();
+//     std::string *func_name = new std::string("traceprov_read_int_vector");
+//     duckdb_scalar_function_set_name(func, func_name->c_str());
+//     duckdb_logical_type ubigint_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+//     duckdb_scalar_function_add_parameter(func, ubigint_type);
+//     duckdb_scalar_function_add_parameter(func, ubigint_type);
 
-    duckdb_logical_type list_type = duckdb_create_list_type(ubigint_type);
-    duckdb_scalar_function_set_return_type(func, list_type);
-    duckdb_destroy_logical_type(&list_type);
-    duckdb_destroy_logical_type(&ubigint_type);
+//     duckdb_logical_type list_type = duckdb_create_list_type(ubigint_type);
+//     duckdb_scalar_function_set_return_type(func, list_type);
+//     duckdb_destroy_logical_type(&list_type);
+//     duckdb_destroy_logical_type(&ubigint_type);
 
-    duckdb_scalar_function_set_function(func, traceprov_read_int_vector_func);
-    return func;
-}
-
-typedef struct TraceProvInferBind {
-    std::mutex *bind_mutex;
-    std::vector<std::string *> *queries;
-    TraceProvNode *node;
-    uint32_t worker_count;
-} TraceProvInferBind;
-
-typedef struct TraceProvInferLocalInit {
-    uint32_t worker_idx;
-    std::string *query;
-    duckdb_prepared_statement stmt;
-    duckdb_connection con;
-    duckdb_result curr_result;
-} TraceProvInferLocalInit;
-
-void traceprov_infer_bind(duckdb_bind_info info){
-    auto param_1 = duckdb_bind_get_parameter(info, 0);
-    const uint64_t layer_number = duckdb_get_uint64(param_1);
-    duckdb_destroy_value(&param_1);
-
-    TraceProvInferExtra *extra_info = (TraceProvInferExtra *)duckdb_bind_get_extra_info(info);
-    TraceProvInferBind *bind = (TraceProvInferBind *)malloc(sizeof(TraceProvInferBind));
-    auto node = extra_info->spec->result_map->at(layer_number);
-
-    bind->bind_mutex = new std::mutex;
-    bind->node = node;
-    bind->queries = extra_info->layer_string->at(layer_number);
-    bind->worker_count = 0;
-
-
-    const uint64_t column_count = traceprov_get_node_column_count(node);
-    for (uint64_t col_count = 0; col_count < column_count; col_count++){
-        const std::string param = std::string("column_") + std::to_string(col_count);
-        duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
-        duckdb_bind_add_result_column(info, param.c_str(), type);
-        duckdb_destroy_logical_type(&type);
-    }
-
-    duckdb_bind_set_bind_data(info, bind, free);
-    duckdb_bind_set_cardinality(info, 1000000, true);
-}
-
-void traceprov_infer_init(duckdb_init_info info){
-    auto bind_data = (TraceProvInferBind *)duckdb_init_get_bind_data(info);
-    duckdb_init_set_max_threads(info, bind_data->queries->size());
-    duckdb_init_set_init_data(info, NULL, NULL);
-}
-
-void traceprov_infer_local_init(duckdb_init_info info){
-    TraceProvInferExtra *extra = (TraceProvInferExtra *)duckdb_init_get_extra_info(info);
-    auto bind_data = (TraceProvInferBind *)duckdb_init_get_bind_data(info);
-    auto local_init_data = (TraceProvInferLocalInit *)malloc(sizeof(TraceProvInferLocalInit));
-    bind_data->bind_mutex->lock();
-    const uint64_t self_idx = bind_data->worker_count++;
-    bind_data->bind_mutex->unlock();
-    local_init_data->worker_idx = self_idx;
-    local_init_data->query = bind_data->queries->at(self_idx);
-    local_init_data->stmt = NULL;
-    local_init_data->con = extra->cached_connections->at(self_idx);
-    duckdb_init_set_init_data(info, local_init_data, free);
-}
-
-void traceprov_infer_func(duckdb_function_info info, duckdb_data_chunk output){
-    auto bind_data = (TraceProvInferBind *)duckdb_function_get_bind_data(info);
-    auto init_data = (TraceProvInferLocalInit *)duckdb_function_get_local_init_data(info);
-    auto con = init_data->con;
-    if (init_data->stmt == NULL){
-        // Compile the statement.
-        DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, init_data->query->c_str(), &init_data->stmt), duckdb_prepare_error(init_data->stmt));
-        DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared_streaming(init_data->stmt, &init_data->curr_result));
-        // if (!duckdb_result_is_streaming(init_data->curr_result)){
-        //     elog(ERROR, "Expected result to be streaming!");
-        // }
-    }
-    duckdb_data_chunk result_chunk = NULL;
-    if (duckdb_result_is_streaming(init_data->curr_result)){
-        result_chunk = duckdb_stream_fetch_chunk(init_data->curr_result);
-    }else{
-        result_chunk = duckdb_fetch_chunk(init_data->curr_result);
-    }
-    if (result_chunk == NULL){
-        duckdb_data_chunk_set_size(output, 0);
-        return;
-    }
-    // Copy all the vectors.
-    const uint64_t result_column_count = duckdb_data_chunk_get_column_count(result_chunk);
-    const uint64_t expected_column_count = duckdb_data_chunk_get_column_count(output);
-    // if (result_column_count != expected_column_count){
-    //     elog(ERROR, "Got different col counts: %ld, %ld", result_column_count, expected_column_count);
-    // }
-    const uint64_t row_count = duckdb_data_chunk_get_size(result_chunk);
-    for (uint64_t col_idx = 0; col_idx < result_column_count; col_idx++){
-        duckdb_vector result_col = duckdb_data_chunk_get_vector(result_chunk, col_idx);
-        uint64_t *result_col_data = (uint64_t *)duckdb_vector_get_data(result_col);
-        duckdb_vector data_col = duckdb_data_chunk_get_vector(output, col_idx);
-        uint64_t *data_col_data = (uint64_t *)duckdb_vector_get_data(data_col);
-        memcpy(data_col_data, result_col_data, sizeof(uint64_t)*row_count);
-    }
-    duckdb_data_chunk_set_size(output, row_count);
-}
-
-duckdb_table_function traceprov_create_infer_table_func(){
-    auto function = duckdb_create_table_function();
-    duckdb_table_function_set_name(function, "traceprov_infer_table");
-    duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
-    duckdb_table_function_add_parameter(function, type);
-    duckdb_destroy_logical_type(&type);
-
-    duckdb_table_function_set_bind(function, traceprov_infer_bind);
-    duckdb_table_function_set_init(function, traceprov_infer_init);
-    duckdb_table_function_set_local_init(function, traceprov_infer_local_init);
-    duckdb_table_function_set_function(function, traceprov_infer_func);
-    return function;
-}
-
+//     duckdb_scalar_function_set_function(func, traceprov_read_int_vector_func);
+//     return func;
+// }
 static uint8_t dummy = 0;
 
 void traceprov_attempt_prefaults(){
@@ -1321,4 +1186,3 @@ void traceprov_attempt_prefaults(){
     elog(INFO, "Time for prefaults: %ld", (duration).count());
 }
 
-#endif

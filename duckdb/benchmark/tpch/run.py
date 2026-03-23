@@ -84,7 +84,7 @@ def run():
             else:
                 graph_dir = graph_dir / "non_optimized"
             query_result = run_single(
-                Path(parsed.exe),
+                exe=Path(parsed.exe),
                 db=Path(parsed.db),
                 query_num=query,
                 base_root=Path(parsed.base_root),
@@ -94,25 +94,16 @@ def run():
                 spec=spec[query][0],
                 traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
                 use_optimized=parsed.optimized,
+                use_aggresive_optimized=parsed.agg_optimized,
                 validate=is_validate and parsed.sample_inference is None,
                 disable_col_opt=disable_col_opt,
                 materialize_infer=parsed.mat_infer,
                 iters=total_iters,
                 pre_base=pre_base_path,
                 run_inference=parsed.infer,
-                use_aggresive_optimized=parsed.agg_optimized,
                 strict=parsed.strict,
-                traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
-                traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
-                traceprov_use_implicit_union=parsed.traceprov_use_implicit_union,
-                traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation,
-                traceprov_use_merge_chunks=parsed.traceprov_use_merge_chunks,
-                traceprov_combine_in_memory=parsed.traceprov_combine_in_memory,
-                traceprov_split_combine=parsed.traceprov_split_combine,
-                use_synthetic_infer=parsed.use_syn_infer,
-                use_union_infer=parsed.use_union_infer,
-                traceprov_use_compact=parsed.traceprov_use_compact,
-                pending=parsed.pending
+                pending=parsed.pending,
+                parsed=parsed
             )
 
         if parsed.sample_inference:
@@ -140,6 +131,7 @@ def run():
                     pre_base=pre_base_path,
                     mat_infer=parsed.mat_infer,
                     validate=parsed.validate,
+                    parsed=parsed
                 )
             else:
                 if parsed.sample_inference != "sample":
@@ -150,7 +142,6 @@ def run():
                     query_num=query,
                     root=Path(parsed.root),
                     spec_element=spec[query][0],
-                    partition_spec_element=part_config[query],
                     samples=out_ids,
                     use_optimized=parsed.optimized,
                     iters=total_iters,
@@ -159,10 +150,10 @@ def run():
                     profile=True,
                     settings=False,
                     validate=parsed.validate,
-                    traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
-                    traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
                     mat_infer=parsed.mat_infer,
                     table_suff=parsed.suff,
+                    parsed=parsed,
+                    use_aggresive_optimized=parsed.agg_optimized
                 )
 
         assert query not in results

@@ -2,6 +2,7 @@
 #define __TP_UTILS__
 #include <stdio.h>
 #include <iostream>
+#include <list>
 #include "traceprov.hpp"
 #include <sys/file.h>
 #include <sys/stat.h>

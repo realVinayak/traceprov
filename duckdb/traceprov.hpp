@@ -10,6 +10,13 @@
 #include <unistd.h>
 #include <functional>
 
+#if TRACEPROV_SD_MODE==1
+
+#include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/parser/parsed_data/create_scalar_function_info.hpp"
+
+#endif
+
 using namespace duckdb;
 
 #define TP_STD_VECTOR_SIZE 2048
@@ -388,51 +395,39 @@ typedef struct TraceProvPartitionLayerItem {
 
 typedef std::vector<TraceProvPartitionLayerItem> TraceProvPartitionLayers;
 
-#if TRACEPROV_SD_MODE==0
-void traceprov_update(duckdb_function_info info, duckdb_data_chunk input, duckdb_aggregate_state *states);
-
 
 void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map, TraceProvPartitionLayers *partition_layers);
 
-duckdb_scalar_function traceprov_create_reinit_state();
-duckdb_scalar_function* traceprov_create_log_function(
+ScalarFunction *traceprov_create_reinit_state();
+ScalarFunction  **traceprov_create_log_function(
     const uint32_t num_args,
     const bool is_volatile,
     TraceProvNullMap *null_map,
     const bool is_boolean
 );
-#endif
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-
-typedef struct TraceProvDuckDbState {
-    bool should_hash;
-    TraceProvNullMap *null_map;
-    bool is_bool_return;
-} TraceProvDuckDbState;
-
-struct TraceProvAggExtra : public AggregateFunctionInfo {
+typedef struct TraceProvAggExtra {
     bool ignore_gn;
     uint64_t use_part_agg;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
     TraceProvNullMap *null_map;
     TraceProvPartitionLayers *partition_layers;
-};
+    bool is_bool_return;
+} TraceProvAggExtra;
 
 // Simplifies stuff.
 struct TraceProvAggBind : public FunctionData  {
 
     explicit TraceProvAggBind(
-        TraceProvAggExtra *extra,
         TraceProvLayerNumber layer_number,
         std::vector<uint8_t> *sizes,
         bool infer_null,
         std::vector<uint64_t> *cols,
         bool should_hash
     ) :
-        extra(extra),
         layer_number(layer_number),
         sizes(sizes),
         infer_null(infer_null),
@@ -440,7 +435,6 @@ struct TraceProvAggBind : public FunctionData  {
         should_hash(should_hash)
         {}
 
-    TraceProvAggExtra *extra;
     TraceProvLayerNumber layer_number;
     // Sizes of the different columns.
     // This is cached, and used just once.
@@ -450,14 +444,13 @@ struct TraceProvAggBind : public FunctionData  {
     bool should_hash;
 public:
     unique_ptr<FunctionData> Copy() const override {
-        return make_uniq<TraceProvAggBind>(extra, layer_number, sizes, infer_null, cols, should_hash);
+        return make_uniq<TraceProvAggBind>(layer_number, sizes, infer_null, cols, should_hash);
     }
 
     bool Equals(const FunctionData &other_p) const override {
         auto &other = other_p.Cast<TraceProvAggBind>();
         return (
-            extra == other.extra 
-            && layer_number == other.layer_number 
+            layer_number == other.layer_number 
             && sizes == other.sizes 
             && infer_null == other.infer_null 
             && cols == other.cols

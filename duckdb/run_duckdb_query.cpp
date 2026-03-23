@@ -73,6 +73,7 @@ typedef struct ExtraQueryGroup {
 } ExtraQueryGroup;
 
 std::string read_file(std::string file);
+void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 
 // TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
@@ -254,7 +255,7 @@ struct Options parse_args(int argc, char **argv){
             TraceProvLayerNumber layer = 0;
             sscanf(extra_path.c_str(), "/tmp/infer_%d_template", &layer);
             if (layer == 0){
-                elog(ERROR, "Error parsing: %s", extra_path.c_str());
+                elog(INFO, "Error parsing: %s", extra_path.c_str());
             }
             for (std::string extra_file_path; std::getline(extra_file_stream, extra_file_path);){
                 if (extra_file_path.size() > 0){
@@ -439,13 +440,11 @@ void perform_query(
     duckdb_prepared_statement *later_stmt = NULL
 ){
 
-    #if TRACEPROV_SD_MODE==0
     if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
         // traceprov_write_max_used_layer(options->min_layer_number);
     }
-    #endif
 
     if (options->disable_column_optimizer){
         // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
@@ -604,9 +603,64 @@ typedef struct Funcs {
     duckdb_table_function tp_read_offset_func;
 } Funcs;
 
+#if TRACEPROV_SD_MODE==0
+struct TraceProvCreateScalarFunctionInfo : public CreateFunctionInfo {
+	DUCKDB_API explicit TraceProvCreateScalarFunctionInfo(ScalarFunction function);
+	DUCKDB_API explicit TraceProvCreateScalarFunctionInfo(ScalarFunctionSet set);
+
+	ScalarFunctionSet functions;
+
+public:
+	DUCKDB_API unique_ptr<CreateInfo> Copy() const override;
+};
+
+
+TraceProvCreateScalarFunctionInfo::TraceProvCreateScalarFunctionInfo(ScalarFunction function)
+    : CreateFunctionInfo(CatalogType::SCALAR_FUNCTION_ENTRY), functions(function.name) {
+    name = function.name;
+    functions.AddFunction(std::move(function));
+    internal = true;
+}
+TraceProvCreateScalarFunctionInfo::TraceProvCreateScalarFunctionInfo(ScalarFunctionSet set)
+    : CreateFunctionInfo(CatalogType::SCALAR_FUNCTION_ENTRY), functions(std::move(set)) {
+    name = functions.name;
+    for (auto &func : functions.functions) {
+        func.name = functions.name;
+    }
+    internal = true;
+}
+
+unique_ptr<CreateInfo> TraceProvCreateScalarFunctionInfo::Copy() const {
+    ScalarFunctionSet set(name);
+    set.functions = functions.functions;
+    auto result = make_uniq<TraceProvCreateScalarFunctionInfo>(std::move(set));
+    CopyProperties(*result);
+    return std::move(result);
+}
+
+void register_func(duckdb::ScalarFunction *func, duckdb_connection con){
+    auto duck_con = reinterpret_cast<duckdb::Connection *>(con);
+    duck_con->BeginTransaction();
+    TraceProvCreateScalarFunctionInfo info(*func);
+    info.schema = DEFAULT_SCHEMA;
+    duck_con->context->RegisterFunction(info);
+    duck_con->Commit();
+}
+
+#else
+void register_func(duckdb::ScalarFunction *func, duckdb_connection con){
+    auto duck_con = reinterpret_cast<duckdb::Connection *>(con);
+    duck_con->BeginTransaction();
+    CreateScalarFunctionInfo info(*func);
+    info.schema = DEFAULT_SCHEMA;
+    duck_con->context->RegisterFunction(info);
+    duck_con->Commit();
+}
+#endif
+
 Funcs traceprov_add_funcs(duckdb_connection con){
-    duckdb_scalar_function reinit_func = traceprov_create_reinit_state();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, reinit_func));
+    auto reinit_func = traceprov_create_reinit_state();
+    register_func(reinit_func, con);
 
     duckdb_table_function tp_read_func = traceprov_create_table_func();
     DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_func));
@@ -617,11 +671,11 @@ Funcs traceprov_add_funcs(duckdb_connection con){
     duckdb_table_function tp_read_offset_partition_func = traceprov_create_table_offset_partition_func();
     DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_offset_partition_func));
     
-    duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
+    // duckdb_scalar_function tp_table_window_func = traceprov_create_table_window_func(2, 0, NULL);
+    // DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_table_window_func));
 
-    duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
+    // duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
+    // DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
 
     return Funcs {
         .tp_read_func = tp_read_func,
@@ -642,7 +696,9 @@ std::vector<duckdb_connection> *make_duckdb_connections(const uint32_t num_threa
         DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "doing threads!");
         // DUCKDB_RUN_SHORT_QUERY(con, "SET streaming_buffer_size='16KiB';", "setting streaming_buffer_size!");
         DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "unsetting preserve_insertion_order!");
+        #if TRACEPROV_SD_MODE==0
         DUCKDB_RUN_SHORT_QUERY(con, "set pin_threads=\"on\";", "set pin threads");
+        #endif
         traceprov_add_funcs(con);
         conns->push_back(con);
     }
@@ -697,7 +753,9 @@ int main(int argc, char **argv){
     DUCKDB_EXIT_ON_ERROR(duckdb_connect(db, &con));
 
     DUCKDB_RUN_SHORT_QUERY(con, "load JSON;", "load json");
+    #if TRACEPROV_SD_MODE==0
     DUCKDB_RUN_SHORT_QUERY(con, "set pin_threads=\"on\";", "set pin threads");
+    #endif
     DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "set insertion order preserve");
 
     if (options.is_new_sd){
@@ -710,14 +768,13 @@ int main(int argc, char **argv){
     TraceProvNullMap *null_map = traceprov_infer_nulls();
     TraceProvPartitionLayers *partition_layers = traceprov_layers_to_partition();
 
-    #if TRACEPROV_SD_MODE==0
     const uint32_t num_args = 12;
     // duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
     // duckdb_aggregate_function *ignore_gn_funcs = traceprov_create_funcs(num_args, false, true, options.use_partition_agg);
     // duckdb_aggregate_function *window_funcs = traceprov_create_window_funcs(num_args);
-    duckdb_scalar_function *log_funcs = traceprov_create_log_function(num_args, false, null_map, false);
-    duckdb_scalar_function *volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map, false);
-    duckdb_scalar_function *boolean_log_funcs = traceprov_create_log_function(num_args, false, null_map, true);
+    auto log_funcs = traceprov_create_log_function(num_args, false, null_map, false);
+    auto volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map, false);
+    auto boolean_log_funcs = traceprov_create_log_function(num_args, false, null_map, true);
     traceprov_create_and_register_agg(num_args, con, null_map, partition_layers);
     for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
@@ -729,27 +786,22 @@ int main(int argc, char **argv){
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, window_funcs[farg_idx]));
         // std::cout << "ran aggregate register window successfully!" << std::endl;
 
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, log_funcs[farg_idx]));
+        register_func(log_funcs[farg_idx], con);
         std::cout << "ran top-level log register successfully!" << std::endl;
 
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, volatile_log_funcs[farg_idx]));
+        register_func(volatile_log_funcs[farg_idx], con);
         std::cout << "ran top-level volatile log register successfully!" << std::endl;
 
-        DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, boolean_log_funcs[farg_idx]));
+        register_func(boolean_log_funcs[farg_idx], con);
         std::cout << "ran top-level boolean log register successfully!" << std::endl;
     }
 
     Funcs table_funcs = traceprov_add_funcs(con);
 
-    auto infer_table_func = traceprov_create_infer_table_func();
-    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, infer_table_func));
-
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
         traceprov_create_debug_table_funcs(con);
     }
-
-    #endif
         
     //if (options.disable_column_optimizer){
     //    DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
@@ -757,15 +809,12 @@ int main(int argc, char **argv){
     //}
 
     DUCKDB_RUN_SHORT_QUERY(con, "ANALYZE;", "run analyze;");
-    DUCKDB_RUN_SHORT_QUERY(con, "set max_expression_depth=(1::ubigint << 63) - 1;", "run max expression depth adjustment;");
     traceprov_setup_page_cache(options.num_threads, options.initial_page_count);
 
-    #if TRACEPROV_SD_MODE==0
     if (!options.no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
     }
-    #endif
 
     if (options.min_layer_number){
         traceprov_current.maximum_local_layer_used_copy = options.min_layer_number;
@@ -816,15 +865,15 @@ int main(int argc, char **argv){
             uint32_t extra_idx = 0;
 
             for (auto extra_sql: extra_sqls_clone){
-                #if TRACEPROV_SD_MODE == 0
-
-                auto extra = table_func_extra.at(extra_idx);
+                
+                TraceProvTableExtra *extra = NULL;
+                if (table_func_extra.size() != 0){
+                    extra = table_func_extra.at(extra_idx);
+                }
 
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_func, extra, free); // whatever
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, extra, free);
 
-
-                #endif
                 // traceprov_attempt_prefaults();
                 extra_idx++;
                 Options new_options = options;
@@ -843,11 +892,9 @@ int main(int argc, char **argv){
                     ""
                 );
 
-                #if TRACEPROV_SD_MODE == 0
                 // eh, so that the state is still consistent later.
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
-                #endif
             }
         }
     }else{
@@ -874,14 +921,14 @@ int main(int argc, char **argv){
         // Run extra all ;)
         for (auto extra_sql: extra_sqls_clone){
 
-            #if TRACEPROV_SD_MODE == 0
-
-            auto extra = table_func_extra.at(extra_sql_idx);
+            TraceProvTableExtra *extra = NULL;
+            if (table_func_extra.size() != 0){
+                extra = table_func_extra.at(extra_sql_idx);
+            }
 
             duckdb_table_function_set_extra_info(table_funcs.tp_read_func, (void *)extra, free);
             duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, (void *)extra, free);
 
-            #endif
             extra_sql_idx++;
             Options extra_options = options;
             extra_options.no_reinit_state = true;
@@ -895,14 +942,12 @@ int main(int argc, char **argv){
                     sprintf(profile_out, options.profile_out_path.c_str(), extra_sql_idx, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&extra_options, con, extra_sql.sql, agg_result, final_profile_out, NULL, "", &stmt);
                 extra_options._extra_output = extra_sql.extra;
+                perform_query(&extra_options, con, extra_sql.sql, agg_result, final_profile_out, NULL, "", &stmt);
             }
-            #if TRACEPROV_SD_MODE == 0
             // eh, so that the state is still consistent later.
             duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
             duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
-            #endif
         }
     }
 
@@ -1135,6 +1180,9 @@ TraceProvDerivationSpec* augment_extra_sql(
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+                if (log_offset != -1){
+                    table_name += "_" + std::to_string(log_offset);
+                }
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
                 // for (auto ddl_string : ddls){
                 //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
