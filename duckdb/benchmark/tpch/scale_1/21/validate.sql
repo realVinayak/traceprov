@@ -10,8 +10,7 @@ where exists (
         from lineitem l2
         where l2.l_orderkey = l1.l_orderkey
             and (l2.l_orderkey, l2.l_linenumber) in (
-                select column_2_1,
-                    column_3_1
+                select (column_2_1, column_3_1)
                 from traceprov_lineage_1
             )
     )
@@ -29,11 +28,13 @@ where exists (
         o_orderkey,
         n_nationkey
     ) in (
-        select column_1,
-            column_2,
-            column_3,
-            column_4,
-            column_5
+        select (
+                column_1,
+                column_2,
+                column_3,
+                column_4,
+                column_5
+            )
         from traceprov_lineage_2
     )
     and s_suppkey = l1.l_suppkey

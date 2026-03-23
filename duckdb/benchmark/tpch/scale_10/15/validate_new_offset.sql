@@ -65,7 +65,7 @@ WHERE
 	and (
 		supplier.rowid in (
 			select
-				"CAST(top_level_tp_table_0.column_0 AS BIGINT)"
+				"column_0"
 			FROM
 				LAYER_5_%OUT_ID%
 		)

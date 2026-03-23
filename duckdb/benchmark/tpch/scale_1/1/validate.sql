@@ -11,8 +11,7 @@ select l_returnflag,
     count(*) as count_order
 from lineitem
 where (l_orderkey, l_linenumber) in (
-        select column_1,
-            column_2
+        select (column_1, column_2)
         from traceprov_lineage_1
     )
 group by l_returnflag,

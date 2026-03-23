@@ -21,11 +21,13 @@ where c_custkey = o_custkey
         l_linenumber,
         n_nationkey
     ) in (
-        select column_1,
-            column_2,
-            column_3,
-            column_4,
-            column_5
+        select (
+                column_1,
+                column_2,
+                column_3,
+                column_4,
+                column_5
+            )
         from traceprov_lineage_1
     )
 group by c_custkey,

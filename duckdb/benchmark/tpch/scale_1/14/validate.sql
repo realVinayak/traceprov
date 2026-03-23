@@ -9,8 +9,10 @@ from lineitem,
     part
 where l_partkey = p_partkey
     and (l_orderkey, l_linenumber, p_partkey) in (
-        select column_1,
-            column_2,
-            column_3
+        select (
+                column_1,
+                column_2,
+                column_3
+            )
         from traceprov_lineage_1
     )

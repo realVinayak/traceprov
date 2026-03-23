@@ -4,9 +4,11 @@ from lineitem,
     part
 where p_partkey = l_partkey
     and (l_orderkey, l_linenumber, p_partkey) in (
-        select column_1,
-            column_2,
-            column_3
+        select (
+                column_1,
+                column_2,
+                column_3
+            )
         from traceprov_lineage_3
     )
     and l_quantity < (
@@ -14,8 +16,7 @@ where p_partkey = l_partkey
         from lineitem
         where l_partkey = p_partkey
             and (l_orderkey, l_linenumber) in (
-                select column_1_1,
-                    column_2_1
+                select (column_1_1, column_2_1)
                 from traceprov_lineage_1
             )
     );

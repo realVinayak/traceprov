@@ -7,8 +7,7 @@ from partsupp,
     part
 where p_partkey = ps_partkey
     and (partsupp.rowid, part.rowid) in (
-        select column_1,
-            column_2
+        select (column_1, column_2)
         from traceprov_lineage_1
     )
 group by p_brand,

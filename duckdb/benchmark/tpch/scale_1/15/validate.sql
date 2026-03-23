@@ -13,8 +13,7 @@ FROM supplier,
 			) AS total_revenue
 		FROM lineitem
 		WHERE (l_orderkey, l_linenumber) in (
-				select column_1_1,
-					column_2
+				select (column_1_1, column_2)
 				FROM traceprov_lineage_1
 			)
 		GROUP BY lineitem.l_suppkey
@@ -35,8 +34,7 @@ WHERE (
 									) AS total_revenue
 								FROM lineitem
 								WHERE (l_orderkey, l_linenumber) in (
-										select column_1_1,
-											column_2
+										select (column_1_1, column_2)
 										from traceprov_lineage_2
 									)
 								GROUP BY lineitem.l_suppkey

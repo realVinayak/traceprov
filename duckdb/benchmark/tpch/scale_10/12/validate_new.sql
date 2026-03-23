@@ -18,8 +18,7 @@ from orders,
     lineitem
 where o_orderkey = l_orderkey
     and (orders.rowid, lineitem.rowid) in (
-        select column_1,
-            column_2
+        select (column_1, column_2)
         FROM traceprov_lineage_1
     )
 group by l_shipmode

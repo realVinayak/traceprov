@@ -27,10 +27,10 @@ from
 				from
 					customer
 				where
-					c_acctbal > 0.00
-					and substring(c_phone from 1 for 2) in
-						('13', '31', '23', '29', '30', '18', '17')
-            )
+                    and (customer.rowid) in (
+                        select column_1
+                        from LAYER_1_%OUT_ID%
+                )
             and not exists (
                 select
                     *

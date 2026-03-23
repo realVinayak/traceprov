@@ -32,10 +32,12 @@ where p_partkey = ps_partkey
                 nation.rowid,
                 region.rowid
             ) in (
-                select column_1_1,
-                    column_2_1,
-                    column_3_1,
-                    column_4_1
+                select (
+                        column_1_1,
+                        column_2_1,
+                        column_3_1,
+                        column_4_1
+                    )
                 from traceprov_lineage_1
             )
     )
@@ -46,7 +48,7 @@ where p_partkey = ps_partkey
         nation.rowid,
         region.rowid
     ) in (
-        SELECT *
+        SELECT (column_0, column_1, column_2, column_3, column_4)
         from traceprov_lineage_3
     )
 order by s_acctbal desc,

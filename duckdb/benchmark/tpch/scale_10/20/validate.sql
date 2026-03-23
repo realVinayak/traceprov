@@ -20,20 +20,20 @@ where s_suppkey in (
                 where l_partkey = ps_partkey
                     and l_suppkey = ps_suppkey
                     and (l_orderkey, l_linenumber) in (
-                        select column_1_1,
-                            column_2_1
+                        select (
+                                column_1_1,
+                                column_2_1
+                            )
                         from traceprov_lineage_2
                     )
             )
             and (ps_partkey, ps_suppkey) in (
-                select column_0,
-                    column_1
+                select (column_0, column_1)
                 from traceprov_lineage_4
             )
     )
     and (s_suppkey, n_nationkey) in (
-        select column_0,
-            column_1
+        select (column_0, column_1)
         from traceprov_lineage_5
     )
     and s_nationkey = n_nationkey

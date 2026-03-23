@@ -18,12 +18,13 @@ where c_custkey = o_custkey
                 from traceprov_lineage_1
             )
         group by l_orderkey
-        having sum(l_quantity) > 300
     )
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
-        select column_1,
-            column_2,
-            column_3
+        select (
+                column_1,
+                column_2,
+                column_3
+            )
         FROM traceprov_lineage_3
     )
 group by c_name,

@@ -11,8 +11,7 @@ where o_orderkey in (
         from lineitem
         where l_orderkey = o_orderkey
             and (l_orderkey, l_linenumber) in (
-                select column_1_1,
-                    column_2
+                select (column_1_1, column_2)
                 from traceprov_lineage_1
             )
     )

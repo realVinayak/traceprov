@@ -9,7 +9,6 @@ from lineitem,
     part
 where l_partkey = p_partkey
     and (lineitem.rowid, part.rowid) in (
-        select column_1,
-            column_2
+        select (column_1, column_2)
         from traceprov_lineage_1
     )

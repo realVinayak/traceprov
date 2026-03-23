@@ -9,9 +9,11 @@ from customer,
 where c_custkey = o_custkey
     and l_orderkey = o_orderkey
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
-        select column_1,
-            column_2,
-            column_3
+        select (
+                column_1,
+                column_2,
+                column_3
+            )
         from traceprov_lineage_1
     )
 group by l_orderkey,

@@ -30,8 +30,7 @@ where s_suppkey in (
             )
     )
     and (supplier.rowid, nation.rowid) in (
-        select column_0,
-            column_1
+        select (column_0, column_1)
         from traceprov_lineage_5
     )
     and s_nationkey = n_nationkey

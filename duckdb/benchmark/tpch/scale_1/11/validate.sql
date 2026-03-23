@@ -7,10 +7,12 @@ from partsupp,
 where ps_suppkey = s_suppkey
     and s_nationkey = n_nationkey
     and (ps_partkey, ps_suppkey, s_suppkey, n_nationkey) in (
-        select column_1,
-            column_2,
-            column_3,
-            column_4
+        select (
+                column_1,
+                column_2,
+                column_3,
+                column_4
+            )
         FROM traceprov_lineage_3
     )
 group by ps_partkey
@@ -22,10 +24,12 @@ having sum(ps_supplycost * ps_availqty) > (
         where ps_suppkey = s_suppkey
             and s_nationkey = n_nationkey
             and (ps_partkey, ps_suppkey, s_suppkey, n_nationkey) in (
-                select column_1,
-                    column_2,
-                    column_3,
-                    column_4
+                select (
+                        column_1,
+                        column_2,
+                        column_3,
+                        column_4
+                    )
                 FROM traceprov_lineage_1
             )
     )
