@@ -42,6 +42,7 @@ def infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
         out_ids.extend((range(row_count))[-clamped:])
     return out_ids
 
+CAPTURE_ENTRY = ("capture", 0, 0)
 
 def run_sample_inference(
     exec: Path,
@@ -90,13 +91,13 @@ def run_sample_inference(
             sql_spec_map.append((element['idx'], sample_id, out_id))
         log_offsets.append(out_id)
 
-    sql_spec_map = product(sql_spec_map, range(iters))
-    sql_spec_map = [("capture", 0, 0), *sql_spec_map]
+    sql_spec_map = [CAPTURE_ENTRY, *sql_spec_map]
+    sql_spec_map = list(product(sql_spec_map, range(iters)))
 
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
-        threads=1,
+        threads=parsed.threads,
         i=captured_sql.as_posix(),
         time="/tmp/infer_time.json",
         min_layer_number=min_layer_used,
@@ -116,7 +117,7 @@ def run_sample_inference(
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
             capture_options.profile,
-            range(1, len(log_offsets) + 1),
+            range(0, len(log_offsets) + 1),
             range(capture_options.repeat),
         )
     else:
@@ -130,9 +131,8 @@ def run_sample_inference(
 
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
-            if map_idx == 0:
-                continue
-            (element_idx, sample_id, out_id), iter_id = map_entry
+            if map_entry == CAPTURE_ENTRY: continue
+            (_, sample_id, out_id), iter_id = map_entry
             # don't do any validation in this case.
             if iter_id > 0:
                 continue
@@ -179,6 +179,7 @@ def run_single_smokedduck(
     query_num: str,
     base_root: Path,
     root: Path,
+    parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
     sd_extension_path: Path | None = None,
@@ -186,6 +187,7 @@ def run_single_smokedduck(
     run_inference: bool = True,
     validate: bool = False,
     mat_infer: bool = False,
+    run_sd: bool = True
 ):
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -202,7 +204,7 @@ def run_single_smokedduck(
     base_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
-        threads=1,
+        threads=parsed.threads,
         i=base_sql.as_posix(),
         time="/tmp/base_time.json",
         profile="/tmp/base_profile_%d.json",
@@ -241,30 +243,37 @@ def run_single_smokedduck(
             ]
         else:
             assert 0, "not supported yet, use sample inference branch"
+    
+    if run_sd:
+        capture_options = capture_options._replace(extras=extras)
+        traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+        capture_result_time = json_read_file(capture_options.time)
+        capture_profile_out = json_read_iters(
+            capture_options.profile, capture_options.repeat
+        )
+        capture_settings = json_read_file(capture_options.settings)
+        capture_stats = json_read_iters(capture_options.stats, capture_options.repeat)
 
-    capture_options = capture_options._replace(extras=extras)
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
-    capture_result_time = json_read_file(capture_options.time)
-    capture_profile_out = json_read_iters(
-        capture_options.profile, capture_options.repeat
-    )
-    capture_settings = json_read_file(capture_options.settings)
-    capture_stats = json_read_iters(capture_options.stats, capture_options.repeat)
+        if validate:
+            if is_new_sd:
+                validate_query(
+                    root / query_num, "validate_new_sd.sql", capture_options.db, exec_str
+                )
+            else:
+                assert 0, "no validaton support in this call path for old smokedduck"
 
-    if validate:
-        if is_new_sd:
-            validate_query(
-                root / query_num, "validate_new_sd.sql", capture_options.db, exec_str
+        if run_inference:
+            capture_result_time, infer_results = extract_extras(
+                capture_result_time, capture_profile_out, capture_options
             )
         else:
-            assert 0, "no validaton support in this call path for old smokedduck"
-
-    if run_inference:
-        capture_result_time, infer_results = extract_extras(
-            capture_result_time, capture_profile_out, capture_options
-        )
+            infer_results = None
     else:
+        capture_result_time = None
+        capture_profile_out = None
         infer_results = None
+        capture_settings = None
+        capture_stats = None
 
     final_result = dict(
         base_time=base_result_time,
@@ -374,7 +383,6 @@ def _run_sample_inference_smokedduck(
     validate: bool = False,
     mat_infer: bool = False,
 ):
-    samples = [0]
     base_dir = base_root / query_num
     query_dir = root / query_num
     base_sql = base_dir / "base.sql"
@@ -396,7 +404,7 @@ def _run_sample_inference_smokedduck(
     sql_spec_map = []
     for sample_id, out_id in enumerate(samples):
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
-        infer_with_offset = f"select * from lineage_query(1, 100, {out_id}::UINTEGER)"
+        infer_with_offset = f"select * from lineage_query({query_id}, 100, {out_id}::UINTEGER)"
         if validate or mat_infer:
             infer_with_offset = (
                 f"create or replace table LAYER_1_SD_{out_id} AS ({infer_with_offset})"
@@ -405,10 +413,8 @@ def _run_sample_inference_smokedduck(
         extra_sqls.append(final_q_path.as_posix())
         sql_spec_map.append((sample_id, out_id))
 
-    sql_spec_map = [
-        ("capture", 0),
-        *product(sql_spec_map, range(iters)),
-    ]
+    sql_spec_map = [('capture', 0), *sql_spec_map]
+    sql_spec_map = list(product(sql_spec_map, range(iters)))
     just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
 
     capture_options = DuckDBDriverOptions(
@@ -430,7 +436,7 @@ def _run_sample_inference_smokedduck(
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
             capture_options.profile,
-            range(1, len(extra_sqls) + 1),
+            range(0, len(extra_sqls) + 1),
             range(capture_options.repeat),
         )
     else:

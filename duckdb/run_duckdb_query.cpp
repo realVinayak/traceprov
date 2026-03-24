@@ -552,6 +552,7 @@ void perform_query(
         if (options->is_new_sd){
             DUCKDB_RUN_SHORT_QUERY(con, final_stats_query, "new sd result dump");
         }else{
+            // DUCKDB_RUN_SHORT_QUERY(con, final_stats_query, "old sd result dump");
             if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
                 std::cout << duckdb_prepare_error(stmt) << std::endl;
             }
@@ -901,15 +902,22 @@ int main(int argc, char **argv){
         // run main once.
         {
             Options new_options = options;
-            new_options.profile_out_path = "";
             char final_stats_query[256] = {0};
+            char final_profile_out[256] = {0};
             if (IS_SET(new_options.stats_path)){
                 char stats_query[256] = {0};
                 sprintf(stats_query,  new_options.stats_path.c_str(), 0);
                 sprintf(final_stats_query, (options.is_new_sd ? TP_SET_STATS_OUTPUT_NEW : TP_SET_STATS_OUTPUT), stats_query);
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
-            perform_query(&new_options, con, in_sql, agg_result, NULL, final_stats_query, "");
+            for (int i  = 0; i < new_options.repeat; i++){
+                if (IS_SET(new_options.profile_out_path)){
+                    char profile_out[256] = {0};
+                    sprintf(profile_out, options.profile_out_path.c_str(), 0, i);
+                    sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
+                }
+                perform_query(&new_options, con, in_sql, agg_result, final_profile_out, final_stats_query, "");               
+            }
         }
         int extra_sql_idx = 0;
 
@@ -1198,7 +1206,15 @@ TraceProvDerivationSpec* augment_extra_sql(
                 table_extra->pointer_spec = result_spec->p_context;
                 table_extra->partition_spec = info;
                 table_func_extra->push_back(table_extra);
-                extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = "layer-" + std::to_string(result_map_pair.first)});
+                std::string extra_str = "";
+                extra_str += "[";
+                extra_str += "layer-" + std::to_string(result_map_pair.first);
+                if (log_offset != -1){
+                    extra_str += ",";
+                    extra_str += "log_offset-" + std::to_string(log_offset);
+                }
+                extra_str += "]";
+                extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = extra_str});
             }
         }
     }

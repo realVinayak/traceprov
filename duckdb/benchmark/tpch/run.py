@@ -58,7 +58,7 @@ def run():
             query_result = dict(
                 sd_type=parsed.sd_mode,
                 sd=run_single_smokedduck(
-                    Path(parsed.exe),
+                    exe=Path(parsed.exe),
                     db=Path(parsed.db),
                     query_num=query,
                     base_root=Path(parsed.base_root),
@@ -74,6 +74,8 @@ def run():
                     run_inference=is_new_sd and parsed.infer,
                     validate=parsed.validate and is_new_sd,
                     mat_infer=parsed.mat_infer,
+                    run_sd=parsed.sample_inference is None,
+                    parsed=parsed
                 ),
             )
         else:
@@ -100,7 +102,7 @@ def run():
                 materialize_infer=parsed.mat_infer,
                 iters=total_iters,
                 pre_base=pre_base_path,
-                run_inference=parsed.infer,
+                run_inference=parsed.infer and parsed.sample_inference is None,
                 strict=parsed.strict,
                 pending=parsed.pending,
                 parsed=parsed
@@ -118,7 +120,7 @@ def run():
                 out_ids = infer_sample_id(out_ids, base_row_count, parsed.sample_num)
 
             if parsed.sd_mode:
-                query_id = query_result["sd"]["capture_stats"][0]["query_id"]
+                query_id = 4
                 sample_inference_result = run_sample_inference_smokedduck(
                     Path(parsed.exe),
                     db=Path(parsed.db),
