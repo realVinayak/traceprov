@@ -13,6 +13,7 @@ from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
+    extract_graph_dir,
     infer_sample_id,
     json_read_file,
     run_sample_inference,
@@ -35,9 +36,7 @@ def run():
 
     parsed = base_parser.parse_args()
     config: dict = json_read_file(parsed.config)
-    part_config: dict = json_read_file(parsed.part_cfg)
     query_layer_config: dict = json_read_file(parsed.query_layer_cfg)
-    is_validate = config.get("validate", False) or parsed.validate
 
     # for now...
     assert config["subdirs"] == ["params_default"]
@@ -54,58 +53,26 @@ def run():
         pre_base_path = Path(pre_base) if pre_base is not None else None
         sample_inference_result = None
         if parsed.sd_mode:
-            is_new_sd = parsed.sd_mode == "new"
             query_result = dict(
                 sd_type=parsed.sd_mode,
                 sd=run_single_smokedduck(
-                    exe=Path(parsed.exe),
-                    db=Path(parsed.db),
                     query_num=query,
-                    base_root=Path(parsed.base_root),
-                    root=Path(parsed.root),
+                    parsed=parsed,
                     iters=total_iters,
                     pre_base=pre_base_path,
-                    is_new_sd=is_new_sd,
-                    sd_extension_path=(
-                        None
-                        if parsed.sd_extension_path is None
-                        else Path(parsed.sd_extension_path)
-                    ),
-                    run_inference=is_new_sd and parsed.infer,
-                    validate=parsed.validate and is_new_sd,
-                    mat_infer=parsed.mat_infer,
-                    run_sd=parsed.sample_inference is None,
-                    parsed=parsed
-                ),
+                )
             )
         else:
             disable_col_opt = query in NEEDS_DISABLE
-            graph_dir = Path(parsed.graph_dir)
-            if parsed.optimized:
-                graph_dir = graph_dir / "optimized"
-            else:
-                graph_dir = graph_dir / "non_optimized"
+            graph_dir = extract_graph_dir(parsed)
             query_result = run_single(
-                exe=Path(parsed.exe),
-                db=Path(parsed.db),
                 query_num=query,
-                base_root=Path(parsed.base_root),
-                root=Path(parsed.root),
                 traceprov_graph_path=graph_dir / query / "graph.bin",
-                threads=parsed.threads,
-                spec=spec[query][0],
                 traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
-                use_optimized=parsed.optimized,
-                use_aggresive_optimized=parsed.agg_optimized,
-                validate=is_validate and parsed.sample_inference is None,
-                disable_col_opt=disable_col_opt,
-                materialize_infer=parsed.mat_infer,
+                parsed=parsed,
                 iters=total_iters,
-                pre_base=pre_base_path,
-                run_inference=parsed.infer and parsed.sample_inference is None,
-                strict=parsed.strict,
-                pending=parsed.pending,
-                parsed=parsed
+                disable_col_opt=disable_col_opt,
+                pre_base=pre_base_path
             )
 
         if parsed.sample_inference:
@@ -115,47 +82,28 @@ def run():
             else:
                 base_result = query_result["base_time"][0]
             base_row_count: int = base_result["row_count"]
-            out_ids = range(base_row_count)
-            if parsed.sample_inference == "sample":
-                out_ids = infer_sample_id(out_ids, base_row_count, parsed.sample_num)
+            out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
                 query_id = 4
                 sample_inference_result = run_sample_inference_smokedduck(
-                    Path(parsed.exe),
-                    db=Path(parsed.db),
                     query_num=query,
-                    query_id=query_id,
-                    root=Path(parsed.root),
-                    base_root=Path(parsed.base_root),
                     samples=out_ids,
+                    query_id=query_id,
+                    parsed=parsed,
                     iters=total_iters,
-                    pre_base=pre_base_path,
-                    mat_infer=parsed.mat_infer,
-                    validate=parsed.validate,
-                    parsed=parsed
+                    pre_base=pre_base_path
                 )
             else:
-                if parsed.sample_inference != "sample":
-                    out_ids = [-1, *out_ids]
                 sample_inference_result = run_sample_inference(
-                    Path(parsed.exe),
-                    db=Path(parsed.db),
                     query_num=query,
-                    root=Path(parsed.root),
                     spec_element=spec[query][0],
                     samples=out_ids,
-                    use_optimized=parsed.optimized,
+                    parsed=parsed,
                     iters=total_iters,
                     pre_base=pre_base_path,
                     disable_col_opt=disable_col_opt,
-                    profile=True,
-                    settings=False,
-                    validate=parsed.validate,
-                    mat_infer=parsed.mat_infer,
-                    table_suff=parsed.suff,
-                    parsed=parsed,
-                    use_aggresive_optimized=parsed.agg_optimized
+                    traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
                 )
 
         assert query not in results

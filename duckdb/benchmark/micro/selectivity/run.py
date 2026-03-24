@@ -4,6 +4,7 @@ from pathlib import Path
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_duckdb_generic import (
+    infer_sample_id,
     json_read_file,
     just_read,
     just_write,
@@ -23,6 +24,9 @@ def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("--num_groups", required=True, type=int)
     base_parser.add_argument("--config", required=True)
+    base_parser.add_argument(
+        "--random", action=argparse.BooleanOptionalAction, default=True
+    )
     parsed = base_parser.parse_args()
 
     result = []
@@ -33,31 +37,37 @@ def run():
     base_offset_sql = just_read(Path("queries/base_offset.sql"))
     capture_sql = just_read(Path("queries/capture.sql"))
     capture_new_sql = just_read(Path("queries/capture_new.sql"))
-    infer_sql = just_read(Path("queries/infer.sql"))
+    capture_new_compact_sql = just_read(Path("queries/capture_new_compact.sql"))
     validate_sql = just_read(Path("queries/validate.sql"))
     validate_new_sql = just_read(Path("queries/validate_new.sql"))
     validate_offset_sql = just_read(Path("queries/validate_offset.sql"))
     validate_new_offset_sql = just_read(Path("queries/validate_new_offset.sql"))
     validate_sd_sql = just_read(Path("queries/validate_sd.sql"))
-    infer_offset_sql = just_read(Path("queries/infer_offset.sql"))
     validate_sd_new_sql = just_read(Path("queries/validate_new_sd.sql"))
     config = json_read_file(parsed.config)
     assert config is not None
 
     query = "query"
     os.makedirs(tmp / query, exist_ok=True)
+    parsed.root = tmp.as_posix()
+    parsed.base_root = tmp.as_posix()
 
     for query_dir in config:
 
         def run(raw_selectivity):
             selectivity = int(parsed.num_groups * (raw_selectivity / 100))
-            replacer = lambda in_sql: in_sql.replace(
-                "ROW_COUNT", str(query_dir["num_rows"])
-            ).replace(":selectivity", str(selectivity))
+            def replacer(in_sql: str):
+                query_str = in_sql.replace("ROW_COUNT", str(query_dir["num_rows"]))
+                query_str = query_str.replace(":selectivity", str(selectivity))
+                if not parsed.random:
+                    query_str = query_str.replace("_random", "")
+                return query_str
+
             just_write(tmp / query / "base.sql", replacer(base_sql))
             just_write(tmp / query / "base_offset.sql", replacer(base_offset_sql))
             just_write(tmp / query / "capture.sql", replacer(capture_sql))
             just_write(tmp / query / "capture_new.sql", replacer(capture_new_sql))
+            just_write(tmp / query / "capture_new_compact.sql", replacer(capture_new_compact_sql))
             just_write(tmp / query / "validate.sql", replacer(validate_sql))
             just_write(tmp / query / "validate_sd.sql", replacer(validate_sd_sql))
             just_write(
@@ -67,128 +77,63 @@ def run():
                 tmp / query / "validate_new_offset.sql",
                 replacer(validate_new_offset_sql),
             )
-            just_write(tmp / query / "infer_1.sql", infer_sql)
-            just_write(tmp / query / "infer_1_offset.sql", infer_offset_sql)
-            just_write(tmp / query / "infer_1_new.sql", infer_sql)
-            just_write(tmp / query / "infer_1_new_offset.sql", infer_offset_sql)
             just_write(
                 tmp / query / "validate_new_sd.sql", replacer(validate_sd_new_sql)
             )
             just_write(tmp / query / "validate_new.sql", replacer(validate_new_sql))
 
+            sample_inference_result = None
             if parsed.sd_mode:
-                is_new_sd = parsed.sd_mode == "new"
                 query_result = dict(
                     sd_type=parsed.sd_mode,
                     sd=run_single_smokedduck(
-                        Path(parsed.exe),
-                        db=Path(parsed.db),
-                        query_num="query",
-                        root=tmp,
-                        base_root=tmp,
+                        query_num=query,
+                        parsed=parsed,
                         iters=total_iters,
-                        is_new_sd=is_new_sd,
-                        sd_extension_path=(
-                            None
-                            if parsed.sd_extension_path is None
-                            else Path(parsed.sd_extension_path)
-                        ),
-                        run_inference=is_new_sd,
-                        validate=parsed.validate and is_new_sd,
+                        pre_base=None
                     ),
                 )
-                if parsed.sample_inference:
-                    assert not is_new_sd or parsed.sample_inference == "all"
-                    if not is_new_sd:
-                        # normal sd case.
-                        row_count = query_result["sd"]["base_time"][0]["row_count"]
-                        out_ids = range(row_count)
-                        if parsed.sample_inference == "sample":
-                            out_ids = random.sample(
-                                out_ids, k=min(row_count, parsed.sample_num)
-                            )
-                        query_id = query_result["sd"]["capture_stats"][0]["query_id"]
-                        query_result["infer_result"] = run_sample_inference_smokedduck(
-                            Path(parsed.exe),
-                            db=Path(parsed.db),
-                            query_num=query,
-                            query_id=query_id,
-                            root=tmp,
-                            base_root=tmp,
-                            samples=out_ids,
-                            iters=total_iters,
-                            pre_base=None,
-                            validate=parsed.validate,
-                        )
-                    else:
-                        assert (
-                            0
-                        ), "didn't expect sample inference on new SD, redundant with all inference!"
             else:
-                spec_element = dict(min_local_used=3, elements=[dict(idx=1)])
-                query_result = dict(
-                    traceprov=run_single(
-                        Path(parsed.exe),
-                        db=Path(parsed.db),
-                        query_num="query",
-                        base_root=tmp,
-                        root=tmp,
-                        spec_element=spec_element,
-                        use_optimized=parsed.optimized,
-                        validate=parsed.validate,
-                        disable_col_opt=False,
-                        materialize_infer=parsed.mat_infer,
-                        iters=total_iters,
-                        pre_base=None,
-                        run_inference=parsed.infer,
-                        traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
-                        traceprov_use_partition_in_log=parsed.traceprov_use_partition_in_log,
-                        traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
-                    )
+                graph_dir = Path(parsed.graph_dir)
+                query_result = run_single(
+                    query_num=query,
+                    traceprov_graph_path=graph_dir / query / "graph.bin",
+                    traceprov_layers_to_derive=(1,),
+                    parsed=parsed,
+                    iters=total_iters,
+                    pre_base=None
                 )
-                if parsed.sample_inference:
-                    row_count = query_result["traceprov"]["base_time"][0]["row_count"]
-                    assert isinstance(row_count, int)
-                    out_ids = range(row_count)
-                    if parsed.sample_inference == "sample":
-                        out_ids = random.sample(
-                            out_ids,
-                            min(parsed.sample_num, row_count),
-                        )
-                        if len(out_ids) != row_count:
-                            # also pick first parsed.sample_num / 4
-                            clamped = int(parsed.sample_num / 4)
-                            out_ids.extend((range(row_count))[:clamped])
-                            out_ids.extend((range(row_count))[-clamped:])
-                    elif not parsed.validate:
-                        out_ids = [-1, *out_ids]
+            
+            if parsed.sample_inference:
+                # need to sample the inference.
+                if parsed.sd_mode:
+                    base_result = query_result["sd"]["base_time"][0]
+                else:
+                    base_result = query_result["base_time"][0]
+                base_row_count: int = base_result["row_count"]
+                out_ids = infer_sample_id(base_row_count, parsed)
 
-                    sample_inference_result = run_sample_inference(
-                        Path(parsed.exe),
-                        db=Path(parsed.db),
+                if parsed.sd_mode:
+                    query_id = 4
+                    sample_inference_result = run_sample_inference_smokedduck(
                         query_num=query,
-                        root=tmp,
-                        spec_element=spec_element,
-                        partition_spec_element=dict(
-                            use_part_agg=[1], top_level_log=2, layers=[1]
-                        ),
                         samples=out_ids,
-                        use_optimized=parsed.optimized,
+                        query_id=query_id,
+                        parsed=parsed,
                         iters=total_iters,
-                        pre_base=None,
-                        disable_col_opt=False,
-                        profile=True,
-                        settings=False,
-                        validate=parsed.validate,
-                        traceprov_use_partition_in_agg=parsed.traceprov_use_partition_in_agg,
-                        traceprov_use_row_in_agg_partition=parsed.traceprov_use_row_in_agg_partition,
-                        mat_infer=parsed.mat_infer,
-                        table_suff=parsed.suff,
                     )
-                    query_result = {
-                        **query_result,
-                        "sample_inference": sample_inference_result,
-                    }
+                else:
+                    sample_inference_result = run_sample_inference(
+                        query_num=query,
+                        samples=out_ids,
+                        parsed=parsed,
+                        traceprov_layers_to_derive=(1,),
+                        iters=total_iters
+                    )
+            query_result = {
+                **query_result,
+                "sample_inference": sample_inference_result,
+            }
             result.append(
                 dict(
                     dir=query_dir["num_rows"],

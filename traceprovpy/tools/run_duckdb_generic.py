@@ -29,8 +29,13 @@ def make_dump_query(in_query: str, out_path: str):
     dump_query = f"copy (select * from ({in_query}) f order by all) to '{out_path}' (header false)"
     return dump_query
 
+def infer_sample_id(base_row_count: int, parsed):
+    out_ids = range(base_row_count)
+    if parsed.sample_inference == "sample":
+        out_ids = _infer_sample_id(out_ids, base_row_count, parsed.sample_num)
+    return out_ids
 
-def infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
+def _infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
     out_ids = random.sample(
         out_ids,
         min(sample_num, row_count),
@@ -45,27 +50,24 @@ def infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
 CAPTURE_ENTRY = ("capture", 0, 0)
 
 def run_sample_inference(
-    exec: Path,
-    db: Path,
     query_num: str,
-    root: Path,
-    spec_element: dict,
     samples: Iterable[int],
     parsed,
-    use_optimized: bool = False,
-    use_aggresive_optimized: bool = False,
+    traceprov_layers_to_derive: Tuple[int],
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
-    disable_col_opt: bool = False,
-    profile: bool = True,
-    settings: bool = True,
-    validate: bool = False,
-    mat_infer: bool = False,
-    table_suff: str = "",
+    disable_col_opt: bool = False
 ):
+    db = Path(parsed.db)
+    exe = Path(parsed.exe)
+    root = Path(parsed.root)
+    validate = parsed.validate
+    materialize_infer = parsed.mat_infer
+    use_optimized=parsed.optimized
+    use_aggresive_optimized=parsed.agg_optimized
 
     if validate:
-        mat_infer = True
+        materialize_infer = True
         iters = 1
 
     query_dir = root / query_num
@@ -75,8 +77,8 @@ def run_sample_inference(
         use_optimized,
         use_aggresive_optimized
     )
-    min_layer_used = spec_element["min_local_used"]
-    exec_str = exec.as_posix()
+
+    exec_str = exe.as_posix()
     if pre_base:
         pre_base_options = DuckDBDriverOptions(
             db=db.as_posix(), repeat=1, threads=1, i=(query_dir / pre_base).as_posix()
@@ -87,8 +89,8 @@ def run_sample_inference(
     
     log_offsets = []
     for sample_id, out_id in enumerate(samples):
-        for element in spec_element['elements']:
-            sql_spec_map.append((element['idx'], sample_id, out_id))
+        for element in traceprov_layers_to_derive:
+            sql_spec_map.append((element, sample_id, out_id))
         log_offsets.append(out_id)
 
     sql_spec_map = [CAPTURE_ENTRY, *sql_spec_map]
@@ -100,14 +102,14 @@ def run_sample_inference(
         threads=parsed.threads,
         i=captured_sql.as_posix(),
         time="/tmp/infer_time.json",
-        min_layer_number=min_layer_used,
-        profile=("/tmp/infer_profile_%d_%d.json" if profile else None),
-        settings=("/tmp/capture_settings.json" if settings else None),
+        profile=("/tmp/infer_profile_%d_%d.json"),
+        settings=("/tmp/capture_settings.json"),
         disable_col_opt=disable_col_opt,
         main_once_extra_all=True,
         log_offsets=log_offsets,
         traceprov_perform_derivation=True,
-        traceprov_materialize_derivation=mat_infer
+        traceprov_layers_to_derive=traceprov_layers_to_derive,
+        traceprov_materialize_derivation=materialize_infer
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -172,23 +174,32 @@ def run_sample_inference(
         sql_spec_map=sql_spec_map,
     )
 
+def get_is_new_sd(parsed):
+    return parsed.sd_mode == "new"
 
 def run_single_smokedduck(
-    exe: Path,
-    db: Path,
     query_num: str,
-    base_root: Path,
-    root: Path,
     parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
-    pre_base: Path | None = None,
-    sd_extension_path: Path | None = None,
-    is_new_sd: bool = False,
-    run_inference: bool = True,
-    validate: bool = False,
-    mat_infer: bool = False,
-    run_sd: bool = True
+    pre_base: Path | None = None
 ):
+
+    db = Path(parsed.db)
+    exe = Path(parsed.exe)
+    base_root = Path(parsed.base_root)
+    root = Path(parsed.root)
+    validate = parsed.validate
+    materialize_infer = parsed.mat_infer
+    run_inference = parsed.infer and parsed.sample_inference is None
+    is_new_sd = get_is_new_sd(parsed)
+    run_sd=parsed.sample_inference is None
+
+    sd_extension_path=(
+        None
+        if parsed.sd_extension_path is None
+        else Path(parsed.sd_extension_path)
+    ),
+
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
     exec_str = exe.as_posix()
@@ -229,8 +240,8 @@ def run_single_smokedduck(
     if run_inference:
         if is_new_sd:
             infer_sql = "select * from read_block(0)"
-            if mat_infer or validate:
-                if mat_infer:
+            if materialize_infer or validate:
+                if materialize_infer:
                     # so that it's easier to differniate them :)
                     table = f"LAYER_1_{query_num}_new_sd"
                 else:
@@ -330,63 +341,26 @@ def validate_query(
         f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
     )
 
-
 def run_sample_inference_smokedduck(
-    exec: Path,
-    db: Path,
     query_num: str,
-    base_root: Path,
-    root: Path,
     samples: list[int],
     query_id: int,
     parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
-    pre_base: Path | None = None,
-    profile: bool = True,
-    settings: bool = True,
-    validate: bool = False,
-    mat_infer: bool = False,
+    pre_base: Path | None = None
 ):
-    sample_results = _run_sample_inference_smokedduck(
-        exec,
-        db,
-        query_num,
-        base_root,
-        root,
-        samples,
-        query_id,
-        parsed,
-        iters,
-        pre_base,
-        profile,
-        settings,
-        validate,
-        mat_infer,
-    )
+    
+    db = Path(parsed.db)
+    exe = Path(parsed.exe)
+    base_root = Path(parsed.base_root)
+    root = Path(parsed.root)
+    validate = parsed.validate
+    materialize_infer = parsed.mat_infer
 
-    return sample_results
-
-
-def _run_sample_inference_smokedduck(
-    exec: Path,
-    db: Path,
-    query_num: str,
-    base_root: Path,
-    root: Path,
-    samples: list[int],
-    query_id: int,
-    parsed,
-    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
-    pre_base: Path | None = None,
-    profile: bool = True,
-    settings: bool = True,
-    validate: bool = False,
-    mat_infer: bool = False,
-):
     base_dir = base_root / query_num
     query_dir = root / query_num
     base_sql = base_dir / "base.sql"
-    exec_str = exec.as_posix()
+    exec_str = exe.as_posix()
     if validate:
         iters = 1
     if pre_base:
@@ -405,7 +379,7 @@ def _run_sample_inference_smokedduck(
     for sample_id, out_id in enumerate(samples):
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
         infer_with_offset = f"select * from lineage_query({query_id}, 100, {out_id}::UINTEGER)"
-        if validate or mat_infer:
+        if validate or materialize_infer:
             infer_with_offset = (
                 f"create or replace table LAYER_1_SD_{out_id} AS ({infer_with_offset})"
             )
@@ -423,8 +397,8 @@ def _run_sample_inference_smokedduck(
         threads=parsed.threads,
         i=base_sql.as_posix(),
         time="./tmp/infer_time.json",
-        profile=("./tmp/infer_profile_%d_%d.json" if profile else None),
-        settings=("./tmp/capture_settings.json" if settings else None),
+        profile=("./tmp/infer_profile_%d_%d.json"),
+        settings=("./tmp/capture_settings.json"),
         extra_file="./tmp/extra_file.txt",
         stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
@@ -539,28 +513,37 @@ def extract_capture_query(query_dir: Path, parsed, use_optimized: bool, use_aggr
     assert captured_sql.exists(), f"Expected capture query to exist: {captured_sql.as_posix()}"
     return captured_sql
 
+
+def extract_graph_dir(parsed):
+    graph_dir = Path(parsed.graph_dir)
+    if parsed.optimized:
+        graph_dir = graph_dir / "optimized"
+    else:
+        graph_dir = graph_dir / "non_optimized"
+    assert graph_dir.exists()
+    return graph_dir
+
 def run_single(
-    db: Path,
-    exe: Path,
     query_num: str,
-    base_root: Path,
-    root: Path,
     traceprov_graph_path: Path,
-    threads: int,
     traceprov_layers_to_derive: Tuple[int],
-    spec: dict,
     parsed,
-    use_optimized: bool = False,
-    validate: bool = False,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     disable_col_opt: bool = False,
-    materialize_infer: bool = False,
-    pre_base: Path | None = None,
-    run_inference: bool = True,
-    use_aggresive_optimized: bool = False,
-    strict: bool = False,
-    pending: bool = False
+    pre_base: Path | None = None
 ):
+    
+    db = Path(parsed.db)
+    exe = Path(parsed.exe)
+    base_root = Path(parsed.base_root)
+    root = Path(parsed.root)
+    validate = parsed.validate
+    materialize_infer = parsed.mat_infer
+    run_inference = parsed.infer and parsed.sample_inference is None
+    pending = parsed.pending
+    use_optimized=parsed.optimized
+    use_aggresive_optimized=parsed.agg_optimized
+
     if validate:
         materialize_infer = True
     # if validating, assert not using optimized, for now...
@@ -571,6 +554,7 @@ def run_single(
     base_sql = base_root / query_num / "base.sql"
 
     query_dir = root / query_num
+
     captured_sql = extract_capture_query(query_dir, parsed, use_optimized, use_aggresive_optimized)
 
     exec_str = exe.as_posix()
@@ -581,6 +565,7 @@ def run_single(
         )
         traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
 
+    threads = parsed.threads
     base_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
@@ -610,7 +595,7 @@ def run_single(
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)
     traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
-    extra_file_paths = []
+
     if run_inference:
         capture_options = capture_options._replace(
             traceprov_perform_derivation=True,
@@ -641,7 +626,7 @@ def run_single(
                 if (query_dir / "validate_new_ignore_gn.sql").exists():
                     validate_path = "validate_new_ignore_gn.sql"
                 else:
-                    assert not strict, "Expected ignore to be set!"
+                    assert False, "Expected ignore to be set!"
             if validate_path is None:
                 validate_path = "validate_new.sql"
         else:

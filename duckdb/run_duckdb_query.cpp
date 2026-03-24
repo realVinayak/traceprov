@@ -913,7 +913,7 @@ int main(int argc, char **argv){
             for (int i  = 0; i < new_options.repeat; i++){
                 auto run_option = new_options;
                 if (i != new_options.repeat - 1){
-                    new_options.stats_path = "";
+                    run_option.stats_path = "";
                 }
                 if (IS_SET(run_option.profile_out_path)){
                     char profile_out[256] = {0};
