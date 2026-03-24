@@ -911,12 +911,16 @@ int main(int argc, char **argv){
                 std::cout << "STATS QUERY: " << final_stats_query << std::endl;
             }
             for (int i  = 0; i < new_options.repeat; i++){
-                if (IS_SET(new_options.profile_out_path)){
+                auto run_option = new_options;
+                if (i != new_options.repeat - 1){
+                    new_options.stats_path = "";
+                }
+                if (IS_SET(run_option.profile_out_path)){
                     char profile_out[256] = {0};
                     sprintf(profile_out, options.profile_out_path.c_str(), 0, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&new_options, con, in_sql, agg_result, final_profile_out, final_stats_query, "");               
+                perform_query(&run_option, con, in_sql, agg_result, final_profile_out, final_stats_query, "");               
             }
         }
         int extra_sql_idx = 0;
