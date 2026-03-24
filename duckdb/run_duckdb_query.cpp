@@ -1222,9 +1222,11 @@ TraceProvDerivationSpec* augment_extra_sql(
                     extra_str += ",";
                     extra_str += "log_offset-" + std::to_string(log_offset);
                 }
-                if (info->partition_time != 0){
-                    extra_str += ",";
-                    extra_str += "partition_time-" + std::to_string(info->partition_time);
+                if (info){
+                    if (info->partition_time != 0){
+                        extra_str += ",";
+                        extra_str += "partition_time-" + std::to_string(info->partition_time);
+                    }
                 }
                 extra_str += "]";
                 extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = extra_str});
