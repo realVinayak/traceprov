@@ -480,6 +480,7 @@ typedef struct TraceProvPartitionInfo {
     // If a worker is not in the nested entry, it implies the worker doesn't have any relevant partition :)
     std::unordered_map<TraceProvLayerNumber, TraceProvWorkerPartition*> *partition_data;
     std::unordered_map<TraceProvLayerNumber, uint64_t> *layer_log_map;
+    uint64_t partition_time;
 } TraceProvPartitionInfo;
 
 #endif

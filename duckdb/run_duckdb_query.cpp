@@ -1006,6 +1006,8 @@ static void populate_log_offset(
     TraceProvPartitionLayers *partition_layers,
     TraceProvPartitionInfo *partition_info
 ){
+    partition_info->partition_time = 0;
+    const auto start_time = std::chrono::steady_clock::now();
     initialize_global_context();
 
     // Need to, now, check which partitions to consider, for which rows.
@@ -1082,6 +1084,9 @@ static void populate_log_offset(
             worker_partition_map->insert({log_worker_id, log_bucket_id});
         }
     }
+
+    const auto end_time = std::chrono::steady_clock::now();
+    partition_info->partition_time = (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)).count();
 }
 
 // This doesn't do all of option (that'll be too much)
@@ -1216,6 +1221,10 @@ TraceProvDerivationSpec* augment_extra_sql(
                 if (log_offset != -1){
                     extra_str += ",";
                     extra_str += "log_offset-" + std::to_string(log_offset);
+                }
+                if (info->partition_time != 0){
+                    extra_str += ",";
+                    extra_str += "partition_time-" + std::to_string(info->partition_time);
                 }
                 extra_str += "]";
                 extra_sqls.push_back(ExtraQuery{.sql = node_sql, .extra = extra_str});
