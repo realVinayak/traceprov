@@ -8,6 +8,7 @@ from traceprovpy.tools.run_duckdb_generic import (
     json_read_file,
     just_read,
     just_write,
+    run_combined,
     run_sample_inference,
     run_sample_inference_smokedduck,
     run_single,
@@ -82,58 +83,7 @@ def run():
             )
             just_write(tmp / query / "validate_new.sql", replacer(validate_new_sql))
 
-            sample_inference_result = None
-            if parsed.sd_mode:
-                query_result = dict(
-                    sd_type=parsed.sd_mode,
-                    sd=run_single_smokedduck(
-                        query_num=query,
-                        parsed=parsed,
-                        iters=total_iters,
-                        pre_base=None
-                    ),
-                )
-            else:
-                graph_dir = Path(parsed.graph_dir)
-                query_result = run_single(
-                    query_num=query,
-                    traceprov_graph_path=graph_dir / query / "graph.bin",
-                    traceprov_layers_to_derive=(1,),
-                    parsed=parsed,
-                    iters=total_iters,
-                    pre_base=None
-                )
-            
-            if parsed.sample_inference:
-                # need to sample the inference.
-                if parsed.sd_mode:
-                    base_result = query_result["sd"]["base_time"][0]
-                else:
-                    base_result = query_result["base_time"][0]
-                base_row_count: int = base_result["row_count"]
-                out_ids = infer_sample_id(base_row_count, parsed)
-
-                if parsed.sd_mode:
-                    query_id = 4
-                    sample_inference_result = run_sample_inference_smokedduck(
-                        query_num=query,
-                        samples=out_ids,
-                        query_id=query_id,
-                        parsed=parsed,
-                        iters=total_iters,
-                    )
-                else:
-                    sample_inference_result = run_sample_inference(
-                        query_num=query,
-                        samples=out_ids,
-                        parsed=parsed,
-                        traceprov_layers_to_derive=(1,),
-                        iters=total_iters
-                    )
-            query_result = {
-                **query_result,
-                "sample_inference": sample_inference_result,
-            }
+            query_result = run_combined(parsed, total_iters, query)
             result.append(
                 dict(
                     dir=query_dir["num_rows"],

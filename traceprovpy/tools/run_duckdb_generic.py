@@ -49,6 +49,18 @@ def _infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
 
 CAPTURE_ENTRY = ("capture", 0, 0)
 
+def create_base_offset(query_dir: Path):
+    base_offset = query_dir / "base_offset.sql"
+    if not base_offset.exists():
+        base_query = query_dir / "base.sql"
+        if base_query.exists():
+            base_query_content = just_read(base_query)
+            base_query_content = base_query_content.replace(";", "")
+            base_query_content = f"select * from ({base_query_content}) LIMIT 1 OFFSET {TP_OFFSET_TICKER}"
+            just_write(base_offset, base_query_content)
+    
+    assert base_offset.exists(), "Expected base offset query to exist!"
+
 def run_sample_inference(
     query_num: str,
     samples: Iterable[int],
@@ -648,6 +660,61 @@ def run_single(
         capture_settings=capture_settings,
     )
     return final_result
+
+def run_combined(parsed, total_iters, query):
+    sample_inference_result = None
+    if parsed.sd_mode:
+        query_result = dict(
+            sd_type=parsed.sd_mode,
+            sd=run_single_smokedduck(
+                query_num=query,
+                parsed=parsed,
+                iters=total_iters,
+                pre_base=None
+            ),
+        )
+    else:
+        graph_dir = Path(parsed.graph_dir)
+        query_result = run_single(
+            query_num=query,
+            traceprov_graph_path=graph_dir / query / "graph.bin",
+            traceprov_layers_to_derive=(1,),
+            parsed=parsed,
+            iters=total_iters,
+            pre_base=None
+        )
+    
+    if parsed.sample_inference:
+        # need to sample the inference.
+        if parsed.sd_mode:
+            base_result = query_result["sd"]["base_time"][0]
+        else:
+            base_result = query_result["base_time"][0]
+        base_row_count: int = base_result["row_count"]
+        out_ids = infer_sample_id(base_row_count, parsed)
+
+        if parsed.sd_mode:
+            query_id = 4
+            sample_inference_result = run_sample_inference_smokedduck(
+                query_num=query,
+                samples=out_ids,
+                query_id=query_id,
+                parsed=parsed,
+                iters=total_iters,
+            )
+        else:
+            sample_inference_result = run_sample_inference(
+                query_num=query,
+                samples=out_ids,
+                parsed=parsed,
+                traceprov_layers_to_derive=(1,),
+                iters=total_iters
+            )
+    query_result = {
+        **query_result,
+        "sample_inference": sample_inference_result,
+    }
+    return query_result
 
 
 def add_query_options(parser: argparse.ArgumentParser):
