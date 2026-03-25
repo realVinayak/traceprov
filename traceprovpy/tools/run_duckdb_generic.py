@@ -68,7 +68,8 @@ def run_sample_inference(
     traceprov_layers_to_derive: Tuple[int],
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
-    disable_col_opt: bool = False
+    disable_col_opt: bool = False,
+    pre_query: bool = False
 ):
     db = Path(parsed.db)
     exe = Path(parsed.exe)
@@ -121,7 +122,8 @@ def run_sample_inference(
         log_offsets=log_offsets,
         traceprov_perform_derivation=True,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
-        traceprov_materialize_derivation=materialize_infer
+        traceprov_materialize_derivation=materialize_infer,
+        pre_query=pre_query
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -193,24 +195,20 @@ def run_single_smokedduck(
     query_num: str,
     parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
-    pre_base: Path | None = None
+    pre_base: Path | None = None,
+    pre_query: list[str] = None
 ):
-
     db = Path(parsed.db)
     exe = Path(parsed.exe)
     base_root = Path(parsed.base_root)
     root = Path(parsed.root)
     validate = parsed.validate
     materialize_infer = parsed.mat_infer
-    run_inference = parsed.infer and parsed.sample_inference is None
+    run_inference = parsed.infer and parsed.sample_inference is None and parsed.sd_mode != 'old'
     is_new_sd = get_is_new_sd(parsed)
     run_sd=parsed.sample_inference is None
 
-    sd_extension_path=(
-        None
-        if parsed.sd_extension_path is None
-        else Path(parsed.sd_extension_path)
-    ),
+    sd_extension_path=None if parsed.sd_extension_path is None else Path(parsed.sd_extension_path)
 
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -232,6 +230,7 @@ def run_single_smokedduck(
         time="/tmp/base_time.json",
         profile="/tmp/base_profile_%d.json",
         settings="/tmp/base_settings.json",
+        pre_query=pre_query
     )
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
     base_result_time = json_read_file(base_options.time)
@@ -542,7 +541,8 @@ def run_single(
     parsed,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     disable_col_opt: bool = False,
-    pre_base: Path | None = None
+    pre_base: Path | None = None,
+    pre_query: list[str] = None
 ):
     
     db = Path(parsed.db)
@@ -586,7 +586,8 @@ def run_single(
         time="./tmp/base_time.json",
         profile="./tmp/base_profile_%d.json",
         settings="./tmp/base_settings.json",
-        pending=pending
+        pending=pending,
+        pre_query=pre_query
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
@@ -661,7 +662,7 @@ def run_single(
     )
     return final_result
 
-def run_combined(parsed, total_iters, query):
+def run_combined(parsed, total_iters, query, pre_query: list[str]):
     sample_inference_result = None
     if parsed.sd_mode:
         query_result = dict(
@@ -670,7 +671,8 @@ def run_combined(parsed, total_iters, query):
                 query_num=query,
                 parsed=parsed,
                 iters=total_iters,
-                pre_base=None
+                pre_base=None,
+                pre_query=pre_query
             ),
         )
     else:
@@ -681,7 +683,8 @@ def run_combined(parsed, total_iters, query):
             traceprov_layers_to_derive=(1,),
             parsed=parsed,
             iters=total_iters,
-            pre_base=None
+            pre_base=None,
+            pre_query=pre_query
         )
     
     if parsed.sample_inference:
@@ -701,6 +704,7 @@ def run_combined(parsed, total_iters, query):
                 query_id=query_id,
                 parsed=parsed,
                 iters=total_iters,
+                pre_query=pre_query
             )
         else:
             sample_inference_result = run_sample_inference(
@@ -708,7 +712,8 @@ def run_combined(parsed, total_iters, query):
                 samples=out_ids,
                 parsed=parsed,
                 traceprov_layers_to_derive=(1,),
-                iters=total_iters
+                iters=total_iters,
+                pre_query=pre_query
             )
     query_result = {
         **query_result,

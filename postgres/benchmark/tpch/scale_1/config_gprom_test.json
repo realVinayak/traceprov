@@ -1,0 +1,14 @@
+{
+    "_queries": [
+        1
+    ],
+    "queries": "range(1, 5)",
+    "validate": false,
+    "subdirs": [
+        "params_default"
+    ],
+    "runTimeOptions": {
+        "repeat": 3,
+        "throwaway": 2
+    }
+}

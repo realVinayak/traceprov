@@ -9,6 +9,7 @@ from traceprovpy.tools.benchmark_utils import (
 )
 from traceprovpy.tools.convert_csv_to_duckdb import convert_csv_to_duckdb
 from traceprovpy.tools.benchmark import GenericBenchmark, QuerySpec
+from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import (
     DEFAULT_REPEAT,
     DEFAULT_THROWAWAY,
@@ -56,6 +57,7 @@ class DuckDBDriverOptions(NamedTuple):
     extra_files: list[str] = None
     traceprov_use_compact: bool = False
     log_offsets: list[str] = None
+    pre_query: list[str] = None
 
     @staticmethod
     def _optimizations():
@@ -120,6 +122,7 @@ class DuckDBDriverOptions(NamedTuple):
             and (key not in ["extra", "extras", "extra_files"])
             and (key not in ["traceprov_layers_to_derive"])
             and (key not in ['log_offsets'])
+            and (key not in ['pre_query'])
         ]
         all_extras = [*([self.extra] if self.extra else []), *(self.extras or [])]
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
@@ -136,6 +139,13 @@ class DuckDBDriverOptions(NamedTuple):
             key_value_options = [
                 *key_value_options, 
                 *[f"--log_offset {log_offset}" for log_offset in self.log_offsets]
+            ]
+        if self.pre_query:
+            pre_query_file = "/tmp/traceprov_pre_query.txt"
+            just_write(pre_query_file, '\n'.join(self.pre_query))
+            key_value_options = [
+                *key_value_options,
+                *[f"--pre_main_sql {pre_query_file}"]
             ]
 
         print(key_value_options)

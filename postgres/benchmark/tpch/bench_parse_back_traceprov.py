@@ -172,8 +172,6 @@ def main():
     parsed, others = parser.parse_known_args()
     with open(parsed.config) as f:
         config: dict = json.loads(f.read())
-    is_validate = config.get("validate", False)
-    use_duckdb_inference = bench_has_duckdb_infer(others)
     dir_queries = []
 
     extra_commands = []

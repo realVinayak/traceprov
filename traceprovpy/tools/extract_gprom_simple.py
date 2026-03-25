@@ -11,23 +11,41 @@ WINDOW = "window"
 HEURISTICS = "heuristics"
 
 HEURISTICS_OPTIONS = ["-heuristic_opt TRUE"]
-
+LATERAL_OPTIONS = ["-lateral_rewrite TRUE"]
+UNNEST_OPTIONS = ["-unnest_rewrite TRUE"]
 
 class GpromOptions(NamedTuple):
     mode: Literal["join", "window"]
     heuristics: bool = False
+    is_lateral: bool = False
+    is_unnest: bool = False
 
-    @staticmethod
-    def from_parsed(parsed):
-        assert parsed.gp_mode == "join" or parsed.gp_mode == "window"
-        return GpromOptions(mode=parsed.gp_mode, heuristics=parsed.heu)
+    def from_parsed(self, parsed):
+        return self._replace(is_lateral=parsed.lateral)
 
     @staticmethod
     def add_parse_options(parser):
-        parser.add_argument("--gp_mode", required=True, type=str)
         parser.add_argument(
-            "--heu", action=argparse.BooleanOptionalAction, default=False
+            "--lateral", action=argparse.BooleanOptionalAction, default=False
         )
+        parser.add_argument(
+            "--is_unnest", action=argparse.BooleanOptionalAction, default=False
+        )
+
+    def to_str(self):
+        return f"({self.mode} - {self.heuristics})"
+    
+    @staticmethod
+    def from_str(self_str: str):
+        mode = 'join' if 'join' in self_str else 'window'
+        heu = 'True' in self_str
+        return GpromOptions(mode=mode, heuristics=heu)
+    
+    def safe_key(self):
+        parts = ['gprom', self.mode]
+        if self.heuristics:
+            parts.append("heuristics")
+        return "_".join(parts)
 
 
 GPROM_OPTIONS_MAPPING = dict(
@@ -61,17 +79,21 @@ def gprom_from_file(
         host=connection_param.host,
         port=connection_param.port,
         db=connection_param.database,
-        Pexecutor="sql",
+        Pexecutor="wf",
         Loperator_verbose="TRUE",
         queryFile=file_name,
-        Poutfile=out_file,
+        Pout_file=out_file,
     )
 
     flattened = " ".join(f"-{key} {value}" for key, value in base_user_options.items())
-    execute_cmd_raw = f"gprom -backend postgres {flattened}"
+    execute_cmd_raw = f"LD_LIBRARY_PATH=/usr/bin/libduck_prebuilt/ PATH=$PATH:/home/realv/projects/gprom/bld/bin/ gprom -backend postgres {flattened}"
     extra_options = gprom_modes[options.mode]
     if options.heuristics:
         extra_options = [*extra_options, *HEURISTICS_OPTIONS]
+    if options.is_lateral:
+        extra_options = [*extra_options, *LATERAL_OPTIONS]
+    if options.is_unnest:
+        extra_options = [*extra_options, *UNNEST_OPTIONS]
 
     gprom_cmd_list = [execute_cmd_raw, *extra_options]
     gprom_cmd = " ".join(gprom_cmd_list)
