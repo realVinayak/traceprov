@@ -1,19 +1,20 @@
-PROVENANCE OF (
-    select
-        sum(l_extendedprice) / 7.0 as avg_yearly
-    from
-        part USE PROVENANCE (p_partkey),
-        lineitem USE PROVENANCE (l_orderkey, l_linenumber) JOIN (
-            SELECT 
-                0.2 * avg(l_quantity) as avgdvalue,
-                l_partkey as internal_lpartkey
-            FROM lineitem USE PROVENANCE (l_orderkey, l_linenumber)
-            group BY l_partkey
-        ) as f
-        ON l_quantity < f.avgdvalue
-    where
-        p_partkey = l_partkey
-        and p_brand = 'Brand#23'
-        and p_container = 'MED BOX'
-        and f.internal_lpartkey = p_partkey
-);
+SELECT prov_lineitem_l__orderkey,
+    prov_lineitem_l__linenumber,
+    prov_part_p__partkey,
+    prov_lineitem_1_l__orderkey,
+    prov_lineitem_1_l__linenumber
+FROM (
+        PROVENANCE OF (
+            select sum(l_extendedprice) / 7.0 as avg_yearly
+            from lineitem USE PROVENANCE (l_orderkey, l_linenumber),
+                part USE PROVENANCE (p_partkey)
+            where p_partkey = l_partkey
+                and p_brand = 'Brand#23'
+                and p_container = 'MED BOX'
+                and l_quantity < (
+                    select 0.2 * avg(l_quantity)
+                    from lineitem USE PROVENANCE (l_orderkey, l_linenumber)
+                    where l_partkey = p_partkey
+                )
+        )
+    );
