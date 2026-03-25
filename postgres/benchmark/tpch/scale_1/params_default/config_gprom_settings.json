@@ -1,0 +1,240 @@
+{
+    "1": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "2": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": false
+        }
+    },
+    "3": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "4": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "5": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "6": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "7": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "8": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "9": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "10": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "11": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": false
+        }
+    },
+    "12": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "13": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "14": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": false
+        }
+    },
+    "17": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": false
+        }
+    },
+    "18": {
+        "(join - False)": {
+            "passed": false
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": false
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "19": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": false
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": false
+        }
+    }
+}
