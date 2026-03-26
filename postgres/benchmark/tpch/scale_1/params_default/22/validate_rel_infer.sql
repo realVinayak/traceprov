@@ -1,0 +1,30 @@
+select cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from (
+        select substring(
+                c_phone
+                from 1 for 2
+            ) as cntrycode,
+            c_acctbal
+        from customer
+        where c_acctbal > (
+                select avg(c_acctbal)
+                from customer
+                where c_custkey in (
+                        select col_1
+                        from traceprov_relation_infer_1_mat
+                    )
+            )
+            and c_custkey in (
+                select col_1
+                from traceprov_relation_infer_3_mat
+            )
+            and not exists (
+                select *
+                from orders
+                where o_custkey = c_custkey
+            )
+    ) as custsale
+group by cntrycode
+order by cntrycode;
