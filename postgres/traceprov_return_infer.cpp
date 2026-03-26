@@ -3047,7 +3047,7 @@ extern "C" {
         // we still need to read data to make base relations out of it.
         if (!aggregate_was_split){
             // The simple case.
-            if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
+            if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0) && false){
 
                 auto base_log_relation = make_traceprov_relation(self_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
                 base_log_relation->rel_args = make_relation_args(current_local_context->worker_id, agg_graph->headNumber);
@@ -3174,7 +3174,7 @@ extern "C" {
                     elog(ERROR, "Got mismatching node count on logs!");
                 }
 
-                if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
+                if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0) && false){
                     auto child_tree = derive_on_node(
                         (TraceProvNode *)base_log_relation,
                         agg_graph,
@@ -3989,6 +3989,62 @@ extern "C" {
         graph_str.append(std::to_string(context.maximum_layer_number_used));
         graph_str.append("}");
         PG_RETURN_TEXT_P(cstring_to_text(graph_str.c_str()));
+    }
+
+    // Prepares for scan, and returns the create table commands to make simpler (and automated)
+    PG_FUNCTION_INFO_V1(traceprov_prepare_for_scan);
+
+    Datum traceprov_prepare_for_scan(PG_FUNCTION_ARGS){
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping shared context");
+        }
+
+        TraceProvParseContext *parse_context = NULL;
+        TraceProvInferSetupExtra *setup_extra = NULL;
+        auto result_map = get_generic_derivation_spec(&parse_context, &setup_extra);
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '{');
+        auto scan_map = new std::unordered_map<TraceProvLayerNumber, TraceProvRelationInferExtraItem>;
+        // appendStringInfo(&buf, "\"width\": %ld", last_result.width);
+        // appendStringInfoChar(&buf, ',');
+        // appendStringInfo(&buf, "\"time\": %ld", last_result.time);
+        // appendStringInfoChar(&buf, ',');
+        // appendStringInfo(&buf, "\"row_count\": %ld", last_result.row_count);
+        bool needs_sep = false;
+        appendStringInfo(&buf, "\"sql\": [");
+        for (auto child: *result_map){
+            const TraceProvLayerNumber idx = child.first;
+            TraceProvNode *node = child.second;
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
+            const auto col_count = traceprov_get_node_column_count(node);
+            scan_map->insert({idx, TraceProvRelationInferExtraItem{.sql = (new std::string(sql))->c_str(), .expected_col_width = col_count}});
+            StringInfoData create_table_buff;
+            initStringInfo(&create_table_buff);
+            auto table_name = psprintf(TRACEPROV_RELATION_INFER_NAME, idx);
+            StringInfoData col_buff;
+            initStringInfo(&col_buff);
+            for (uint64_t col_idx = 0; col_idx < col_count; col_idx++){
+                if (col_idx > 0){
+                    appendStringInfoChar(&col_buff, ',');
+                }
+                appendStringInfo(&col_buff, "%s BIGINT", psprintf("col_%ld", col_idx));
+            }
+            appendStringInfo(&create_table_buff, "\"CREATE TABLE %s(%s) USING traceprov_am;\"", table_name, col_buff.data);
+            if (needs_sep){
+                appendStringInfoChar(&buf, ',');
+            }
+            needs_sep = true;
+            appendStringInfoString(&buf, create_table_buff.data);
+        }
+        g_tp_relation_infer_extra.map = scan_map;
+        appendStringInfoChar(&buf, ']');
+        appendStringInfoChar(&buf, '}');
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
     }
 
 };

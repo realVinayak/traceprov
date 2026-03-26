@@ -20,11 +20,6 @@ extern "C" {
     #include "funcapi.h"
     #include "traceprov_graph.h"
 
-    struct traceprov_inference_context {
-        duckdb_database db;
-        duckdb_connection con;
-    };
-
     // This is a bit different from duckdb's global state.
     // We manage the lifecycle of this ourselves.
     typedef struct TraceProvDuckDbGlobalState {
@@ -291,24 +286,6 @@ extern "C" {
             fillup_pointer(bind_data->row_layer_info, output, init_data->row_layer_ptr, init_data->current, init_data->number_of_records, bind_data->column_width, bind_data->row_width, &init_data->row_layer_ptr, init_data->row_null_layer_ptr);
         }
         init_data->current = final_state;
-    }
-
-    #define PG_DUCKDB_EXIT_ON_ERROR(state) { \
-        if (state == DuckDBError){ \
-            elog(ERROR, "Received duckdberror state at %s : %d", __FILE__,  __LINE__); \
-        } \
-    }
-
-    #define PG_DUCKDB_EXIT_ON_ERROR_MSG(state, msg) { \
-        if (state == DuckDBError){ \
-            elog(ERROR, "Received duckdberror state at %s : %d (%s)", __FILE__,  __LINE__, msg); \
-        } \
-    }
-
-    #define PG_DUCKDB_EXIT_ON_ERROR_RESULT(state, result) { \
-        if (state == DuckDBError){ \
-            elog(ERROR, "Received duckdberror state at %s : %d (%s)", __FILE__,  __LINE__, duckdb_result_error(&result)); \
-        } \
     }
 
     #define PG_DUCKDB_RUN_SHORT_QUERY(con, query, msg) { \
@@ -613,7 +590,8 @@ extern "C" {
                         uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
                         uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
                         record[col_idx] = col_data[row_idx];
-                        nulls[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+                        if (col_validity)
+                            nulls[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
                     }
                     // Directly store the value in Postgres rather than storing them
                     // in an intermediate step.
