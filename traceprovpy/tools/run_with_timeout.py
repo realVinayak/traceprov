@@ -3,6 +3,7 @@
 # Here, we also do the repeated runs (+ throwaways)
 
 import json
+import re
 from typing import Any, Literal, NamedTuple
 import psycopg2
 import os
@@ -39,6 +40,16 @@ class RunParams(NamedTuple):
             raise Exception("execution time or runtime params should be defined")
         return self
 
+class DuckDBConnectionParams(NamedTuple):
+    db: str
+    
+    @staticmethod
+    def make_from_parsed(parsed):
+        return DuckDBConnectionParams(parsed.db)
+    
+    def make_connection(self):
+        import duckdb
+        return duckdb.connect(self.db, read_only=True)
 
 class ConnectionParams(NamedTuple):
     host: str
@@ -72,15 +83,19 @@ class ConnectionParams(NamedTuple):
         return connection_params.make_connection()
 
     @staticmethod
-    def make_from_parsed(parsed):
-        connection_params = ConnectionParams(
-            host=parsed.host,
-            port=parsed.port,
-            user=parsed.user,
-            password=parsed.password,
-            database=parsed.db,
-        )
-        return connection_params
+    def make_from_parsed(parsed, backend: str = 'postgres'):
+        if backend == 'duckdb':
+            return DuckDBConnectionParams.make_from_parsed(parsed)
+    
+        if backend == 'postgres':
+            return ConnectionParams(
+                host=parsed.host,
+                port=parsed.port,
+                user=parsed.user,
+                password=parsed.password,
+                database=parsed.db,
+            )
+        assert 0, f"Unknown option: {backend}"
 
 
 class Preprocessor:

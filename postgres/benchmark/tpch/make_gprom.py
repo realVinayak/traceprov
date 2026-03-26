@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 
-from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
+from traceprovpy.tools.connection_utils import duckdb_connection_from_cmd, postgres_connection_from_cmd
 from traceprovpy.tools.extract_gprom_simple import GPROM_OPTIONS_MAPPING, GpromOptions, gprom_from_file
 from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
@@ -20,18 +20,27 @@ def get_file(options: GpromOptions):
     combined = "_".join(flat)
     return f"{combined}.sql"
 
+
+import sys
+
 def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
     parser.add_argument("--dest", type=str)
+    parser.add_argument("--backend", choices=['postgres', 'duckdb'], default='postgres')
     GpromOptions.add_parse_options(parser)
-
-    postgres_connection_from_cmd(parser)
+    curr_args = ' '.join(sys.argv)
+    print("Handling: ", curr_args)
+    if '--backend duckdb' in curr_args:
+        duckdb_connection_from_cmd(parser)
+    elif '--backend postgres' in curr_args:
+        postgres_connection_from_cmd(parser)
+    else:
+        assert False, "Invalid backend!"
     parsed, _ = parser.parse_known_args()
-    connection_params = ConnectionParams.make_from_parsed(parsed)
+    connection_params = ConnectionParams.make_from_parsed(parsed, backend=parsed.backend)
     queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [15, 16, 22]]
     # queries = ["11"]
-    con = connection_params.make_connection()
     passed = defaultdict(dict)
     for query in queries:
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
@@ -49,18 +58,21 @@ def main():
                 print(gprom_sql)
                 val_pack = dict(query=gprom_sql, passed=True)
                 passed[query][options] = val_pack
+                con = connection_params.make_connection()
                 try:
                     cursor = con.cursor()
                     cursor.execute(f"EXPLAIN {gprom_sql}")
+                    cursor.close()
+                    con.close()
                     print(f"Passed explain check!: ", query, options)
                 except:
                     val_pack["passed"] = False
                     con.rollback()
+                finally:
+                    con.close()
             except Exception as e:
                 print(e)
                 print(f"Failed explain check!: ", query, options)
-                cursor.close()
-                con.rollback()
 
     for query, query_options in passed.items():
         for option, query_contents in query_options.items():

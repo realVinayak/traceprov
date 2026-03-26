@@ -20,6 +20,7 @@ from collections import defaultdict
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
+from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     ConnectionParams,
@@ -276,13 +277,12 @@ class ValidationQuerySpec(QuerySpec):
 
         base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
         other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_pack.file_path} > /tmp/traceprov_other.out"
-        assert os.system(base_result) == 0
-        assert os.system(other_result) == 0
-        diff_return = os.system(
+        traceprov_assert_safe_run(base_result)
+        traceprov_assert_safe_run(other_result)
+        traceprov_assert_safe_run(
             "diff -u /tmp/traceprov_base.out /tmp/traceprov_other.out"
         )
-        assert diff_return == 0
-        return diff_return
+        return 0
 
 
 class Query(NamedTuple):

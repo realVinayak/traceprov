@@ -3,7 +3,7 @@
 
 import argparse
 from typing import Literal, NamedTuple
-from traceprovpy.tools.run_with_timeout import ConnectionParams
+from traceprovpy.tools.run_with_timeout import ConnectionParams, DuckDBConnectionParams
 import os
 
 JOIN = "join"
@@ -69,24 +69,38 @@ def gprom_from_parsed(parsed, input_file):
 
 
 def gprom_from_file(
-    options: GpromOptions, connection_param: ConnectionParams, file_name: str
+    options: GpromOptions, connection_param: ConnectionParams | DuckDBConnectionParams, file_name: str
 ):
     out_file = "/tmp/gprom_extracted_temp.sql"
     os.system(f"rm -f {out_file}")
-    base_user_options = dict(
-        user=connection_param.user,
-        passwd=connection_param.password,
-        host=connection_param.host,
-        port=connection_param.port,
-        db=connection_param.database,
+    generic_options = dict(
         Pexecutor="wf",
-        Loperator_verbose="TRUE",
         queryFile=file_name,
-        Pout_file=out_file,
+        Pout_file=out_file
     )
+    backend = None
+    if isinstance(connection_param, ConnectionParams):
+        backend = 'postgres'
+        base_user_options = dict(
+            user=connection_param.user,
+            passwd=connection_param.password,
+            host=connection_param.host,
+            port=connection_param.port,
+            db=connection_param.database,
+            operator_verbose="TRUE"
+        )
+    elif isinstance(connection_param, DuckDBConnectionParams):
+        backend = 'duckdb'
+        base_user_options = dict(
+            db=connection_param.db
+        )
+    else:
+        assert 0, "Got invalid instance!"
+    
+    base_user_options = {**base_user_options, **generic_options}
 
     flattened = " ".join(f"-{key} {value}" for key, value in base_user_options.items())
-    execute_cmd_raw = f"LD_LIBRARY_PATH=/usr/bin/libduck_prebuilt/ PATH=$PATH:/home/realv/projects/gprom/bld/bin/ gprom -backend postgres {flattened}"
+    execute_cmd_raw = f"LD_LIBRARY_PATH=/usr/bin/libduck_prebuilt/ PATH=$PATH:/home/realv/projects/gprom/bld/bin/ gprom -backend {backend} {flattened}"
     extra_options = gprom_modes[options.mode]
     if options.heuristics:
         extra_options = [*extra_options, *HEURISTICS_OPTIONS]
