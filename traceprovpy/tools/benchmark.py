@@ -336,7 +336,7 @@ class GenericBenchmark(NamedTuple):
     sd_options: SmokedDuckOptions | None = None
 
     def run_from_argparse(
-        self, directories: list[QueryDirectory], params=RunParams(), parser=None
+        self, directories: list[QueryDirectory], params=RunParams(), parser=None, init_sql: list[str] = None
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
@@ -394,6 +394,7 @@ class GenericBenchmark(NamedTuple):
             directories,
             connection_params,
             params,
+            init_sql
         )
         end = time.perf_counter()
         final_result = dict(
@@ -461,6 +462,7 @@ class GenericBenchmark(NamedTuple):
         directories: list[QueryDirectory],
         connection_params: ConnectionParams,
         params=RunParams(),
+        init_sql: list[str] = None
     ):
         # Always run the analyze for statistics initially.
         assert (
@@ -469,6 +471,13 @@ class GenericBenchmark(NamedTuple):
             )
             == 0
         )
+        for init_sql_line in init_sql:
+            assert (
+                os.system(
+                    f'echo "{init_sql_line}" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
+                )
+                == 0
+            )
         print(directories)
 
         call_options = (top_dir, directories, connection_params, params)
