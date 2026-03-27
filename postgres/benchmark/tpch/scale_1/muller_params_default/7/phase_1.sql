@@ -1,0 +1,110 @@
+SELECT writeorderby(4, 
+                    "subquery7"."tuid", 
+                    row_number() OVER(ORDER BY ("subquery7"."supp_nation") ASC, 
+                                               ("subquery7"."cust_nation") ASC, 
+                                               ("subquery7"."l_year") ASC RANGE UNBOUNDED PRECEDING)) AS "tuid", 
+       "subquery7"."supp_nation" AS "supp_nation", 
+       "subquery7"."cust_nation" AS "cust_nation", 
+       "subquery7"."l_year" AS "l_year", 
+       "subquery7"."revenue" AS "revenue"
+FROM (SELECT writeaggregation(2, 
+                              array_agg("subquery6"."tuid")) AS "tuid", 
+             "subquery6"."supp_nation" AS "supp_nation", 
+             "subquery6"."cust_nation" AS "cust_nation", 
+             "subquery6"."l_year" AS "l_year", 
+             sum("subquery6"."volume") AS "revenue"
+      FROM (SELECT writejoin(1, 
+                             "RTE0"."tuid", 
+                             "RTE1"."tuid", 
+                             "RTE2"."tuid", 
+                             "RTE3"."tuid", 
+                             "RTE4"."tuid", 
+                             "RTE5"."tuid") AS "tuid", 
+                   "RTE4"."n_name" AS "supp_nation", 
+                   "RTE5"."n_name" AS "cust_nation", 
+                   date_part('year', "RTE1"."l_shipdate") AS "l_year", 
+                   ("RTE1"."l_extendedprice") * ((1) -
+                                                 ("RTE1"."l_discount")) AS "volume"
+            FROM supplier_1 AS "RTE0"("tuid", 
+                                      "s_suppkey", 
+                                      "s_name", 
+                                      "s_address", 
+                                      "s_nationkey", 
+                                      "s_phone", 
+                                      "s_acctbal", 
+                                      "s_comment"), 
+                 lineitem_1 AS "RTE1"("tuid", 
+                                      "l_orderkey", 
+                                      "l_partkey", 
+                                      "l_suppkey", 
+                                      "l_linenumber", 
+                                      "l_quantity", 
+                                      "l_extendedprice", 
+                                      "l_discount", 
+                                      "l_tax", 
+                                      "l_returnflag", 
+                                      "l_linestatus", 
+                                      "l_shipdate", 
+                                      "l_commitdate", 
+                                      "l_receiptdate", 
+                                      "l_shipinstruct", 
+                                      "l_shipmode", 
+                                      "l_comment"), 
+                 orders_1 AS "RTE2"("tuid", 
+                                    "o_orderkey", 
+                                    "o_custkey", 
+                                    "o_orderstatus", 
+                                    "o_totalprice", 
+                                    "o_orderdate", 
+                                    "o_orderpriority", 
+                                    "o_clerk", 
+                                    "o_shippriority", 
+                                    "o_comment"), 
+                 customer_1 AS "RTE3"("tuid", 
+                                      "c_custkey", 
+                                      "c_name", 
+                                      "c_address", 
+                                      "c_nationkey", 
+                                      "c_phone", 
+                                      "c_acctbal", 
+                                      "c_mktsegment", 
+                                      "c_comment"), 
+                 nation_1 AS "RTE4"("tuid", 
+                                    "n_nationkey", 
+                                    "n_name", 
+                                    "n_regionkey", 
+                                    "n_comment"), 
+                 nation_1 AS "RTE5"("tuid", 
+                                    "n_nationkey", 
+                                    "n_name", 
+                                    "n_regionkey", 
+                                    "n_comment")
+            WHERE (("RTE0"."s_suppkey") = ("RTE1"."l_suppkey") AND
+                  ("RTE2"."o_orderkey") = ("RTE1"."l_orderkey") AND
+                  ("RTE3"."c_custkey") = ("RTE2"."o_custkey") AND
+                  ("RTE0"."s_nationkey") = ("RTE4"."n_nationkey") AND
+                  ("RTE3"."c_nationkey") = ("RTE5"."n_nationkey") AND
+                  ((("RTE4"."n_name") = ('FRANCE') AND ("RTE5"."n_name") =
+                                                       ('GERMANY')) OR
+                  (("RTE4"."n_name") = ('GERMANY') AND ("RTE5"."n_name") =
+                                                       ('FRANCE'))) AND
+                  ((date_part('epoch', "RTE1"."l_shipdate")) >=
+                   (788914800) AND (date_part('epoch', 
+                                              "RTE1"."l_shipdate")) <=
+                                   (851986800)))) AS "subquery6"("tuid", 
+                                                                 "supp_nation", 
+                                                                 "cust_nation", 
+                                                                 "l_year", 
+                                                                 "volume")
+      GROUP BY ("subquery6"."supp_nation"), 
+      ("subquery6"."cust_nation"), 
+      ("subquery6"."l_year")
+      HAVING True) AS "subquery7"("tuid", 
+                                  "supp_nation", 
+                                  "cust_nation", 
+                                  "l_year", 
+                                  "revenue")
+ORDER BY ("subquery7"."supp_nation") ASC, 
+("subquery7"."cust_nation") ASC, 
+("subquery7"."l_year") ASC
+LIMIT NULL;

@@ -1,0 +1,82 @@
+SELECT writeorderby(4, 
+                    "subquery4"."tuid", 
+                    row_number() OVER(ORDER BY ("subquery4"."revenue") DESC, 
+                                               ("subquery4"."o_orderdate") ASC RANGE UNBOUNDED PRECEDING)) AS "tuid", 
+       "subquery4"."l_orderkey" AS "l_orderkey", 
+       "subquery4"."revenue" AS "revenue", 
+       "subquery4"."o_orderdate" AS "o_orderdate", 
+       "subquery4"."o_shippriority" AS "o_shippriority"
+FROM (SELECT writeaggregation(2, 
+                              array_agg("subquery3"."tuid")) AS "tuid", 
+             "subquery3"."l_orderkey" AS "l_orderkey", 
+             sum(("subquery3"."l_extendedprice") * ((1) -
+                                                    ("subquery3"."l_discount"))) AS "revenue", 
+             "subquery3"."o_orderdate" AS "o_orderdate", 
+             "subquery3"."o_shippriority" AS "o_shippriority"
+      FROM (SELECT writejoin(1, 
+                             "RTE0"."tuid", 
+                             "RTE1"."tuid", 
+                             "RTE2"."tuid") AS "tuid", 
+                   "RTE2"."l_orderkey" AS "l_orderkey", 
+                   "RTE2"."l_extendedprice" AS "l_extendedprice", 
+                   "RTE2"."l_discount" AS "l_discount", 
+                   "RTE1"."o_orderdate" AS "o_orderdate", 
+                   "RTE1"."o_shippriority" AS "o_shippriority"
+            FROM customer_1 AS "RTE0"("tuid", 
+                                      "c_custkey", 
+                                      "c_name", 
+                                      "c_address", 
+                                      "c_nationkey", 
+                                      "c_phone", 
+                                      "c_acctbal", 
+                                      "c_mktsegment", 
+                                      "c_comment"), 
+                 orders_1 AS "RTE1"("tuid", 
+                                    "o_orderkey", 
+                                    "o_custkey", 
+                                    "o_orderstatus", 
+                                    "o_totalprice", 
+                                    "o_orderdate", 
+                                    "o_orderpriority", 
+                                    "o_clerk", 
+                                    "o_shippriority", 
+                                    "o_comment"), 
+                 lineitem_1 AS "RTE2"("tuid", 
+                                      "l_orderkey", 
+                                      "l_partkey", 
+                                      "l_suppkey", 
+                                      "l_linenumber", 
+                                      "l_quantity", 
+                                      "l_extendedprice", 
+                                      "l_discount", 
+                                      "l_tax", 
+                                      "l_returnflag", 
+                                      "l_linestatus", 
+                                      "l_shipdate", 
+                                      "l_commitdate", 
+                                      "l_receiptdate", 
+                                      "l_shipinstruct", 
+                                      "l_shipmode", 
+                                      "l_comment")
+            WHERE ("RTE0"."c_mktsegment") = ('BUILDING') AND
+                  ("RTE0"."c_custkey") = ("RTE1"."o_custkey") AND
+                  ("RTE2"."l_orderkey") = ("RTE1"."o_orderkey") AND
+                  (date_part('epoch', "RTE1"."o_orderdate")) < (795225600)
+                  AND (date_part('epoch', "RTE2"."l_shipdate")) >
+                      (795225600)) AS "subquery3"("tuid", 
+                                                  "l_orderkey", 
+                                                  "l_extendedprice", 
+                                                  "l_discount", 
+                                                  "o_orderdate", 
+                                                  "o_shippriority")
+      GROUP BY ("subquery3"."l_orderkey"), 
+      ("subquery3"."o_orderdate"), 
+      ("subquery3"."o_shippriority")
+      HAVING True) AS "subquery4"("tuid", 
+                                  "l_orderkey", 
+                                  "revenue", 
+                                  "o_orderdate", 
+                                  "o_shippriority")
+ORDER BY ("subquery4"."revenue") DESC, 
+("subquery4"."o_orderdate") ASC
+LIMIT 10;

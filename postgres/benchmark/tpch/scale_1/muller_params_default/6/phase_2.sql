@@ -1,0 +1,30 @@
+SELECT "group"."tuid" AS "tuid", 
+       concat_agg(("subquery1"."l_extendedprice") ||
+                  ("subquery1"."l_discount")) AS "revenue"
+FROM (SELECT "join"."tuid" AS "tuid", 
+             "RTE0"."l_extendedprice" AS "l_extendedprice", 
+             "RTE0"."l_discount" AS "l_discount"
+      FROM lineitem_2 AS "RTE0"("tuid", 
+                                "l_orderkey", 
+                                "l_partkey", 
+                                "l_suppkey", 
+                                "l_linenumber", 
+                                "l_quantity", 
+                                "l_extendedprice", 
+                                "l_discount", 
+                                "l_tax", 
+                                "l_returnflag", 
+                                "l_linestatus", 
+                                "l_shipdate", 
+                                "l_commitdate", 
+                                "l_receiptdate", 
+                                "l_shipinstruct", 
+                                "l_shipmode", 
+                                "l_comment"), 
+           LATERAL readjoin(1, 
+                            "RTE0"."tuid") AS "join"("tuid")) AS "subquery1"("tuid", 
+                                                                             "l_extendedprice", 
+                                                                             "l_discount"), 
+     LATERAL readaggregation(2, 
+                             "subquery1"."tuid") AS "group"("tuid")
+GROUP BY ("group"."tuid");

@@ -1,0 +1,88 @@
+SELECT writeaggregation(5, 
+                        array_agg("subquery5"."tuid")) AS "tuid", 
+       (sum("subquery5"."l_extendedprice")) /
+       (7.0) AS "avg_yearly"
+FROM (SELECT writejoin(4, 
+                       "RTE0"."tuid", 
+                       "RTE1"."tuid") AS "tuid", 
+             "RTE0"."l_extendedprice" AS "l_extendedprice"
+      FROM lineitem_1 AS "RTE0"("tuid", 
+                                "l_orderkey", 
+                                "l_partkey", 
+                                "l_suppkey", 
+                                "l_linenumber", 
+                                "l_quantity", 
+                                "l_extendedprice", 
+                                "l_discount", 
+                                "l_tax", 
+                                "l_returnflag", 
+                                "l_linestatus", 
+                                "l_shipdate", 
+                                "l_commitdate", 
+                                "l_receiptdate", 
+                                "l_shipinstruct", 
+                                "l_shipmode", 
+                                "l_comment"), 
+           part_1 AS "RTE1"("tuid", 
+                            "p_partkey", 
+                            "p_name", 
+                            "p_mfgr", 
+                            "p_brand", 
+                            "p_type", 
+                            "p_size", 
+                            "p_container", 
+                            "p_retailprice", 
+                            "p_comment")
+      WHERE ("RTE1"."p_partkey") = ("RTE0"."l_partkey") AND
+            ("RTE1"."p_brand") = ('Brand#23') AND
+            ("RTE1"."p_container") = ('MED BOX') AND
+            ("RTE0"."l_quantity") <
+            ((SELECT (0.2) *
+                     (avg("subquery4"."l_quantity")) AS "avg_qt"
+              FROM (SELECT writejoin(1, 
+                                     "subquery2"."tuid", 
+                                     "RTE3"."tuid") AS "tuid", 
+                           "RTE3"."l_quantity" AS "l_quantity", 
+                           "RTE3"."l_partkey" AS "l_partkey"
+                    FROM (SELECT 1 AS "tuid", 
+                                 "RTE1"."p_partkey" AS "p_partkey", 
+                                 "RTE1"."p_name" AS "p_name", 
+                                 "RTE1"."p_mfgr" AS "p_mfgr", 
+                                 "RTE1"."p_brand" AS "p_brand", 
+                                 "RTE1"."p_type" AS "p_type", 
+                                 "RTE1"."p_size" AS "p_size", 
+                                 "RTE1"."p_container" AS "p_container", 
+                                 "RTE1"."p_retailprice" AS "p_retailprice", 
+                                 "RTE1"."p_comment" AS "p_comment") AS "subquery2"("tuid", 
+                                                                                   "p_partkey", 
+                                                                                   "p_name", 
+                                                                                   "p_mfgr", 
+                                                                                   "p_brand", 
+                                                                                   "p_type", 
+                                                                                   "p_size", 
+                                                                                   "p_container", 
+                                                                                   "p_retailprice", 
+                                                                                   "p_comment"), 
+                         lineitem_1 AS "RTE3"("tuid", 
+                                              "l_orderkey", 
+                                              "l_partkey", 
+                                              "l_suppkey", 
+                                              "l_linenumber", 
+                                              "l_quantity", 
+                                              "l_extendedprice", 
+                                              "l_discount", 
+                                              "l_tax", 
+                                              "l_returnflag", 
+                                              "l_linestatus", 
+                                              "l_shipdate", 
+                                              "l_commitdate", 
+                                              "l_receiptdate", 
+                                              "l_shipinstruct", 
+                                              "l_shipmode", 
+                                              "l_comment")
+                    WHERE ("RTE3"."l_partkey") =
+                          ("subquery2"."p_partkey")) AS "subquery4"("tuid", 
+                                                                    "l_quantity", 
+                                                                    "l_partkey")
+              HAVING True))) AS "subquery5"("tuid", "l_extendedprice")
+HAVING True;

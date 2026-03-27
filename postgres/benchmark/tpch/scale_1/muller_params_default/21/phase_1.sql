@@ -1,0 +1,142 @@
+SELECT writeorderby(6, 
+                    "subquery7"."tuid", 
+                    row_number() OVER(ORDER BY ("subquery7"."numwait") DESC, 
+                                               ("subquery7"."s_name") ASC RANGE UNBOUNDED PRECEDING)) AS "tuid", 
+       "subquery7"."s_name" AS "s_name", 
+       "subquery7"."numwait" AS "numwait"
+FROM (SELECT writeaggregation(4, 
+                              array_agg("subquery6"."tuid")) AS "tuid", 
+             "subquery6"."s_name" AS "s_name", 
+             count(*) AS "numwait"
+      FROM (SELECT writejoin(3, 
+                             "RTE0"."tuid", 
+                             "RTE1"."tuid", 
+                             "RTE2"."tuid", 
+                             "RTE3"."tuid") AS "tuid", 
+                   "RTE0"."s_name" AS "s_name"
+            FROM supplier_1 AS "RTE0"("tuid", 
+                                      "s_suppkey", 
+                                      "s_name", 
+                                      "s_address", 
+                                      "s_nationkey", 
+                                      "s_phone", 
+                                      "s_acctbal", 
+                                      "s_comment"), 
+                 lineitem_1 AS "RTE1"("tuid", 
+                                      "l_orderkey", 
+                                      "l_partkey", 
+                                      "l_suppkey", 
+                                      "l_linenumber", 
+                                      "l_quantity", 
+                                      "l_extendedprice", 
+                                      "l_discount", 
+                                      "l_tax", 
+                                      "l_returnflag", 
+                                      "l_linestatus", 
+                                      "l_shipdate", 
+                                      "l_commitdate", 
+                                      "l_receiptdate", 
+                                      "l_shipinstruct", 
+                                      "l_shipmode", 
+                                      "l_comment"), 
+                 orders_1 AS "RTE2"("tuid", 
+                                    "o_orderkey", 
+                                    "o_custkey", 
+                                    "o_orderstatus", 
+                                    "o_totalprice", 
+                                    "o_orderdate", 
+                                    "o_orderpriority", 
+                                    "o_clerk", 
+                                    "o_shippriority", 
+                                    "o_comment"), 
+                 nation_1 AS "RTE3"("tuid", 
+                                    "n_nationkey", 
+                                    "n_name", 
+                                    "n_regionkey", 
+                                    "n_comment")
+            WHERE (("RTE0"."s_suppkey") = ("RTE1"."l_suppkey") AND
+                  ("RTE2"."o_orderkey") = ("RTE1"."l_orderkey") AND
+                  ("RTE2"."o_orderstatus") = ('F') AND
+                  ("RTE1"."l_receiptdate") > ("RTE1"."l_commitdate") AND
+                  EXISTS(SELECT "RTE4"."l_orderkey" AS "l_orderkey", 
+                                "RTE4"."l_partkey" AS "l_partkey", 
+                                "RTE4"."l_suppkey" AS "l_suppkey", 
+                                "RTE4"."l_linenumber" AS "l_linenumber", 
+                                "RTE4"."l_quantity" AS "l_quantity", 
+                                "RTE4"."l_extendedprice" AS "l_extendedprice", 
+                                "RTE4"."l_discount" AS "l_discount", 
+                                "RTE4"."l_tax" AS "l_tax", 
+                                "RTE4"."l_returnflag" AS "l_returnflag", 
+                                "RTE4"."l_linestatus" AS "l_linestatus", 
+                                "RTE4"."l_shipdate" AS "l_shipdate", 
+                                "RTE4"."l_commitdate" AS "l_commitdate", 
+                                "RTE4"."l_receiptdate" AS "l_receiptdate", 
+                                "RTE4"."l_shipinstruct" AS "l_shipinstruct", 
+                                "RTE4"."l_shipmode" AS "l_shipmode", 
+                                "RTE4"."l_comment" AS "l_comment"
+                         FROM lineitem_1 AS "RTE4"("tuid", 
+                                                   "l_orderkey", 
+                                                   "l_partkey", 
+                                                   "l_suppkey", 
+                                                   "l_linenumber", 
+                                                   "l_quantity", 
+                                                   "l_extendedprice", 
+                                                   "l_discount", 
+                                                   "l_tax", 
+                                                   "l_returnflag", 
+                                                   "l_linestatus", 
+                                                   "l_shipdate", 
+                                                   "l_commitdate", 
+                                                   "l_receiptdate", 
+                                                   "l_shipinstruct", 
+                                                   "l_shipmode", 
+                                                   "l_comment")
+                         WHERE (("RTE4"."l_orderkey") = ("RTE1"."l_orderkey")
+                               AND ("RTE4"."l_suppkey") <>
+                                   ("RTE1"."l_suppkey"))) AND
+                  NOT EXISTS(SELECT "RTE5"."l_orderkey" AS "l_orderkey", 
+                                    "RTE5"."l_partkey" AS "l_partkey", 
+                                    "RTE5"."l_suppkey" AS "l_suppkey", 
+                                    "RTE5"."l_linenumber" AS "l_linenumber", 
+                                    "RTE5"."l_quantity" AS "l_quantity", 
+                                    "RTE5"."l_extendedprice" AS "l_extendedprice", 
+                                    "RTE5"."l_discount" AS "l_discount", 
+                                    "RTE5"."l_tax" AS "l_tax", 
+                                    "RTE5"."l_returnflag" AS "l_returnflag", 
+                                    "RTE5"."l_linestatus" AS "l_linestatus", 
+                                    "RTE5"."l_shipdate" AS "l_shipdate", 
+                                    "RTE5"."l_commitdate" AS "l_commitdate", 
+                                    "RTE5"."l_receiptdate" AS "l_receiptdate", 
+                                    "RTE5"."l_shipinstruct" AS "l_shipinstruct", 
+                                    "RTE5"."l_shipmode" AS "l_shipmode", 
+                                    "RTE5"."l_comment" AS "l_comment"
+                             FROM lineitem_1 AS "RTE5"("tuid", 
+                                                       "l_orderkey", 
+                                                       "l_partkey", 
+                                                       "l_suppkey", 
+                                                       "l_linenumber", 
+                                                       "l_quantity", 
+                                                       "l_extendedprice", 
+                                                       "l_discount", 
+                                                       "l_tax", 
+                                                       "l_returnflag", 
+                                                       "l_linestatus", 
+                                                       "l_shipdate", 
+                                                       "l_commitdate", 
+                                                       "l_receiptdate", 
+                                                       "l_shipinstruct", 
+                                                       "l_shipmode", 
+                                                       "l_comment")
+                             WHERE (("RTE5"."l_orderkey") =
+                                    ("RTE1"."l_orderkey") AND
+                                   ("RTE5"."l_suppkey") <> ("RTE1"."l_suppkey")
+                                   AND ("RTE5"."l_receiptdate") >
+                                       ("RTE5"."l_commitdate"))) AND
+                  ("RTE0"."s_nationkey") = ("RTE3"."n_nationkey") AND
+                  ("RTE3"."n_name") =
+                  ('SAUDI ARABIA'))) AS "subquery6"("tuid", "s_name")
+      GROUP BY ("subquery6"."s_name")
+      HAVING True) AS "subquery7"("tuid", "s_name", "numwait")
+ORDER BY ("subquery7"."numwait") DESC, 
+("subquery7"."s_name") ASC
+LIMIT NULL;

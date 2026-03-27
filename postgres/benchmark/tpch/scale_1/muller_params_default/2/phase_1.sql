@@ -1,0 +1,112 @@
+SELECT writeorderby(3, 
+                    "subquery9"."tuid", 
+                    row_number() OVER(ORDER BY ("subquery9"."s_acctbal") DESC, 
+                                               ("subquery9"."n_name") ASC, 
+                                               ("subquery9"."s_name") ASC, 
+                                               ("subquery9"."p_partkey") ASC RANGE UNBOUNDED PRECEDING)) AS "tuid", 
+       "subquery9"."s_acctbal" AS "s_acctbal", 
+       "subquery9"."s_name" AS "s_name", 
+       "subquery9"."n_name" AS "n_name", 
+       "subquery9"."p_partkey" AS "p_partkey", 
+       "subquery9"."p_mfgr" AS "p_mfgr", 
+       "subquery9"."s_address" AS "s_address", 
+       "subquery9"."s_phone" AS "s_phone", 
+       "subquery9"."s_comment" AS "s_comment"
+FROM (SELECT writejoin(2, 
+                       "RTE0"."tuid", 
+                       "RTE1"."tuid", 
+                       "RTE2"."tuid", 
+                       "RTE3"."tuid", 
+                       "RTE4"."tuid") AS "tuid", 
+             "RTE1"."s_acctbal" AS "s_acctbal", 
+             "RTE1"."s_name" AS "s_name", 
+             "RTE3"."n_name" AS "n_name", 
+             "RTE0"."p_partkey" AS "p_partkey", 
+             "RTE0"."p_mfgr" AS "p_mfgr", 
+             "RTE1"."s_address" AS "s_address", 
+             "RTE1"."s_phone" AS "s_phone", 
+             "RTE1"."s_comment" AS "s_comment"
+      FROM part_1 AS "RTE0"("tuid", 
+                            "p_partkey", 
+                            "p_name", 
+                            "p_mfgr", 
+                            "p_brand", 
+                            "p_type", 
+                            "p_size", 
+                            "p_container", 
+                            "p_retailprice", 
+                            "p_comment"), 
+           supplier_1 AS "RTE1"("tuid", 
+                                "s_suppkey", 
+                                "s_name", 
+                                "s_address", 
+                                "s_nationkey", 
+                                "s_phone", 
+                                "s_acctbal", 
+                                "s_comment"), 
+           partsupp_1 AS "RTE2"("tuid", 
+                                "ps_partkey", 
+                                "ps_suppkey", 
+                                "ps_availqty", 
+                                "ps_supplycost", 
+                                "ps_comment"), 
+           nation_1 AS "RTE3"("tuid", 
+                              "n_nationkey", 
+                              "n_name", 
+                              "n_regionkey", 
+                              "n_comment"), 
+           region_1 AS "RTE4"("tuid", 
+                              "r_regionkey", 
+                              "r_name", 
+                              "r_comment")
+      WHERE ("RTE0"."p_partkey") = ("RTE2"."ps_partkey") AND
+            ("RTE1"."s_suppkey") = ("RTE2"."ps_suppkey") AND
+            ("RTE0"."p_size") = (15) AND ("RTE0"."p_type") ~~
+                                         ('%BRASS') AND ("RTE1"."s_nationkey") =
+                                                        ("RTE3"."n_nationkey")
+            AND ("RTE3"."n_regionkey") = ("RTE4"."r_regionkey") AND
+            ("RTE4"."r_name") = ('EUROPE') AND
+            ("RTE2"."ps_supplycost") =
+            ((SELECT min("RTE5"."ps_supplycost") AS "min"
+              FROM partsupp_1 AS "RTE5"("tuid", 
+                                        "ps_partkey", 
+                                        "ps_suppkey", 
+                                        "ps_availqty", 
+                                        "ps_supplycost", 
+                                        "ps_comment"), 
+                   supplier_1 AS "RTE6"("tuid", 
+                                        "s_suppkey", 
+                                        "s_name", 
+                                        "s_address", 
+                                        "s_nationkey", 
+                                        "s_phone", 
+                                        "s_acctbal", 
+                                        "s_comment"), 
+                   nation_1 AS "RTE7"("tuid", 
+                                      "n_nationkey", 
+                                      "n_name", 
+                                      "n_regionkey", 
+                                      "n_comment"), 
+                   region_1 AS "RTE8"("tuid", 
+                                      "r_regionkey", 
+                                      "r_name", 
+                                      "r_comment")
+              WHERE ("RTE0"."p_partkey") = ("RTE5"."ps_partkey") AND
+                    ("RTE6"."s_suppkey") = ("RTE5"."ps_suppkey") AND
+                    ("RTE6"."s_nationkey") = ("RTE7"."n_nationkey") AND
+                    ("RTE7"."n_regionkey") = ("RTE8"."r_regionkey") AND
+                    ("RTE8"."r_name") =
+                    ('EUROPE')))) AS "subquery9"("tuid", 
+                                                  "s_acctbal", 
+                                                  "s_name", 
+                                                  "n_name", 
+                                                  "p_partkey", 
+                                                  "p_mfgr", 
+                                                  "s_address", 
+                                                  "s_phone", 
+                                                  "s_comment")
+ORDER BY ("subquery9"."s_acctbal") DESC, 
+("subquery9"."n_name") ASC, 
+("subquery9"."s_name") ASC, 
+("subquery9"."p_partkey") ASC
+LIMIT 100;

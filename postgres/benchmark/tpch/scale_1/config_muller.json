@@ -1,0 +1,24 @@
+{
+    "queries": [
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10,
+        11,
+        16,
+        17,
+        18,
+        19,
+        21,
+        22
+    ],
+    "subdir": "muller_params_default",
+    "runTimeOptions": {
+        "repeat": 3,
+        "throwaway": 0
+    }
+}
