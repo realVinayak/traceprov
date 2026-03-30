@@ -21,7 +21,6 @@
 
 PG_MODULE_MAGIC;
 
-int grow_group_page_mapping(const int, struct traceprov_aggregate_layer *);
 int grow_layer_file(struct traceprov_aggregate_layer *);
 uint32 traceprov_hashint8(int64);
 
@@ -592,8 +591,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     const uint64 null_bit_map = PG_GETARG_INT64(2);
     const uint32 record_length = PG_NARGS() - 3; // 1 for layer number, 1 for internal state, 1 for null bitmap
     const bool is_init = PG_ARGISNULL(0);
-
-    struct traceprov_agg_context *agg_context;
+    
     MemoryContext agg_mem_context;
     if (!AggCheckCallContext(fcinfo, &agg_mem_context))
         elog(ERROR, "aggregate function called in non-aggregate context");
@@ -609,10 +607,10 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
 
     // The bucket zero just means the current layer.
     uint8 bucket = 0;
+    uint64_t agg_group_value = 0;
 
     if (is_init){
         const uint64 absolute_group_number =  ++main_layer->num_groups;
-        agg_context = (struct traceprov_agg_context *)MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
         // If we determine that we're going to hash this, we store the hash bucket in the second byte of group count field.
         // This helps speeding things up during inference, and we don't have to worry about hashing it the next time this gets
         // called. Also, during inference, the value is not hashed again.
@@ -622,14 +620,12 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
         // Also set the worker id here.
         // This is done because, technically, postgres can apply optimizations where it finalizes an aggregate entirely
         // if it lives inside of a partition. In the worst case, that happens on a remote process (so need to infer it back by also logging worker id)
-        agg_context->group_cnt = TRACEPROV_SET_WORKER_ID(TRACEPROV_SET_BUCKET(absolute_group_number, bucket), traceprov_current.my_worker_id);
-        agg_context->worker_id = traceprov_current.my_worker_id;
-        agg_context->is_combined = 0;
-        agg_context->layer_number = layer_number;
+        agg_group_value = TRACEPROV_SET_WORKER_ID(TRACEPROV_SET_BUCKET(absolute_group_number, bucket), traceprov_current.my_worker_id);
+        agg_group_value = TRACEPROV_SET_LAYER(agg_group_value, layer_number);
     }else{
-        agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        agg_group_value = PG_GETARG_INT64(0);
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
-            bucket = TRACEPROV_GET_BUCKET(agg_context->group_cnt);
+            bucket = TRACEPROV_GET_BUCKET(agg_group_value);
         }
     }
 
@@ -665,7 +661,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
     }else{
         // Need to log in all cases (for now.)
         grow_if_full(current_column_layer);
-        *((uint64*)current_column_layer->current_row) = (agg_context->group_cnt);
+        *((uint64*)current_column_layer->current_row) = (agg_group_value);
         current_column_layer->current_row += sizeof(uint64);
     }
 
@@ -700,62 +696,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
         null_bm_layer->current_row += sizeof(uint64);
     }
 
-    PG_RETURN_POINTER(agg_context);
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_key_finalfunc);
-
-Datum traceprov_agg_key_finalfunc(PG_FUNCTION_ARGS){
-    
-    if (unlikely(PG_ARGISNULL(0))){
-        PG_RETURN_NULL();
-    }
-
-    struct traceprov_agg_context *agg_context = (struct traceprov_agg_context *)PG_GETARG_POINTER(0);
-    
-    // Here, to re-use the code for layer setup, the group is, simply, treated as just another layer.
-    // That way, we don't have recreate yet another infrastructure for groups.
- 
-    const int32 group_layer_number = agg_context->layer_number + 1;
-    int rc = 0;
-
-    if (unlikely(rc = initialize_local_and_layer(group_layer_number, 1, 0, false, (Node *)fcinfo->context, 0, 0, 0))){
-        PRINT_ON_DEBUG("Error setting up local or layer for group.");
-        elog(ERROR, "Error setting up local or layer for group.");
-        return 1;
-    }
-
-    struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_number);
-    // Here, it'll be aligned again.
-    if (unlikely(current_layer->record_padding != 0)){
-        elog(ERROR, "Expected padding of 0");
-        PG_RETURN_NULL();
-    }
-
-    // Here, this is slightly different than the sfunc's usage of layers.
-    // This is because the group number can be arbitrary (they don't need to be sequential)
-    // So, we need to, unfortunately, store all the memory mappings that are created sequentially.
-    // In the previous usage of layers, once we move past a page, we won't need it. Here, we can.
-    
-    // This is the page number that needs to be fetched (1-indexed.)
-    const int32 page_number = (((agg_context->group_cnt - 1) * sizeof(int64)) / TRACEPROV_PAGE_SIZE) + 1;
-
-
-    // Need to, first, setup the group-page mapping.
-    if (unlikely((rc = grow_group_page_mapping(page_number, current_layer)))){
-        elog(ERROR, "Error setting up space for group-page mapping");
-        return rc;
-    }
-
-    // By the time we're here, the file has already been grown to handle the group.
-    const int region = TRACEPROV_NUM_REGIONS_GROUP(page_number) - 1;
-    void ** ptr = (void**)current_layer->current_row;
-
-    if (region == 0){
-        PG_RETURN_POINTER(((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]);
-    }
-    void *new_ptr = (((agg_context->group_cnt - 1) * sizeof(int64)) + ptr[region]) - ((TRACEPROV_PAGE_SIZE)*(1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG));
-    PG_RETURN_POINTER(new_ptr); 
+    PG_RETURN_UINT64(agg_group_value);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_agg_key_combine);
@@ -770,28 +711,29 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         return rc;
     }
 
-    struct traceprov_agg_context *reference_struct, *other;
+    // struct traceprov_agg_context *reference_struct, *other;
+    uint64_t reference_struct = NULL, other = NULL;
 
     if (PG_ARGISNULL(0)){
-        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        reference_struct = PG_GETARG_INT64(1);
         other = NULL;
     }else if (PG_ARGISNULL(1)){
-        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
+        reference_struct = PG_GETARG_INT64(0);
         other = NULL;
     } else{
-        reference_struct = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
-        other = (struct traceprov_agg_context*)PG_GETARG_POINTER(1);
+        reference_struct = PG_GETARG_INT64(0);
+        other = PG_GETARG_INT64(1);
         // If ther other happened to be combined, swap.
-        if (other->is_combined){
-            assert(!reference_struct->is_combined);
-            struct traceprov_agg_context *tmp = other;
+        if (TRACEPROV_GET_IS_COMBINED(other)){
+            assert(!TRACEPROV_GET_IS_COMBINED(reference_struct));
+            uint64_t tmp = other;
             other = reference_struct;
             reference_struct = tmp;
         }
     }
 
     assert(reference_struct != NULL);
-    const uint32 layer_number = reference_struct->layer_number;
+    const uint32 layer_number =  TRACEPROV_GET_LAYER(reference_struct);
 
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
     uint32 combined_layer_number = 0;
@@ -801,7 +743,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
     // Here, we don't care about any layer file (it is not this function's responsibility)
     // So, we do the bare minimum, just setting up the local context (vars)
-    if ((rc = initialize_local_and_layer(combined_layer_number, 1, 2, true, (Node *)fcinfo->context, 0, 0, 0))){
+    if ((rc = initialize_local_and_layer(combined_layer_number, 1, 1, true, (Node *)fcinfo->context, 0, 0, 0))){
         PRINT_ON_DEBUG("Error setting up local or layer for combine");
         return rc;
     }
@@ -826,7 +768,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
      */
 
     const bool needs_logging_reference = (
-        !reference_struct->is_combined
+        !TRACEPROV_GET_IS_COMBINED(reference_struct)
     );
 
     uint8 bucket = 0;
@@ -834,19 +776,18 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     uint64 group_no = 0;
     const bool is_init = needs_logging_reference;
     if (!needs_logging_reference){
-        group_no = reference_struct->group_cnt;
+        group_no = reference_struct;
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = TRACEPROV_GET_BUCKET(group_no);
         }
     }else{
         // If the current worker is the remote 
-        const uint64 absolute_group_number =  ++current_layer->num_groups;
+        const uint64 absolute_group_number = reference_struct;
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
         }
         // Setting is combined here makes things simpler during inference.
         group_no = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_BUCKET(absolute_group_number, bucket));
-        reference_struct->is_combined = 1;
     }
 
     struct traceprov_aggregate_layer *current_column_layer = NULL;
@@ -895,224 +836,18 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     );
 
     if (needs_logging_reference){
-        *(uint64 *)(current_rows_layer->current_row) = reference_struct->worker_id;
-        current_rows_layer->current_row += sizeof(uint64);
-        *(uint64 *)(current_rows_layer->current_row) = reference_struct->group_cnt;
+        *(uint64 *)(current_rows_layer->current_row) = reference_struct;
         current_rows_layer->current_row += sizeof(uint64);
     }
 
     if (other != NULL){
-        *(uint64 *)(current_rows_layer->current_row) = other->worker_id;
-        current_rows_layer->current_row += sizeof(uint64);
-        *(uint64 *)(current_rows_layer->current_row) = other->group_cnt;
+        *(uint64 *)(current_rows_layer->current_row) = other;
         current_rows_layer->current_row += sizeof(uint64);
     }
 
-    reference_struct->group_cnt = group_no;
-    PG_RETURN_POINTER(reference_struct);
+    PG_RETURN_UINT64(group_no);
 }
 
-PG_FUNCTION_INFO_V1(traceprov_agg_key_serialize);
-
-Datum traceprov_agg_key_serialize(PG_FUNCTION_ARGS){
-    struct traceprov_agg_context *context;
-    StringInfoData buf;
-
-    if (PG_ARGISNULL(0)) PG_RETURN_BYTEA_P(NULL);
-
-    context = (struct traceprov_agg_context*) PG_GETARG_POINTER(0);
-
-    pq_begintypsend(&buf);
-    pq_sendint8(&buf, context->is_combined);
-    pq_sendint64(&buf, context->group_cnt);
-    pq_sendint8(&buf, context->worker_id);
-    pq_sendint32(&buf, context->layer_number);
-
-    PG_RETURN_BYTEA_P(pq_endtypsend(&buf));
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_key_deserialize);
-
-Datum traceprov_agg_key_deserialize(PG_FUNCTION_ARGS){
-
-    struct traceprov_agg_context *context;
-    StringInfoData buf;
-    MemoryContext agg_mem_context;
-
-    if (PG_ARGISNULL(0)) PG_RETURN_POINTER(NULL);
-    
-    bytea *s = PG_GETARG_BYTEA_P(0);
-    initStringInfo(&buf);
-
-    buf.data = VARDATA(s);
-    buf.len = VARSIZE(s) - VARHDRSZ;
-    buf.cursor = 0;
-    if (!AggCheckCallContext(fcinfo, &agg_mem_context))
-        elog(ERROR, "aggregate function called in non-aggregate context");
-
-    context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
-    context->is_combined = pq_getmsgbyte(&buf);
-    context->group_cnt = pq_getmsgint64(&buf);
-    context->worker_id = pq_getmsgbyte(&buf);
-    context->layer_number = pq_getmsgint(&buf, sizeof(int32));
-
-    PG_RETURN_POINTER(context);
-}
-
-int grow_group_page_mapping(const int page_to_fetch, struct traceprov_aggregate_layer *layer){
-
-    // Here, we can be a bit clever.
-    // Since the contents of the group are fine being private to a worker,
-    // we can simply malloc and remalloc them, rather than doing any trickery with files.
-    // This significantly simplifies this, already.
-    
-    // If the page to fetch is 1, it'd just be 1 page.
-    // For anything more than that, we'd need to see how many pages does a single increment cover.
-    // For example, if TRACEPROV_INCREMENT_GROUP_BY_PG == 3, and we have page to fetch == 7,
-    // the regions will be {[0, 1], [2, 5], [6, 9]}. So, the number of regions will be 3.
-    const int32 num_regions = TRACEPROV_NUM_REGIONS_GROUP(page_to_fetch);
-
-    if (layer->current_row == NULL){
-        layer->current_row = malloc(sizeof(void*)*num_regions);
-        memset(layer->current_row, 0, sizeof(void*)*num_regions);
-    }else if (page_to_fetch > layer->size){
-        layer->current_row = realloc(layer->current_row, sizeof(void*)*num_regions);
-        if (DEBUG_MODE) PRINT_ON_DEBUG("clearing out from regions: %d, for: %d", TRACEPROV_NUM_REGIONS_GROUP(layer->size), (num_regions - TRACEPROV_NUM_REGIONS_GROUP(layer->size)));
-        memset((void**)layer->current_row + (TRACEPROV_NUM_REGIONS_GROUP(layer->size)), 0, (num_regions - TRACEPROV_NUM_REGIONS_GROUP(layer->size)) * sizeof(void*));
-    }
-
-    if (layer->current_row == NULL){
-        return 1;
-    }
-
-    void **ptr = (void **)layer->current_row;
-
-    if (ptr[0] == NULL){
-        // Set the initial mapping
-        ptr[0] = layer->last_mapping;
-    }
-
-    if (page_to_fetch <= layer->size) return 0;
-
-    // Region is 1 indexed.
-    for (int region = 2; region < num_regions + 1; region++){
-        // For every new region, need to grow the file.
-        if (ptr[region - 1] != NULL) continue;
-        const int32 new_size = 1 + (region - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG;
-        if (unlikely(ftruncate(layer->layer_fd, new_size * TRACEPROV_PAGE_SIZE))){
-            elog(ERROR, "Error growing the layer file later");
-        }
-        // Need to now actually map the new portion of the file.
-        void *mapped_ptr = mmap(
-            NULL,
-            TRACEPROV_INCREMENT_GROUP_BY_PG * TRACEPROV_PAGE_SIZE,
-            PROT_WRITE,
-            MAP_SHARED,
-            layer->layer_fd,
-            (1 + (region - 2)*TRACEPROV_INCREMENT_GROUP_BY_PG)*TRACEPROV_PAGE_SIZE
-        );
-
-        if (mapped_ptr == MAP_FAILED){
-            elog(ERROR, "Error mmaping the grown group-by file");
-        }
-        ptr[region - 1] = mapped_ptr; 
-    }
-    // Basically, 1 (for the first page) + TRACEPROV_INCREMENT_GROUP_BY_PG pages for every subsequent region.
-    layer->size = 1 + (num_regions - 1)*TRACEPROV_INCREMENT_GROUP_BY_PG;
-
-    if (unlikely(layer->size < page_to_fetch)){
-        elog(ERROR, "Created wrong region sizes, didn't use hint correctly.");
-    }
-
-    return 0;
-}
-
-PG_FUNCTION_INFO_V1(mark_later);
-
-Datum mark_later(PG_FUNCTION_ARGS){
-
-    // Can happen when, say, it was a filler column for the union.
-    // Or, for example, a left join.
-    if (PG_ARGISNULL(0)){
-        PG_RETURN_INT64(0);
-    }
-
-    // We'll now simply set the value of this row to be 
-    struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
-    // if (row->in_result){
-    //     elog(ERROR, "Found marking an existing row!");
-    // }
-    row->in_result = 1;
-    PG_RETURN_INT64(1);
-}
-
-PG_FUNCTION_INFO_V1(mark_later_value);
-
-Datum mark_later_value(PG_FUNCTION_ARGS){
-    if (PG_ARGISNULL(0) || PG_ARGISNULL(1)){
-        PG_RETURN_INT64(0);
-    }
-    struct trace_file_grouped_row * row = (struct trace_file_grouped_row*)(PG_GETARG_INT64(0));
-    row->in_result = PG_GETARG_INT64(1);
-    PG_RETURN_INT64(PG_GETARG_INT64(1));
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_sfunc);
-
-Datum traceprov_agg_from_ptr_sfunc(PG_FUNCTION_ARGS){
-
-    // IMPORTANT: this is the layer number of the LAST layer.
-    int32 layer_number = PG_GETARG_INT32(1);
-    int32 new_layer_number = PG_GETARG_INT32(2);
-
-    MemoryContext agg_mem_context;
-    if (!AggCheckCallContext(fcinfo, &agg_mem_context))
-        elog(ERROR, "aggregate function called in non-aggregate context");
-
-    const int32 group_layer_result = layer_number + 1;
-
-    struct traceprov_aggregate_layer *current_layer = get_layer(group_layer_result);
-    struct traceprov_agg_context *agg_context;
-    if (PG_ARGISNULL(0)){
-        agg_context = (struct traceprov_agg_context *) MemoryContextAlloc(agg_mem_context, sizeof(struct traceprov_agg_context));
-        agg_context->group_cnt = ++current_layer->num_groups;
-        agg_context->layer_number = new_layer_number;
-    }else{
-        agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
-    }
-
-    struct trace_file_grouped_row * row = (struct trace_file_grouped_row *)(PG_GETARG_INT64(3));
-    row->in_result = agg_context->group_cnt;
-    PG_RETURN_POINTER(agg_context);
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_combine);
-
-Datum traceprov_agg_from_ptr_combine(PG_FUNCTION_ARGS){
-    elog(ERROR, "Didn't expect combine to be called");
-    PG_RETURN_POINTER(NULL);
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_serialize);
-
-Datum traceprov_agg_from_ptr_serialize(PG_FUNCTION_ARGS){
-    elog(ERROR, "Didn't expect serialize to be called");
-    PG_RETURN_POINTER(NULL);
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_deserialize);
-
-Datum traceprov_agg_from_ptr_deserialize(PG_FUNCTION_ARGS){
-    elog(ERROR, "Didn't expect deserialize to be called");
-    PG_RETURN_POINTER(NULL);
-}
-
-PG_FUNCTION_INFO_V1(traceprov_agg_from_ptr_finalfunc);
-
-Datum traceprov_agg_from_ptr_finalfunc(FunctionCallInfo fcinfo){
-    // This works, and is fine.
-    return traceprov_agg_key_finalfunc(fcinfo);
-}
 
 // These are dummy functions (mostly to benchmark the cost of calling functions from Postgres.)
 
@@ -1240,7 +975,6 @@ Datum traceprov_agg_key_offset_finalfunc(PG_FUNCTION_ARGS){
     if (unlikely(PG_ARGISNULL(0))){
         PG_RETURN_NULL();
     }
-    struct traceprov_agg_context *agg_context = (struct traceprov_agg_context*)PG_GETARG_POINTER(0);
 
-    PG_RETURN_INT64(agg_context->group_cnt);
+    PG_RETURN_INT64(PG_GETARG_INT64(0));
 }

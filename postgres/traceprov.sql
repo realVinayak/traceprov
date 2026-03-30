@@ -155,20 +155,18 @@ DROP FUNCTION IF EXISTS reinit_state (INTEGER);
 -- This is here for historical reasons.
 DROP FUNCTION IF EXISTS reinit_state ();
 
-DROP FUNCTION IF EXISTS mark_later (bigint);
-
 DROP FUNCTION IF EXISTS test_local_setup (INTEGER, INTEGER);
 
-DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state internal, bigint);
+DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, bigint);
 
-DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state internal, int, BIGINT);
+DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT);
 
-DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state internal, int, BIGINT, BIGINT);
+DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT);
 
-DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state internal, int, BIGINT, BIGINT, BIGINT);
+DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT, BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -177,7 +175,7 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
 );
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -187,20 +185,8 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
 );
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-);
-
-DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
-    int,
-    BIGINT,
     BIGINT,
     BIGINT,
     BIGINT,
@@ -210,9 +196,8 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
 );
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
-    BIGINT,
     BIGINT,
     BIGINT,
     BIGINT,
@@ -223,9 +208,8 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
 );
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
-    BIGINT,
     BIGINT,
     BIGINT,
     BIGINT,
@@ -237,7 +221,21 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
 );
 
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
+    int,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+);
+
+DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -251,12 +249,12 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT
 );
 
-DROP FUNCTION IF EXISTS traceprov_agg_key_finalfunc (state internal);
+DROP FUNCTION IF EXISTS traceprov_agg_key_finalfunc (state bigint);
 
 -- Agg key offset (stores the offset.)
-DROP FUNCTION IF EXISTS traceprov_agg_key_offset_finalfunc (state internal);
+DROP FUNCTION IF EXISTS traceprov_agg_key_offset_finalfunc (state bigint);
 
-DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_sfunc (state internal, INT, INT, BIGINT);
+DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_sfunc (state bigint, INT, INT, BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_combine (internal, internal);
 
@@ -264,7 +262,7 @@ DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_serialize (internal);
 
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_deserialize (bytea, internal);
 
-DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_finalfunc (state internal);
+DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_finalfunc (state bigint);
 
 -- serialize and deserialize
 DROP FUNCTION IF EXISTS traceprov_agg_key_serialize (internal);
@@ -272,7 +270,7 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_serialize (internal);
 DROP FUNCTION IF EXISTS traceprov_agg_key_deserialize (bytea, internal);
 
 -- combine
-DROP FUNCTION IF EXISTS traceprov_agg_key_combine (internal, internal);
+DROP FUNCTION IF EXISTS traceprov_agg_key_combine (bigint, bigint);
 
 -- nops.
 DROP AGGREGATE IF EXISTS traceprov_nop (int, BIGINT);
@@ -340,6 +338,33 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
 );
 
 
+DROP FUNCTION IF EXISTS traceprov_log_entry (
+    INT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+);
+
+
+DROP FUNCTION IF EXISTS traceprov_log_entry (
+    INT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+);
+
+
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT);
 
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT, BIGINT);
@@ -397,63 +422,44 @@ CREATE FUNCTION reinit_state () RETURNS INTEGER AS '$libdir/__FILE__',
 CREATE FUNCTION test_local_setup (INTEGER, INTEGER) RETURNS INTEGER AS '$libdir/__FILE__',
 'test_local_setup' LANGUAGE C;
 
-CREATE FUNCTION traceprov_agg_key_sfunc (state internal, int, bigint) RETURNS internal AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, bigint) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
-CREATE FUNCTION traceprov_agg_key_finalfunc (state internal) RETURNS bigint AS '$libdir/__FILE__',
-'traceprov_agg_key_finalfunc' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_key_serialize (internal) RETURNS bytea AS '$libdir/__FILE__',
-'traceprov_agg_key_serialize' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_key_deserialize (bytea, internal) RETURNS internal AS '$libdir/__FILE__',
-'traceprov_agg_key_deserialize' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_key_combine (internal, internal) RETURNS internal AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_agg_key_combine (bigint, bigint) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_combine' LANGUAGE C;
 
-CREATE FUNCTION mark_later (bigint) RETURNS INTEGER AS '$libdir/__FILE__',
-'mark_later' LANGUAGE C PARALLEL SAFE;
-
-CREATE FUNCTION traceprov_agg_key_offset_finalfunc (state internal) RETURNS bigint AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_agg_key_offset_finalfunc (state bigint) RETURNS bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_offset_finalfunc' LANGUAGE C;
 
-CREATE AGGREGATE traceprov_agg_key (int, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    SSPACE = 32
-);
-
-CREATE FUNCTION traceprov_agg_key_sfunc (state internal, int, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
-CREATE FUNCTION traceprov_agg_key_sfunc (state internal, int, BIGINT, BIGINT, BIGINT) RETURNS internal AS '$libdir/__FILE__',
+CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT, BIGINT) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -461,11 +467,11 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -474,11 +480,11 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -488,11 +494,11 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -503,11 +509,11 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_agg_key_sfunc (
-    state internal,
+    state bigint,
     int,
     BIGINT,
     BIGINT,
@@ -519,7 +525,7 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT,
     BIGINT
-) RETURNS internal AS '$libdir/__FILE__',
+) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
 
 CREATE FUNCTION traceprov_nop_sfunc (state internal, int, BIGINT) RETURNS internal AS '$libdir/__FILE__',
@@ -539,8 +545,8 @@ CREATE FUNCTION traceprov_nop_deserialize (bytea, internal) RETURNS internal AS 
 
 CREATE AGGREGATE traceprov_nop (int, BIGINT) (
     SFUNC = traceprov_nop_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= internal,
+
     FINALFUNC = traceprov_nop_finalfunc,
     COMBINEFUNC = traceprov_nop_combine,
     SERIALFUNC = traceprov_nop_serialize,
@@ -548,218 +554,51 @@ CREATE AGGREGATE traceprov_nop (int, BIGINT) (
     PARALLEL = SAFE
 );
 
-CREATE AGGREGATE traceprov_agg_key_parallel (int, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (int, BIGINT, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (
-    int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (
-    int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (
-    int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (
-    int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE AGGREGATE traceprov_agg_key_parallel (
-    int,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) (
-    SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_key_finalfunc,
-    COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
-    PARALLEL = SAFE
-);
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
     PARALLEL = SAFE
 );
 
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
     PARALLEL = SAFE
 );
 
@@ -773,12 +612,9 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
     PARALLEL = SAFE
 );
 
@@ -793,12 +629,12 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
@@ -814,12 +650,12 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
@@ -836,12 +672,12 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
 
@@ -859,66 +695,14 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
+    STYPE= bigint,
+
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    SERIALFUNC = traceprov_agg_key_serialize,
-    DESERIALFUNC = traceprov_agg_key_deserialize,
+    
+
     PARALLEL = SAFE
 );
-
-CREATE FUNCTION traceprov_agg_from_ptr_sfunc (state internal, int, int, BIGINT) RETURNS internal AS '$libdir/__FILE__',
-'traceprov_agg_from_ptr_sfunc' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_from_ptr_finalfunc (state internal) RETURNS bigint AS '$libdir/__FILE__',
-'traceprov_agg_from_ptr_finalfunc' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_from_ptr_serialize (internal) RETURNS bytea AS '$libdir/__FILE__',
-'traceprov_agg_from_ptr_serialize' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_from_ptr_deserialize (bytea, internal) RETURNS internal AS '$libdir/__FILE__',
-'traceprov_agg_from_ptr_deserialize' LANGUAGE C;
-
-CREATE FUNCTION traceprov_agg_from_ptr_combine (internal, internal) RETURNS internal AS '$libdir/__FILE__',
-'traceprov_agg_from_ptr_combine' LANGUAGE C;
-
-CREATE AGGREGATE traceprov_agg_from_ptr (int, int, BIGINT) (
-    SFUNC = traceprov_agg_from_ptr_sfunc,
-    STYPE = internal,
-    SSPACE = 32,
-    FINALFUNC = traceprov_agg_from_ptr_finalfunc,
-    COMBINEFUNC = traceprov_agg_from_ptr_combine,
-    SERIALFUNC = traceprov_agg_from_ptr_serialize,
-    DESERIALFUNC = traceprov_agg_from_ptr_deserialize,
-    PARALLEL = SAFE
-);
-
-CREATE FUNCTION traceprov_make_ptr (INTEGER, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
-
-CREATE FUNCTION traceprov_make_ptr (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
-
-CREATE FUNCTION traceprov_make_ptr (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
-
-CREATE FUNCTION traceprov_make_ptr (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
-
-CREATE FUNCTION traceprov_make_ptr (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
-
-CREATE FUNCTION traceprov_make_ptr (
-    INTEGER,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT,
-    BIGINT
-) RETURNS BIGINT AS '$libdir/__FILE__',
-'traceprov_make_ptr' LANGUAGE C PARALLEL SAFE STABLE;
 
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
@@ -957,6 +741,36 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+
+
+CREATE FUNCTION traceprov_log_entry (
+    INTEGER,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+) RETURNS BOOLEAN AS '$libdir/__FILE__',
+'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+
+
+CREATE FUNCTION traceprov_log_entry (
+    INTEGER,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT,
+    BIGINT
+) RETURNS BOOLEAN AS '$libdir/__FILE__',
+'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
+
 
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;

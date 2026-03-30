@@ -232,20 +232,6 @@ struct current_context {
 // So that's why it lives here now.
 extern struct current_context traceprov_current;
 
-struct traceprov_agg_context {
-    // Whether this aggregation was combined.
-    int8 is_combined;
-    // Group count for this group.
-    int64 group_cnt;
-    // Worker on which this group was processed.
-    uint8 worker_id;
-    // Layer number for this group.
-    uint32 layer_number;
-};
-
-// Whenever this condition fails, also need to update the function definition.
-static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
-
 #define TRACEPROV_SHARED_CONTEXT_SIZE (sizeof(struct traceprov_shared_context))
 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
@@ -258,16 +244,20 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 
 #define TRACEPROV_AGG_ROW_COUNT(state) (IsA(state, AggState) ? (((AggState *)state)->ss.ps.plan->lefttree->plan_rows) : 0)
 
-#define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
-#define TRACEPROV_GET_BUCKET(X) ((uint8) (((uint64) X) >> 48))
+#define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64_t) BUCKET) << 48) | X)
+#define TRACEPROV_GET_BUCKET(X) ((uint8_t) (((uint64_t) X) >> 48))
 
-#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64)1) << 47) | X)
-#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64)1) << 47) & X) != 0)
-#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64)1) << 47)) & X)
+#define TRACEPROV_SET_LAYER(X, BUCKET) ((((uint64_t) BUCKET) << 40) | X)
+#define TRACEPROV_GET_LAYER(X) ((uint8_t) (((uint64_t) X) >> 40))
 
-#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64) W) << 56) | X)
-#define TRACEPROV_GET_WORKER_ID(X) ((uint8) (((uint64) X) >> 56))
-#define TRACEPROV_STRIP_WORKER_ID(X) ((((uint64)(~((uint8)0))) << 56) & X)
+#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64_t)1) << 39) | X)
+#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64_t)1) << 39) & X) != 0)
+#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64_t)1) << 39)) & X)
+
+#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64_t) W) << 56) | X)
+#define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
+#define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 56)) & X)
+
 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 

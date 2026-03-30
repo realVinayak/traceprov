@@ -3120,10 +3120,10 @@ extern "C" {
             // 3. Join the base logs directly to the previous log.
 
             // For combine, need to join on colum 1, but need to propagate column 2 and 3
-            TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the worker id
-            TraceProvColumn *output_column_2 = new TraceProvColumn(2, 3); // This is the individual log 
+            // TraceProvColumn *output_column_1 = new TraceProvColumn(2, 2); // This is the worker id
+            TraceProvColumn *output_column_2 = new TraceProvColumn(2, 2); // This is the individual log 
             auto output_column = new std::vector<TraceProvColumn*>;
-            output_column->push_back(output_column_1);
+            // output_column->push_back(output_column_1);
             output_column->push_back(output_column_2);
 
             TraceProvColumn *join_column_1 = new TraceProvColumn(1, reference_match_idx);
@@ -3138,9 +3138,9 @@ extern "C" {
                 true
             );
             const uint64 combine_match_key_idx = traceprov_get_node_column_count((TraceProvNode *)combine_join);
-            if (combine_match_key_idx != (traceprov_get_node_column_count(reference_node) + 2))
+            if (combine_match_key_idx != (traceprov_get_node_column_count(reference_node) + 1))
                 elog(INFO, "Inconsistent state!");
-            const uint64 worker_id_key_idx = combine_match_key_idx - 1;
+            // const uint64 worker_id_key_idx = combine_match_key_idx - 1;
 
             for (auto worker_local_pair: *layers_across_workers){
                 const uint8 worker_id = worker_local_pair.first;
@@ -3168,8 +3168,8 @@ extern "C" {
                         new TraceProvColumn(1, col_idx + 1)
                      );
                 }
-                TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
-                partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
+                // TraceProvColumn *worker_id_column = new TraceProvColumn(1, worker_id_key_idx);
+                // partial_join_exprn->const_join_condition->push_back(new TraceProvConstJoinPair(worker_id_column, worker_id));
                 if (traceprov_get_node_column_count((TraceProvNode *)partial_join_exprn) != traceprov_get_node_column_count((TraceProvNode *)base_join_exprn)){
                     elog(ERROR, "Got mismatching node count on logs!");
                 }
