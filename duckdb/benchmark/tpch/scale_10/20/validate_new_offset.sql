@@ -34,9 +34,7 @@ where
 	)
 	and s_nationkey = n_nationkey
     and (supplier.rowid, nation.rowid) in (
-        select
-            "CAST(top_level_tp_table_0.column_0 AS BIGINT)",
-            "CAST(top_level_tp_table_0.column_1 AS BIGINT)"
+        select (column_0, column_1)
         from
             LAYER_5_%OUT_ID%
     )
