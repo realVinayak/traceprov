@@ -1,0 +1,38 @@
+SELECT fast_bit_or(F0."PROV_supplier1"::bit(32)) AS "PROV_supplier1", fast_bit_or(F0."PROV_lineitem1"::bit(32)) AS "PROV_lineitem1"
+FROM (
+SELECT F0."s_name" AS "s_name", F0."numwait" AS "numwait", F0."PROV_supplier1" AS "PROV_supplier1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM (
+SELECT F0."s_name" AS "s_name", F0."numwait" AS "numwait", F0."PROV_supplier1" AS "PROV_supplier1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM (
+SELECT F0."GROUP_0" AS "s_name", F0."AGGR_0" AS "numwait", F0."PROV_supplier1" AS "PROV_supplier1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM (
+SELECT count(1) AS "AGGR_0", F0."s_name" AS "GROUP_0", set_bits(F0."PROV_supplier1")::bit(32) AS "PROV_supplier1", fast_bit_or(F0."PROV_lineitem1"::bit(32)) AS "PROV_lineitem1"
+FROM (
+SELECT F0."s_suppkey" AS "s_suppkey", F0."s_name" AS "s_name", F0."s_address" AS "s_address", F0."s_nationkey" AS "s_nationkey", F0."s_phone" AS "s_phone", F0."s_acctbal" AS "s_acctbal", F0."s_comment" AS "s_comment", F0."l_orderkey" AS "l_orderkey", F0."l_suppkey" AS "l_suppkey", F0."l_receiptdate" AS "l_receiptdate", F0."l_commitdate" AS "l_commitdate", F0."o_orderkey" AS "o_orderkey", F0."o_custkey" AS "o_custkey", F0."o_orderstatus" AS "o_orderstatus", F0."o_totalprice" AS "o_totalprice", F0."o_orderdate" AS "o_orderdate", F0."o_orderpriority" AS "o_orderpriority", F0."o_clerk" AS "o_clerk", F0."o_shippriority" AS "o_shippriority", F0."o_comment" AS "o_comment", F1."n_nationkey" AS "n_nationkey", F1."n_name" AS "n_name", F1."n_regionkey" AS "n_regionkey", F1."n_comment" AS "n_comment", F0."PROV_supplier1" AS "PROV_supplier1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM ((
+SELECT F0."s_suppkey" AS "s_suppkey", F0."s_name" AS "s_name", F0."s_address" AS "s_address", F0."s_nationkey" AS "s_nationkey", F0."s_phone" AS "s_phone", F0."s_acctbal" AS "s_acctbal", F0."s_comment" AS "s_comment", F0."l_orderkey" AS "l_orderkey", F0."l_suppkey" AS "l_suppkey", F0."l_receiptdate" AS "l_receiptdate", F0."l_commitdate" AS "l_commitdate", F1."o_orderkey" AS "o_orderkey", F1."o_custkey" AS "o_custkey", F1."o_orderstatus" AS "o_orderstatus", F1."o_totalprice" AS "o_totalprice", F1."o_orderdate" AS "o_orderdate", F1."o_orderpriority" AS "o_orderpriority", F1."o_clerk" AS "o_clerk", F1."o_shippriority" AS "o_shippriority", F1."o_comment" AS "o_comment", F0."PROV_supplier1" AS "PROV_supplier1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM ((
+SELECT F0."s_suppkey" AS "s_suppkey", F0."s_name" AS "s_name", F0."s_address" AS "s_address", F0."s_nationkey" AS "s_nationkey", F0."s_phone" AS "s_phone", F0."s_acctbal" AS "s_acctbal", F0."s_comment" AS "s_comment", F1."l_orderkey" AS "l_orderkey", F1."l_suppkey" AS "l_suppkey", F1."l_receiptdate" AS "l_receiptdate", F1."l_commitdate" AS "l_commitdate", F0."PROV_supplier1" AS "PROV_supplier1", F1."PROV_lineitem1" AS "PROV_lineitem1"
+FROM ((
+SELECT F0."s_suppkey" AS "s_suppkey", F0."s_name" AS "s_name", F0."s_address" AS "s_address", F0."s_nationkey" AS "s_nationkey", F0."s_phone" AS "s_phone", F0."s_acctbal" AS "s_acctbal", F0."s_comment" AS "s_comment", binary_search_array_pos(ARRAY [1,3049,6157,9244,12316,15398,18511,21622,24821,28010,31244,34281,37386,40491,43630,46733,49976,53123,56098,59414,62587,65761,68809,71953,75065,78153,81329,84513,87560,90590,93882,96931,100001], s_suppkey) - 1 AS "PROV_supplier1"
+FROM "supplier" AS F0) F0 CROSS JOIN (
+SELECT F0."l_orderkey" AS "l_orderkey", F0."l_suppkey" AS "l_suppkey", F0."l_receiptdate" AS "l_receiptdate", F0."l_commitdate" AS "l_commitdate", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM (
+SELECT F0."GROUP_0" AS "l_orderkey", F0."GROUP_1" AS "l_suppkey", F0."GROUP_2" AS "l_receiptdate", F0."GROUP_3" AS "l_commitdate", F0."AGGR_0" AS "datebc", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM (
+SELECT fast_bit_or((CASE  WHEN (F0."l_receiptdate1" > F0."l_commitdate1") THEN '1'::bit(1) ELSE '0'::bit(1) END)::bit(1)) AS "AGGR_0", F0."l_orderkey" AS "GROUP_0", F0."l_suppkey" AS "GROUP_1", F0."l_receiptdate" AS "GROUP_2", F0."l_commitdate" AS "GROUP_3", set_bits(F0."PROV_lineitem1")::bit(32) AS "PROV_lineitem1"
+FROM (
+SELECT F0."l_orderkey" AS "l_orderkey", F0."l_partkey" AS "l_partkey", F0."l_suppkey" AS "l_suppkey", F0."l_linenumber" AS "l_linenumber", F0."l_quantity" AS "l_quantity", F0."l_extendedprice" AS "l_extendedprice", F0."l_discount" AS "l_discount", F0."l_tax" AS "l_tax", F0."l_returnflag" AS "l_returnflag", F0."l_linestatus" AS "l_linestatus", F0."l_shipdate" AS "l_shipdate", F0."l_commitdate" AS "l_commitdate", F0."l_receiptdate" AS "l_receiptdate", F0."l_shipinstruct" AS "l_shipinstruct", F0."l_shipmode" AS "l_shipmode", F0."l_comment" AS "l_comment", F1."l_orderkey" AS "l_orderkey1", F1."l_partkey" AS "l_partkey1", F1."l_suppkey" AS "l_suppkey1", F1."l_linenumber" AS "l_linenumber1", F1."l_quantity" AS "l_quantity1", F1."l_extendedprice" AS "l_extendedprice1", F1."l_discount" AS "l_discount1", F1."l_tax" AS "l_tax1", F1."l_returnflag" AS "l_returnflag1", F1."l_linestatus" AS "l_linestatus1", F1."l_shipdate" AS "l_shipdate1", F1."l_commitdate" AS "l_commitdate1", F1."l_receiptdate" AS "l_receiptdate1", F1."l_shipinstruct" AS "l_shipinstruct1", F1."l_shipmode" AS "l_shipmode1", F1."l_comment" AS "l_comment1", F0."PROV_lineitem1" AS "PROV_lineitem1"
+FROM ((
+SELECT F0."l_orderkey" AS "l_orderkey", F0."l_partkey" AS "l_partkey", F0."l_suppkey" AS "l_suppkey", F0."l_linenumber" AS "l_linenumber", F0."l_quantity" AS "l_quantity", F0."l_extendedprice" AS "l_extendedprice", F0."l_discount" AS "l_discount", F0."l_tax" AS "l_tax", F0."l_returnflag" AS "l_returnflag", F0."l_linestatus" AS "l_linestatus", F0."l_shipdate" AS "l_shipdate", F0."l_commitdate" AS "l_commitdate", F0."l_receiptdate" AS "l_receiptdate", F0."l_shipinstruct" AS "l_shipinstruct", F0."l_shipmode" AS "l_shipmode", F0."l_comment" AS "l_comment", binary_search_array_pos(ARRAY [1,1942309,3780867,5680996,7438596,9296355,11172832,13073988,14915840,16607975,18439395,20304326,22259780,24101414,26059811,27936422,29847456,31642433,33662309,35482019,37259143,38977191,40925344,42899968,44780128,46500129,48470790,50521505,52554116,54495366,56323682,58154343,60000001], l_orderkey) - 1 AS "PROV_lineitem1"
+FROM "lineitem" AS F0) F0 CROSS JOIN (
+SELECT F0."l_orderkey" AS "l_orderkey", F0."l_partkey" AS "l_partkey", F0."l_suppkey" AS "l_suppkey", F0."l_linenumber" AS "l_linenumber", F0."l_quantity" AS "l_quantity", F0."l_extendedprice" AS "l_extendedprice", F0."l_discount" AS "l_discount", F0."l_tax" AS "l_tax", F0."l_returnflag" AS "l_returnflag", F0."l_linestatus" AS "l_linestatus", F0."l_shipdate" AS "l_shipdate", F0."l_commitdate" AS "l_commitdate", F0."l_receiptdate" AS "l_receiptdate", F0."l_shipinstruct" AS "l_shipinstruct", F0."l_shipmode" AS "l_shipmode", F0."l_comment" AS "l_comment"
+FROM "lineitem" AS F0) F1)) F0
+WHERE ((F0."l_orderkey1" = F0."l_orderkey") and (F0."l_suppkey1" <> F0."l_suppkey"))
+GROUP BY F0."l_orderkey", F0."l_suppkey", F0."l_receiptdate", F0."l_commitdate") F0) F0
+WHERE (F0."datebc" != '1')) F1)) F0 CROSS JOIN (
+SELECT F0."o_orderkey" AS "o_orderkey", F0."o_custkey" AS "o_custkey", F0."o_orderstatus" AS "o_orderstatus", F0."o_totalprice" AS "o_totalprice", F0."o_orderdate" AS "o_orderdate", F0."o_orderpriority" AS "o_orderpriority", F0."o_clerk" AS "o_clerk", F0."o_shippriority" AS "o_shippriority", F0."o_comment" AS "o_comment"
+FROM "orders" AS F0) F1)) F0 CROSS JOIN "nation" AS F1)) F0
+WHERE ((((((F0."s_suppkey" = F0."l_suppkey") and (F0."o_orderkey" = F0."l_orderkey")) and (F0."o_orderstatus" = 'F')) and (F0."l_receiptdate" > F0."l_commitdate")) and (F0."s_nationkey" = F0."n_nationkey")) and (F0."n_name" = 'CHINA'))
+GROUP BY F0."s_name") F0) F0 order by numwait desc, s_name) F0
+limit 100) F0;

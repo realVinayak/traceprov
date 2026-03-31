@@ -1,0 +1,52 @@
+{
+    "32": {
+        "2": "q2_cap_10g.sql",
+        "3": "q3_cap_10g.sql",
+        "10": "q10_cap_10g.sql",
+        "15": "q15_cap_10g.sql",
+        "18": "q18_cap_10g.sql",
+        "19": "q19_cap_10g.sql",
+        "20": "q20_cap_10g.sql",
+        "21": "q21_cap_10g.sql"
+    },
+    "64": {
+        "2": "q2_cap_10g.sql",
+        "3": "q3_cap_10g.sql",
+        "10": "q10_cap_10g.sql",
+        "15": "q15_cap_10g.sql",
+        "18": "q18_cap_10g.sql",
+        "19": "q19_cap_10g.sql",
+        "20": "q20_cap_10g.sql",
+        "21": "q21_cap_10g.sql"
+    },
+    "400": {
+        "2": "q2_cap_10g.sql",
+        "3": "q3_cap_10g.sql",
+        "10": "q10_cap_10g.sql",
+        "15": "q15_cap_10g.sql",
+        "18": "q18_cap_10g.sql",
+        "19": "q19_cap_10g.sql",
+        "20": "q20_cap_10g.sql",
+        "21": "q21_cap_10g.sql"
+    },
+    "4k": {
+        "2": "q2_cap_10g.sql",
+        "3": "q3_cap_10g.sql",
+        "10": "q10_cap_10g.sql",
+        "18": "q18_cap_10g.sql",
+        "19": "q19_cap_10g.sql",
+        "20": "q20_cap_10g.sql",
+        "21": "q21_cap_10g.sql"
+    },
+    "10k": {
+        "2": "q2_cap_10g.sql",
+        "3": "q3_cap_10g.sql",
+        "10": "q10_cap_10g.sql",
+        "15": "q15_cap_10g.sql",
+        "18": "q18_cap_10g.sql",
+        "19": "q19_cap_10g.sql",
+        "20": "q20_cap_10g.sql",
+        "21": "q21_cap_10g.sql"
+    },
+    "100k": {}
+}

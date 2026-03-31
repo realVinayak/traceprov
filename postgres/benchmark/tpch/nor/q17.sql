@@ -1,0 +1,1 @@
+select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem l1, part, (select 0.2 * avg(l_quantity) as avgl, l_partkey from lineitem group by l_partkey) l2 where p_partkey = l1.l_partkey and p_brand = 'Brand#31' and p_container = 'SM PKG' and l2.l_partkey = p_partkey and l_quantity < avgl;
