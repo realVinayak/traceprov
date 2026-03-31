@@ -115,18 +115,11 @@ static inline void traceprov_grow_col_page_mapping_file(const uint64_t extra_siz
     }
 }
 
+
 // a Nop.
 static inline void traceprov_grow_row_count_page_mapping_file(TraceProvInitData *init, TraceProvBindData *bind){
 
 }
-
-void handle_offset(
-    TraceProvBindData *bind_data_combined,
-    TraceProvBindData *bind_data,
-    TraceProvInitData *init_data_combined,
-    TraceProvInitData *init_data,
-    duckdb_data_chunk output
-);
 
 TraceProvInitData *allocate_init_data(){
     auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
@@ -166,7 +159,6 @@ TraceProvInitData *traceprov_make_init_data(TraceProvBindData *bind_data){
             null_init_data_inst,
             null_bind_data_inst
         );
-
         init_data_inst->next_null_idx = ((uint64_t *)null_init_data_inst->col_layer_ptr)[0];
         init_data_inst->next_null_col_count = ((uint64_t *)null_init_data_inst->col_layer_ptr)[1];
         null_init_data_inst->col_layer_ptr = INCR_BY_BYTES(null_init_data_inst->col_layer_ptr, sizeof(uint64_t)*2);
@@ -610,6 +602,61 @@ void traceprov_duckdb_local_init(duckdb_init_info info){
     init_data_inst->is_dummy = is_dummy;
 }
 
+uint64_t fillup_pointer(
+    const struct traceprov_aggregate_layer *layer,
+    duckdb_data_chunk chunk,
+    void *source_ptr,
+    uint64_t current_pos,
+    const uint64_t final_num_records,
+    const uint64_t total_width,
+    void **final_ptr
+){
+    const uint64_t original_pos = current_pos;
+    for (uint64_t i = 0; i < TP_STD_VECTOR_SIZE; i++){
+        source_ptr = INCR_BY_BYTES(source_ptr, layer->record_padding);
+        if (current_pos >= final_num_records) break;
+        uint64_t *canonical_ptr = (uint64_t *)source_ptr;
+        for (uint64_t col_idx = 0; col_idx < total_width; col_idx++){
+            auto dest_ptr = (uint64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(chunk, col_idx));
+            dest_ptr[i] = *canonical_ptr;
+            canonical_ptr++;
+        }
+        current_pos++;
+        source_ptr = (void *)canonical_ptr;
+    }
+    duckdb_data_chunk_set_size(chunk, current_pos - original_pos);
+    *final_ptr = source_ptr;
+    return current_pos;
+}
+
+uint64_t fillup_pointer_huge(
+    const struct traceprov_aggregate_layer *layer,
+    duckdb_data_chunk chunk,
+    uint64_t current_pos,
+    TraceProvBindData *bind_data,
+    const uint64_t final_num_records,
+    const uint64_t total_width,
+    TraceProvInitData *init_data
+){
+    const uint64_t original_pos = current_pos;
+    uint64_t final_pos = 0;
+    for (uint64_t local_idx = 0; local_idx < TP_STD_VECTOR_SIZE; local_idx++){
+        const uint64_t probe_pos = (local_idx + original_pos);
+        final_pos = probe_pos;
+        if (probe_pos >= final_num_records) break;
+        traceprov_grow_col_page_mapping(0, init_data, bind_data);
+        uint64_t *canonical_ptr = (uint64_t *)(INCR_BY_BYTES(init_data->col_layer_ptr, layer->record_padding));
+        for (uint64_t col_idx = 0; col_idx < total_width; col_idx++){
+            auto dest_ptr = (uint64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(chunk, col_idx));
+            dest_ptr[local_idx] = *canonical_ptr;
+            canonical_ptr++;
+        }
+        init_data->col_layer_ptr = canonical_ptr;
+    }
+    duckdb_data_chunk_set_size(chunk, final_pos - original_pos);
+    return final_pos;
+}
+
 
 void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output){
     auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
@@ -633,203 +680,156 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
     auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
 
     if (bind_data->rel_args.offset != -1){
-        handle_offset(bind_data_combined, bind_data, init_data_combined, init_data, output);
+        uint64_t *values = NULL;
+        bool new_allocated = false;
+        if (values == NULL){
+            // This allows caching the value, if determined at partition pruning time.
+            // alloc buffer for the values.
+            values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
+            read_at_offset(bind_data->rel_args.offset, bind_data, values, bind_data_combined->sizes);
+            new_allocated = true;
+        }
+        for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+            const uint8_t col_size = bind_data_combined->sizes->at(col_idx);
+            if (col_size == sizeof(uint32_t)){
+                uint32_t *dest_ptr = (uint32_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                dest_ptr[0] = values[col_idx];
+            }else{
+                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                dest_ptr[0] = values[col_idx];
+            }
+        }
+        duckdb_data_chunk_set_size(output, 1);
+        if (new_allocated)
+            free(values);
+        init_data->is_dummy = true;
+        init_data_combined->is_dummy = true;
         return;
     }
 
     uint64_t chunk_size = 0;
-    if (bind_data->is_strict_rows){
-        elog(ERROR, "Unsupported option!");
-    }
+    const auto _traceprov_grow_col_page_mapping = bind_data_combined->is_memory_mapping ? traceprov_grow_col_page_mapping : traceprov_grow_col_page_mapping_file;
+    const auto _traceprov_grow_row_count_page_mapping = bind_data_combined->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
 
-    // Haven't emitted all chunks yet.
-    uint64_t seek_ahead_chunk_size = 0;
-    auto _traceprov_grow_row_count_page_mapping = bind_data->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
-    auto _traceprov_grow_col_page_mapping = bind_data->is_memory_mapping ? traceprov_grow_col_page_mapping : traceprov_grow_col_page_mapping_file;
-
-    while (true){
-        if (init_data->current < bind_data->num_rows){
-            _traceprov_grow_row_count_page_mapping(init_data, bind_data);
-            const uint64_t num_rows = *((uint64_t*)init_data->row_count_layer_ptr);
-            seek_ahead_chunk_size += num_rows;
-            if (seek_ahead_chunk_size > STANDARD_VECTOR_SIZE) break;
-            init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t));
-            if (bind_data->col_layer->read_columns_at_once){
-                const uint64_t col_log_size = num_rows * sizeof(uint64_t);
-                const uint64_t extra_size = col_log_size * 2;
-                _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
-                    uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                    memcpy(&dest_ptr[chunk_size], init_data->col_layer_ptr, col_log_size);
-                    init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, col_log_size);
-                }
-            }else{
-                idx_t start_idx = 0;
-                if (bind_data_combined->first_mask){
-                    // In this case, need to read the first column as 4 bytes, but add the mask in layer.
-                    if (unlikely(bind_data->col_layer->mask == NULL)){
-                        elog(ERROR, "Expected the mask to be present!!");
-                    }
-                    start_idx++;
-                    const uint64_t extra_size = sizeof(uint32_t)*num_rows;
+    if (!bind_data->is_strict_rows){
+        // Haven't emitted all chunks yet.
+        uint64_t seek_ahead_chunk_size = 0;
+        while (true){
+            if (init_data->current < bind_data->num_rows){
+                _traceprov_grow_row_count_page_mapping(init_data, bind_data);
+                const uint64_t num_rows = *((uint64_t*)init_data->row_count_layer_ptr);
+                seek_ahead_chunk_size += num_rows;
+                if (seek_ahead_chunk_size > STANDARD_VECTOR_SIZE) break;
+                init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t));
+                if (bind_data->col_layer->read_columns_at_once){
+                    const uint64_t col_log_size = num_rows * sizeof(uint64_t);
+                    const uint64_t extra_size = col_log_size * 2;
                     _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                    uint64_t *dest_ptr = &((uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0))))[chunk_size];
-                    for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-                        dest_ptr[row_idx] = ((bind_data->col_layer->mask << 32) | (uint64_t)(((uint32_t *)(init_data->col_layer_ptr))[row_idx]));
+                    for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
+                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        memcpy(&dest_ptr[chunk_size], init_data->col_layer_ptr, col_log_size);
+                        init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, col_log_size);
                     }
-                    init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
-                }
-                for (idx_t col_idx = start_idx; col_idx < bind_data->column_width; col_idx++){
-                    const uint8_t unit_size = bind_data_combined->sizes->at(col_idx);
-                    const uint64_t extra_size = unit_size*num_rows;
-                    _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                    void *dest_ptr = (void *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-                    memcpy(INCR_BY_BYTES(dest_ptr, chunk_size*unit_size), init_data->col_layer_ptr, extra_size);
-                    init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
-                }
-                if (bind_data->col_layer->null_layer_number){
-                    duckdb_data_chunk_set_size(output, seek_ahead_chunk_size);
-                    const bool is_first_write = seek_ahead_chunk_size == num_rows;
-                    const idx_t eager_idx = init_data->current + 1;
-                    const uint64_t validity_size = ((num_rows - 1) / 64) + 1;
-                    if (eager_idx == init_data->next_null_idx){
-                        auto null_init_data = init_data->null_map_init_data;
-                        auto null_bind_data = init_data->null_map_bind_data;
-                        for (uint64_t col_idx = 0; col_idx < init_data->next_null_col_count; col_idx++){
+                }else{
+                    idx_t start_idx = 0;
+                    if (bind_data_combined->first_mask){
+                        // In this case, need to read the first column as 4 bytes, but add the mask in layer.
+                        if (unlikely(bind_data->col_layer->mask == NULL)){
+                            elog(ERROR, "Expected the mask to be present!!");
+                        }
+                        start_idx++;
+                        const uint64_t extra_size = sizeof(uint32_t)*num_rows;
+                        _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
+                        uint64_t *dest_ptr = &((uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0))))[chunk_size];
+                        for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
+                            dest_ptr[row_idx] = ((bind_data->col_layer->mask << 32) | (uint64_t)(((uint32_t *)(init_data->col_layer_ptr))[row_idx]));
+                        }
+                        init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
+                    }
+                    for (idx_t col_idx = start_idx; col_idx < bind_data->column_width; col_idx++){
+                        const uint8_t unit_size = bind_data_combined->sizes->at(col_idx);
+                        const uint64_t extra_size = unit_size*num_rows;
+                        _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
+                        void *dest_ptr = (void *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        memcpy(INCR_BY_BYTES(dest_ptr, chunk_size*unit_size), init_data->col_layer_ptr, extra_size);
+                        init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
+                    }
+                    if (bind_data->col_layer->null_layer_number){
+                        duckdb_data_chunk_set_size(output, seek_ahead_chunk_size);
+                        const bool is_first_write = seek_ahead_chunk_size == num_rows;
+                        const idx_t eager_idx = init_data->current + 1;
+                        const uint64_t validity_size = ((num_rows - 1) / 64) + 1;
+                        if (eager_idx == init_data->next_null_idx){
+                            auto null_init_data = init_data->null_map_init_data;
+                            auto null_bind_data = init_data->null_map_bind_data;
+                            for (uint64_t col_idx = 0; col_idx < init_data->next_null_col_count; col_idx++){
+                                _traceprov_grow_col_page_mapping(
+                                    (validity_size + 1)*sizeof(uint64_t),
+                                    null_init_data,
+                                    null_bind_data
+                                );
+                                const idx_t written_col_idx = ((uint64_t*)null_init_data->col_layer_ptr)[0];
+                                null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t));
+                                duckdb_vector col_vector = duckdb_data_chunk_get_vector(output, written_col_idx);
+                                uint64_t *written_validity = (uint64_t *)null_init_data->col_layer_ptr;
+                                if (is_first_write){
+                                    duckdb_vector_ensure_validity_writable(col_vector);
+                                    uint64_t *dest_validity = duckdb_vector_get_validity(col_vector);
+                                    memcpy(dest_validity, written_validity, sizeof(uint64_t)*validity_size);
+                                }else{
+                                    // In this case, we cannot, unfortuntaly, not simply copy the validity.
+                                    // TODO: Try copying if the size can be reorganized to be of byte or something.
+                                    uint64_t *dest_validity = duckdb_vector_get_validity(col_vector);
+                                    const idx_t write_start_idx = (seek_ahead_chunk_size - num_rows);
+                                    for (uint32_t row_idx = 0; row_idx < num_rows; row_idx++){
+                                        const uint64_t validity_block = written_validity[row_idx / 64];
+                                        const bool row_validity = (validity_block & ((uint64_t)1 << (row_idx % 64))) != 0;
+                                        if (row_validity == 0){
+                                            duckdb_validity_set_row_invalid(dest_validity, row_idx + write_start_idx);
+                                        }
+                                    }
+                                }
+                                null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t)*validity_size);
+                            }
+                            // Need to set the eager idx now.
                             _traceprov_grow_col_page_mapping(
-                                (validity_size + 1)*sizeof(uint64_t),
+                                2*sizeof(uint64_t),
                                 null_init_data,
                                 null_bind_data
                             );
-                            const idx_t written_col_idx = ((uint64_t*)null_init_data->col_layer_ptr)[0];
-                            null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t));
-                            duckdb_vector col_vector = duckdb_data_chunk_get_vector(output, written_col_idx);
-                            uint64_t *written_validity = (uint64_t *)null_init_data->col_layer_ptr;
-                            if (is_first_write){
-                                duckdb_vector_ensure_validity_writable(col_vector);
-                                uint64_t *dest_validity = duckdb_vector_get_validity(col_vector);
-                                memcpy(dest_validity, written_validity, sizeof(uint64_t)*validity_size);
-                            }else{
-                                // In this case, we cannot, unfortuntaly, not simply copy the validity.
-                                // TODO: Try copying if the size can be reorganized to be of byte or something.
-                                uint64_t *dest_validity = duckdb_vector_get_validity(col_vector);
-                                const idx_t write_start_idx = (seek_ahead_chunk_size - num_rows);
-                                for (uint32_t row_idx = 0; row_idx < num_rows; row_idx++){
-                                    const uint64_t validity_block = written_validity[row_idx / 64];
-                                    const bool row_validity = (validity_block & ((uint64_t)1 << (row_idx % 64))) != 0;
-                                    if (row_validity == 0){
-                                        duckdb_validity_set_row_invalid(dest_validity, row_idx + write_start_idx);
-                                    }
-                                }
-                            }
-                            null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t)*validity_size);
+                            init_data->next_null_idx = ((uint64_t *)null_init_data->col_layer_ptr)[0];
+                            init_data->next_null_col_count = ((uint64_t *)null_init_data->col_layer_ptr)[1];
+                            null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t)*2);
                         }
-                        // Need to set the eager idx now.
-                        _traceprov_grow_col_page_mapping(
-                            2*sizeof(uint64_t),
-                            null_init_data,
-                            null_bind_data
-                        );
-                        init_data->next_null_idx = ((uint64_t *)null_init_data->col_layer_ptr)[0];
-                        init_data->next_null_col_count = ((uint64_t *)null_init_data->col_layer_ptr)[1];
-                        null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t)*2);
                     }
                 }
+                init_data->current++;
+                chunk_size += num_rows;
+            }else{
+                // This way, when the last chunk of the any worker's layer is seen, we automatically
+                // shift to the next worker's layer.
+                init_data_combined->worker_bind_idx++;
+                break;
             }
-            init_data->current++;
-            chunk_size += num_rows;
-        }else{
-            // This way, when the last chunk of the any worker's layer is seen, we automatically
-            // shift to the next worker's layer.
-            init_data_combined->worker_bind_idx++;
-            break;
+            // The original behaviour.
+            if (!traceprov_use_merge_chunks) break;
         }
-        // The original behaviour.
-        if (!traceprov_use_merge_chunks) break;
+        // elog(INFO, "Chunk Sizes: %ld", chunk_size);
+        duckdb_data_chunk_set_size(output, chunk_size);
+        return;
     }
-    // elog(INFO, "Chunk Sizes: %ld", chunk_size);
-    duckdb_data_chunk_set_size(output, chunk_size);
-    return;
-
+    init_data->current = fillup_pointer_huge(
+        bind_data->col_layer,
+        output,
+        init_data->current,
+        bind_data,
+        bind_data->num_rows,
+        bind_data->column_width,
+        init_data
+    );
     if (init_data->current >= bind_data->num_rows){
         // So that when all the rows of a worker, we automatically move to the next one.
         init_data_combined->worker_bind_idx++;
-    }
-}
-
-void handle_offset(
-    TraceProvBindData *bind_data_combined,
-    TraceProvBindData *bind_data,
-    TraceProvInitData *init_data_combined,
-    TraceProvInitData *init_data,
-    duckdb_data_chunk output
-){
-    uint64_t *values = NULL;
-    bool new_allocated = false;
-    if (values == NULL){
-        // This allows caching the value, if determined at partition pruning time.
-        // alloc buffer for the values.
-        values = (uint64_t *) malloc(sizeof(uint64_t)*bind_data->column_width);
-        read_at_offset(bind_data->rel_args.offset, bind_data, values, bind_data_combined->sizes);
-        new_allocated = true;
-    }
-    for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++){
-        const uint8_t col_size = bind_data_combined->sizes->at(col_idx);
-        if (col_size == sizeof(uint32_t)){
-            uint32_t *dest_ptr = (uint32_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-            dest_ptr[0] = values[col_idx];
-        }else{
-            uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-            dest_ptr[0] = values[col_idx];
-        }
-    }
-    duckdb_data_chunk_set_size(output, 1);
-    if (new_allocated)
-        free(values);
-    init_data->is_dummy = true;
-    init_data_combined->is_dummy = true;
-    return;
-}
-
-void traceprov_duckdb_func_file(duckdb_function_info info, duckdb_data_chunk output){
-    auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
-    auto init_data_combined = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
-
-    // This is the only case that signifies table scan end now.
-    if (init_data_combined->worker_bind_idx >= init_data_combined->worker_init_data->size()){
-        return duckdb_data_chunk_set_size(output, 0);
-    }
-
-    TraceProvBindData *bind_data = bind_data_combined;
-
-    if (bind_data_combined->worker_bind_data){
-        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
-            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->worker_bind_idx);
-        }else{
-            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->idx_in_bind);
-        }
-    }
-
-    auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
-    if (bind_data->rel_args.offset != -1){
-        handle_offset(bind_data_combined, bind_data, init_data_combined, init_data, output);
-        return;
-    }
-    uint64_t chunk_size = 0;
-    if (init_data->current < bind_data->num_rows){
-        const uint64_t num_rows = ((uint64_t *)bind_data->row_count_layer_ptr)[init_data->current];
-        const uint64_t col_width = bind_data->column_width;
-        const uint64_t extra_size = (sizeof(uint64_t)*num_rows);
-        for (idx_t col_idx = 0; col_idx < col_width; col_idx++){
-            uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
-            traceprov_grow_col_page_mapping_file(extra_size, init_data, bind_data);
-            memcpy(dest_ptr, init_data->col_layer_ptr, sizeof(uint64_t)*num_rows);
-            init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
-        }
-        init_data->current++;
-        chunk_size = num_rows;
-        duckdb_data_chunk_set_size(output, chunk_size);
-        return;
     }
 }
 
