@@ -464,6 +464,18 @@ PlannedStmt *traceprov_set_test(
     return standard_planner(newQuery, query_string, cursorOptions, boundParams);
 }
 
+// If a query has distinct, rewrite it into an aggregation.
+void distinct_to_agg(Query *parse){
+    if (parse->distinctClause){
+        if (parse->groupClause != NIL || parse->hasAggs){
+            elog(ERROR, "Expected grouo clause to be unset!");
+        }
+        parse->groupClause = parse->distinctClause;
+        parse->hasAggs = true;
+        parse->distinctClause = NIL;
+    }
+}
+
 // Recursively perform the traceprov rewrite.
 Query *traceprov_perform_rewrite(
     Query *parse, 
@@ -471,6 +483,7 @@ Query *traceprov_perform_rewrite(
     TraceProvParseContext *tp_context,
     bool parentHasAggs
 ){
+    distinct_to_agg(parse);
     bool purePointerInParent = parentHasAggs || parse->hasAggs;
     if (parse->hasAggs && parse->setOperations != NULL){
         elog(ERROR, "Didn't expect aggregation and set operations to both set!");
