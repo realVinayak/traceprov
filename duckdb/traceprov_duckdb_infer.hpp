@@ -9,8 +9,10 @@ typedef struct TraceProvDuckDbGlobalState {
 } TraceProvDuckDbGlobalState;
 extern TraceProvDuckDbGlobalState g_tp_duckdb_state;
 void reset_global_context();
-void *traceprov_create_table_window_func(const uint64_t num_args, const uint32_t worker_count, std::vector<uint32_t> *expected_layers);
-void *traceprov_create_read_vector_func();
+#if TRACEPROV_SD_MODE==0
+duckdb_scalar_function traceprov_create_table_window_func(const uint64_t num_args, const uint32_t worker_count, std::vector<uint32_t> *expected_layers);
+duckdb_scalar_function traceprov_create_read_vector_func();
+#endif
 void *traceprov_get_row(
     const uint64_t worker_id,
     const uint64_t layer_number,

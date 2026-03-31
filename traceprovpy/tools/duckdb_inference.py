@@ -3,13 +3,10 @@ import argparse
 import json
 from pathlib import Path
 from typing import Callable, NamedTuple, Set, Tuple
-from traceprovpy.tools.benchmark_utils import (
-    TRACEPROV_SQL_DERIVATION_QUERY,
-    traceprov_assert_safe_run,
-)
+from traceprovpy.tools.benchmark_utils import TRACEPROV_SQL_DERIVATION_QUERY
 from traceprovpy.tools.convert_csv_to_duckdb import convert_csv_to_duckdb
 from traceprovpy.tools.benchmark import GenericBenchmark, QuerySpec
-from traceprovpy.tools.file_utils import just_write
+from traceprovpy.tools.file_utils import just_write, traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import (
     DEFAULT_REPEAT,
     DEFAULT_THROWAWAY,
@@ -20,6 +17,7 @@ from traceprovpy.tools.copy_traceprov_dump import make_copy
 import os
 
 TRACEPROV_GRAPH_FILE = "/tmp/traceprov/graph.bin"
+
 
 # TODO: Breakk this up.
 # TODO: Add automatic parse arguments. Cmon that already exists in other places.
@@ -80,19 +78,18 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_perform_derivation",
             "traceprov_materialize_derivation",
             "traceprov_dry_run_derivation",
-            "traceprov_use_implicit_union"
+            "traceprov_use_implicit_union",
         }
-        assert len(optimizations.intersection(base_options)) == 0, "Expected no common ones"
+        assert (
+            len(optimizations.intersection(base_options)) == 0
+        ), "Expected no common ones"
         return base_options | optimizations
 
     @staticmethod
     def add_parse_options(parser: ArgumentParser):
         optimizations = DuckDBDriverOptions._optimizations()
-        misc_bool_options = {
-            "pending",
-            "traceprov_dry_run_derivation"
-        }
-        for optimization in optimizations | misc_bool_options: 
+        misc_bool_options = {"pending", "traceprov_dry_run_derivation"}
+        for optimization in optimizations | misc_bool_options:
             parser.add_argument(
                 f"--{optimization}",
                 action=argparse.BooleanOptionalAction,
@@ -121,31 +118,34 @@ class DuckDBDriverOptions(NamedTuple):
             if (key not in self._boolean_options() and value is not None)
             and (key not in ["extra", "extras", "extra_files"])
             and (key not in ["traceprov_layers_to_derive"])
-            and (key not in ['log_offsets'])
-            and (key not in ['pre_query'])
+            and (key not in ["log_offsets"])
+            and (key not in ["pre_query"])
         ]
         all_extras = [*([self.extra] if self.extra else []), *(self.extras or [])]
         key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
         key_value_options = [
             *key_value_options,
-            *[f'--extra_file {file}' for file in self.extra_files or []]
+            *[f"--extra_file {file}" for file in self.extra_files or []],
         ]
         if self.traceprov_layers_to_derive:
             key_value_options = [
-                *key_value_options, 
-                *[f"--traceprov_layers_to_derive {layer_to_derive}" for layer_to_derive in self.traceprov_layers_to_derive]
+                *key_value_options,
+                *[
+                    f"--traceprov_layers_to_derive {layer_to_derive}"
+                    for layer_to_derive in self.traceprov_layers_to_derive
+                ],
             ]
         if self.log_offsets:
             key_value_options = [
-                *key_value_options, 
-                *[f"--log_offset {log_offset}" for log_offset in self.log_offsets]
+                *key_value_options,
+                *[f"--log_offset {log_offset}" for log_offset in self.log_offsets],
             ]
         if self.pre_query:
             pre_query_file = "/tmp/traceprov_pre_query.txt"
-            just_write(pre_query_file, '\n'.join(self.pre_query))
+            just_write(pre_query_file, "\n".join(self.pre_query))
             key_value_options = [
                 *key_value_options,
-                *[f"--pre_main_sql {pre_query_file}"]
+                *[f"--pre_main_sql {pre_query_file}"],
             ]
 
         print(key_value_options)
@@ -296,5 +296,5 @@ class DuckDbInferenceBinQuerySpec(QuerySpec):
     ):
         pg_pack = get_run_options(TP_SKIPPABLE_OPTION)
         assert self.extra_options is not None
-        destination_dir : Path = self.extra_options['destination_dir']
+        destination_dir: Path = self.extra_options["destination_dir"]
         make_copy(pg_pack.connection_params, destination_dir.as_posix())

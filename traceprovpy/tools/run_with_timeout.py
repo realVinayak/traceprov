@@ -4,7 +4,7 @@
 
 import json
 import re
-from typing import Any, Literal, NamedTuple
+from typing import Any, Dict, List, Literal, NamedTuple
 import psycopg2
 import os
 import argparse
@@ -40,16 +40,19 @@ class RunParams(NamedTuple):
             raise Exception("execution time or runtime params should be defined")
         return self
 
+
 class DuckDBConnectionParams(NamedTuple):
     db: str
-    
+
     @staticmethod
     def make_from_parsed(parsed):
         return DuckDBConnectionParams(parsed.db)
-    
+
     def make_connection(self):
         import duckdb
+
         return duckdb.connect(self.db, read_only=True)
+
 
 class ConnectionParams(NamedTuple):
     host: str
@@ -83,11 +86,11 @@ class ConnectionParams(NamedTuple):
         return connection_params.make_connection()
 
     @staticmethod
-    def make_from_parsed(parsed, backend: str = 'postgres'):
-        if backend == 'duckdb':
+    def make_from_parsed(parsed, backend: str = "postgres"):
+        if backend == "duckdb":
             return DuckDBConnectionParams.make_from_parsed(parsed)
-    
-        if backend == 'postgres':
+
+        if backend == "postgres":
             return ConnectionParams(
                 host=parsed.host,
                 port=parsed.port,
@@ -142,6 +145,51 @@ class ReplaceSelectivity(Preprocessor):
 
     def __repr__(self):
         return f"ReplaceSelectivity('{self.clause}->{self.selectivity}')"
+
+
+class ReplaceBucket(Preprocessor):
+    candidate_keys: Dict[str, List[int]]
+
+    def __init__(self, candidate_keys: dict):
+        self.candidate_keys = candidate_keys
+
+    def preprocess(self, in_content: str) -> str:
+        for candidate, boundaries in self.candidate_keys.items():
+            formatted = f"%{candidate}%"
+            if formatted not in in_content:
+                continue
+            content = [str(c) for c in boundaries["array"]]
+            b_formatted = ",".join(content)
+            in_content = in_content.replace(formatted, f"ARRAY [{b_formatted}]")
+        return in_content
+
+    def __hash__(self):
+        values = tuple(tuple(item) for item in self.candidate_keys.items())
+        return hash(
+            (self.__class__.__name__, tuple(self.candidate_keys.keys()), values)
+        )
+
+    def __repr__(self):
+        return f"ReplaceBucket('<truncated>[{str(list(self.candidate_keys.keys()))}]')"
+
+
+class MatMaterialize(Preprocessor):
+    table_name: str
+
+    def __init__(self, table_name: str):
+        self.table_name = table_name
+
+    def preprocess(self, in_content: str) -> str:
+        # make traceprov query.
+        in_content = in_content.replace(";", "")
+        in_content = f"create table {self.table_name} as ({in_content})"
+        return in_content
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.table_name))
+
+    def __repr__(self):
+        return "MatMaterialize()"
 
 
 class SmokedDuckOptions(NamedTuple):

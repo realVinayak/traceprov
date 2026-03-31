@@ -20,12 +20,14 @@ from collections import defaultdict
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
-from traceprovpy.tools.file_utils import traceprov_assert_safe_run
+from traceprovpy.tools.file_utils import just_write, traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     ConnectionParams,
     MakeTraceProv,
+    MatMaterialize,
     Preprocessor,
+    ReplaceBucket,
     ReplaceFILE,
     ReplaceSelectivity,
     RunParams,
@@ -62,6 +64,12 @@ def json_serial(obj):
         return dict(
             preprocessor_type=ReplaceSelectivity.__name__, param=obj.selectivity
         )
+
+    if isinstance(obj, ReplaceBucket):
+        return dict(preprocessor_type=ReplaceBucket.__name__, param="<truncated>")
+
+    if isinstance(obj, MatMaterialize):
+        return dict(preprocessor_type=MatMaterialize.__name__, param=obj.table_name)
 
     if isinstance(obj, MakeTraceProv):
         return "MakeTraceProv"
@@ -168,7 +176,10 @@ class QuerySpec(NamedTuple):
                 )
                 if extra.preprocess:
                     extra_pack = extra_pack._replace(
-                        preprocessors=[*(extra_pack.preprocessors or []), *(extra.preprocess or [])]
+                        preprocessors=[
+                            *(extra_pack.preprocessors or []),
+                            *(extra.preprocess or []),
+                        ]
                     )
                 if extra.func:
                     extra_result = extra.func(self, extra, extra_pack, get_run_options)
@@ -285,6 +296,38 @@ class ValidationQuerySpec(QuerySpec):
         return 0
 
 
+class DropTable(QuerySpec):
+
+    def run_packs(self, top_dir, get_run_options, benchmark):
+        tables = self.base.split(":")
+        base_pack = self.get_pack(top_dir, TP_SKIPPABLE_OPTION, get_run_options)
+        print("[drpp table]: ", self.base)
+        con = base_pack.connection_params.make_connection()
+        cursor = con.cursor()
+        for table in tables:
+            cursor.execute(f"drop table if exists {table}")
+        cursor.close()
+        con.commit()
+        con.close()
+        return 0
+
+
+class SketchValidationQuerySpec(QuerySpec):
+
+    def run_packs(self, top_dir, get_run_options, benchmark):
+        base_pack = self.get_pack(top_dir, TP_SKIPPABLE_OPTION, get_run_options)
+        print("[sketch validation]: ", self.base, self.materialize)
+        query = f"select 1 from (select left_record FROM (select * from {self.base} limit 1) as left_record) JOIN (SELECT right_record FROM (select * from {self.materialize}) as right_record) ON left_record = right_record;"
+        con = base_pack.connection_params.make_connection()
+        cursor = con.cursor()
+        cursor.execute(query)
+        result = cursor.fetchone()
+        assert result is not None and result == ((1,))
+        cursor.close()
+        con.close()
+        return 0
+
+
 class Query(NamedTuple):
     query_name: str
     spec: QuerySpec
@@ -336,7 +379,11 @@ class GenericBenchmark(NamedTuple):
     sd_options: SmokedDuckOptions | None = None
 
     def run_from_argparse(
-        self, directories: list[QueryDirectory], params=RunParams(), parser=None, init_sql: list[str] = None
+        self,
+        directories: list[QueryDirectory],
+        params=RunParams(),
+        parser=None,
+        init_sql: list[str] = None,
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
@@ -390,11 +437,7 @@ class GenericBenchmark(NamedTuple):
 
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
-            parsed.test_root,
-            directories,
-            connection_params,
-            params,
-            init_sql
+            parsed.test_root, directories, connection_params, params, init_sql
         )
         end = time.perf_counter()
         final_result = dict(
@@ -462,7 +505,7 @@ class GenericBenchmark(NamedTuple):
         directories: list[QueryDirectory],
         connection_params: ConnectionParams,
         params=RunParams(),
-        init_sql: list[str] = None
+        init_sql: list[str] = None,
     ):
         # Always run the analyze for statistics initially.
         assert (
@@ -471,7 +514,7 @@ class GenericBenchmark(NamedTuple):
             )
             == 0
         )
-        for init_sql_line in init_sql:
+        for init_sql_line in init_sql or []:
             assert (
                 os.system(
                     f'echo "{init_sql_line}" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
@@ -493,8 +536,9 @@ class GenericBenchmark(NamedTuple):
                     shared_libraries=[
                         self.traceprov_rewriter_path,
                     ],
-                    extra_commands=list(query.extra_commands or [])
+                    extra_commands=list(query.extra_commands or []),
                 )
+
             return _get_options_from_file
 
         results_from_dirs = {}
@@ -511,8 +555,12 @@ class GenericBenchmark(NamedTuple):
                     _get_options,
                     self,
                 )
+                current_query_result = combined_results.get(query.query_name, {})
+                assert (
+                    query.spec.key not in current_query_result
+                ), f"Didn't expect {query.spec.key} to be in the result!"
                 combined_results[query.query_name] = {
-                    **combined_results.get(query.query_name, {}),
+                    **current_query_result,
                     query.spec.key: results,
                 }
             results_from_dirs[directory.dir_name] = combined_results
@@ -548,6 +596,10 @@ class GenericBenchmark(NamedTuple):
     def setup_preprocess(self, directory: QueryDirectory):
         def _map_preprocess(preprocess: Preprocessor):
             if isinstance(preprocess, MakeTraceProv):
+                return preprocess
+            if isinstance(preprocess, ReplaceBucket):
+                return preprocess
+            if isinstance(preprocess, MatMaterialize):
                 return preprocess
             if not isinstance(preprocess, ReplaceFILE):
                 raise Exception("Not implemented other preprocess yet")

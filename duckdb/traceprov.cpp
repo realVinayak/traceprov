@@ -102,71 +102,75 @@ static int initialize_local_and_layer(
 } \
 
 #define TRACEPROV_SET_BUCKET_ON_STATE(STATE, LAYER) { \
-    STATE->layer_number = layer_number; \
     const uint64_t original_group_number = ++LAYER->num_groups; \
     const uint64_t bucket = original_group_number % TRACEPROV_BUCKET_COUNT; \
-    STATE->group_cnt = TRACEPROV_SET_WORKER_ID((TRACEPROV_SET_BUCKET(original_group_number, bucket)), traceprov_current.my_worker_id); \
+    STATE->state = TRACEPROV_SET_WORKER_ID((TRACEPROV_SET_BUCKET(original_group_number, bucket)), traceprov_current.my_worker_id); \
 } \
 
 unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<Expression>> &arguments, TraceProvAggExtra *extra);
 
 static void traceprov_direct_update_partition(Vector inputs[], AggregateInputData &aggr_input_data, idx_t input_count, Vector &states, idx_t count);
 
-// // Taken from duckdb src.
-// duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function function) {
-//     return reinterpret_cast<duckdb::AggregateFunction *>(function);
-// }
+
+#if TRACEPROV_SD_MODE==0
+
+// Taken from duckdb src.
+duckdb::AggregateFunction *GetCAggregateFunction(duckdb_aggregate_function function) {
+    return reinterpret_cast<duckdb::AggregateFunction *>(function);
+}
 
 
-// inline bool RowIsVisible(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
-//     return (row_idx < scan->next_row_index && scan->current_row_index <= row_idx);
-// }
+inline bool RowIsVisible(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+    return (row_idx < scan->next_row_index && scan->current_row_index <= row_idx);
+}
 
-// inline sel_t RowOffset(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
-//     return duckdb::UnsafeNumericCast<sel_t>(row_idx - scan->current_row_index);
-// }
-// // Inspired from implementation in mode.cpp, but without any class stuff
-// // since we don't need that.
-// void traceprov_window(
-//     duckdb::AggregateInputData &aggr_input_data,
-//     const duckdb::WindowPartitionInput &partition,
-//     duckdb::const_data_ptr_t g_state,
-//     duckdb::data_ptr_t l_state,
-//     const duckdb::SubFrames &subframes,
-//     duckdb::Vector &result,
-//     duckdb::idx_t rid
-// ){
-//     if (partition.count == 0){
-//         elog(INFO, "Skipping window because output is empty!");
-//         return;
-//     }
-//     if (subframes.size() != 1)
-//         elog(ERROR, "Expected the subframe size to be 1!");
+inline sel_t RowOffset(idx_t row_idx, duckdb::ColumnDataScanState *scan) {
+    return duckdb::UnsafeNumericCast<sel_t>(row_idx - scan->current_row_index);
+}
+// Inspired from implementation in mode.cpp, but without any class stuff
+// since we don't need that.
+void traceprov_window(
+    duckdb::AggregateInputData &aggr_input_data,
+    const duckdb::WindowPartitionInput &partition,
+    duckdb::const_data_ptr_t g_state,
+    duckdb::data_ptr_t l_state,
+    const duckdb::SubFrames &subframes,
+    duckdb::Vector &result,
+    duckdb::idx_t rid
+){
+    if (partition.count == 0){
+        elog(INFO, "Skipping window because output is empty!");
+        return;
+    }
+    if (subframes.size() != 1)
+        elog(ERROR, "Expected the subframe size to be 1!");
 
-//     auto frame = subframes.at(0);
-//     // elog(INFO, "Start: %ld, End: %ld, RID: %ld, Count: %ld", frame.start, frame.end, rid, partition.count);
-//     // Don't do anything if the frame end is not the row end.
-//     if (frame.end < partition.count) return;
-//     // Now, need to do all the bulk stuff.
+    auto frame = subframes.at(0);
+    // elog(INFO, "Start: %ld, End: %ld, RID: %ld, Count: %ld", frame.start, frame.end, rid, partition.count);
+    // Don't do anything if the frame end is not the row end.
+    if (frame.end < partition.count) return;
+    // Now, need to do all the bulk stuff.
 
-//     auto scan = new duckdb::ColumnDataScanState();
-//     auto inputs = partition.inputs;
-//     inputs->InitializeScan(*scan, partition.column_ids);
-//     duckdb::DataChunk page;
-//     inputs->InitializeScanChunk(*scan, page);
+    auto scan = new duckdb::ColumnDataScanState();
+    auto inputs = partition.inputs;
+    inputs->InitializeScan(*scan, partition.column_ids);
+    duckdb::DataChunk page;
+    inputs->InitializeScanChunk(*scan, page);
 
-//     int64_t last_chunk_idx = -1;
-//     for (idx_t row_id = frame.start; row_id < frame.end; row_id++){
-//         if(!inputs->Seek(row_id, *scan, page)){
-//             elog(ERROR, "Expected seek to always be fine!")
-//         }
-//         // In this case, we'll have already written  up this chunk.
-//         // So, continue in this case.
-//         if ((int64_t)scan->chunk_index == last_chunk_idx) continue;
-//         // traceprov_update(NULL, reinterpret_cast<duckdb_data_chunk>(&page), NULL);
-//         last_chunk_idx = scan->chunk_index;
-//     }
-// }
+    int64_t last_chunk_idx = -1;
+    for (idx_t row_id = frame.start; row_id < frame.end; row_id++){
+        if(!inputs->Seek(row_id, *scan, page)){
+            elog(ERROR, "Expected seek to always be fine!")
+        }
+        // In this case, we'll have already written  up this chunk.
+        // So, continue in this case.
+        if ((int64_t)scan->chunk_index == last_chunk_idx) continue;
+        // traceprov_update(NULL, reinterpret_cast<duckdb_data_chunk>(&page), NULL);
+        last_chunk_idx = scan->chunk_index;
+    }
+}
+
+#endif
 
 #define TP_NO_EXPECT elog(ERROR, "Didn't expect to be called!")
 
@@ -546,31 +550,29 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
             const uint64_t chunk_size = sizeof(uint32_t)*num_rows;
             TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
             for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-                if (agg_contexts[row_idx]->layer_number == 0){
-                    agg_contexts[row_idx]->layer_number = layer_number;
+                const uint32_t group_count = (uint32_t)agg_contexts[row_idx]->state;
+                if (group_count == 0){
                     // Annotate the group with the worker id.
-                    agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
-                    agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
+                    agg_contexts[row_idx]->state = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
                 }
-                *((uint32_t*)main_layer->current_row) = (uint32_t)agg_contexts[row_idx]->group_cnt;
+                *((uint32_t*)main_layer->current_row) = (uint32_t)agg_contexts[row_idx]->state;
                 main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint32_t));
                 if (unlikely(main_layer->mask == 0)){
                     // Extract out the mask.
                     // During reading, we reapply this mask ;)
-                    main_layer->mask = agg_contexts[row_idx]->group_cnt >> 32;
+                    main_layer->mask = agg_contexts[row_idx]->state >> 32;
                 }
             }
         } else{
             const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
             TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
             for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
-                if (agg_contexts[row_idx]->layer_number == 0){
-                    agg_contexts[row_idx]->layer_number = layer_number;
+                const uint32_t group_count = (uint32_t)agg_contexts[row_idx]->state;
+                if (group_count == 0){
                     // Annotate the group with the worker id.
-                    agg_contexts[row_idx]->group_cnt = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
-                    agg_contexts[row_idx]->worker_id = traceprov_current.my_worker_id;
+                    agg_contexts[row_idx]->state = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
                 }
-                *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->group_cnt;
+                *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->state;
                 main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint64_t));
             }
         }
@@ -628,6 +630,20 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     }
 }
 
+#if TRACEPROV_SD_MODE==0
+static void traceprov_direct_simple_update(Vector inputs[], AggregateInputData &aggr_input_data, idx_t input_count, data_ptr_t state, idx_t count){
+    // Ugh. This is kinda rare to be called (we do this in rare cases, only for window functions)
+    // So, it is fine to just expand the state out.
+    Vector vec(LogicalType::POINTER, count);
+    vec.Flatten(count);
+    auto vec_data = FlatVector::GetDataUnsafe<data_ptr_t>(vec);
+    for (idx_t i = 0; i < count; i++){
+        vec_data[i] = state;
+    }
+    traceprov_direct_update(inputs, aggr_input_data, input_count, vec, count);
+}
+#endif
+
 static void traceprov_direct_update_partition(Vector inputs[], AggregateInputData &aggr_input_data, idx_t input_count, Vector &states, idx_t count){
     // The below case is fine, since count < 2048.
     const uint16_t num_rows = (uint16_t)count;
@@ -653,10 +669,11 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
 
     for (uint16_t row_idx = 0; row_idx < num_rows; row_idx++){
         struct traceprov_agg_context *curr_state = agg_contexts[row_idx];
-        if (unlikely(curr_state->layer_number == 0)){
+        const uint32_t group_number = (uint32_t)curr_state->state;
+        if (unlikely(group_number == 0)){
             TRACEPROV_SET_BUCKET_ON_STATE(curr_state, main_layer);
         }
-        const uint64_t local_bucket = TRACEPROV_GET_BUCKET(curr_state->group_cnt);
+        const uint64_t local_bucket = TRACEPROV_GET_BUCKET(curr_state->state);
         const int64_t cursor = cursors[local_bucket]++;
         const bool is_reverse = (local_bucket & 1) != 0;
         uint16_t *slice_vector = ((uint16_t *)main_layer->slice_vectors[local_bucket]);
@@ -704,7 +721,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
             // Done this way to hopefully auto vectorization.
             if (is_reverse){
                 for (int32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-                    const uint64_t group_count = agg_contexts[slice_vector[-curr_slice_idx - 1]]->group_cnt;
+                    const uint64_t group_count = agg_contexts[slice_vector[-curr_slice_idx - 1]]->state;
                     *((uint32_t*)current_layer->current_row) = group_count;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint32_t));
                     if (unlikely(current_layer->mask == NULL)){
@@ -713,7 +730,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
                 }
             }else{
                 for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-                    const uint64_t group_count = agg_contexts[slice_vector[curr_slice_idx]]->group_cnt;
+                    const uint64_t group_count = agg_contexts[slice_vector[curr_slice_idx]]->state;
                     *((uint32_t*)current_layer->current_row) = group_count;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint32_t));
                     if (unlikely(current_layer->mask == NULL)){
@@ -730,7 +747,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
             // Done this way to hopefully auto vectorization.
             if (is_reverse){
                 for (int32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-                    const uint64_t group_count = agg_contexts[slice_vector[-curr_slice_idx - 1]]->group_cnt;
+                    const uint64_t group_count = agg_contexts[slice_vector[-curr_slice_idx - 1]]->state;
                     *((uint64_t*)current_layer->current_row) = group_count;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
                     if (unlikely(current_layer->mask == NULL)){
@@ -739,7 +756,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
                 }
             }else{
                 for (uint32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
-                    const uint64_t group_count = agg_contexts[slice_vector[curr_slice_idx]]->group_cnt;
+                    const uint64_t group_count = agg_contexts[slice_vector[curr_slice_idx]]->state;
                     *((uint64_t*)current_layer->current_row) = group_count;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
                     if (unlikely(current_layer->mask == NULL)){
@@ -870,11 +887,11 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
     uint64_t *target_write_ptr = (uint64_t*)combined_layer->current_row;
     uint64_t *source_write_ptr = &(((uint64_t*)combined_layer->current_row)[count]);
     for (idx_t idx = 0; idx < count; idx++){
-        if (target_states[idx]->is_combined && source_states[idx]->is_combined)
+        if ( TRACEPROV_GET_IS_COMBINED(target_states[idx]->state) && TRACEPROV_GET_IS_COMBINED(source_states[idx]->state))
             elog(ERROR, "Didn't expect both of the states to be combined...");
 
-        if (target_states[idx]->group_cnt == 0 && source_states[idx]->group_cnt > 0){
-            if (unlikely(source_states[idx]->is_combined)){
+        if (TRACEPROV_GET_GROUP_COUNT(target_states[idx]->state) == 0 && TRACEPROV_GET_GROUP_COUNT(source_states[idx]->state) > 0){
+            if (unlikely(TRACEPROV_GET_IS_COMBINED(source_states[idx]->state))){
                 elog(ERROR, "Expected source to not be combined in this case!");
             }
             memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
@@ -883,18 +900,17 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
         const struct traceprov_agg_context *source_state = source_states[idx];
         struct traceprov_agg_context *target_state = target_states[idx];
 
-        if (!target_state->is_combined){
+        if (!TRACEPROV_GET_IS_COMBINED(target_state->state)){
             // We set the current worker id as the worker, so that it can be used when filtering easily.
-            target_state->group_cnt = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_WORKER_ID(TRACEPROV_STRIP_WORKER_ID(target_state->group_cnt), traceprov_current.my_worker_id));
-            target_state->is_combined = true;
+            target_state->state = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_WORKER_ID(TRACEPROV_STRIP_WORKER_ID(target_state->state), traceprov_current.my_worker_id));
         }
 
         #if TRACEPROV_COLLECT_STATS_MODE == 1
         ++target_state->combined_count;
         combined_layer->max_combined_times = MAX(combined_layer->max_combined_times, target_state->combined_count);
         #endif
-        target_write_ptr[0] = target_state->group_cnt;
-        source_write_ptr[0] = source_state->group_cnt;
+        target_write_ptr[0] = target_state->state;
+        source_write_ptr[0] = source_state->state;
         target_write_ptr++;
         source_write_ptr++;
     }
@@ -917,7 +933,7 @@ static void traceprov_direct_finalize(Vector &state, AggregateInputData &aggr_in
     #endif
 
     for (idx_t i = 0; i < count; i++){
-        result_data[offset + i] = source_states[i]->group_cnt;
+        result_data[offset + i] = source_states[i]->state;
     }
 }
 
@@ -942,6 +958,10 @@ AggregateFunction *traceprov_create_agg_direct_functions(const uint32_t num_args
         nullptr,
         traceprov_direct_bind
     );
+    #if TRACEPROV_SD_MODE==0
+    function->window = traceprov_window;
+    function->simple_update = traceprov_direct_simple_update;
+    #endif
     return function;
 }
 

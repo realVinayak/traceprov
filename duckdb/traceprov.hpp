@@ -290,8 +290,8 @@ struct local_context {
     int32_t   layer_fd;
 };
 
-// At least the local context should be fittable in a page.
-static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
+// // At least the local context should be fittable in a page.
+// static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
 
 struct traceprov_shared_context {
     int32_t   magic_word;
@@ -334,14 +334,7 @@ typedef struct AggStateExtended {
 } AggStateExtended;
 
 struct traceprov_agg_context {
-    // Whether this aggregation was combined.
-    uint8_t is_combined;
-    // Group count for this group.
-    uint64_t group_cnt;
-    // Worker on which this group was processed.
-    uint8_t worker_id;
-    // Layer number for this group.
-    uint32_t layer_number;
+    uint64_t state;
     #if TRACEPROV_COLLECT_STATS_MODE == 1
     uint32_t combined_count;
     #endif
@@ -376,6 +369,8 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64_t) W) << 56) | X)
 #define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
 #define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 56)) & X)
+
+#define TRACEPROV_GET_GROUP_COUNT(X) ((uint32_t)X)
 
 // TODO: Use this everywhere.
 #define INCR_BY_BYTES(X, Y) (&(((uint8_t*)X)[Y]))

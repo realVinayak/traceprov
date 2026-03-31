@@ -1,7 +1,7 @@
 # Simply copies over the traceprov files.
 
 import os
-from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
+from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 import getpass
 
@@ -34,6 +34,6 @@ def make_copy(connection_params: ConnectionParams, destination_dir: str):
 
     traceprov_assert_safe_run("chmod +x /tmp/prepare_for_duckdb.sh")
     traceprov_assert_safe_run("/tmp/prepare_for_duckdb.sh")
-    #traceprov_assert_safe_run(
+    # traceprov_assert_safe_run(
     #    f"sudo chown -R {original_user} {destination_dir}"
-    #)
+    # )

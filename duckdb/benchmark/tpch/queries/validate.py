@@ -5,8 +5,8 @@ import os
 from pathlib import Path
 
 from gen_query import get_in_extra
-from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
+from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
 query_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 17, 18, 19, 20, 21, 22]
 needs_disable = {11, 17, 18, 2, 20, 22}

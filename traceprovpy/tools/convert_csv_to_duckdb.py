@@ -3,7 +3,7 @@ import glob
 import os
 import pathlib
 
-from traceprovpy.tools.benchmark_utils import traceprov_assert_safe_run
+from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
 
 def convert_csv_to_duckdb(input_path: str, output_path: str, header: bool):

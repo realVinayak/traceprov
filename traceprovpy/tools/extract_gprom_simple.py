@@ -14,6 +14,7 @@ HEURISTICS_OPTIONS = ["-heuristic_opt TRUE"]
 LATERAL_OPTIONS = ["-lateral_rewrite TRUE"]
 UNNEST_OPTIONS = ["-unnest_rewrite TRUE"]
 
+
 class GpromOptions(NamedTuple):
     mode: Literal["join", "window"]
     heuristics: bool = False
@@ -34,15 +35,15 @@ class GpromOptions(NamedTuple):
 
     def to_str(self):
         return f"({self.mode} - {self.heuristics})"
-    
+
     @staticmethod
     def from_str(self_str: str):
-        mode = 'join' if 'join' in self_str else 'window'
-        heu = 'True' in self_str
+        mode = "join" if "join" in self_str else "window"
+        heu = "True" in self_str
         return GpromOptions(mode=mode, heuristics=heu)
-    
+
     def safe_key(self):
-        parts = ['gprom', self.mode]
+        parts = ["gprom", self.mode]
         if self.heuristics:
             parts.append("heuristics")
         return "_".join(parts)
@@ -69,34 +70,30 @@ def gprom_from_parsed(parsed, input_file):
 
 
 def gprom_from_file(
-    options: GpromOptions, connection_param: ConnectionParams | DuckDBConnectionParams, file_name: str
+    options: GpromOptions,
+    connection_param: ConnectionParams | DuckDBConnectionParams,
+    file_name: str,
 ):
     out_file = "/tmp/gprom_extracted_temp.sql"
     os.system(f"rm -f {out_file}")
-    generic_options = dict(
-        Pexecutor="wf",
-        queryFile=file_name,
-        Pout_file=out_file
-    )
+    generic_options = dict(Pexecutor="wf", queryFile=file_name, Pout_file=out_file)
     backend = None
     if isinstance(connection_param, ConnectionParams):
-        backend = 'postgres'
+        backend = "postgres"
         base_user_options = dict(
             user=connection_param.user,
             passwd=connection_param.password,
             host=connection_param.host,
             port=connection_param.port,
             db=connection_param.database,
-            operator_verbose="TRUE"
+            # operator_verbose="TRUE"
         )
     elif isinstance(connection_param, DuckDBConnectionParams):
-        backend = 'duckdb'
-        base_user_options = dict(
-            db=connection_param.db
-        )
+        backend = "duckdb"
+        base_user_options = dict(db=connection_param.db)
     else:
         assert 0, "Got invalid instance!"
-    
+
     base_user_options = {**base_user_options, **generic_options}
 
     flattened = " ".join(f"-{key} {value}" for key, value in base_user_options.items())

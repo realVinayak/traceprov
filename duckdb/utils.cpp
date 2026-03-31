@@ -261,7 +261,7 @@ int initialize_local_context(){
     }
     // Set up the local context in a file.
     // This makes everything guaranteed to be on a different page.
-    if ((rc = fail_safe_mmap(worker_layer_map_fd, sizeof(struct local_context), (void**)&traceprov_current.local_context))){
+    if ((rc = fail_safe_mmap(worker_layer_map_fd, TRACEPROV_PAGE_SIZE * (1 + ((sizeof(struct local_context) - 1) / TRACEPROV_PAGE_SIZE)), (void**)&traceprov_current.local_context))){
         goto exit_initialize_local_context;
     }
     // Set up the current context. All this is local (so, not visible to other processes.)

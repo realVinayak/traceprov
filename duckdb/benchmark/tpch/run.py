@@ -97,7 +97,6 @@ def run():
             else:
                 sample_inference_result = run_sample_inference(
                     query_num=query,
-                    spec_element=spec[query][0],
                     samples=out_ids,
                     parsed=parsed,
                     iters=total_iters,

@@ -27,10 +27,11 @@ from
 				from
 					customer
 				where
-                    and (customer.rowid) in (
+                    (customer.rowid) in (
                         select column_1
                         from LAYER_1_%OUT_ID%
                 )
+            )
             and not exists (
                 select
                     *

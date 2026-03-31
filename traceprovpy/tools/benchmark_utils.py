@@ -8,7 +8,7 @@ from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
 
-from traceprovpy.tools.traceprov_extra_func import traceprov_extra_infer_func
+from traceprovpy.tools.traceprov_extra_func import get_traceprov_extra_infer_func
 
 TRACEPROV_SYNC_TIME = lambda: ExtraQuery(
     label="traceprov_sync_time",
@@ -96,10 +96,22 @@ TRACEPROV_GET_GENERIC_DERIVATION_SPEC = lambda: ExtraQuery(
 TRACEPROV_INFER_SPEC = lambda: ExtraQuery(
     label="traceprov_infer",
     query=TP_SKIPPABLE_OPTION,
-    func=CallableRepr(traceprov_extra_infer_func, "traceprov_extra_infer_func"),
+    func=CallableRepr(
+        get_traceprov_extra_infer_func(True), "traceprov_extra_infer_func"
+    ),
     repeat=3,
-    runs_after_base=True
+    runs_after_base=True,
 )
+
+TRACEPROV_PREPARE_INFER_SPEC = lambda: ExtraQuery(
+    label="traceprov_prepare_infer",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(
+        get_traceprov_extra_infer_func(False), "traceprov_prepare_extra_infer_func"
+    ),
+    runs_after_base=True,
+)
+
 
 def traceprov_dump_safe_results(suff: str, results: Any):
     current_timestamp = datetime.now()
@@ -108,3 +120,13 @@ def traceprov_dump_safe_results(suff: str, results: Any):
     os.makedirs(result_dir, exist_ok=True)
     with open(result_dir / "result.json", "w") as f:
         f.write(json.dumps(results))
+
+
+def make_traceprov_drop_table_extra(table_name: str):
+    return lambda: ExtraQuery(
+        label=f"traceprov_drop_table_{table_name}",
+        query=f"$INLINE-DROP TABLE IF EXISTS {table_name};",
+        runs_after_base=True,
+        strict_run=True,
+        skip_validation=True,
+    )
