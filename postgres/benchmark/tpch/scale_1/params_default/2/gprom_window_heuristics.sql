@@ -15,15 +15,15 @@ SELECT F0_0.p_partkey AS p_partkey, F0_0.p_type AS p_type, F0_0.p_size AS p_size
 FROM ((
 SELECT F0_0.p_partkey AS p_partkey, F0_0.p_type AS p_type, F0_0.p_size AS p_size, F1_0.s_suppkey AS s_suppkey, F1_0.s_name AS s_name, F1_0.s_nationkey AS s_nationkey, F1_0.s_acctbal AS s_acctbal, F0_0.prov_part_p__partkey AS prov_part_p__partkey, F1_0.prov_supplier_s__suppkey AS prov_supplier_s__suppkey, _mergerowid(F0_0._result_tid, F1_0._result_tid) AS _result_tid
 FROM ((
-SELECT F0_0.p_partkey AS p_partkey, F0_0.p_type AS p_type, F0_0.p_size AS p_size, F0_0.p_partkey AS prov_part_p__partkey, ()::int8 AS _result_tid
+SELECT F0_0.p_partkey AS p_partkey, F0_0.p_type AS p_type, F0_0.p_size AS p_size, F0_0.p_partkey AS prov_part_p__partkey, (F0_0.p_partkey)::int8 AS _result_tid
 FROM part F0_0) F0_0 CROSS JOIN (
-SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_nationkey AS s_nationkey, F0_0.s_acctbal AS s_acctbal, F0_0.s_suppkey AS prov_supplier_s__suppkey, ()::int8 AS _result_tid
+SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_nationkey AS s_nationkey, F0_0.s_acctbal AS s_acctbal, F0_0.s_suppkey AS prov_supplier_s__suppkey, (F0_0.s_suppkey)::int8 AS _result_tid
 FROM supplier F0_0) F1_0)) F0_0 CROSS JOIN (
 SELECT F0_0.ps_partkey AS ps_partkey, F0_0.ps_suppkey AS ps_suppkey, F0_0.ps_supplycost AS ps_supplycost, F0_0.ps_partkey AS prov_partsupp_ps__partkey, F0_0.ps_suppkey AS prov_partsupp_ps__suppkey, _tid2int8(F0_0.ctid) AS _result_tid
 FROM partsupp F0_0) F1_0)) F0_0 CROSS JOIN (
-SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_nationkey AS prov_nation_n__nationkey, ()::int8 AS _result_tid
+SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_nationkey AS prov_nation_n__nationkey, (F0_0.n_nationkey)::int8 AS _result_tid
 FROM nation F0_0) F1_0)) F0_0 CROSS JOIN (
-SELECT F0_0.r_regionkey AS r_regionkey, F0_0.r_name AS r_name, F0_0.r_regionkey AS prov_region_r__regionkey, ()::int8 AS _result_tid
+SELECT F0_0.r_regionkey AS r_regionkey, F0_0.r_name AS r_name, F0_0.r_regionkey AS prov_region_r__regionkey, (F0_0.r_regionkey)::int8 AS _result_tid
 FROM region F0_0) F1_0)) F0_0 CROSS JOIN (
 SELECT F0_0."AGGR_0" AS "min(ps_supplycost)", F0_0.ps_partkey AS "ps_partkey_1", F0_0."prov_supplier_1_s__suppkey" AS "prov_supplier_1_s__suppkey", F0_0."prov_partsupp_1_ps__partkey" AS "prov_partsupp_1_ps__partkey", F0_0."prov_partsupp_1_ps__suppkey" AS "prov_partsupp_1_ps__suppkey", F0_0."prov_nation_1_n__nationkey" AS "prov_nation_1_n__nationkey", F0_0."prov_region_1_r__regionkey" AS "prov_region_1_r__regionkey", dense_rank() OVER ( ORDER BY F0_0.ps_partkey) AS _result_tid
 FROM (
