@@ -11,7 +11,7 @@ SELECT F0_0.l_partkey AS l_partkey, F0_0.l_quantity AS l_quantity, F0_0.l_extend
 FROM ((
 SELECT F0_0.l_partkey AS l_partkey, F0_0.l_quantity AS l_quantity, F0_0.l_extendedprice AS l_extendedprice, F0_0.l_orderkey AS prov_lineitem_l__orderkey, F0_0.l_linenumber AS prov_lineitem_l__linenumber, _tid2int8(F0_0.ctid) AS _result_tid, 1 AS _setprov_dup_count
 FROM lineitem F0_0) F0_0 CROSS JOIN (
-SELECT F0_0.p_partkey AS p_partkey, F0_0.p_brand AS p_brand, F0_0.p_container AS p_container, F0_0.p_partkey AS prov_part_p__partkey, ()::int8 AS _result_tid, 1 AS _setprov_dup_count
+SELECT F0_0.p_partkey AS p_partkey, F0_0.p_brand AS p_brand, F0_0.p_container AS p_container, F0_0.p_partkey AS prov_part_p__partkey, (F0_0.p_partkey)::int8 AS _result_tid, 1 AS _setprov_dup_count
 FROM part F0_0) F1_0)) F0_0 CROSS JOIN (
 SELECT (0.200000 * F0_0."AGGR_0") AS "(0200000*avg(l_quantity))", F0_0.l_partkey AS "l_partkey_1", F0_0."prov_lineitem_1_l__orderkey" AS "prov_lineitem_1_l__orderkey", F0_0."prov_lineitem_1_l__linenumber" AS "prov_lineitem_1_l__linenumber", dense_rank() OVER ( ORDER BY F0_0.l_partkey) AS _result_tid, row_number() OVER (PARTITION BY F0_0.l_partkey ORDER BY F0_0.l_partkey) AS _setprov_dup_count
 FROM (

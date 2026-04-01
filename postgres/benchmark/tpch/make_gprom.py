@@ -5,13 +5,21 @@ import json
 import os
 from pathlib import Path
 
-from traceprovpy.tools.connection_utils import duckdb_connection_from_cmd, postgres_connection_from_cmd
-from traceprovpy.tools.extract_gprom_simple import GPROM_OPTIONS_MAPPING, GpromOptions, gprom_from_file
+from traceprovpy.tools.connection_utils import (
+    duckdb_connection_from_cmd,
+    postgres_connection_from_cmd,
+)
+from traceprovpy.tools.extract_gprom_simple import (
+    GPROM_OPTIONS_MAPPING,
+    GpromOptions,
+    gprom_from_file,
+)
 from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
 needs_unnest = ["02", "17", "20"]
 needs_lateral = ["02", "17", "21"]
+
 
 def get_file(options: GpromOptions):
     flat = ["gprom", options.mode]
@@ -23,24 +31,27 @@ def get_file(options: GpromOptions):
 
 import sys
 
+
 def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
     parser.add_argument("--dest", type=str)
-    parser.add_argument("--backend", choices=['postgres', 'duckdb'], default='postgres')
+    parser.add_argument("--backend", choices=["postgres", "duckdb"], default="postgres")
     GpromOptions.add_parse_options(parser)
-    curr_args = ' '.join(sys.argv)
+    curr_args = " ".join(sys.argv)
     print("Handling: ", curr_args)
-    if '--backend duckdb' in curr_args:
+    if "--backend duckdb" in curr_args:
         duckdb_connection_from_cmd(parser)
-    elif '--backend postgres' in curr_args:
+    elif "--backend postgres" in curr_args:
         postgres_connection_from_cmd(parser)
     else:
         assert False, "Invalid backend!"
     parsed, _ = parser.parse_known_args()
-    connection_params = ConnectionParams.make_from_parsed(parsed, backend=parsed.backend)
+    connection_params = ConnectionParams.make_from_parsed(
+        parsed, backend=parsed.backend
+    )
     queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [15, 16, 22]]
-    # queries = ["11"]
+    # queries = ["20"]
     passed = defaultdict(dict)
     for query in queries:
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
@@ -79,16 +90,16 @@ def main():
             file_name = get_file(option)
             if parsed.dest:
                 dest = Path(parsed.dest)
-                abs_file_path : Path = dest / str(int(query)) / file_name
+                abs_file_path: Path = dest / str(int(query)) / file_name
                 os.makedirs(abs_file_path.parent, exist_ok=True)
-                just_write(abs_file_path, query_contents['query'])
+                just_write(abs_file_path, query_contents["query"])
             print(get_file(option))
-    
+
     if parsed.dest:
         config_file: Path = Path(parsed.dest) / "config_gprom.json"
         passed_remap = {
             query: {
-                option.to_str(): dict(passed=option_data['passed'])
+                option.to_str(): dict(passed=option_data["passed"])
                 for option, option_data in query_options.items()
             }
             for (query, query_options) in passed.items()
@@ -97,5 +108,6 @@ def main():
 
     # print(json.dumps(passed))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

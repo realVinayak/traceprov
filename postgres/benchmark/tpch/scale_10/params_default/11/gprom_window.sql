@@ -9,9 +9,9 @@ SELECT F0_0.ps_partkey AS ps_partkey, F0_0.ps_suppkey AS ps_suppkey, F0_0.ps_ava
 FROM ((
 SELECT F0_0.ps_partkey AS ps_partkey, F0_0.ps_suppkey AS ps_suppkey, F0_0.ps_availqty AS ps_availqty, F0_0.ps_supplycost AS ps_supplycost, F0_0.ps_comment AS ps_comment, F0_0.ps_partkey AS prov_partsupp_ps__partkey, F0_0.ps_suppkey AS prov_partsupp_ps__suppkey, _tid2int8(F0_0.ctid) AS _result_tid, 1 AS _setprov_dup_count
 FROM partsupp F0_0) F0_0 CROSS JOIN (
-SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_address AS s_address, F0_0.s_nationkey AS s_nationkey, F0_0.s_phone AS s_phone, F0_0.s_acctbal AS s_acctbal, F0_0.s_comment AS s_comment, F0_0.s_suppkey AS prov_supplier_s__suppkey, ()::int8 AS _result_tid, 1 AS _setprov_dup_count
+SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_address AS s_address, F0_0.s_nationkey AS s_nationkey, F0_0.s_phone AS s_phone, F0_0.s_acctbal AS s_acctbal, F0_0.s_comment AS s_comment, F0_0.s_suppkey AS prov_supplier_s__suppkey, (F0_0.s_suppkey)::int8 AS _result_tid, 1 AS _setprov_dup_count
 FROM supplier F0_0) F1_0)) F0_0 CROSS JOIN (
-SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_comment AS n_comment, F0_0.n_nationkey AS prov_nation_n__nationkey, ()::int8 AS _result_tid, 1 AS _setprov_dup_count
+SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_comment AS n_comment, F0_0.n_nationkey AS prov_nation_n__nationkey, (F0_0.n_nationkey)::int8 AS _result_tid, 1 AS _setprov_dup_count
 FROM nation F0_0) F1_0)) F0_0
 WHERE (((F0_0.ps_suppkey = F0_0.s_suppkey) AND (F0_0.s_nationkey = F0_0.n_nationkey)) AND (F0_0.n_name = 'GERMANY'))) F0_0),
 temp_view_4 AS (
@@ -27,9 +27,9 @@ SELECT F0_0.ps_partkey AS ps_partkey, F0_0.ps_suppkey AS ps_suppkey, F0_0.ps_ava
 FROM ((
 SELECT F0_0.ps_partkey AS ps_partkey, F0_0.ps_suppkey AS ps_suppkey, F0_0.ps_availqty AS ps_availqty, F0_0.ps_supplycost AS ps_supplycost, F0_0.ps_comment AS ps_comment, F0_0.ps_partkey AS "prov_partsupp_1_ps__partkey", F0_0.ps_suppkey AS "prov_partsupp_1_ps__suppkey", _tid2int8(F0_0.ctid) AS _result_tid, 1 AS _setprov_dup_count
 FROM partsupp F0_0) F0_0 CROSS JOIN (
-SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_address AS s_address, F0_0.s_nationkey AS s_nationkey, F0_0.s_phone AS s_phone, F0_0.s_acctbal AS s_acctbal, F0_0.s_comment AS s_comment, F0_0.s_suppkey AS "prov_supplier_1_s__suppkey", ()::int8 AS _result_tid, 1 AS _setprov_dup_count
+SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_name AS s_name, F0_0.s_address AS s_address, F0_0.s_nationkey AS s_nationkey, F0_0.s_phone AS s_phone, F0_0.s_acctbal AS s_acctbal, F0_0.s_comment AS s_comment, F0_0.s_suppkey AS "prov_supplier_1_s__suppkey", (F0_0.s_suppkey)::int8 AS _result_tid, 1 AS _setprov_dup_count
 FROM supplier F0_0) F1_0)) F0_0 CROSS JOIN (
-SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_comment AS n_comment, F0_0.n_nationkey AS "prov_nation_1_n__nationkey", ()::int8 AS _result_tid, 1 AS _setprov_dup_count
+SELECT F0_0.n_nationkey AS n_nationkey, F0_0.n_name AS n_name, F0_0.n_regionkey AS n_regionkey, F0_0.n_comment AS n_comment, F0_0.n_nationkey AS "prov_nation_1_n__nationkey", (F0_0.n_nationkey)::int8 AS _result_tid, 1 AS _setprov_dup_count
 FROM nation F0_0) F1_0)) F0_0
 WHERE (((F0_0.ps_suppkey = F0_0.s_suppkey) AND (F0_0.s_nationkey = F0_0.n_nationkey)) AND (F0_0.n_name = 'GERMANY')) UNION ALL (SELECT NULL AS "AGG_GB_ARG0", NULL AS "prov_partsupp_1_ps__partkey", NULL AS "prov_partsupp_1_ps__suppkey", NULL AS "prov_supplier_1_s__suppkey", NULL AS "prov_nation_1_n__nationkey", -1 AS _result_tid, NULL AS _setprov_dup_count))) F0_0) F0_0
 WHERE ((F0_0.__dummy_cnt = 1) OR (F0_0._result_tid <> -1))),
