@@ -304,6 +304,8 @@ class DropTable(QuerySpec):
         print("[drpp table]: ", self.base)
         con = base_pack.connection_params.make_connection()
         cursor = con.cursor()
+        for cmd in base_pack.extra_commands or []:
+            cursor.execute(cmd)
         for table in tables:
             cursor.execute(f"drop table if exists {table}")
         cursor.close()
@@ -377,6 +379,7 @@ class GenericBenchmark(NamedTuple):
     traceprov_infer_set_path: None | str = None
     traceprov_rewriter_path: None | str = None
     sd_options: SmokedDuckOptions | None = None
+    skip_load: bool = False
 
     def run_from_argparse(
         self,
@@ -533,9 +536,13 @@ class GenericBenchmark(NamedTuple):
                     connection_params=connection_params,
                     file_path=file_path,
                     params=params,
-                    shared_libraries=[
-                        self.traceprov_rewriter_path,
-                    ],
+                    shared_libraries=(
+                        [
+                            self.traceprov_rewriter_path,
+                        ]
+                        if not self.skip_load
+                        else []
+                    ),
                     extra_commands=list(query.extra_commands or []),
                 )
 
@@ -595,11 +602,13 @@ class GenericBenchmark(NamedTuple):
 
     def setup_preprocess(self, directory: QueryDirectory):
         def _map_preprocess(preprocess: Preprocessor):
-            if isinstance(preprocess, MakeTraceProv):
-                return preprocess
-            if isinstance(preprocess, ReplaceBucket):
-                return preprocess
-            if isinstance(preprocess, MatMaterialize):
+            skipable = [
+                MakeTraceProv,
+                ReplaceBucket,
+                MatMaterialize,
+                ReplaceSelectivity,
+            ]
+            if preprocess.__class__ in skipable:
                 return preprocess
             if not isinstance(preprocess, ReplaceFILE):
                 raise Exception("Not implemented other preprocess yet")

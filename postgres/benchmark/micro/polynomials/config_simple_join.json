@@ -1,0 +1,8 @@
+{
+    "factorization": [],
+    "_simple_join": [1000, 5000, 10000, 50000, 100000],
+    "runTimeOptions": {
+        "repeat": 1,
+        "throwaway": 0
+    }
+}

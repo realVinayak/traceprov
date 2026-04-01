@@ -3,7 +3,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 from typing import Any
-from traceprovpy.tools.benchmark import ExtraQuery
+from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
@@ -129,4 +129,25 @@ def make_traceprov_drop_table_extra(table_name: str):
         runs_after_base=True,
         strict_run=True,
         skip_validation=True,
+    )
+
+
+def get_next():
+    i = 0
+    while True:
+        i += 1
+        yield i
+
+
+gen = get_next()
+
+
+def make_drop_table(tables, query, extra_commands: list[str] = None):
+    return Query(
+        query_name=query,
+        spec=DropTable(
+            base=":".join(tables),
+            key=f"DROP_TABLES_{next(gen)}",
+        ),
+        extra_commands=extra_commands,
     )
