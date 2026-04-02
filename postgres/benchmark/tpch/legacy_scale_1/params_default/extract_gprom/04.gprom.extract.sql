@@ -1,8 +1,7 @@
+
 SELECT prov_orders_o__orderkey,
     prov_lineitem_l__linenumber,
-    prov_lineitem_l__orderkey,
-    prov_orders_1_o__orderkey,
-    prov_orders_1_o__custkey
+    prov_lineitem_l__orderkey
 FROM (
         PROVENANCE OF (
             select o_orderpriority,
@@ -12,10 +11,7 @@ FROM (
                     SELECT 1,
                         l_orderkey
                     FROM lineitem USE PROVENANCE (l_linenumber, l_orderkey)
-                        JOIN orders BASERELATION on o_orderkey = l_orderkey
                     WHERE l_commitdate < l_receiptdate
-                        and o_orderdate >= '1993-07-01'
-                        and o_orderdate < '1993-10-01'
                     group by l_orderkey
                 ) f ON o_orderkey = l_orderkey
             where o_orderdate >= '1993-07-01'
@@ -24,6 +20,7 @@ FROM (
             order by o_orderpriority
         )
     );
+
 -- NOT DONE --
 -- -- using default substitutions
 -- select

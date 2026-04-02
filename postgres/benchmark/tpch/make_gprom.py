@@ -17,8 +17,8 @@ from traceprovpy.tools.extract_gprom_simple import (
 from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
-needs_unnest = ["02", "17", "20"]
-needs_lateral = ["02", "17", "21"]
+needs_unnest = ["02", "17", "15", "22"]
+needs_lateral = ["02", "17", "11"]
 
 
 def get_file(options: GpromOptions):
@@ -50,8 +50,8 @@ def main():
     connection_params = ConnectionParams.make_from_parsed(
         parsed, backend=parsed.backend
     )
-    queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [15, 16, 22]]
-    # queries = ["20"]
+    queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [21]]
+    # queries = ["04"]
     passed = defaultdict(dict)
     for query in queries:
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
