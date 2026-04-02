@@ -195,6 +195,20 @@
             "passed": true
         }
     },
+    "15": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
     "17": {
         "(join - False)": {
             "passed": true
@@ -234,6 +248,28 @@
             "passed": true
         },
         "(window - True)": {
+            "passed": true
+        }
+    },
+    "20": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        }
+    },
+    "22": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(join - True)": {
             "passed": true
         }
     }
