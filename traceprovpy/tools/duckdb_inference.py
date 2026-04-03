@@ -56,6 +56,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_use_compact: bool = False
     log_offsets: list[str] = None
     pre_query: list[str] = None
+    extra_multiple_count: int | None = None
 
     @staticmethod
     def _optimizations():
@@ -98,6 +99,7 @@ class DuckDBDriverOptions(NamedTuple):
 
         parser.add_argument("--threads", type=int, default=1)
         parser.add_argument("--db", required=True)
+        parser.add_argument("--extra_multiple_count", type=int)
 
     def parse_optimizations(self, parsed):
         optimizations = self._optimizations()

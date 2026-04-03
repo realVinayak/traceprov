@@ -616,6 +616,7 @@ def run_single(
     pending = parsed.pending
     use_optimized = parsed.optimized
     use_aggresive_optimized = parsed.agg_optimized
+    extra_multiple_count = parsed.extra_multiple_count
 
     if validate:
         materialize_infer = True
@@ -667,6 +668,7 @@ def run_single(
         traceprov_materialize_derivation=(validate or materialize_infer)
         and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
+        extra_multiple_count=extra_multiple_count,
     ).parse_optimizations(parsed)
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
