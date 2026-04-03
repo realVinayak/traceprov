@@ -1,10 +1,12 @@
 # This makes things more organized.
 from datetime import datetime
+from itertools import product
 import json
 from pathlib import Path
 from typing import Any
 from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query
 from traceprovpy.tools.callable_repr import CallableRepr
+from traceprovpy.tools.extract_gprom_simple import GpromOptions
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
 
@@ -151,3 +153,36 @@ def make_drop_table(tables, query, extra_commands: list[str] = None):
         ),
         extra_commands=extra_commands,
     )
+
+
+def add_gprom_candidates(parser):
+    parser.add_argument(
+        "--mode",
+        choices=["join", "window", "join_heu", "window_heu", "all"],
+        default="all",
+    )
+
+
+def get_gprom_candidates(gprom_mode: str):
+    if gprom_mode == "all":
+        all_options = product(["join", "window"], [True, False])
+        return [GpromOptions(*opt) for opt in all_options]
+
+    option = GpromOptions("join") if "join" in gprom_mode else GpromOptions("window")
+    if "heu" in gprom_mode:
+        option = option._replace(heuristics=True)
+    return [option]
+
+
+def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
+    cands = get_gprom_candidates(gprom_mode)
+    valid_specs: list[GpromOptions] = []
+    for cand in cands:
+        cand_key = cand.to_str()
+        if cand_key not in gprom_config:
+            continue
+        config_spec = gprom_config[cand.to_str()]
+        assert isinstance(config_spec, dict)
+        if config_spec["passed"]:
+            valid_specs.append(cand)
+    return valid_specs

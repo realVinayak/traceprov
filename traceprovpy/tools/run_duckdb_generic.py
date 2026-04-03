@@ -556,6 +556,45 @@ def extract_graph_dir(parsed):
     return graph_dir
 
 
+def run_single_query_dry(
+    query_path_str: str,
+    parsed,
+    iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
+):
+    db = Path(parsed.db)
+    exec_path = Path(parsed.exe)
+    exec_str = exec_path.as_posix()
+    query_path = Path(query_path_str)
+    assert query_path.exists(), f"Expected {query_path.as_posix()} to exist!"
+    threads = parsed.threads
+    base_options = DuckDBDriverOptions(
+        db=db.as_posix(),
+        repeat=iters,
+        threads=threads,
+        i=query_path.as_posix(),
+        time="./tmp/base_time.json",
+        profile="./tmp/base_profile_%d.json",
+        settings="./tmp/base_settings.json",
+    )
+
+    return (exec_str, base_options)
+
+
+def infer_option_results(options: DuckDBDriverOptions):
+    base_result_time = json_read_file(options.time)
+    base_profile_out = json_read_iters(options.profile, options.repeat)
+    base_settings = json_read_file(options.settings)
+    return dict(time=base_result_time, profile=base_profile_out, settings=base_settings)
+
+
+def run_single_query(
+    query_path_str: str, parsed, iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY
+):
+    exec_str, base_options = run_single_query_dry(query_path_str, parsed, iters)
+    traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
+    return infer_option_results(base_options)
+
+
 def run_single(
     query_num: str,
     traceprov_graph_path: Path,

@@ -52,6 +52,7 @@ def main():
     )
     queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [21]]
     # queries = ["04"]
+    # queries = ["13"]
     passed = defaultdict(dict)
     for query in queries:
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"

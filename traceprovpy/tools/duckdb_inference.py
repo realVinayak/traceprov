@@ -107,7 +107,7 @@ class DuckDBDriverOptions(NamedTuple):
         }
         return self._replace(**kwargs)
 
-    def serialize(self) -> str:
+    def get_list_options(self) -> list[str]:
         options = self._asdict()
         boolean_options = [
             f"--{key}" for key in self._boolean_options() if options[key] == True
@@ -153,7 +153,10 @@ class DuckDBDriverOptions(NamedTuple):
         with open(self.i) as f:
             contents = f.read()
         assert len(contents) > 0, f"Got no contents for {self.i}"
-        return " ".join([*boolean_options, *key_value_options])
+        return [*boolean_options, *key_value_options]
+
+    def serialize(self) -> str:
+        return " ".join(self.get_list_options())
 
 
 def run_simple_query(query: str, db_executable: str, db_path: str, **options):
