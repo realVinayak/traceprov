@@ -712,14 +712,14 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
 
     // struct traceprov_agg_context *reference_struct, *other;
-    uint64_t reference_struct = NULL, other = NULL;
+    uint64_t reference_struct = 0, other = 0;
 
     if (PG_ARGISNULL(0)){
         reference_struct = PG_GETARG_INT64(1);
-        other = NULL;
+        other = 0;
     }else if (PG_ARGISNULL(1)){
         reference_struct = PG_GETARG_INT64(0);
-        other = NULL;
+        other = 0;
     } else{
         reference_struct = PG_GETARG_INT64(0);
         other = PG_GETARG_INT64(1);
@@ -732,7 +732,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         }
     }
 
-    assert(reference_struct != NULL);
+    assert(reference_struct != 0);
     const uint32 layer_number =  TRACEPROV_GET_LAYER(reference_struct);
 
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
@@ -809,7 +809,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
             ((current_column_layer->current_row == current_column_layer->end_of_memory_zone)
             || ((current_column_layer->current_row == current_column_layer->end_of_memory_zone - sizeof(uint64)) 
                 && (needs_logging_reference) // need to log the reference.
-                && other != NULL // Other is not null, so we'd have to log it too.
+                && other != 0 // Other is not null, so we'd have to log it too.
             ))
         );
 
@@ -818,7 +818,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
             current_column_layer->current_row += sizeof(uint64);
         }
 
-        if (other != NULL){
+        if (other != 0){
             *(uint64*)current_column_layer->current_row = group_no;
             current_column_layer->current_row += sizeof(uint64);
         }
@@ -831,7 +831,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         ((current_rows_layer->current_row == current_rows_layer->end_of_memory_zone)
         || ((current_rows_layer->current_row == current_rows_layer->end_of_memory_zone - (sizeof(uint64) + sizeof(uint64))) 
             && (needs_logging_reference) // need to log the reference.
-            && other != NULL // Other is not null, so we'd have to log it too.
+            && other != 0 // Other is not null, so we'd have to log it too.
         ))
     );
 
@@ -840,7 +840,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         current_rows_layer->current_row += sizeof(uint64);
     }
 
-    if (other != NULL){
+    if (other != 0){
         *(uint64 *)(current_rows_layer->current_row) = other;
         current_rows_layer->current_row += sizeof(uint64);
     }
@@ -919,7 +919,7 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
     }
     if (return_pointer_version){
         current_layer->current_row = (void *)&pk_space[1];
-        PG_RETURN_INT64(pk_space);
+        PG_RETURN_INT64((uint64)pk_space);
     }
     current_layer->current_row = pk_space;
     if (unlikely(null_bit_map > 0)){
@@ -945,7 +945,7 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
 PG_FUNCTION_INFO_V1(traceprov_make_ptr);
 
 Datum traceprov_make_ptr(PG_FUNCTION_ARGS){
-    PG_RETURN_POINTER(perform_log(fcinfo, true, 0));
+    PG_RETURN_POINTER((void*)perform_log(fcinfo, true, 0));
 }
 
 PG_FUNCTION_INFO_V1(traceprov_log_entry);

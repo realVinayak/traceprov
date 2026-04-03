@@ -39,7 +39,7 @@ traceprov_ptr_type_recv(PG_FUNCTION_ARGS)
 {
     StringInfo buf = (StringInfo) PG_GETARG_POINTER(0);
     int64 ptr = pq_getmsgint64(buf);
-    PG_RETURN_POINTER(ptr);
+    PG_RETURN_POINTER((void*)ptr);
 }
 
 PG_FUNCTION_INFO_V1(traceprov_ptr_type_send);

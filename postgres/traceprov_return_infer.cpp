@@ -103,7 +103,7 @@ extern "C" {
     }
 
     static TraceProvData *traceprov_make_column_data(
-        std::vector<std::vector<uint64>*> *vectors
+        std::vector<std::vector<uint64_t>*> *vectors
     ){
         auto data = palloc0_object(TraceProvData);
         for (auto column: *vectors){
