@@ -112,7 +112,7 @@ extern "C" {
 
     static TraceProvColumnData *traceprov_make_empty_column(){
         auto col_data = palloc0_object(TraceProvColumnData);
-        col_data->data = new std::vector<uint64>;
+        col_data->data = new std::vector<uint64_t>;
         return col_data;
     }
 
@@ -145,7 +145,7 @@ extern "C" {
 
         for (size_t record_index = 0; record_index < pk_records[0]->size(); record_index++){
             for (size_t key_index = 0; key_index < width; key_index++){
-                records[key_index] = Int64GetDatumFast(pk_records[key_index]->at(record_index));
+                records[key_index] = Int64GetDatum(pk_records[key_index]->at(record_index));
             }
 
             tuplestore_putvalues(tupstore, tupdesc, records, nulls);
@@ -733,7 +733,7 @@ extern "C" {
                 record[TRACEPROV_LAYER_STAT::layer_number] = Int32GetDatum(layer.layer_number);
                 record[TRACEPROV_LAYER_STAT::record_padding] = Int32GetDatum(layer.record_padding);
                 record[TRACEPROV_LAYER_STAT::layer_fd] = Int32GetDatum(layer.layer_fd);
-                record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatumFast(record_count);
+                record[TRACEPROV_LAYER_STAT::logged_record_count] = Int64GetDatum(record_count);
                 record[TRACEPROV_LAYER_STAT::is_sorted_by_group_num] = Int32GetDatum(is_sorted_by_group_no);
                 record[TRACEPROV_LAYER_STAT::aggregate_strategy] = Int32GetDatum(layer.aggregate_strategy);
                 std::string graphStr = "[";
@@ -1017,37 +1017,9 @@ extern "C" {
         return (TraceProvNode *)join_exprn;
     }
 
-    void get_column_data_at_offset(
-        TraceProvColumnData *column_data, 
-        std::vector<uint64> *offsets,
-        TraceProvColumnData *final_column_data
-    ){
-        std::vector<uint64> *data = new std::vector<uint64>(offsets->size());
-        uint64 idx = 0;
-        for (auto offset: *offsets){
-            data->at(idx) = (column_data->data->at(offset));
-            idx++;
-        }
-        final_column_data->data = data;
-        final_column_data->descriptor = column_data->descriptor;
-    }
-
-    // Gets the data at the input offsets.
-    TraceProvData *get_data_at_offsets(TraceProvData *data, std::vector<uint64> *offsets, uint64 skip_idx = 0){
-        auto new_data = new TraceProvData;
-        for (uint64 column_idx = 1; column_idx <= data->size(); column_idx++){
-            auto current_column = traceprov_make_empty_column();
-            new_data->push_back(current_column);
-            if (column_idx ==  skip_idx) continue;
-            auto original_data = data->at(column_idx - 1);
-            get_column_data_at_offset(original_data, offsets, current_column);
-        }
-        return new_data;
-    }
-
     // Reads all the columns
     // Doesn't go into rows.
-    static std::vector<std::vector<uint64> *> *read_all_columns_simple(
+    static std::vector<std::vector<uint64_t> *> *read_all_columns_simple(
         const struct traceprov_aggregate_layer *current_layer,
         const struct local_context *local_context,
         bool emulate_read
@@ -1059,12 +1031,12 @@ extern "C" {
         
         const void *final_log_ptr = get_final_ptr(log_ptr, current_layer);
         const uint32 layer_record_padding = current_layer->record_padding; 
-        std::vector<std::vector<uint64> *> *current_worker_logs = new std::vector<std::vector<uint64> *>();
+        auto current_worker_logs = new std::vector<std::vector<uint64_t> *>();
         current_worker_logs->reserve(current_layer->num_pk_records);
         const uint64 total_number_of_records = (current_layer->size * TRACEPROV_PAGE_SIZE) / TRACEPROV_GET_RECORD_SIZE(current_layer);
         // Reserve space for next pointers.
         for (uint32 i = 0; i < current_layer->num_pk_records; i++){
-            auto data_vec = new std::vector<uint64>;
+            auto data_vec = new std::vector<uint64_t>;
             // If not emulating read, only then reserve the space, because we ain't filling it up.
             if (!emulate_read)
                 data_vec->reserve(total_number_of_records);

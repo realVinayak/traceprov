@@ -460,7 +460,7 @@ extern "C" {
             }
             for (uint64 col_idx = 0; col_idx < column_count; col_idx++){
                 auto column_data = new TraceProvColumnData;
-                column_data->data = new std::vector<uint64>();
+                column_data->data = new std::vector<uint64_t>();
                 column_data->validity = new std::vector<bool>();
                 traceprov_data->push_back(column_data);
             }
