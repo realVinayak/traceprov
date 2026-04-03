@@ -118,7 +118,7 @@ static int initialize_local_context(){
     
     if (traceprov_current.my_worker_id != 0) return 0;
 
-    int rc = 0, is_locked = 0, shared_context_fd = 0, worker_layer_map_fd = 0;
+    int rc = 0, is_locked = 0, shared_context_fd = 0, worker_layer_map_fd = 0, previous_error=0;
     char *shared_context_file_name = psprintf(TRACEPROV_SHARED_CONTEXT, DataDir);
 
     PRINT_ON_DEBUG("Using %s as shared dir.", shared_context_file_name);
@@ -225,7 +225,7 @@ static int initialize_local_context(){
     }
 
 exit_initialize_local_context:
-    int previous_error = rc;
+    previous_error = rc;
     if (is_locked){
         if ((rc = flock(shared_context_fd, LOCK_UN))){
             PRINT_ON_DEBUG("Error unlocked share context file: %d", rc);
