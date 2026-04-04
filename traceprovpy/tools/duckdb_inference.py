@@ -57,6 +57,7 @@ class DuckDBDriverOptions(NamedTuple):
     log_offsets: list[str] = None
     pre_query: list[str] = None
     extra_multiple_count: int | None = None
+    traceprov_force_seq_scan: bool = False
 
     @staticmethod
     def _optimizations():
@@ -65,6 +66,7 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_merge_chunks",
             "traceprov_use_compact",
             "traceprov_skip_page_cache",
+            "traceprov_force_seq_scan",
         }
 
     def _boolean_options(self):

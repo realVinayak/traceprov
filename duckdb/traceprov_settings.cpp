@@ -38,3 +38,6 @@ bool traceprov_use_compact = false;
 // Assume that the value can be NULL?
 // If false, it tries looking at the graph to determine if the value in a layer can be NULL or not.
 bool traceprov_assume_null = false;
+
+// Force sequential scan, instead of parallel?
+bool traceprov_force_seq_scan = false;

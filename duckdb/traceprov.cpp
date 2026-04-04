@@ -887,22 +887,33 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
     uint64_t *target_write_ptr = (uint64_t*)combined_layer->current_row;
     uint64_t *source_write_ptr = &(((uint64_t*)combined_layer->current_row)[count]);
     for (idx_t idx = 0; idx < count; idx++){
-        if ( TRACEPROV_GET_IS_COMBINED(target_states[idx]->state) && TRACEPROV_GET_IS_COMBINED(source_states[idx]->state))
-            elog(ERROR, "Didn't expect both of the states to be combined...");
+        if ( TRACEPROV_GET_IS_COMBINED(target_states[idx]->state) ) {
+            if (TRACEPROV_GET_IS_COMBINED(source_states[idx]->state))
+                elog(ERROR, "Didn't expect both of the states to be combined...");
+        } else{
+            if (TRACEPROV_GET_GROUP_COUNT(target_states[idx]->state) != 0){
+                elog(ERROR, "Expected group count to be unset!");
+            }
+        }
+        
+        bool was_copied = false;
 
         if (TRACEPROV_GET_GROUP_COUNT(target_states[idx]->state) == 0 && TRACEPROV_GET_GROUP_COUNT(source_states[idx]->state) > 0){
             if (unlikely(TRACEPROV_GET_IS_COMBINED(source_states[idx]->state))){
                 elog(ERROR, "Expected source to not be combined in this case!");
             }
             memcpy(target_states[idx], source_states[idx], sizeof(struct traceprov_agg_context));
+            was_copied = true;
         }
 
         const struct traceprov_agg_context *source_state = source_states[idx];
         struct traceprov_agg_context *target_state = target_states[idx];
+        const uint64_t original_target_state_value = target_state->state;
 
         if (!TRACEPROV_GET_IS_COMBINED(target_state->state)){
             // We set the current worker id as the worker, so that it can be used when filtering easily.
-            target_state->state = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_WORKER_ID(TRACEPROV_STRIP_WORKER_ID(target_state->state), traceprov_current.my_worker_id));
+            // In this case, we fake the worker as the layer number.
+            target_state->state = TRACEPROV_SET_IS_COMBINED(TRACEPROV_SET_LAYER(target_state->state, traceprov_current.my_worker_id));
         }
 
         #if TRACEPROV_COLLECT_STATS_MODE == 1

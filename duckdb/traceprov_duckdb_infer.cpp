@@ -555,7 +555,9 @@ void traceprov_duckdb_init(duckdb_init_info info){
     uint64_t max_threads = 1;
     if (bind_data->rel_args.worker_id == 0){
         // Don't make init data yet for this case.
-        max_threads = bind_data->worker_bind_data->size();
+        if (!traceprov_force_seq_scan){
+            max_threads = bind_data->worker_bind_data->size();
+        }
     }else{
         init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
         init_data_inst->worker_init_data->push_back(
@@ -581,7 +583,7 @@ void traceprov_duckdb_local_init(duckdb_init_info info){
     bind_data->bind_data_mutex->unlock();
     // TODO: Make this smarter.
     // Specificially, see if this thread has a local context, and try "sticking" to that context
-    if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
+    if ((bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN) || traceprov_force_seq_scan){
         // In this case, need to over the children ones.
         if (self_idx == 0){
             for (auto worker_bind_data: *bind_data->worker_bind_data){
@@ -670,7 +672,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
     TraceProvBindData *bind_data = bind_data_combined;
 
     if (bind_data_combined->worker_bind_data){
-        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN){
+        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN || traceprov_force_seq_scan){
             bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->worker_bind_idx);
         }else{
             bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->idx_in_bind);
@@ -805,10 +807,12 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                 }
                 init_data->current++;
                 chunk_size += num_rows;
+                if (init_data->current >= bind_data->num_rows){
+                    // This way, when the last chunk of the any worker's layer is seen, we automatically
+                    // shift to the next worker's layer.
+                    init_data_combined->worker_bind_idx++;
+                }
             }else{
-                // This way, when the last chunk of the any worker's layer is seen, we automatically
-                // shift to the next worker's layer.
-                init_data_combined->worker_bind_idx++;
                 break;
             }
             // The original behaviour.
@@ -818,19 +822,8 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
         duckdb_data_chunk_set_size(output, chunk_size);
         return;
     }
-    init_data->current = fillup_pointer_huge(
-        bind_data->col_layer,
-        output,
-        init_data->current,
-        bind_data,
-        bind_data->num_rows,
-        bind_data->column_width,
-        init_data
-    );
-    if (init_data->current >= bind_data->num_rows){
-        // So that when all the rows of a worker, we automatically move to the next one.
-        init_data_combined->worker_bind_idx++;
-    }
+    // Previously, combine was handled here.
+    elog(ERROR, "Didn't expect to get here now!");
 }
 
 void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){

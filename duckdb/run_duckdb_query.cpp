@@ -155,6 +155,7 @@ struct Options {
     // via --traceprov_skip_page_cache
     // via --traceprov_use_implicit_union
     // via --traceprov_use_merge_chunks
+    // via --traceprov_force_seq_scan
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -358,6 +359,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--extra_multiple_count")){
             options.extra_multiple_count = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--traceprov_force_seq_scan")){
+            traceprov_force_seq_scan = true;
             continue;
         }
 
@@ -1064,8 +1068,6 @@ static void populate_log_offset(
         worker_id = worker_layer.first;
         log_offset = TRACEPROV_SET_WORKER_ID(log_offset, worker_id);
     }
-
-    auto stripped_log_entry = TRACEPROV_STRIP_WORKER_ID(log_offset);
 
     void *row = traceprov_get_row(
         worker_id,

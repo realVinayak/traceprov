@@ -14,4 +14,5 @@ extern uint32_t traceprov_thread_count;
 extern bool traceprov_split_combine;
 extern bool traceprov_use_compact;
 extern bool traceprov_assume_null;
+extern bool traceprov_force_seq_scan;
 #endif
