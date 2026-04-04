@@ -27,6 +27,9 @@ def make_duckdb_parse():
     parser.add_argument(
         "--strict", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--crash_on_error", action=argparse.BooleanOptionalAction, default=False
+    )
     parser.add_argument("--infer", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sample_num", type=int, default=100)
     parser.add_argument("--graph_dir", type=str, required=False)

@@ -220,6 +220,9 @@ def run_single_smokedduck(
     sd_extension_path = (
         None if parsed.sd_extension_path is None else Path(parsed.sd_extension_path)
     )
+    crash_on_error = parsed.crash_on_error
+
+    run_cmd = traceprov_assert_safe_run if crash_on_error else os.system
 
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -231,7 +234,7 @@ def run_single_smokedduck(
             threads=1,
             i=(root / query_num / pre_base).as_posix(),
         )
-        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+        run_cmd(f"{exec_str} {pre_base_options.serialize()}")
 
     base_options = DuckDBDriverOptions(
         db=db.as_posix(),
@@ -243,7 +246,10 @@ def run_single_smokedduck(
         settings="/tmp/base_settings.json",
         pre_query=pre_query,
     )
-    traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
+    return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
+    if return_code != 0:
+        print("failed: rc: ", return_code)
+        return dict(type="base_failed", rc=return_code)
     base_result_time = json_read_file(base_options.time)
     base_profile_out = json_read_iters(base_options.profile, base_options.repeat)
     base_settings = json_read_file(base_options.settings)
@@ -277,39 +283,44 @@ def run_single_smokedduck(
         else:
             assert 0, "not supported yet, use sample inference branch"
 
+    capture_result_time = None
+    capture_profile_out = None
+    infer_results = None
+    capture_settings = None
+    capture_stats = None
+    capture_result_code = -1
     if run_sd:
         capture_options = capture_options._replace(extras=extras)
-        traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
-        capture_result_time = json_read_file(capture_options.time)
-        capture_profile_out = json_read_iters(
-            capture_options.profile, capture_options.repeat
-        )
-        capture_settings = json_read_file(capture_options.settings)
-        capture_stats = json_read_iters(capture_options.stats, capture_options.repeat)
+        capture_result_code = run_cmd(f"{exec_str} {capture_options.serialize()}")
+        if capture_result_code == 0:
+            capture_result_time = json_read_file(capture_options.time)
+            capture_profile_out = json_read_iters(
+                capture_options.profile, capture_options.repeat
+            )
+            capture_settings = json_read_file(capture_options.settings)
+            capture_stats = json_read_iters(
+                capture_options.stats, capture_options.repeat
+            )
 
-        if validate:
-            if is_new_sd:
-                validate_query(
-                    root / query_num,
-                    "validate_new_sd.sql",
-                    capture_options.db,
-                    exec_str,
+            if validate:
+                if is_new_sd:
+                    validate_query(
+                        root / query_num,
+                        "validate_new_sd.sql",
+                        capture_options.db,
+                        exec_str,
+                    )
+                else:
+                    assert (
+                        0
+                    ), "no validaton support in this call path for old smokedduck"
+
+            if run_inference:
+                capture_result_time, infer_results = extract_extras(
+                    capture_result_time, capture_profile_out, capture_options
                 )
             else:
-                assert 0, "no validaton support in this call path for old smokedduck"
-
-        if run_inference:
-            capture_result_time, infer_results = extract_extras(
-                capture_result_time, capture_profile_out, capture_options
-            )
-        else:
-            infer_results = None
-    else:
-        capture_result_time = None
-        capture_profile_out = None
-        infer_results = None
-        capture_settings = None
-        capture_stats = None
+                infer_results = None
 
     final_result = dict(
         base_time=base_result_time,
@@ -320,6 +331,7 @@ def run_single_smokedduck(
         capture_settings=capture_settings,
         capture_stats=capture_stats,
         infer_results=infer_results,
+        capture_result_code=capture_result_code,
     )
     return final_result
 
@@ -384,6 +396,7 @@ def run_sample_inference_smokedduck(
     query_dir = root / query_num
     base_sql = base_dir / "base.sql"
     exec_str = exe.as_posix()
+    run_cmd = traceprov_assert_safe_run if parsed.crash_on_error else os.system
     if validate:
         iters = 1
     if pre_base:
@@ -393,7 +406,9 @@ def run_sample_inference_smokedduck(
             threads=1,
             i=(root / query_num / pre_base).as_posix(),
         )
-        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+        rc = run_cmd(f"{exec_str} {pre_base_options.serialize()}")
+        if rc != 0:
+            return dict(type="capture_on_pre_base", return_code=rc)
 
     sample_q_dir = Path("./tmp/sd_infer/") / query_num
     os.makedirs(sample_q_dir, exist_ok=True)
@@ -430,7 +445,9 @@ def run_sample_inference_smokedduck(
         main_once_extra_all=True,
     )
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
+    if rc != 0:
+        return dict(type="crash_on_capture", return_code=rc)
     capture_result_time = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(

@@ -59,6 +59,8 @@ def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]
         for a, b in product(first_iter, second_iter)
     ]
 
+
 def traceprov_assert_safe_run(cmd: str):
     print("Running: ", cmd)
     assert os.system(cmd) == 0
+    return 0
