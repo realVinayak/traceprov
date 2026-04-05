@@ -55,7 +55,8 @@ class NormalizedRow(object):
         simple_keys = {
             key: getattr(self, key)
             for key in keys
-            if hasattr(self, key) and not isinstance(getattr(self, key), Extendable)
+            if hasattr(self, key)
+            and not isinstance(getattr(self, key), Extendable)
             and getattr(self, key) is not None
         }
         rows = [
@@ -83,6 +84,7 @@ def extract_thread_category(file_name: str):
     bucket = int(match.groups()[0])
     return str(bucket)
 
+
 import statistics
 
 
@@ -91,19 +93,18 @@ def tap_simple_result(result: dict):
         time=result["time"], width=result["width"], row_count=result["row_count"]
     )
 
+
 def tap_profile_result(result: dict):
-    return dict(
-        latency=result['latency']
-    )
+    return dict(latency=result["latency"])
+
 
 def sum_simple_result(left_result: dict, right_result: dict):
     return {
         **left_result,
-        **{
-            key: left_result.get(key) + value
-            for (key, value) in right_result.items()
-        }
+        **{key: left_result.get(key) + value for (key, value) in right_result.items()},
     }
+
+
 def combine_tap_result(results: list[dict]):
 
     def _reduce(previous, current):
@@ -119,13 +120,23 @@ def extract_traceprov(traceprov_result: dict):
     return dict(
         base=Extendable(map(tap_simple_result, traceprov_result["base_time"])),
         capture=Extendable(map(tap_simple_result, traceprov_result["capture_time"])),
-        base_profile=Extendable(map(tap_profile_result, traceprov_result["base_profile"])),
-        capture_profile=Extendable(map(tap_profile_result, traceprov_result["capture_profile"]))
+        base_profile=Extendable(
+            map(tap_profile_result, traceprov_result["base_profile"])
+        ),
+        capture_profile=Extendable(
+            map(tap_profile_result, traceprov_result["capture_profile"])
+        ),
     )
 
 
 def extract_infer(infer_results: dict):
-    return combine_tap_result([([tap_simple_result(node) for node in infer_result['times']]) for infer_result in infer_results])
+    return combine_tap_result(
+        [
+            ([tap_profile_result(node) for node in infer_result["profile"]])
+            for infer_result in infer_results
+        ]
+    )
+
 
 def extract_stats_sample_infer_row(sql_map: list[dict], time_results: list[dict]):
     time_map = defaultdict(dict)
@@ -134,16 +145,21 @@ def extract_stats_sample_infer_row(sql_map: list[dict], time_results: list[dict]
         assert len(key) == 3
         element_id, *rest = key
         rest = tuple(rest)
-        time_map[rest][element_id] = [*time_map[rest].get(element_id, []), time_cell['time']]
+        time_map[rest][element_id] = [
+            *time_map[rest].get(element_id, []),
+            time_cell["time"],
+        ]
     time_map_summed = []
-    #print(time_map)
+    # print(time_map)
     for key, values in time_map.items():
-        #print("merging: ", values.keys())
-        #print(list(zip(*values.values(), strict=True)))
+        # print("merging: ", values.keys())
+        # print(list(zip(*values.values(), strict=True)))
         time_map_summed.append(list(map(sum, zip(*values.values(), strict=True))))
-    #print(time_map_summed)
+    # print(time_map_summed)
     # time_map_reduced = {key: sorted(values[5:], reverse=True)[3:] for (key, values) in time_map.items()}
-    time_map_reduced = [sorted(values[5:], reverse=True)[2:] for values in time_map_summed]
+    time_map_reduced = [
+        sorted(values[5:], reverse=True)[2:] for values in time_map_summed
+    ]
     # time_map_reduced = {key: values for (key, values) in time_map.items()}
     time_map_reduced = [
         (
@@ -166,11 +182,13 @@ class NormalizedSampleInferRow(NormalizedRow):
     def keys(self):
         return super().keys() | {"average_time", "max_stdev_ratio"}
 
+
 class NormalizedInferRow(NormalizedRow):
     infer: Extendable
 
     def keys(self):
         return super().keys() | {"infer"}
+
 
 category_order = [
     "TraceProv(bucket: None)",

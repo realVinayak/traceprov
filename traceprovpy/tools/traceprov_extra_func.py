@@ -57,6 +57,11 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         is_validate = query_spec.extra_options[TRACEPROV_MATERIALIZE_LAYER_KEY]
         conn = run_time_options.run_connection_strict()
         cursor = conn.cursor()
+        prepare_cursor_explain = (
+            f"{run_time_options.get_explain(conn)} {TRACEPROV_PREPARE_FOR_SCAN}"
+        )
+        cursor.execute(prepare_cursor_explain)
+        prepare_for_scan_analyze_result = cursor.fetchall()[0][0][0]
         cursor.execute(TRACEPROV_PREPARE_FOR_SCAN)
         infer_spec = json.loads(cursor.fetchall()[0][0])
         print(infer_spec)
@@ -66,9 +71,15 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
             (layer, get_matching_element(layer, elements)) for layer in derivable_layers
         ]
         assert len(filtered_layers) > 0
+        create_table_analyze_results = []
         for table, (_, create_table_sql) in filtered_layers:
             cursor.execute(f"DROP TABLE IF EXISTS {table};")
             cursor.execute(create_table_sql)
+            # create_table_explain_sql = (
+            #     f"{run_time_options.get_explain(conn)} {create_table_sql}"
+            # )
+            # cursor.execute(create_table_explain_sql)
+            # create_table_analyze_results.append(cursor.fetchall()[0][0][0])
 
             if not is_validate:
                 continue
@@ -105,6 +116,11 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
                 # also compute the row count.
                 results.append(result_elem)
         cursor.close()
-        return results
+        final_results = dict(
+            prepare_for_scan_init=prepare_for_scan_analyze_result,
+            core_results=results,
+            create_table_analyze_results=create_table_analyze_results,
+        )
+        return final_results
 
     return traceprov_extra_infer_func

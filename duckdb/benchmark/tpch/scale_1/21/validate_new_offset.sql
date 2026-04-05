@@ -41,10 +41,10 @@ where
         nation.rowid
     ) in (
         select
-            column_1,
+            (column_1,
             column_2,
             column_3,
-            column_4
+            column_4)
         from
             LAYER_2_%OUT_ID%
     )

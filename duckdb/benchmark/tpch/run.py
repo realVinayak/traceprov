@@ -31,7 +31,6 @@ def run():
     base_parser = make_duckdb_parse()
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
-    base_parser.add_argument("-part_cfg", required=True)
     base_parser.add_argument("--query_layer_cfg", required=True)
 
     parsed = base_parser.parse_args()
@@ -60,7 +59,7 @@ def run():
                     parsed=parsed,
                     iters=total_iters,
                     pre_base=pre_base_path,
-                )
+                ),
             )
         else:
             disable_col_opt = query in NEEDS_DISABLE
@@ -68,11 +67,13 @@ def run():
             query_result = run_single(
                 query_num=query,
                 traceprov_graph_path=graph_dir / query / "graph.bin",
-                traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
+                traceprov_layers_to_derive=tuple(
+                    query_layer_config[query]["layers_used"]
+                ),
                 parsed=parsed,
                 iters=total_iters,
                 disable_col_opt=disable_col_opt,
-                pre_base=pre_base_path
+                pre_base=pre_base_path,
             )
 
         if parsed.sample_inference:
@@ -92,7 +93,7 @@ def run():
                     query_id=query_id,
                     parsed=parsed,
                     iters=total_iters,
-                    pre_base=pre_base_path
+                    pre_base=pre_base_path,
                 )
             else:
                 sample_inference_result = run_sample_inference(
@@ -102,7 +103,9 @@ def run():
                     iters=total_iters,
                     pre_base=pre_base_path,
                     disable_col_opt=disable_col_opt,
-                    traceprov_layers_to_derive=tuple(query_layer_config[query]["layers_used"]),
+                    traceprov_layers_to_derive=tuple(
+                        query_layer_config[query]["layers_used"]
+                    ),
                 )
 
         assert query not in results

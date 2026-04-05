@@ -370,6 +370,9 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
 #define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 56)) & X)
 
+#define TRACEPROV_SET_LAYER(X, BUCKET) ((((uint64_t) BUCKET) << 40) | X)
+#define TRACEPROV_GET_LAYER(X) ((uint8_t) (((uint64_t) X) >> 40))
+
 #define TRACEPROV_GET_GROUP_COUNT(X) ((uint32_t)X)
 
 // TODO: Use this everywhere.

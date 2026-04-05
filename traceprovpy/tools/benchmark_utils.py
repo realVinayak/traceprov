@@ -3,6 +3,7 @@ from datetime import datetime
 from itertools import product
 import json
 from pathlib import Path
+import sys
 from typing import Any
 from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query
 from traceprovpy.tools.callable_repr import CallableRepr
@@ -119,9 +120,12 @@ def traceprov_dump_safe_results(suff: str, results: Any):
     current_timestamp = datetime.now()
     datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
     result_dir = Path(f"results/{suff}_{datetime_string}/")
+    print("writing to: ", result_dir)
     os.makedirs(result_dir, exist_ok=True)
+    call_options = list(sys.argv)
+    wrapped_results = dict(results=results, call_options=call_options)
     with open(result_dir / "result.json", "w") as f:
-        f.write(json.dumps(results))
+        f.write(json.dumps(wrapped_results))
 
 
 def make_traceprov_drop_table_extra(table_name: str):

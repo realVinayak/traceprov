@@ -29,12 +29,14 @@ def just_write(file: str | Path, contents: str):
 
 
 @safe_file
-def json_read_file(file: str):
+def json_read_file(file: str, strict_file: bool = False):
     try:
         with open(file) as f:
             json_content = json.loads(f.read())
         return json_content
-    except:
+    except Exception as e:
+        if strict_file:
+            raise
         try:
             return just_read(file)
         except:
@@ -59,6 +61,8 @@ def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]
         for a, b in product(first_iter, second_iter)
     ]
 
+
 def traceprov_assert_safe_run(cmd: str):
     print("Running: ", cmd)
     assert os.system(cmd) == 0
+    return 0
