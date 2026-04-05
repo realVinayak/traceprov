@@ -116,9 +116,9 @@ def run_sample_inference(
         repeat=iters,
         threads=parsed.threads,
         i=captured_sql.as_posix(),
-        time="/tmp/infer_time.json",
-        profile=("/tmp/infer_profile_%d_%d.json"),
-        settings=("/tmp/capture_settings.json"),
+        time="./tmp/infer_time.json",
+        profile=("./tmp/infer_profile_%d_%d.json"),
+        settings=("./tmp/capture_settings.json"),
         disable_col_opt=disable_col_opt,
         main_once_extra_all=True,
         log_offsets=log_offsets,
@@ -135,9 +135,10 @@ def run_sample_inference(
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
             capture_options.profile,
-            range(0, len(log_offsets) + 1),
+            range(0, len(log_offsets) * len(list(traceprov_layers_to_derive)) + 1),
             range(capture_options.repeat),
         )
+        assert len(capture_profile_out) == len(capture_result_time)
     else:
         capture_profile_out = None
     if capture_options.settings:
@@ -241,9 +242,9 @@ def run_single_smokedduck(
         repeat=iters,
         threads=parsed.threads,
         i=base_sql.as_posix(),
-        time="/tmp/base_time.json",
-        profile="/tmp/base_profile_%d.json",
-        settings="/tmp/base_settings.json",
+        time="./tmp/base_time.json",
+        profile="./tmp/base_profile_%d.json",
+        settings="./tmp/base_settings.json",
         pre_query=pre_query,
     )
     return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
@@ -255,10 +256,10 @@ def run_single_smokedduck(
     base_settings = json_read_file(base_options.settings)
 
     capture_options = base_options._replace(
-        time="/tmp/capture_time.json",
-        profile="/tmp/capture_profile_%d.json",
-        settings="/tmp/capture_settings.json",
-        stats="/tmp/capture_sd_stats_%d.json",
+        time="./tmp/capture_time.json",
+        profile="./tmp/capture_profile_%d.json",
+        settings="./tmp/capture_settings.json",
+        stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
         is_new_sd=is_new_sd,
         sd_extension_path=sd_extension_path,
@@ -277,8 +278,8 @@ def run_single_smokedduck(
                 infer_sql = f"create or replace table {table} AS ({infer_sql})"
 
             extras = [
-                just_write("/tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
-                just_write("/tmp/run_infer.sql", infer_sql),
+                just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
+                just_write("./tmp/run_infer.sql", infer_sql),
             ]
         else:
             assert 0, "not supported yet, use sample inference branch"
@@ -343,17 +344,17 @@ def validate_query(
     exec_str: str,
     base_query_name="base.sql",
 ):
-    base_dump_path = Path("/tmp/") / "base_dump.csv"
-    capture_dump_path = Path("/tmp/") / "capture_dump.csv"
+    base_dump_path = Path("./tmp/") / "base_dump.csv"
+    capture_dump_path = Path("./tmp/") / "capture_dump.csv"
 
-    base_dump_query_path = Path("/tmp/") / "base_dump_query.sql"
+    base_dump_query_path = Path("./tmp/") / "base_dump_query.sql"
     base_dump_query = make_dump_query(
         just_read(base_dir / base_query_name), base_dump_path.as_posix()
     )
     just_write(base_dump_query_path, base_dump_query)
 
     validate_query = base_dir / validate_query_name
-    capture_dump_query_path = Path("/tmp/") / "capture_dump_query.sql"
+    capture_dump_query_path = Path("./tmp/") / "capture_dump_query.sql"
     capture_dump_query = make_dump_query(
         just_read(validate_query), capture_dump_path.as_posix()
     )
