@@ -85,19 +85,20 @@ class DuckDBDriverOptions(NamedTuple):
             for opt in optimizations
         }
         assert len(mapped) == len(optimizations)
-        mapped = {**mapped, "threads": "threads"}
+        mapped = {**mapped, "threads": "threads", "optimized": "optimized"}
         value_mapping = sorted(
             [(key, value, getattr(parsed, key)) for (key, value) in mapped.items()],
             key=lambda x: x[0],
         )
         suffix = []
         for key, nice_label, value in value_mapping:
+            final_value = value
             if isinstance(value, bool):
+                final_value = "y" if value else "n"
                 # if the value is the default value, don't bother.
-                if value == getattr(DriverDefaultValuesInstance, key):
+                if value == getattr(DriverDefaultValuesInstance, key, None):
                     continue
-                value = "y" if value else "n"
-            suffix.append(f"{nice_label}-{value}")
+            suffix.append(f"{nice_label}-{final_value}")
         print(suffix)
         return "__".join(suffix)
 
