@@ -63,7 +63,7 @@ class DuckDBDriverOptions(NamedTuple):
     extra_files: list[str] = None
     log_offsets: list[str] = None
     pre_query: list[str] = None
-    extra_multiple_count: int | None = None
+    extra_multiple_count: int | None = 3
     # All optimizations.
     traceprov_use_partition_in_agg: bool = (
         DriverDefaultValues.traceprov_use_partition_in_agg
@@ -151,7 +151,12 @@ class DuckDBDriverOptions(NamedTuple):
 
         parser.add_argument("--threads", type=int, default=1)
         parser.add_argument("--db", required=True)
-        parser.add_argument("--extra_multiple_count", type=int)
+        print("defaults:: ", DuckDBDriverOptions._field_defaults)
+        parser.add_argument(
+            "--extra_multiple_count",
+            type=int,
+            default=DuckDBDriverOptions._field_defaults["extra_multiple_count"],
+        )
 
     def parse_optimizations(self, parsed):
         optimizations = self._optimizations()
