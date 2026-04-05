@@ -10,7 +10,10 @@ from pickletools import optimize
 
 # from run_single import add_query_options, run_single, json_read_file
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
-from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
+from traceprovpy.tools.duckdb_parse_options import (
+    make_duckdb_parse,
+    traceprov_handle_suffix,
+)
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
     extract_graph_dir,
@@ -34,6 +37,8 @@ def run():
     base_parser.add_argument("--query_layer_cfg", required=True)
 
     parsed = base_parser.parse_args()
+    traceprov_handle_suffix(parsed)
+    print("USING SUFFIX --> ", parsed.suff)
     config: dict = json_read_file(parsed.config)
     query_layer_config: dict = json_read_file(parsed.query_layer_cfg)
 

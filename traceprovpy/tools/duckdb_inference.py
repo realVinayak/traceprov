@@ -19,6 +19,18 @@ import os
 TRACEPROV_GRAPH_FILE = "/tmp/traceprov/graph.bin"
 
 
+class DriverDefaultValues(NamedTuple):
+    traceprov_use_partition_in_agg: bool = False
+    traceprov_skip_page_cache: bool = False
+    traceprov_use_merge_chunks: bool = False
+    traceprov_use_implicit_union: bool = True
+    traceprov_use_compact: bool = False
+    traceprov_force_seq_scan: bool = False
+
+
+DriverDefaultValuesInstance = DriverDefaultValues()
+
+
 # TODO: Breakk this up.
 # TODO: Add automatic parse arguments. Cmon that already exists in other places.
 # TODO: Add separate options for the settings (slightly complicated to do automatically, but better than current)
@@ -42,32 +54,66 @@ class DuckDBDriverOptions(NamedTuple):
     extra_file: str | None = None
     is_new_sd: bool = False
     sd_extension_path: str | None = None
-    traceprov_use_partition_in_agg: bool = False
     log_offset: int | None = None
     traceprov_perform_derivation: bool = False
     traceprov_materialize_derivation: bool = False
-    traceprov_skip_page_cache: bool = False
     traceprov_dry_run_derivation: bool = False
     traceprov_layers_to_derive: Tuple[int] | None = None
-    traceprov_use_merge_chunks: bool = False
-    traceprov_use_implicit_union: bool = True
     extras: list[str] = None
     extra_files: list[str] = None
-    traceprov_use_compact: bool = False
     log_offsets: list[str] = None
     pre_query: list[str] = None
     extra_multiple_count: int | None = None
-    traceprov_force_seq_scan: bool = False
+    # All optimizations.
+    traceprov_use_partition_in_agg: bool = (
+        DriverDefaultValues.traceprov_use_partition_in_agg
+    )
+    traceprov_skip_page_cache: bool = DriverDefaultValues.traceprov_skip_page_cache
+    traceprov_use_merge_chunks: bool = DriverDefaultValues.traceprov_use_merge_chunks
+    traceprov_use_implicit_union: bool = (
+        DriverDefaultValues.traceprov_use_implicit_union
+    )
+    traceprov_use_compact: bool = DriverDefaultValues.traceprov_use_compact
+    traceprov_force_seq_scan: bool = DriverDefaultValues.traceprov_force_seq_scan
+
+    @staticmethod
+    def get_suffix(parsed):
+        optimizations = DuckDBDriverOptions._optimizations()
+        # a gentler mapping.
+        mapped = {
+            opt: opt.replace("traceprov_use_", "").replace("traceprov_", "")
+            for opt in optimizations
+        }
+        assert len(mapped) == len(optimizations)
+        mapped = {**mapped, "threads": "threads"}
+        value_mapping = sorted(
+            [(key, value, getattr(parsed, key)) for (key, value) in mapped.items()],
+            key=lambda x: x[0],
+        )
+        suffix = []
+        for key, nice_label, value in value_mapping:
+            if isinstance(value, bool):
+                # if the value is the default value, don't bother.
+                if value == getattr(DriverDefaultValuesInstance, key):
+                    continue
+                value = "y" if value else "n"
+            suffix.append(f"{nice_label}-{value}")
+        print(suffix)
+        return "__".join(suffix)
 
     @staticmethod
     def _optimizations():
-        return {
+        optimizations = {
             "traceprov_use_partition_in_agg",
-            "traceprov_use_merge_chunks",
-            "traceprov_use_compact",
             "traceprov_skip_page_cache",
+            "traceprov_use_merge_chunks",
+            "traceprov_use_implicit_union",
+            "traceprov_use_compact",
             "traceprov_force_seq_scan",
         }
+        recognized = set(DriverDefaultValuesInstance._fields)
+        assert recognized == optimizations
+        return optimizations
 
     def _boolean_options(self):
         optimizations = DuckDBDriverOptions._optimizations()
@@ -81,7 +127,6 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_perform_derivation",
             "traceprov_materialize_derivation",
             "traceprov_dry_run_derivation",
-            "traceprov_use_implicit_union",
         }
         assert (
             len(optimizations.intersection(base_options)) == 0
@@ -96,7 +141,11 @@ class DuckDBDriverOptions(NamedTuple):
             parser.add_argument(
                 f"--{optimization}",
                 action=argparse.BooleanOptionalAction,
-                default=False,
+                default=(
+                    getattr(DriverDefaultValuesInstance, optimization)
+                    if optimization in optimizations
+                    else False
+                ),
             )
 
         parser.add_argument("--threads", type=int, default=1)

@@ -35,3 +35,14 @@ def make_duckdb_parse():
     parser.add_argument("--graph_dir", type=str, required=False)
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
+
+
+SMART_TOKEN = "SMART"
+
+
+# Try to be smart and automatically try to compose a suff string out of the options.
+def traceprov_handle_suffix(parsed):
+    if SMART_TOKEN not in parsed.suff:
+        return
+    suff = DuckDBDriverOptions.get_suffix(parsed)
+    parsed.suff = parsed.suff.replace(SMART_TOKEN, suff)
