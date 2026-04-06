@@ -106,17 +106,19 @@ extern "C" {
             }
             struct local_context *worker_local_context = (struct local_context *)ptr;
             worker_local_contexts->push_back(worker_local_context);
+            close(fd);
         }
         return worker_local_contexts;
     }
 
-    void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
-        const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
-        assert(gap >= 0);
-        // Now, figure out what the last mapped region will have been (or the starting address of it.)
-        const uint64 infered_gap = layer->size == 1 ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
-        void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
-        return final_row;
-    }
 
+    // Inserts at a list's offset.
+    // The offset is 0-indexed.
+    List *traceprov_set_at_offset_int(List *input_list, const uint32 offset, const int value){
+        while (list_length(input_list) <= offset){
+            input_list = lappend_int(input_list, 0);
+        }
+        input_list->elements[offset].int_value = value;
+        return input_list;
+    }
 }

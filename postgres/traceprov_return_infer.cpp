@@ -1,8 +1,5 @@
 // Like traceprov's normal infer, but returns the set of all rows inline for postgres
 // rather than dumping logic.
-// Currently, only handles simple layers.
-// TODO: Migrate all the arguments.
-// TODO: Migrate polynomials generation in some other file?
 
 #include <iostream>
 #include <fcntl.h>
@@ -13,7 +10,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <fstream>
-#include "traceprov_infer_essentials.h"
+#include "traceprov_infer_essentials.hpp"
 #include "traceprov_ext_utils.hpp"
 
 #undef HAVE__BUILTIN_TYPES_COMPATIBLE_P
@@ -79,6 +76,20 @@ extern "C" {
         return tree;
     }
 
+    // Get all children that lie in a tree.
+    // We could return a vector (instead of pg list), but that's awkward to deal with it.
+    static List *getTraceProvInferAbstractTreeNodes(const TraceProvInferAbstractTree* tree){
+        List *nodes = NIL;
+        for (uint64 idx = 0; idx < tree->nodes->size(); idx++){
+            // This is a pointer to the node, because we'll be mutating that in-place :)
+            nodes = lappend(nodes, &tree->nodes->at(idx));
+        }
+        for(auto child: *tree->children){
+            nodes = list_concat(nodes, getTraceProvInferAbstractTreeNodes(child));
+        }
+        return nodes;
+    }
+
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
     static void flattenTraceProvInferAbstractTree(TraceProvInferAbstractTree *tree, TraceProvResultMap *result_map, TraceProvParseContext *parse_context);
 
@@ -107,12 +118,6 @@ extern "C" {
         return col_data;
     }
 
-    // this is fine, even within the same "scope", because they can be separated by {....}
-    #define TP_EVALUATE_START() const auto evaluate_start = std::chrono::high_resolution_clock::now()
-    #define TP_EVALUATE_END() const auto evaluate_end = std::chrono::high_resolution_clock::now()
-    // This is an expression, since callers may want to do something else with it (assign and then log and then push into some vectorksz)
-    #define TP_EVALUATE_DURATION() (std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count())
-
     static TraceProvRelation* get_relation_from_join(TraceProvJoinExpr *join_exprn, bool right=true){
         TraceProvNode *node = right ? join_exprn->right : join_exprn->left;
         if (node->tag != T_TP_RELATION)
@@ -120,6 +125,8 @@ extern "C" {
         TraceProvRelation *relation = (TraceProvRelation *)node;
         return relation;
     }
+
+    static int find_first_set_number_entry(const List *entries, int set_number);
 
     struct infer_result {
         size_t width;
@@ -565,7 +572,7 @@ extern "C" {
     Datum traceprov_sync_time(FunctionCallInfo fcinfo){
         std::vector<std::string> *messages = new std::vector<std::string>;
 
-        auto start = std::chrono::high_resolution_clock::now();
+        TP_EVALUATE_START();
 
         struct traceprov_shared_context context;
         if (map_traceprov_shared_context(&context)){
@@ -605,16 +612,15 @@ extern "C" {
             }
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        TP_EVALUATE_END();
 
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        uint64 duration_time = (uint64)duration.count();
+        const uint64_t duration = TP_EVALUATE_DURATION();
 
         for (std::string s: *messages){
             elog(INFO, "SYNC: %s", s.c_str());
 	    }
         elog(INFO, "Final code: %d", final_code);
-        PG_RETURN_INT64(duration_time);
+        PG_RETURN_INT64(duration);
     }
 
     // Prints some useful statistics (like # of pks, # of groups)
@@ -640,6 +646,10 @@ extern "C" {
             buckets,
             combined_aggregate_layer_number,
             rows_layer_number,
+            null_map_layer_number,
+            null_map,
+            last_allocation_size,
+            initial_allocation_size,
 
             NUM_COLUMNS
         };
@@ -732,9 +742,14 @@ extern "C" {
                 for (int i = 0; i < TRACEPROV_BUCKET_COUNT - 1; i++){
                     graphStr = graphStr.append(psprintf("%d", layer.buckets[i]));
                 }
+                graphStr.append("]");
                 record[TRACEPROV_LAYER_STAT::buckets] = PointerGetDatum(cstring_to_text(graphStr.c_str()));
                 record[TRACEPROV_LAYER_STAT::combined_aggregate_layer_number] = Int32GetDatum(layer.combined_aggregate_layer_number);
                 record[TRACEPROV_LAYER_STAT::rows_layer_number] = Int32GetDatum(layer.rows_layer_number);
+                record[TRACEPROV_LAYER_STAT::null_map_layer_number] = Int32GetDatum(layer.null_map_layer_number);
+                record[TRACEPROV_LAYER_STAT::null_map] = Int64GetDatum(layer.null_map);
+                record[TRACEPROV_LAYER_STAT::last_allocation_size] = Int64GetDatum(layer.last_allocation_size);
+                record[TRACEPROV_LAYER_STAT::initial_allocation_size] = Int64GetDatum(layer.initial_allocation_size);
                 tuplestore_putvalues(tupstore, tupdesc, record, nulls);
                 }
         }
@@ -804,6 +819,42 @@ extern "C" {
         tp_rel->rel_args = NULL;
         PRINT_ON_VALIDATE("REL: %s, %ld;", name, data->at(0)->data->size());
         return tp_rel;
+    }
+
+    TraceProvWindowRead *make_traceprov_window_read(
+        const uint64 frame_start_idx,
+        const uint64 frame_end_idx,
+        const uint64 column_count,
+        TraceProvNode *child_node
+    ){
+        auto tp_window_read = palloc0_object(TraceProvWindowRead);
+        tp_window_read->tag = T_TP_WINDOW_READ;
+        tp_window_read->frame_start_idx = frame_start_idx;
+        tp_window_read->frame_end_idx = frame_end_idx;
+        tp_window_read->column_count = column_count;
+        tp_window_read->child_node = child_node;
+        return tp_window_read;
+    }
+
+    TraceProvFilter *make_traceprov_filter(
+        TraceProvNode *child_node
+    ){
+        auto tp_filter_node = palloc0_object(TraceProvFilter);
+        tp_filter_node->tag = T_TP_FILTER;
+        tp_filter_node->const_join_condition = new TraceProvConstJoinPairs;
+        tp_filter_node->child_node = child_node;
+        return tp_filter_node;
+    }
+
+    TraceProvExists *make_traceprov_exists(
+        TraceProvNode *current,
+        TraceProvNode *condition
+    ){
+        auto tp_exists_node = palloc0_object(TraceProvExists);
+        tp_exists_node->tag = T_TP_EXISTS;
+        tp_exists_node->current = current;
+        tp_exists_node->condition = condition;
+        return tp_exists_node;
     }
 
     static void traceprov_assert_is_in_range(const uint64 column_count, TraceProvColumn *column){
@@ -1205,7 +1256,9 @@ extern "C" {
         // Reserve space for next pointers.
         for (uint32 i = 0; i < current_layer->num_pk_records; i++){
             auto data_vec = new std::vector<uint64>;
-            data_vec->reserve(total_number_of_records);
+            // If not emulating read, only then reserve the space, because we ain't filling it up.
+            if (!emulate_read)
+                data_vec->reserve(total_number_of_records);
             current_worker_logs->push_back(data_vec);
         }
 
@@ -1224,6 +1277,7 @@ extern "C" {
     }
 
     // Reads all columns. Also looks into rows.
+    // If emulate read, it doesn't perform the actural read, but creates column vectors.
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
         const struct local_context *local_context,
@@ -1544,6 +1598,8 @@ extern "C" {
                 appendStringInfoString(&buf, traceprov_node_to_string(child_node));
             }
             appendStringInfoString(&buf, "]");
+        } else {
+            elog(ERROR, "Unrecognized node!");
         }
         appendStringInfoChar(&buf, ')');
         return buf.data;
@@ -1882,6 +1938,15 @@ extern "C" {
         } else if (node->tag == T_TP_APPEND){
             TraceProvAppend *append = (TraceProvAppend *)node;
             return traceprov_get_node_column_count((TraceProvNode *)list_nth(append->nodes, 0));
+        } else if (node->tag == T_TP_WINDOW_READ){
+            TraceProvWindowRead *window_read = (TraceProvWindowRead *)node;
+            return window_read->column_count; 
+        } else if (node->tag == T_TP_FILTER){
+            TraceProvFilter *filter = (TraceProvFilter *)node;
+            return traceprov_get_node_column_count(filter->child_node);
+        } else if (node->tag == T_TP_EXISTS){
+            TraceProvExists *exists = (TraceProvExists *)node;
+            return traceprov_get_node_column_count(exists->current);
         }
         elog(ERROR, "Got unexepected node: %d", node->tag);
         return 0;
@@ -1937,6 +2002,12 @@ extern "C" {
             // const auto evaluate_end = std::chrono::high_resolution_clock::now();
             // PRINT_ON_VALIDATE("Append took: %ld", std::chrono::duration_cast<std::chrono::microseconds>(evaluate_end - evaluate_start).count());
             return result;
+        } else if (node->tag == T_TP_WINDOW_READ){
+            elog(ERROR, "Nope, too complicated to in-line handle window func read. Use duckdb inference instead!");
+        } else if (node->tag == T_TP_FILTER){
+            elog(ERROR, "Not supported in-line for now..");
+        } else if (node->tag == T_TP_EXISTS){
+            elog(ERROR, "Not supported in-line for now..");
         }
         elog(ERROR, "Invalid tag: %d", node->tag);
     }
@@ -2083,7 +2154,7 @@ extern "C" {
         if (context.use_table_def){
             if (relation->rel_args == NULL)
                 elog(INFO, "For table defs, expected the rel args to be filled!");
-            appendStringInfo(&sql_repr, " FROM traceprov_read_worker_layer(%ld::bigint, %ld::bigint) AS %s", relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name);
+            appendStringInfo(&sql_repr, " FROM traceprov_read_worker_layer(%d::int, %d::int) AS %s", relation->rel_args->worker_id, relation->rel_args->layer_number, relation->name);
         }else{
             appendStringInfo(&sql_repr, " FROM %s", relation->name);
         }
@@ -2098,6 +2169,34 @@ extern "C" {
         appendStringInfo(&alias_repr, "%s(%s)", alias_name, select);
         return alias_repr.data;
     }
+
+    static char *traceprov_window_read_to_sql(TraceProvWindowRead *window_read, TraceProvToSQLContext context){
+        char *child_raw_sql = traceprov_node_to_sql(window_read->child_node, context);
+        char *child_alias = window_read->child_node->alias_name;
+        const uint64 child_col_count = traceprov_get_node_column_count(window_read->child_node);
+        char *child_alias_expanded = expand_alias(child_alias, child_col_count);
+        char *child_node_sql = psprintf("(%s) as %s", child_raw_sql, child_alias_expanded);
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        appendStringInfoString(&sql_repr, "SELECT *");
+        appendStringInfoChar(&sql_repr, ',');
+        TraceProvRelationArgs *rel_arg = window_read->rel_args;
+        int64 log_col_count = window_read->column_count - child_col_count;
+        if (log_col_count < 0)
+            elog(ERROR, "Expected log count to always have >= 0 col count!");
+        appendStringInfo(
+            &sql_repr,
+            "unnest(traceprov_read_window_%ld(%d, %d, %s, %s), recursive := true)",
+            log_col_count,
+            rel_arg->worker_id,
+            rel_arg->layer_number,
+            traceprov_get_column_name_idx(child_alias, window_read->frame_start_idx),
+            traceprov_get_column_name_idx(child_alias, window_read->frame_end_idx)
+        );
+        appendStringInfo(&sql_repr, " FROM %s ", child_node_sql);
+        return sql_repr.data;
+    }
+
 
     static char *traceprov_join_to_sql(TraceProvJoinExpr *join_expr, TraceProvToSQLContext context){
         char *left_node_raw_sql = traceprov_node_to_sql(join_expr->left, context);
@@ -2209,6 +2308,44 @@ extern "C" {
         return append_repr.data;
     }
 
+    static char *traceprov_filter_to_sql(TraceProvFilter *filter, TraceProvToSQLContext context){
+        char *child_raw_sql = traceprov_node_to_sql(filter->child_node, context);
+        char *child_alias = filter->child_node->alias_name;
+        const uint64 child_col_count = traceprov_get_node_column_count(filter->child_node);
+        char *child_alias_expanded = expand_alias(child_alias, child_col_count);
+        char *child_node_sql = psprintf("(%s) as %s", child_raw_sql, child_alias_expanded);
+
+        StringInfoData where_repr;
+        initStringInfo(&where_repr);
+        bool did_add_in_join = false;
+        for(auto join_pair: *filter->const_join_condition){
+            if (did_add_in_join)
+                appendStringInfoString(&where_repr, " AND ");
+            did_add_in_join = true;
+            appendStringInfo(
+                &where_repr,
+                "(%s=%ld)",
+                traceprov_get_column_name_idx(child_alias, join_pair->first->second - 1),
+                join_pair->second
+            );
+        }
+
+        StringInfoData sql_repr;
+        initStringInfo(&sql_repr);
+        appendStringInfo(&sql_repr, "SELECT * FROM %s WHERE (%s)", child_node_sql, where_repr.data);
+        return sql_repr.data;
+    }
+
+    static char *traceprov_exists_to_sql(TraceProvExists *exists, TraceProvToSQLContext context){
+        char *condition_sql = traceprov_node_to_sql(exists->condition, context);
+        char *current_sql = traceprov_node_to_sql(exists->current, context);
+        const uint64 current_col_count = traceprov_get_node_column_count(exists->current);
+        char *current_alias_expanded = expand_alias(exists->current->alias_name, current_col_count);
+        
+        char *sql = psprintf("select * from (%s) as %s where (exists (%s))", current_sql, current_alias_expanded, condition_sql);
+        return sql;
+    }
+
     static char *traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
         if (node->tag == T_TP_RELATION){
             node->alias_name = tp_parse_get_unique_alias(context.context);
@@ -2221,36 +2358,78 @@ extern "C" {
         if (node->tag == T_TP_APPEND){
             return traceprov_append_to_sql((TraceProvAppend *)node, context);
         }
+        if (node->tag == T_TP_WINDOW_READ){
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_window_read_to_sql((TraceProvWindowRead *)node, context);
+        }
+        if (node->tag == T_TP_FILTER){
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_filter_to_sql((TraceProvFilter *)node, context);
+        }
+        if (node->tag == T_TP_EXISTS){
+            node->alias_name = tp_parse_get_unique_alias(context.context);
+            return traceprov_exists_to_sql((TraceProvExists *)node, context);
+        }
         elog(ERROR, "Found handling invalid node: %d", node->tag);
     }
 
     static List *get_used_sublinks_in_dependency(
         const TraceProvDependency *dependency,
         TraceProvDepthMap *depth_map,
-        const uint32 recursion_level
+        const uint32 recursion_level,
+        TraceProvParseContext *tp_context
     ){
         List *used_layer_numbers = NIL;
         ListCell *cursor;
+        // Perform everything on the child first.
+        // We can, absolutely, do this in 1 shot.
+        // But, doing it this way simplifies code.
         foreach(cursor, dependency->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
             if (entry->kind == TP_ENTRY_KIND_POINTER){
                 const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(dependency->children, foreach_current_index(cursor));
-                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph, depth_map, recursion_level + 1));
-            }else if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
+                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph, depth_map, recursion_level + 1, tp_context));
+            }
+        }
+        foreach(cursor, dependency->entries){
+            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
                 ListCell *sublink_cursor;
                 foreach(sublink_cursor, entry->sublinks){
                     TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
-                    used_layer_numbers = lappend_int(used_layer_numbers, item->layer_number);
-                    depth_map->insert({item->layer_number, recursion_level});
+                    const TraceProvLayerNumber sublink_number = item->layer_number;
+                    // This WON'T happen for at a single level. But, can happen if there are other RTEs that referred the same sublink.
+                    // In that case, we don't really gain anything by bothering to process it again...
+                    if(traceprov_find_int_list(used_layer_numbers, sublink_number)) continue;
+                    used_layer_numbers = lappend_int(used_layer_numbers, sublink_number);
+                    // Derive everyything on this sublink.
+                    const TraceProvDependency *sublink_graph = tp_get_sublink_graph(tp_context, sublink_number);
+                    auto child_depth_map = new TraceProvDepthMap;
+                    List *indirect_sublinks = get_used_sublinks_in_dependency(sublink_graph, child_depth_map, recursion_level, tp_context);
+                    used_layer_numbers = list_concat(used_layer_numbers, indirect_sublinks);
+                    if (depth_map->find(item->layer_number) == depth_map->end()){
+                        depth_map->insert({item->layer_number, recursion_level});
+                    }else{
+                        uint32 old_level = depth_map->at(item->layer_number);
+                        // This is the only case where we'd be "interested" in updating the level.
+                        // But, this can never happen.
+                        if (old_level < recursion_level)
+                            elog(ERROR, "found the current recursion level to be less than the old value. Should never happen!");
+                    }
+                    for (auto entry: *child_depth_map){
+                        if (depth_map->find(entry.first) == depth_map->end()){
+                            depth_map->insert({entry.first, entry.second});
+                        }else{
+                            elog(ERROR, "Should never find the newer graphs!");
+                        }
+                    }
                 }
-            }else{
-                elog(ERROR, "Only handling pointer or base relation for now..");
             }
         }
         return used_layer_numbers;
     }
 
-    static List* get_used_sublinks(List *graphs, List **p_sublink_depth_map){
+    static List* get_used_sublinks(List *graphs, List **p_sublink_depth_map, TraceProvParseContext *tp_context){
         // Sublinks can refer to other sublinks.
         // So, discover those cases too.
         List *used_sublinks = NIL;
@@ -2263,7 +2442,8 @@ extern "C" {
                 get_used_sublinks_in_dependency(
                     (TraceProvDependency *)lfirst(graph_cursor),
                     depth_map,
-                    0
+                    0,
+                    tp_context
                 )
             );
             depth_maps = lappend(depth_maps, depth_map);
@@ -2277,16 +2457,18 @@ extern "C" {
         char **derivation_spec,
         TraceProvEvaluateNodeContext *eval_context
     ){
+        // TODO: Get rid of this.
         #define PERFORM_IF_USED(X) if (derivation_spec != NULL) X
+
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
-        struct traceprov_shared_context shared_context;
 
+        struct traceprov_shared_context shared_context;
         // NOTE: Shared context is used just to get the total number of workers.
         if (map_traceprov_shared_context(&shared_context))
             elog(ERROR, "Error mapping the shared context");
 
-        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublinkMap), NULL);
+        List *used_sublinks = get_used_sublinks(list_concat_copy(graphs, GET_ROOT_CONTEXT(parsed_back_context)->properties->sublink_map), NULL, parsed_back_context);
 
         const uint8 worker_count = shared_context.worker_count;
         ListCell *graph_cursor;
@@ -2302,7 +2484,7 @@ extern "C" {
             perform_derive_from_log(graph, worker_count, derivation, parsed_back_context, worker_local_contexts, true);
         }
         ListCell *sublink_cursor;
-        foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
+        foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
             TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
             if (traceprov_find_int_list(used_sublinks, child_sublink->headNumber)) continue;
             // Sublinks without any correlation can also exist.
@@ -2408,15 +2590,22 @@ extern "C" {
         bool *nulls = palloc0_array(bool, num_attrs);
 
         for (uint64 row_idx = 0; row_idx < data->at(0)->data->size(); row_idx++){
+            memset(nulls, 0, sizeof(bool)*num_attrs);
             for (uint32 col_idx = 0; col_idx < num_attrs; col_idx++){
                 record[col_idx] = Int64GetDatum(data->at(col_idx)->data->at(row_idx));
+                nulls[col_idx] = !data->at(col_idx)->validity->at(row_idx);
             }
             tuplestore_putvalues(tupstore, tupdesc, record, nulls);
         }
     }
 
-    // Based off pg_prepared_statement.
-    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvTopResult *derived){
+    // Generic prepare for materialization.
+    // Used for copy-based, and deep-copy-based methods.
+    // Since we end up storing the tupstore and tupdesc in rsinfo, we don't need any return (or out pointers.)
+    static void traceprov_prepare_for_materialize(
+        FunctionCallInfo fcinfo,
+        const int32 width
+    ){
         ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
         TupleDesc   tupdesc;
         Tuplestorestate *tupstore;
@@ -2435,18 +2624,25 @@ extern "C" {
 
         per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
         oldcontext = MemoryContextSwitchTo(per_query_ctx);
-        const int32 num_attrs = (int32)derived->width;
+        const int32 num_attrs = width;
         tupdesc = CreateTemplateTupleDesc(num_attrs);
         for (int32 col_idx = 0; col_idx < num_attrs; col_idx++){
             TupleDescInitEntry(tupdesc, (AttrNumber) col_idx + 1, psprintf("column_%d", col_idx), INT8OID, -1, 0);
         }
 
-        tupstore = tuplestore_begin_heap(rsinfo->allowedModes & SFRM_Materialize_Random, false, work_mem);
+        tupstore = tuplestore_begin_heap(rsinfo->allowedModes & SFRM_Materialize_Random, false, 10);
         rsinfo->returnMode = SFRM_Materialize;
         rsinfo->setResult = tupstore;
         rsinfo->setDesc = tupdesc;
         MemoryContextSwitchTo(oldcontext);
+    }
 
+    // Based off pg_prepared_statement.
+    static void traceprov_materialize_derived_result(FunctionCallInfo fcinfo, TraceProvTopResult *derived){
+        traceprov_prepare_for_materialize(fcinfo, derived->width);
+        ReturnSetInfo *rsinfo = (ReturnSetInfo *) fcinfo->resultinfo;
+        TupleDesc tupdesc = rsinfo->setDesc;
+        Tuplestorestate *tupstore = rsinfo->setResult;
         ListCell *data_cursor;
         foreach(data_cursor, derived->pdata){
             TraceProvData *data = (TraceProvData *)lfirst(data_cursor);
@@ -2630,7 +2826,8 @@ extern "C" {
         return TraceProvRecursePack{
             .depth_map = reference->depth_map,
             .level = reference->level,
-            .pending_sublinks = new_sublinks
+            .pending_sublinks = new_sublinks,
+            .size_layer_map = reference->size_layer_map
         };
    }
 
@@ -2638,7 +2835,8 @@ extern "C" {
         return shallow_copy_recurse_pack(new TraceProvRecursePack{
             .depth_map = reference->depth_map,
             .level = reference->level + 1,
-            .pending_sublinks = reference->pending_sublinks
+            .pending_sublinks = reference->pending_sublinks,
+            .size_layer_map = reference->size_layer_map
         });
    }
     // In this case, we're also given the log.
@@ -2834,39 +3032,62 @@ extern "C" {
         TraceProvParseContext *parse_context,
         const TraceProvRecursePack recurse_pack
     ){
-        const uint64 reference_node_col_count = traceprov_get_node_column_count(reference_node);
         auto current_tree = makeTraceProvInferAbstractTree(agg_graph->headNumber);
         const TraceProvLayerNumber layer_number_to_search = agg_graph->headNumber;
         const struct traceprov_aggregate_layer *layer = &current_local_context->cached_layers[layer_number_to_search - 1];
+        if (layer->layer_number == 0)
+            return current_tree;
 
+        auto self_logs = read_all_columns(layer_number_to_search, current_local_context, nullptr, true);
+        const uint64 reference_node_col_count = traceprov_get_node_column_count(reference_node);
         const bool aggregate_was_split = layer->is_leader_layer;
-
         // While we don't need to actually split the data (we can't do that anyways)
         // we still need to read data to make base relations out of it.
         if (!aggregate_was_split){
             // The simple case.
-            auto self_logs = read_all_columns(layer_number_to_search, current_local_context, nullptr, true);
-            if (self_logs == nullptr) return current_tree;
-            TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
-                self_logs,
-                (TraceProvNode *)reference_node,
-                parse_context,
-                "intermediate_join",
-                reference_match_idx
-            );
+            if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
 
-            get_relation_from_join(join_exprn)->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+                auto base_log_relation = make_traceprov_relation(self_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
+                base_log_relation->rel_args = make_relation_args(current_local_context->worker_id, agg_graph->headNumber);
+                auto child_tree = derive_on_node(
+                    (TraceProvNode *)base_log_relation,
+                    agg_graph,
+                    0,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                );
+                List *derived_nodes = getTraceProvInferAbstractTreeNodes(child_tree);
+                ListCell *cursor;
+                foreach(cursor, derived_nodes){
+                    TraceProvNode **node = (TraceProvNode **)lfirst(cursor);
+                    auto exists_node = make_traceprov_exists(*node, reference_node);
+                    *node = (TraceProvNode *)exists_node;
+                }
+                current_tree->children->push_back(child_tree);
+            }else{
+                TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
+                    self_logs,
+                    (TraceProvNode *)reference_node,
+                    parse_context,
+                    "intermediate_join",
+                    reference_match_idx
+                );
 
-            join_exprn->is_left_star = true;
-            current_tree->children->push_back(derive_on_node(
-                (TraceProvNode*)join_exprn, 
-                agg_graph, 
-                reference_node_col_count,
-                current_local_context,
-                worker_local_contexts,
-                parse_context,
-                recurse_pack
-            ));
+                get_relation_from_join(join_exprn)->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+
+                join_exprn->is_left_star = true;
+                current_tree->children->push_back(derive_on_node(
+                    (TraceProvNode*)join_exprn, 
+                    agg_graph, 
+                    reference_node_col_count,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                ));
+            }
         }else{
             // This is a slightly complicated case.
             // But, there is still the guarantee that only 1 worker is the main worker.
@@ -2951,26 +3172,47 @@ extern "C" {
                     elog(ERROR, "Got mismatching node count on logs!");
                 }
 
-                current_tree->children->push_back(derive_on_node(
-                    (TraceProvNode*)partial_join_exprn, 
-                    agg_graph, 
-                    reference_node_col_count,
-                    current_local_context,
-                    worker_local_contexts,
-                    parse_context,
-                    shallow_copy_recurse_pack(&recurse_pack)
-                ));
+                if (agg_graph->graph_type == TP_PURE_AGGREGATE && (recurse_pack.pending_sublinks->size() == 0)){
+                    auto child_tree = derive_on_node(
+                        (TraceProvNode *)base_log_relation,
+                        agg_graph,
+                        0,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    );
+                    List *derived_nodes = getTraceProvInferAbstractTreeNodes(child_tree);
+                    ListCell *cursor;
+                    foreach(cursor, derived_nodes){
+                        TraceProvNode **node = (TraceProvNode **)lfirst(cursor);
+                        // It should be very abornormal to be in a case where we'd get finalized in a child worker.
+                        // This is because, even in the case where there's a partition, we're still acting on all the data.
+                        auto exists_node = make_traceprov_exists(*node, (TraceProvNode*)partial_join_exprn);
+                        *node = (TraceProvNode *)exists_node;
+                    }
+                    current_tree->children->push_back(child_tree);
+                }else{
+                    current_tree->children->push_back(derive_on_node(
+                        (TraceProvNode*)partial_join_exprn, 
+                        agg_graph, 
+                        reference_node_col_count,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    ));
 
-                current_tree->children->push_back(derive_on_node(
-                    (TraceProvNode*)base_join_exprn, 
-                    agg_graph, 
-                    reference_node_col_count,
-                    current_local_context,
-                    worker_local_contexts,
-                    parse_context,
-                    shallow_copy_recurse_pack(&recurse_pack)
-                ));
-
+                    current_tree->children->push_back(derive_on_node(
+                        (TraceProvNode*)base_join_exprn, 
+                        agg_graph, 
+                        reference_node_col_count,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        shallow_copy_recurse_pack(&recurse_pack)
+                    ));
+                }
             }
         }
 
@@ -2989,7 +3231,7 @@ extern "C" {
         const TraceProvRecursePack recurse_pack
     ){
         // const uint64 worker_count = worker_local_contexts->size();
-        if (agg_graph->graph_type != TraceProvGraphKind::TP_AGGREGATE)
+        if ((agg_graph->graph_type != TraceProvGraphKind::TP_AGGREGATE) && (agg_graph->graph_type != TraceProvGraphKind::TP_PURE_AGGREGATE))
             elog(ERROR, "Expected the graph to always be of aggregate!");
         if (current_local_context != NULL){
             return derive_aggregate_on_single_context(
@@ -3020,7 +3262,137 @@ extern "C" {
         return current_tree;
     }
 
-    static TraceProvInferAbstractTree*  derive_sublinks(
+    static TraceProvInferAbstractTree *derive_window_on_single_context(
+        TraceProvNode *reference_node,
+        const uint32 frame_start_idx,
+        const uint32 frame_end_idx,
+        TraceProvDependency *curr_graph,
+        const struct local_context *current_local_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        TraceProvParseContext *parse_context,
+        const TraceProvRecursePack recurse_pack
+    ){
+        auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
+        const TraceProvLayerNumber layer_number_to_search = curr_graph->headNumber;
+        const struct traceprov_aggregate_layer *layer = &current_local_context->cached_layers[layer_number_to_search - 1];
+        if (layer->layer_number == 0)
+            return current_tree;
+
+        // Everything from the left side + logged entries from the right side.
+        const uint64_t reference_node_col_count = traceprov_get_node_column_count(reference_node);
+        const uint64_t log_col_count = list_length(curr_graph->entries);
+        const uint64_t column_count = reference_node_col_count + log_col_count;
+        TraceProvWindowRead *window_read = make_traceprov_window_read(
+            frame_start_idx,
+            frame_end_idx,
+            column_count,
+            reference_node
+        );
+        window_read->rel_args = make_relation_args(current_local_context->worker_id, layer_number_to_search);
+        current_tree->children->push_back(
+            derive_on_node(
+                (TraceProvNode *)window_read,
+                curr_graph,
+                reference_node_col_count,
+                current_local_context,
+                worker_local_contexts,
+                parse_context,
+                // Because we're going another level down...
+                increment_recursion(&recurse_pack)
+            )
+        );
+        if (recurse_pack.size_layer_map->find(log_col_count) == recurse_pack.size_layer_map->end()){
+            recurse_pack.size_layer_map->insert({log_col_count, new std::vector<TraceProvLayerNumber>});   
+        }
+        auto layer_vector = recurse_pack.size_layer_map->at(log_col_count);
+        layer_vector->push_back(layer_number_to_search);
+        return current_tree;
+    }
+
+    static TraceProvInferAbstractTree *derive_set_on_node(
+        TraceProvNode *reference_node,
+        TraceProvDependency *curr_graph,
+        const uint32 idx_start,
+        const int set_number,
+        const uint32 set_idx,
+        const struct local_context *current_local_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        TraceProvParseContext *parse_context,
+        const TraceProvRecursePack recurse_pack
+    ){
+        const int set_start_idx = find_first_set_number_entry(curr_graph->entries, set_number);
+        auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
+
+        if (set_start_idx == -1)
+            return current_tree;
+
+        const List *possible_candidates = tp_get_set_pointer_property(parse_context, set_number);
+
+        ListCell *candidate;
+        foreach(candidate, possible_candidates){
+            const int curr_set_number = lfirst_int(candidate);
+            auto tp_filter = make_traceprov_filter(reference_node);
+            tp_filter->const_join_condition->push_back(new TraceProvConstJoinPair(new TraceProvColumn(1, set_idx + idx_start + 1), (uint64)curr_set_number));
+            
+            current_tree->children->push_back(
+                derive_on_node(
+                    (TraceProvNode *)tp_filter,
+                    tp_get_set_graph(parse_context, curr_set_number),
+                    idx_start + set_start_idx,
+                    current_local_context,
+                    worker_local_contexts,
+                    parse_context,
+                    recurse_pack
+                )
+            );
+        }
+
+        return current_tree;
+    }
+
+    static TraceProvInferAbstractTree *derive_window_on_node(
+        TraceProvNode *reference_node,
+        const uint32 frame_start_idx,
+        const uint32 frame_end_idx,
+        // the _child_ graph.
+        TraceProvDependency *curr_graph,
+        const struct local_context *current_local_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        TraceProvParseContext *parse_context,
+        const TraceProvRecursePack recurse_pack
+    ){
+        if (current_local_context != NULL){
+            return derive_window_on_single_context(
+                reference_node,
+                frame_start_idx,
+                frame_end_idx,
+                curr_graph,
+                current_local_context,
+                worker_local_contexts,
+                parse_context,
+                recurse_pack
+            );
+        }
+
+        auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
+        for (auto context: *worker_local_contexts){
+            current_tree->children->push_back(
+                derive_window_on_single_context(
+                    reference_node,
+                    frame_start_idx,
+                    frame_end_idx,
+                    curr_graph,
+                    context,
+                    worker_local_contexts,
+                    parse_context,
+                    shallow_copy_recurse_pack(&recurse_pack)
+                )
+            );
+        }
+        return current_tree;
+    }
+
+    static TraceProvInferAbstractTree* derive_sublinks(
         TraceProvNode *node,
         const TraceProvDependency *graph,
         TraceProvParseContext *parse_context,
@@ -3034,7 +3406,6 @@ extern "C" {
         auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
         ListCell *entry_cursor;
         List *sublinks_to_commit = NIL;
-        auto added_sublink_map = new std::unordered_map<TraceProvLayerNumber, uint32>();
         // Bitmapset *added_sublinks = NULL;
         foreach(entry_cursor, graph->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
@@ -3049,17 +3420,14 @@ extern "C" {
                 }else{
                     recurse_pack.pending_sublinks->insert({item->layer_number, NIL});
                 }
-                if (added_sublink_map->find(item->layer_number) == added_sublink_map->end())
-                    added_sublink_map->insert({item->layer_number, 0});
                 
-                const uint32 insert_idx = added_sublink_map->at(item->layer_number);
+                const uint32 insert_idx = item->offset_in_key;
                 // All indexes are 1-indexed.
                 uint32 entry_idx = idx_start + foreach_current_index(entry_cursor) + 1;
 
-                pending_entries = list_insert_nth_int(pending_entries, insert_idx, entry_idx);
+                pending_entries = traceprov_set_at_offset_int(pending_entries, insert_idx, entry_idx);
 
                 recurse_pack.pending_sublinks->at(item->layer_number) = pending_entries;
-                added_sublink_map->at(item->layer_number) = (insert_idx + 1);
 
                 if (max_level == recurse_pack.level){
                     // If it is the level when we're at the bottom,
@@ -3138,6 +3506,24 @@ extern "C" {
         bool did_append_self = false;
         foreach(entry_cursor, graph->entries){
             const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+            if (te->kind == TP_ENTRY_SET_POINTER){
+                // The set pointer case.
+                // Need to derive from this.
+                const int current_set_number = te->setNumber;
+                current_tree->children->push_back(
+                    derive_set_on_node(
+                        node,
+                        graph,
+                        idx_start,
+                        current_set_number,
+                        foreach_current_index(entry_cursor),
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        recurse_pack
+                    )
+                );
+            }
             if (te->kind == TP_ENTRY_KIND_BASE_RELATION){
                 if (!did_append_self){
                     current_tree->nodes->push_back(node);
@@ -3148,7 +3534,7 @@ extern "C" {
                     did_append_self = true;
                 }
             } else if (te->kind == TP_ENTRY_KIND_POINTER){
-                // This branch is only possible for nested aggs.
+                if (te->is_pointer_for_window) continue;
                 TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(entry_cursor));
                 current_tree->children->push_back(
                     derive_aggregate_on_node(
@@ -3161,9 +3547,47 @@ extern "C" {
                         increment_recursion(&recurse_pack)
                     )
                 );
+            } else if (te->kind == TP_ENTRY_FRAME_START){
+                // The next entry should be the end.
+                const TraceProvLayerNumber current_window_layer_number = te->window_entry.log_layer_number;
+                const TraceProvEntry *next_te = (TraceProvEntry *)lfirst(lnext(graph->entries, entry_cursor));
+                if (next_te->kind != TP_ENTRY_FRAME_END){
+                    elog(ERROR, "Expected the next entry to be the frame end!");
+                }
+                if (next_te->window_entry.log_layer_number != current_window_layer_number){
+                    elog(ERROR, "Got mismatching frame start and frame end log pointer!");
+                }
+                TraceProvDependency *child_dependency = tp_get_graph_from_children(graph, current_window_layer_number);
+                current_tree->children->push_back(
+                    derive_window_on_node(
+                        node,
+                        idx_start + foreach_current_index(entry_cursor),
+                        idx_start + foreach_current_index(entry_cursor) + 1,
+                        child_dependency,
+                        current_local_context,
+                        worker_local_contexts,
+                        parse_context,
+                        recurse_pack
+                    )
+                );
             }
         }
         return current_tree;
+    }
+    
+    static int find_first_set_number_entry(const List *entries, int set_number){
+        ListCell *entry_cursor;
+        foreach(entry_cursor, entries){
+            const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+            if (te->setNumber == set_number){
+                if (te->kind == TP_ENTRY_SET_POINTER){
+                    return -1;
+                }
+                return foreach_current_index(entry_cursor);
+            }
+        }
+        elog(ERROR, "Didn't find the set entry!");
+        return -1;
     }
 
     static TraceProvNode *simple_read_from_log(
@@ -3290,12 +3714,20 @@ extern "C" {
         return current_tree;
     }
 
+    #ifdef TRACEPROV_BUILD_WITH_DUCKDB
+    const bool use_duckdb = true;
+    #else
+    const bool use_duckdb = false;
+    #endif
 
-    PG_FUNCTION_INFO_V1(traceprov_perform_generic_derivation);
-
-    Datum traceprov_perform_generic_derivation(PG_FUNCTION_ARGS){
+    static TraceProvResultMap *get_generic_derivation_spec(
+        TraceProvParseContext **p_parsed_back_context,
+        TraceProvInferSetupExtra **p_extra
+    ){
         TraceProvParseContext *parsed_back_context = NULL;
         List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL);
+        if (p_parsed_back_context)
+            *p_parsed_back_context = parsed_back_context;
         struct traceprov_shared_context shared_context;
         if (map_traceprov_shared_context(&shared_context)){
             elog(ERROR, "Error mmaping shared context");
@@ -3306,11 +3738,17 @@ extern "C" {
         auto worker_local_contexts = traceprov_get_local_contexts(worker_count);
         List *base_graph_depth_map = NIL;
         List *sublink_used_sublink_map = NIL;
-        List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map);
-        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublinkMap, &sublink_used_sublink_map);
+        List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map, parsed_back_context);
+        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublink_map, &sublink_used_sublink_map, parsed_back_context);
         List *get_all_used_sublinks = list_concat_copy(base_used_sublinks, sublink_used_sublinks);
         traceprov_assert_equal_length(list_make2(base_graph_depth_map, graphs));
         auto top_tree = makeTraceProvInferAbstractTree(0);
+        auto size_layer_map = new TraceProvSizeLayers;
+        auto setup_extra = new TraceProvInferSetupExtra;
+        setup_extra->size_layer_map = size_layer_map;
+        setup_extra->worker_count = worker_count;
+        if (p_extra)
+            *p_extra = setup_extra;
         foreach(graph_cursor, graphs){
             TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
             // The top level graph should always be the simple log.
@@ -3327,13 +3765,14 @@ extern "C" {
                     TraceProvRecursePack {
                         .depth_map = (TraceProvDepthMap *)list_nth(base_graph_depth_map, foreach_current_index(graph_cursor)),
                         .level = 0,
-                        .pending_sublinks = new TraceProvPendingSublinks
+                        .pending_sublinks = new TraceProvPendingSublinks,
+                        .size_layer_map = size_layer_map
                     }
                 )
             );
         }
         ListCell *sublink_cursor;
-        foreach(sublink_cursor, parsed_back_context->properties->sublinkMap){
+        foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
             TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
             // If a sublink is being used, don't derive it.
             // It should be automatically be derived as part of generic handling.
@@ -3351,31 +3790,46 @@ extern "C" {
                     TraceProvRecursePack {
                         .depth_map = (TraceProvDepthMap *)list_nth(sublink_used_sublink_map, foreach_current_index(sublink_cursor)),
                         .level = 0,
-                        .pending_sublinks = new TraceProvPendingSublinks
+                        .pending_sublinks = new TraceProvPendingSublinks,
+                        .size_layer_map = size_layer_map
                     }
                 )
             );
         }
 
-
         auto result_map = new TraceProvResultMap;
-        #ifdef TRACEPROV_BUILD_WITH_DUCKDB
-        const bool use_duckdb = true;
-        #else
-        const bool use_duckdb = false;
-        #endif
-        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
-
         flattenTraceProvInferAbstractTree(top_tree, result_map, parsed_back_context);
+        return result_map;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_perform_generic_derivation);
+
+    Datum traceprov_perform_generic_derivation(PG_FUNCTION_ARGS){
+
+        TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        TraceProvParseContext *parsed_back_context = NULL;
+        TraceProvInferSetupExtra *setup_extra = NULL;
+        auto result_map = get_generic_derivation_spec(&parsed_back_context, &setup_extra);
+
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+
         auto derived_node_map = new std::unordered_map<TraceProvLayerNumber, TraceProvTopResult *>;
         for (auto child: *result_map){
             elog(INFO, "Node Idx: %d", child.first);
             TraceProvNode *node = child.second;
-            char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
             TraceProvData *data = nullptr;
+            uint64 duration = 0;
             if (use_duckdb){
                 elog(INFO, "Used duckdb!");
-                data = traceprov_perform_duckdb_inference(sql);
+                {
+                TP_EVALUATE_START();
+                data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);
+                TP_EVALUATE_END();
+                duration = TP_EVALUATE_DURATION();
+                }
             }else{
                 TraceProvEvaluateNodeContext *eval_context = new TraceProvEvaluateNodeContext;
                 eval_context->should_dump = false;
@@ -3385,6 +3839,7 @@ extern "C" {
             elog(INFO, "Gen SQL: %s", sql);
             elog(INFO, "Size %ld", data->at(0)->data->size());
             elog(INFO, "Width %ld", data->size());
+             elog(INFO, "Time %ld", duration    );
             auto top_result = new TraceProvTopResult;
             top_result->pdata = list_make1(data);
             top_result->width = data->size();
@@ -3396,5 +3851,142 @@ extern "C" {
         traceprov_materialize_derived_result(fcinfo, selected_result);
         return (Datum) 0;
     }
-};
 
+    static TraceProvInferResult last_result;
+    // Same set up as traceprov_perform_generic_derivation.
+    // But is faster :)
+    // Accomplished by directly copy data from DuckDB to Postgres without storing it.
+    PG_FUNCTION_INFO_V1(traceprov_perform_duckdb_inference_fast);
+
+    Datum traceprov_perform_duckdb_inference_fast(PG_FUNCTION_ARGS){
+        const TraceProvLayerNumber result_to_return = PG_GETARG_INT64(0);
+        const bool is_dry_infer = PG_NARGS() > 1 ? PG_GETARG_BOOL(1) : false;
+        TraceProvParseContext *parsed_back_context = NULL;
+        TraceProvInferSetupExtra *setup_extra;
+        auto result_map = get_generic_derivation_spec(&parsed_back_context, &setup_extra);
+
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+
+        if (result_map->find(result_to_return) == result_map->end()){
+            elog(ERROR, "Expected to find the node!!");
+        }
+
+        TraceProvNode *node_to_eval = result_map->at(result_to_return);
+        const char *sql = traceprov_node_to_sql(node_to_eval, TraceProvToSQLContext{.context = parsed_back_context, .use_table_def = true});
+        const uint32 expected_column_width = traceprov_get_node_column_count(node_to_eval);
+        if (!is_dry_infer)
+            traceprov_prepare_for_materialize(fcinfo, expected_column_width);
+        TraceProvInferResult result = traceprov_perform_duckdb_inference_pg_copy(sql, traceprov_current.infer_context, fcinfo, expected_column_width);
+        last_result = result;
+        return (Datum) 0;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_infer_stat);
+
+    Datum traceprov_get_infer_stat(PG_FUNCTION_ARGS){
+        const bool perform_infer = PG_GETARG_BOOL(1);
+        // This allows this function be reused directly after the prior call.
+        if (perform_infer){
+            traceprov_perform_duckdb_inference_fast(fcinfo);
+        }
+
+        // Convert the infer result to json.
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '{');
+        appendStringInfo(&buf, "\"width\": %ld", last_result.width);
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"time\": %ld", last_result.time);
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"row_count\": %ld", last_result.row_count);
+        appendStringInfoChar(&buf, '}');
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_run_duckdb_query);
+
+    // Does exactly the same setup as generic setup, but allows running generic
+    // input queries. SQL injection go brrrr.
+    Datum traceprov_run_duckdb_query(PG_FUNCTION_ARGS){
+
+        char *sql_to_run = PG_GETARG_CSTRING(0);
+        TraceProvParseContext *parsed_back_context = NULL;
+        TraceProvInferSetupExtra *setup_extra = NULL;
+        (void)get_generic_derivation_spec(&parsed_back_context, &setup_extra);
+
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+        TraceProvData *data = traceprov_perform_duckdb_inference(sql_to_run, traceprov_current.infer_context);
+        elog(INFO, "Gen SQL: %s", sql_to_run);
+        elog(INFO, "Size %ld", data->at(0)->data->size());
+        elog(INFO, "Width %ld", data->size());
+        auto top_result = TraceProvTopResult {
+            .pdata = list_make1(data),
+            .width = data->size()
+        };
+        traceprov_materialize_derived_result(fcinfo, &top_result);
+        return (Datum) 0;
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_generic_derivation_spec);
+
+    Datum traceprov_get_generic_derivation_spec(PG_FUNCTION_ARGS){
+
+        const bool perform_execution = PG_GETARG_BOOL(0);
+
+        struct traceprov_shared_context context;
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping shared context");
+        }
+
+        TraceProvParseContext *parse_context = NULL;
+        TraceProvInferSetupExtra *setup_extra = NULL;
+        auto result_map = get_generic_derivation_spec(&parse_context, &setup_extra);
+        if (traceprov_current.infer_context == NULL){
+            traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
+        }
+        std::string graph_str = "{";
+        graph_str.append("\"elements\": [");
+        bool needs_sep = false;
+        for (auto child: *result_map){
+            if (needs_sep)
+                graph_str.append(",");
+            const TraceProvLayerNumber idx = child.first;
+            TraceProvNode *node = child.second;
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
+            TraceProvData *data = nullptr;
+            if (perform_execution){
+                data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);
+            }
+            needs_sep = true;
+            graph_str.append("{");
+            graph_str.append("\"idx\": ");
+            graph_str.append(std::to_string(idx));
+            graph_str.append(",");
+            graph_str.append("\"sql\": ");
+            graph_str.append("\"");
+            graph_str.append(sql);
+            graph_str.append("\"");
+            if (perform_execution){
+                graph_str.append(",");
+                graph_str.append("\"width\": " + std::to_string(data->size()));
+                graph_str.append(",");
+                graph_str.append("\"rows\": " + std::to_string(data->at(0)->data->size()));
+            }else{
+                graph_str.append(",");
+                graph_str.append("\"expected_width\": " + std::to_string(traceprov_get_node_column_count(node)));
+            }
+            graph_str.append("}");
+        }
+        graph_str.append("]");
+        graph_str.append(",");
+        graph_str.append("\"min_local_used\": ");
+        graph_str.append(std::to_string(context.maximum_layer_number_used));
+        graph_str.append("}");
+        PG_RETURN_TEXT_P(cstring_to_text(graph_str.c_str()));
+    }
+
+};

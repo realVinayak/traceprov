@@ -99,6 +99,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         TraceProvLayerNumber layer_number = tp_parse_get_layer_number(context);
         // Add the correlated targets (as keys), and the targets of the base query to the context.
         tp_add_sublink_map_item(new_context, correlated_provenance_targets, added_targets, layer_number);
+        uint64 null_map = get_null_targets_map(correlated_provenance_targets);
         Node * layer_number_const = (Node *) makeConst(
             INT4OID, 
             -1, 
@@ -108,7 +109,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             false,
             true
         );
-        List *arg_vars = list_make1(layer_number_const);
+        List *arg_vars = list_make2(layer_number_const, makeInt8Const(null_map));
         arg_vars = list_concat(arg_vars, correlated_arg_vars);
         ListCell *target_entry_cursor;
         foreach(target_entry_cursor, added_targets){

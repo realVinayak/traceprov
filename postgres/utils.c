@@ -2,6 +2,7 @@
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include "traceprov_settings.h"
 
 int get_error_no(){
     int err_no = errno;
@@ -35,7 +36,7 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     // In this case, we'd have to grow the file.
     const long int initial_size = current_layer->size;
     // Unmap previous allocation.
-    if ((rc = munmap(current_layer->last_mapping, TRACEPROV_SIZE_OF_ALLOCATION(initial_size) * TRACEPROV_PAGE_SIZE))){
+    if ((rc = munmap(current_layer->last_mapping, current_layer->last_allocation_size * TRACEPROV_PAGE_SIZE))){
         elog(ERROR, "Error unmaping");
     }
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
@@ -66,5 +67,15 @@ int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     current_layer->current_row = ptr;
     // Also set the last mapping.
     current_layer->last_mapping = ptr;
+    current_layer->last_allocation_size = TRACEPROV_INCREMENT_TRACE_BY_PG;
     return rc;
+}
+
+void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer){
+    const uint64 gap = ((uint64)layer->current_row - (uint64)layer->last_mapping);
+    assert(gap >= 0);
+    // Now, figure out what the last mapped region will have been (or the starting address of it.)
+    const uint64 infered_gap = layer->size == layer->initial_allocation_size ? 0 : (layer->size - TRACEPROV_INCREMENT_TRACE_BY_PG);
+    void *final_row = (void*)((uint64)forward_row + infered_gap*TRACEPROV_PAGE_SIZE + gap);
+    return final_row;
 }

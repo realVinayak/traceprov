@@ -11,7 +11,7 @@ def traceprov_setup(
     # the smokedduck shared library.
     sd_lib_path: str = "",
     sd_include_path: str = "",
-    sd_num_threads: int = None,
+    sd_num_threads: None | int = None,
     sd_create_idx: bool = False,
 ):
     assert suff is not None
@@ -36,19 +36,30 @@ def traceprov_setup(
         traceprov_infer_set.exists()
     ), f"{traceprov_infer_set.as_posix()} should exist!"
 
+    with open(traceprov_infer_set.as_posix()) as f:
+        infer_sql = f.read()
+
+    with open(traceprov_sql.as_posix()) as f:
+        base_sql = f.read()
+
+    combined_file = "/tmp/combined.sql"
+    with open(combined_file, "w") as f:
+        f.write(base_sql)
+        f.write(infer_sql)
+
     assert (
         os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
+            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {combined_file} -v ON_ERROR_STOP=1"
         )
         == 0
     )
 
-    assert (
-        os.system(
-            f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_infer_set.as_posix()} -v ON_ERROR_STOP=1"
-        )
-        == 0
-    )
+    # assert (
+    #     os.system(
+    #         f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {traceprov_sql.as_posix()} -v ON_ERROR_STOP=1"
+    #     )
+    #     == 0
+    # )
 
     traceprov_obj = f"libtraceprov{suff}"
     traceprv_infer_set_obj = f"libtraceprov_infer{suff}"

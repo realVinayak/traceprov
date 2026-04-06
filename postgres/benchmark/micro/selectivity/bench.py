@@ -9,6 +9,7 @@ from traceprovpy.tools.benchmark import (
 )
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_GET_DERIVATION_SPEC,
+    TRACEPROV_INFER_SPEC,
     TRACEPROV_SYNC_TIME,
 )
 from traceprovpy.tools.duckdb_inference import DuckDBInferenceQuerySpec
@@ -33,11 +34,11 @@ def make_simple_directory(
         get_filter_group(num_groups, selectivity, mode)
     )
 
-    base_query = Query(
+    make_base = lambda query_name: Query(
         query_name=f"predicate_{mode}",
         spec=QuerySpec(
-            base="base.sql",
-            key=f"base_selectivity_{selectivity}",
+            base=f"{query_name}.sql",
+            key=f"{query_name}_selectivity_{selectivity}",
             preprocess=[replaces_selectivity],
         ),
     )
@@ -48,11 +49,18 @@ def make_simple_directory(
             base="base.sql",
             key=f"traceprov_selectivity_{selectivity}",
             preprocess=[replaces_selectivity, MakeTraceProv()],
-            extras=[TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()],
+            extras=[TRACEPROV_SYNC_TIME(), TRACEPROV_INFER_SPEC()],
         ),
     )
 
-    dir_queries = [base_query, traceprov_query]
+    dir_queries = [
+        make_base("base"),
+        # make_base("gprom_join"),
+        # make_base("gprom_join_heuristics"),
+        # make_base("gprom_window"),
+        make_base("gprom_window_heuristics"),
+        traceprov_query,
+    ]
     if use_duckdb_inference:
         dir_queries.append(
             Query(
@@ -252,7 +260,7 @@ def main():
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000"]
+    dir_names = ["50_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
@@ -283,7 +291,7 @@ def main():
         print(selectivity_directories)
         return
     result = benchmark.run_from_argparse(
-        selectivity_directories, params=RunParams(repeat=10, throwaway=5)
+        selectivity_directories, params=RunParams(repeat=3, throwaway=2)
     )
     print(result)
     benchmark.dump_final_result(result)

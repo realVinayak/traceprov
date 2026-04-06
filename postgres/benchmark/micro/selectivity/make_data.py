@@ -7,7 +7,7 @@ from traceprovpy.utils import add_underscores_numbers
 
 DB_PREFIX = "microbench_selectivity_"
 
-CHUNK_SIZE = 10000
+CHUNK_SIZE = 50000
 
 
 def insert_partition(cursor, partition_size, group_index, sql):

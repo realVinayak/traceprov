@@ -65,6 +65,8 @@ List *traceprov_adjust_union(
     ListCell *extraTargetCursor;
     List *newExtraTargets = NIL;
 
+    int initial_set_number = 0;
+
     forboth(rteCursor, queryRteList, extraTargetCursor, extraTargets){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCursor);
         Query *subquery = rte->subquery;
@@ -82,13 +84,14 @@ List *traceprov_adjust_union(
                 newlyCreatedTargets = lappend(newlyCreatedTargets, newTe);
             }
         }
-        const int setNumber = (tp_parse_get_unique_number(context));
+        const int setNumber = (int)tp_parse_get_layer_number(context);
+
         tp_add_set_padding_item(context, setNumber, padding);
         Expr *subqNumberExpr = (Expr*)makeInt8Const(setNumber);
         TargetEntry *subqNumberTarget = makeTargetEntry(
             subqNumberExpr,
             0,
-            pstrdup("tp_setop_nummber"),
+            pstrdup("tp_setop_number"),
             false
         );
         newlyCreatedTargets = lappend(newlyCreatedTargets, subqNumberTarget);
@@ -115,13 +118,20 @@ List *traceprov_adjust_union(
                     isSetPointer,
                     // These have trivially no sublinks.
                     NIL,
-                    NULL
+                    NULL,
+                    false,
+                    false
                 )
             );
         }
         ListCell *targetCursor;
         List *extraTargetsTyped = NIL;
         List *traceprovEntries = NIL, *childGraphs = NIL;
+        const int parent_number = (int)tp_parse_get_layer_number(context);
+        if (initial_set_number == 0){
+            initial_set_number = parent_number;
+        }
+        tp_add_set_pointer_property(context, initial_set_number, setNumber);
         foreach(targetCursor, extraTargetsForRte){
             // Here, also need to cast all into INT8s.
             TraceProvTarget *tpTarget = (TraceProvTarget *)(lfirst(targetCursor));
@@ -146,10 +156,12 @@ List *traceprov_adjust_union(
                     tpTarget->isPointer,
                     copiedTarget,
                     tpTarget->graph,
-                    setNumber,
+                    parent_number,
                     tpTarget->isSetPointer,
                     tpTarget->sublinks,
-                    tpTarget->window_entry
+                    tpTarget->window_entry,
+                    tpTarget->is_pointer_for_window,
+                    tpTarget->is_nullable
                 );
 
             extraTargetsTyped = lappend(
@@ -163,7 +175,7 @@ List *traceprov_adjust_union(
             ));
         }
         newExtraTargets = lappend(newExtraTargets, extraTargetsTyped);
-        tp_add_set_graph_item(context, setNumber, make_traceprov_dependency(TP_LOG, 0, childGraphs, traceprovEntries));
+        tp_add_set_graph_item(context, setNumber, make_traceprov_dependency(TP_LOG, setNumber, childGraphs, traceprovEntries));
     }
 
     List *setOpFlattened = traceprov_find_used_refs((Node*)root, traceProvInclusiveNavigator);
@@ -521,7 +533,9 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                     context,
                     true,
                     window_def,
-                    NULL
+                    NULL,
+                    false,
+                    false
                 );
                 TargetEntry *traceprov_log_te = ((TraceProvTarget *)(lfirst(list_head(traceprov_aggregated_window))))->targetEntry;
                 Node *traceprov_log_node = (Node*)traceprov_log_te->expr;
