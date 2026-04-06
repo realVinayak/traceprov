@@ -37,6 +37,7 @@
 #include "rewrite/rewriteHandler.h"
 
 #include "plan_analyzer.h"
+#include "traceprov_settings.h"
 
 PG_MODULE_MAGIC;
 
@@ -44,21 +45,21 @@ PlannedStmt *traceprov_rewriter_driver(
     Query *, 
     const char *,
     int,
-	ParamListInfo
+    ParamListInfo
 );
 
 PlannedStmt *traceprov_rewriter(
     Query *, 
     const char *,
     int,
-	ParamListInfo
+    ParamListInfo
 );
 
 PlannedStmt *traceprov_set_test(
     Query *,
     const char *,
     int,
-	ParamListInfo
+    ParamListInfo
 );
 
 // Performs rewrite on an RTE.
@@ -68,7 +69,8 @@ static void rteRewrite(
     List **, 
     Index,
     TraceProvParseContext *,
-    bool
+    bool,
+    Bitmapset *
 );
 
 /*
@@ -86,6 +88,54 @@ Query *traceprov_add_nested_query_log(
 static void adjustJoinAliasVars(List *, List *, List *, int, List **, List **);
 
 void _PG_init(){
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc",
+        "Whether to use prealloc at all.",
+        NULL,
+        &traceprov_use_prealloc,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc_log",
+        "Whether to use prealloc at top level.",
+        "No effect if use_prealloc is false. Currently not used.",
+        &traceprov_use_prealloc_log,
+        true,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_prealloc_intermediate",
+        "Whether to use prealloc at intermediate level.",
+        "No effect if use_prealloc is false. Currently not used.",
+        &traceprov_use_prealloc_intermediate,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_compressed_in_sort",
+        "Whether to use compresed representation in agg-by-sort",
+        "Uses derivative of run-length-encoding if enabled",
+        &traceprov_use_compressed_in_sort,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 
@@ -98,7 +148,7 @@ PlannedStmt *traceprov_rewriter_driver(
     Query *parse, 
     const char *query_string,
     int cursorOptions,
-	ParamListInfo boundParams
+    ParamListInfo boundParams
 ){
     // Scan the input str for ticker, and only then perform rewrites, to not mess with
     // other queries.
@@ -117,7 +167,7 @@ PlannedStmt *traceprov_rewriter(
     Query *parse, 
     const char *query_string,
     int cursorOptions,
-	ParamListInfo boundParams
+    ParamListInfo boundParams
 ){
     Query *copied = copyObject(parse);
     ListCell *cursor = NULL;
@@ -355,7 +405,7 @@ Query *traceprov_rewrite_sets_to_joins(
         // modified = handleIntersect(base, ignoreList, context);
         // Remove the set ops (but only if it is intersect)
         modified = base;
-	modified->setOperations = NULL;
+    modified->setOperations = NULL;
     }
 
     if (!wasAll){
@@ -394,14 +444,13 @@ PlannedStmt *traceprov_set_test(
     Query *parse,
     const char *query_string,
     int cursorOptions,
-	ParamListInfo boundParams
+    ParamListInfo boundParams
 ){
     Query *newQuery = traceprov_set_rewriter(parse);
     if (Debug_print_parse)
         elog_node_display(LOG, "traceprov set tree", newQuery, Debug_pretty_print);
     return standard_planner(newQuery, query_string, cursorOptions, boundParams);
 }
-
 
 // Recursively perform the traceprov rewrite.
 Query *traceprov_perform_rewrite(
@@ -456,12 +505,29 @@ Query *traceprov_perform_rewrite(
 
     ListCell *rteCell;
 
+    // For PG_version >= 16. Need to also propertly adjust the nulling rels.
+    // NGL, it actually helps simplify a bunch of stuff for us (to determine if value _could_ be null)
+    List *nul_rels = get_nulling_set(parse->jointree);
     foreach(rteCell, parse->rtable){
         RangeTblEntry *rte = (RangeTblEntry *)lfirst(rteCell);
         List *rteTargets = NIL;
-        if (list_length(rteFilter) == 0 || (traceprov_find_int_list(rteFilter, foreach_current_index(rteCell)+1))){
+        const int curr_idx = foreach_current_index(rteCell);
+        if (list_length(rteFilter) == 0 || (traceprov_find_int_list(rteFilter, curr_idx+1))){
+            // If it is lateral, need to also push the current target list (per rte) to the stack.
+            // This is because we can ***correlation***.
+            // We don't reallyyy care till we see a sublink inside that RTE tho.....
+            // Maybe be more smart about it....
+            TraceProvParseContext *context_to_use = tp_context;
+            if (rte->lateral && targets_per_rte != NIL){
+                context_to_use = traceprov_shallow_copy_context(tp_context);
+                context_to_use->parent_targets = lappend(context_to_use->parent_targets, targets_per_rte);
+            }
             // TODO: hasAggs needs to also include distinct?
-            rteRewrite(rte, &rteTargets, foreach_current_index(rteCell)+1, tp_context, purePointerInParent);
+            Bitmapset *set = NULL;
+            if (curr_idx < list_length(nul_rels)){
+                set = (Bitmapset*)list_nth(nul_rels, curr_idx);
+            }
+            rteRewrite(rte, &rteTargets, curr_idx+1, context_to_use, purePointerInParent, set);
         }else{
             rteTargets = NIL;
         }
@@ -486,7 +552,9 @@ Query *traceprov_perform_rewrite(
             tp_context,
             parentHasAggs,
             NULL,
-            NULL
+            NULL,
+            false,
+            list_length(parse->groupClause) == 0
         );
     }
 
@@ -559,7 +627,8 @@ void rteRewrite(
     List **addedTargets, 
     Index rteIndex, 
     TraceProvParseContext *tpContext,
-    bool parentHasAggs
+    bool parentHasAggs,
+    Bitmapset *nulling_rels
 ){
     List *targetsToAdd = NIL;
 
@@ -588,10 +657,13 @@ void rteRewrite(
                     const int16 indexAttrId = indexStruct->indkey.values[i];
                     FormData_pg_attribute *attr = TupleDescAttr(tupdesc, indexAttrId-1);
                     const char *attrName = NameStr(attr->attname);
+                    // This won't matter in most of the cases (will be false), except in cases
+                    // where multiple keys form the primary key, and one of the key is nullable.
+                    const bool is_nullable = !attr->attnotnull;
                     elog(INFO, "Making clone of %s", attrName);
                     char *targetName = psprintf("tp_%s", attrName);
 
-                    const Var *newVar = makeVar(
+                    Var *newVar = makeVar(
                         rteIndex, 
                         indexAttrId, 
                         attr->atttypid, 
@@ -599,6 +671,10 @@ void rteRewrite(
                         attr->attcollation,
                         0
                     );
+
+                    #if PG_MAJORVERSION_NUM >= 16
+                    newVar->varnullingrels = bms_union(newVar->varnullingrels, nulling_rels);
+                    #endif
                     // This is a dummy entry for now.
                     // This is needed to propagate the resorig* fields.
                     TargetEntry *newTargetEntry = makeTargetEntry((Expr*)newVar, indexAttrId, targetName, false);
@@ -606,7 +682,9 @@ void rteRewrite(
                     newTargetEntry->resorigtbl = rte->relid;
                     // This is the base case, so that's why the isPointer is false;
                     // Also why there's no sublinks (yet)
-                    targetsToAdd = lappend(targetsToAdd, makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL));
+                    TraceProvTarget *new_tp_target = makeTraceProvTarget(false, newTargetEntry, NULL, 0, false, NIL, NULL, false, is_nullable);
+                    traceprov_target_set_nullable(new_tp_target);
+                    targetsToAdd = lappend(targetsToAdd, new_tp_target);
                 }
             }
             ReleaseSysCache(indexTuple);
@@ -622,6 +700,14 @@ void rteRewrite(
         foreach(childTargetCell, targetsToAdd){
             TraceProvTarget *tpTarget = (TraceProvTarget *)lfirst(childTargetCell);
             TargetEntry *childTarget = tpTarget->targetEntry;
+            #if PG_MAJORVERSION_NUM >= 16
+            if (!IsA(childTarget->expr, Var)){
+                elog(ERROR, "Expected it to be trival var!");
+            }
+            Var *curr_var = castNode(Var, childTarget->expr);
+            curr_var->varnullingrels = bms_union(curr_var->varnullingrels, nulling_rels);
+            #endif
+            traceprov_target_set_nullable(tpTarget);
             rte->eref->colnames = lappend(rte->eref->colnames, makeString(childTarget->resname));
         }
     }
@@ -650,6 +736,7 @@ Query *traceprov_add_nested_query_log(
         false,
         true
     ));
+    List *remaining = NIL;
     foreach(target_entry_cursor, targets){
         const TraceProvTarget *tp_target = (TraceProvTarget *)lfirst(target_entry_cursor);
         TraceProvEntry *tp_entry = traceprov_resolve_entry(
@@ -658,8 +745,11 @@ Query *traceprov_add_nested_query_log(
             NULL
         );
         entries = lappend(entries, tp_entry);
-        arg_vars = lappend(arg_vars, makeVarFromTargetEntry(1, tp_target->targetEntry));
+        remaining = lappend(remaining, makeVarFromTargetEntry(1, tp_target->targetEntry));
     }
+    const uint64 null_map = get_null_entry_map(entries);
+    arg_vars = lappend(arg_vars, makeInt8Const(null_map));
+    arg_vars = list_concat(arg_vars, remaining);
     TraceProvDependency *graph = make_traceprov_dependency(
         TP_LOG,
         layer_number,

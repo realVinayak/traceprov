@@ -226,7 +226,7 @@ def main():
                 subdir_queries.append(
                     Query(
                         query_name=query_name,
-                        spec=DuckDBInferenceQuerySpec(base="DUCKDB_INFERENCE"),
+                        spec=DuckDBInferenceQuerySpec(base="DUCKDB_INFERENCE", key="DUCKDB_INFERENCE"),
                     )
                 )
 

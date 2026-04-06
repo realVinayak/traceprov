@@ -72,6 +72,8 @@ static Query *perform_window_clause_rewrite_inline(
         Var *var = lfirst_node(Var, var_cursor);
         var->varattno += list_nth_int(shift_spec, var->varno - 1);
         var->varno = 1;
+        var->varattnosyn = var->varattno;
+        var->varnosyn = var->varno;
     }
 
     // Need to push down all the targets that are referenced in the window clauses.
@@ -134,6 +136,7 @@ static Query *perform_window_clause_rewrite_inline(
             Node *frame_start_fc_node, *frame_end_fc_node;
 
             TargetEntry *outer_ordered_row_number_te = makeTargetEntry((Expr*)ordered_row_number_var, 0, pstrdup("projection_ordered_row_number"), false);
+            outer_ordered_row_number_te->resjunk = true;
             query->targetList = traceprov_append_at_resjunk(query->targetList, outer_ordered_row_number_te);
             SortGroupClause *ordered_row_number_sgc = makeSortGroupClauseForSetOp(exprType((Node*)outer_ordered_row_number_te->expr), false);
             ordered_row_number_sgc->tleSortGroupRef = assignSortGroupRef(outer_ordered_row_number_te, query->targetList);
@@ -187,7 +190,9 @@ static Query *perform_window_clause_rewrite_inline(
                 context,
                 true,
                 rows_window_def,
-                &window_fc_node
+                &window_fc_node,
+                true,
+                false
             );
             if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");
             // Need to set the window clause.
@@ -217,7 +222,9 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number)
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_START, layer_number),
+                    false,
+                    false
                 )
             );
 
@@ -230,7 +237,9 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number)
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_END, layer_number),
+                    false,
+                    false
                 )
             );
 
@@ -251,7 +260,12 @@ static Query *perform_window_clause_rewrite_inline(
                     context,
                     true,
                     rows_window_def,
-                    &window_fc_node
+                    &window_fc_node,
+                    // This is marked false for a reason.
+                    // Doing it this way will allow the window to be derived later on, automatically.
+                    // Since we'll only see once of this, it's fine.
+                    false,
+                    false
                 );
                 if (window_fc_node == NULL) elog(ERROR, "Expected log window fc to be set!");
                 set_winref(window_fc_node, wc->winref);
@@ -270,7 +284,9 @@ static Query *perform_window_clause_rewrite_inline(
                     0,
                     false,
                     NIL,
-                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log)
+                    traceprov_make_window_frame_entry(TP_ENTRY_FRAME_INHERIT, first_log),
+                    false,
+                    false
                 )
             );
         }
@@ -280,6 +296,7 @@ static Query *perform_window_clause_rewrite_inline(
     RangeTblEntry *rte = range_table_entry_from_subquery(subquery, context, true);
     query->rtable = list_make1(rte);
     query->jointree = traceprov_make_from_expr(rte);
+    // rte->eref->colnames
     *extra_targets = added_traceprov_targets;
     return query;
 }

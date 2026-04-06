@@ -20,18 +20,34 @@ import os
 class DuckDBDriverOptions(NamedTuple):
     db: str
     i: str
-    lineage: bool = None
-    profile: str = None
-    pending: bool = None
-    threads: int = None
-    stats: str = None
+    lineage: bool | None = None
+    profile: str | None = None
+    pending: bool | None = None
+    threads: int | None = None
+    stats: str | None = None
     repeat: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY
-    settings: str = None
-    time: str = None
-    idx_scan_percent: str = None
+    settings: str | None = None
+    time: str | None = None
+    idx_scan_percent: str | None = None
+    no_reinit: bool | None = None
+    min_layer_number: None | int = None
+    extra: str | None = None
+    disable_col_opt: bool | None = None
+    extras: list[str] = []
+    main_once_extra_all: bool = False
+    extra_file: str | None = None
+    is_new_sd: bool = False
+    sd_extension_path: str | None = None
 
     def _boolean_options(self):
-        return {"lineage", "pending"}
+        return {
+            "lineage",
+            "pending",
+            "no_reinit",
+            "disable_col_opt",
+            "main_once_extra_all",
+            "is_new_sd",
+        }
 
     def serialize(self) -> str:
         options = self._asdict()
@@ -42,7 +58,14 @@ class DuckDBDriverOptions(NamedTuple):
             f"--{key} {value}"
             for (key, value) in options.items()
             if (key not in self._boolean_options() and value is not None)
+            and (key not in ["extra", "extras"])
         ]
+        all_extras = [*([self.extra] if self.extra is not None else []), *self.extras]
+        key_value_options = [*key_value_options, *[f"--extra {f}" for f in all_extras]]
+        assert self.i is not None
+        with open(self.i) as f:
+            contents = f.read()
+        assert len(contents) > 0, f"Got no contents for {self.i}"
         return " ".join([*boolean_options, *key_value_options])
 
 
@@ -54,7 +77,6 @@ def run_simple_query(query: str, db_executable: str, db_path: str, **options):
     traceprov_assert_safe_run(f"{db_executable} {materialize_options.serialize()}")
 
 
-# def driver_run_query(executable: str, num_threads: int, num_repeat: int, )
 # Note that we end up utilzing the duckdb driver
 # which also gets used for smokedduck.
 class DuckDBInferenceQuerySpec(QuerySpec):
@@ -127,6 +149,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
                 idx_scan_percent=idx_scan_percent,
             )
             traceprov_assert_safe_run(f"{executable} {driver_options.serialize()}")
+            assert driver_options.time and driver_options.settings
             with open(driver_options.time) as f:
                 duckdb_result_spec = json.loads(f.read())
                 # print(duckdb_result_spec)
@@ -161,6 +184,7 @@ class DuckDBInferenceQuerySpec(QuerySpec):
             traceprov_assert_safe_run(
                 f"{executable} {driver_options_profiled.serialize()}"
             )
+            assert driver_options_profiled.profile
             with open(driver_options_profiled.profile) as f:
                 duckdb_terminal_profile = json.loads(f.read())
             final_results = [

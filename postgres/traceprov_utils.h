@@ -5,5 +5,6 @@
 
 void print_layer(struct traceprov_aggregate_layer *);
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer);
+void *get_final_ptr(const void *forward_row, const struct traceprov_aggregate_layer *layer);
 
 #endif

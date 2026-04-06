@@ -1,0 +1,1 @@
+ ./build_and_install.sh test /usr/bin/libduck_prebuilt/ /usr/bin/libduck_prebuilt/

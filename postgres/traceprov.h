@@ -6,6 +6,7 @@
 #include "errno.h"
 #include "utils/elog.h"
 #include "nodes/nodes.h"
+#include "traceprov_settings.h"
 
 #include <assert.h>
 
@@ -56,10 +57,10 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 32
 #endif
 // Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
+#define TRACEPROV_INCREMENT_GROUP_BY_PG 32
 
 #define TRACEPROV_FILE_PERMISSION (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 
@@ -74,6 +75,7 @@ struct local_context;
 struct traceprov_aggregate_layer;
 struct traceprov_shared_context;
 struct current_context;
+struct traceprov_inference_context;
 
 int get_error_no();
 
@@ -161,6 +163,16 @@ struct traceprov_aggregate_layer {
     // All layers are stored in a columnar fashion.
     // This points to the rows (because we always index the columns directly)
     uint32 rows_layer_number;
+    // If this layer needs to store null values, we
+    // maintain another layer where we store the null map.
+    // We do this _only_ if we can guarantee that the values can be not-null.
+    // So, this happens rarely.
+    uint32 null_map_layer_number;
+    // The actual null map.
+    uint64 null_map;
+    uint64 last_allocation_size;
+    // For debugging.
+    uint64 initial_allocation_size;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -209,7 +221,16 @@ struct current_context {
     struct local_context *local_context;
     // This is used during the logging of groups (to determine where the combiner layer goes.)
     uint32  maximum_local_layer_used;
+    // Private struct, just for inference.
+    struct traceprov_inference_context *infer_context;
+    // For cleaning up whatever is in the infer_context.
+    void (*cleanup_infer_context)(struct traceprov_inference_context *);
 };
+
+// This used to live only in traceprov.c file
+// But it is useful to expose this to inference too.
+// So that's why it lives here now.
+extern struct current_context traceprov_current;
 
 struct traceprov_agg_context {
     // Whether this aggregation was combined.
@@ -222,8 +243,6 @@ struct traceprov_agg_context {
     uint32 layer_number;
 };
 
-uint32 traceprov_hashint8(int64);
-
 // Whenever this condition fails, also need to update the function definition.
 static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of aggregate to fit in func definition size");
 
@@ -232,10 +251,12 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define GET_PK_FROM_ROW(PTR, PK_ID) ((int64*)(((uint8*)&(PTR->group_count)) + sizeof(PTR->group_count)) + PK_ID)
 
 // #define TRACEPROV_SHOULD_HASH(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_HASHED)
-// #define TRACEPROV_SHOULD_SORT(state) (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED)
+#define TRACEPROV_SHOULD_SORT(state) (traceprov_use_compressed_in_sort && (IsA(state, AggState) && ((AggState *)state)->aggstrategy == AGG_SORTED))
 
 #define TRACEPROV_SHOULD_HASH(state) (false)
-#define TRACEPROV_SHOULD_SORT(state) (false)
+// #define TRACEPROV_SHOULD_SORT(state) (false)
+
+#define TRACEPROV_AGG_ROW_COUNT(state) (IsA(state, AggState) ? (((AggState *)state)->ss.ps.plan->lefttree->plan_rows) : 0)
 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) ((uint8) (((uint64) X) >> 48))
@@ -251,6 +272,4 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64)*layer->num_pk_records))
-
-void reinit_traceprov_infer_state();
 #endif
