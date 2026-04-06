@@ -76,10 +76,18 @@ def extract_bucket_category(file_name: str):
     return bucket
 
 
-def extract_thread_category(file_name: str):
-    match = re.search(r"_thread_(\d+)", file_name)
+def try_match(file_name: str, hypen: bool):
+    sep = "-" if hypen else "_"
+    match = re.search(rf"_thread{sep}(\d+)", file_name)
     if match is None:
-        match = re.search(r"_threads_(\d+)", file_name)
+        match = re.search(rf"_threads{sep}(\d+)", file_name)
+    return match
+
+
+def extract_thread_category(file_name: str):
+    match = try_match(file_name, True)
+    if match is None:
+        match = try_match(file_name, False)
     assert match is not None
     bucket = int(match.groups()[0])
     return str(bucket)
@@ -132,7 +140,17 @@ def extract_traceprov(traceprov_result: dict):
 def extract_infer(infer_results: dict):
     return combine_tap_result(
         [
-            ([tap_profile_result(node) for node in infer_result["profile"]])
+            (
+                [
+                    (
+                        {
+                            **tap_profile_result(node),
+                            **tap_simple_result(infer_result["times"][node_idx]),
+                        }
+                    )
+                    for node_idx, node in enumerate(infer_result["profile"])
+                ]
+            )
             for infer_result in infer_results
         ]
     )
