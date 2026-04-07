@@ -822,11 +822,15 @@ Query *traceprov_push_down_query(Query *query, List **shift_spec){
     cloned->canSetTag = true;
     cloned->hasWindowFuncs = false;
     cloned->targetList = NIL;
+    cloned->rteperminfos = query->rteperminfos;
+    query->rteperminfos = NIL;
     List *new_targets = NIL;
     List *shifted_refs = NIL;
     ListCell *cursor = NULL;
     foreach(cursor, cloned->rtable){
         RangeTblEntry *rte = lfirst_node(RangeTblEntry, cursor);
+        // Don't clone join table entries..
+        if (rte->rtekind == RTE_JOIN) continue;
         shifted_refs = lappend_int(shifted_refs, list_length(new_targets));
         List *col_names = NIL;
         List *col_vars = NIL;
