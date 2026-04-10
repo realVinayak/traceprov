@@ -5,7 +5,6 @@
 -- Approved February 1998
 -- optimizations:
 -- * skip read|writeFilter()
-drop view if exists revenue0_2_row;
 create view revenue0_2_row (tuid, l_orderkey) as
 select _g.tuid as tuid,
 	concat_agg(l_orderkey) as l_orderkey

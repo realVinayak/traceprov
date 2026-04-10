@@ -5,7 +5,6 @@
 -- Approved February 1998
 -- optimizations:
 -- * skip read|writeFilter()
-drop view if exists revenue0_1;
 create view revenue0_1 (tuid, supplier_no, total_revenue) as
 select writeAggregation(1, array_agg(l.tuid)) as tuid,
 	l_suppkey as l_suppkey,
