@@ -2896,7 +2896,7 @@ extern "C" {
 
     Datum traceprov_get_total_layer_size(PG_FUNCTION_ARGS){
 
-        uint64_t total_page_count = 0;
+        uint64 total_page_count = 0;
 
         struct traceprov_shared_context context;
 
