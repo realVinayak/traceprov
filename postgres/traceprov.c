@@ -26,6 +26,8 @@ uint32 traceprov_hashint8(int64);
 
 static const int32 traceprov_shared_context_magic = 0xBADB00DE;
 
+#define TRACEPROV_DEFAULT_MAX_LAYER_USED 8
+
 struct current_context traceprov_current = {
     .my_worker_id =                 0,
     .traceprov_shared_context_fd =  -1,
@@ -157,7 +159,9 @@ static int initialize_local_context(){
         }
         int graph_file_fd = open(psprintf(TRACEPROV_GRAPH_FILE, DataDir), O_RDWR);
         if (graph_file_fd < 0){
-            elog(INFO, "Error opening the graph file!");   
+            elog(INFO, "Error opening the graph file!");
+            // Fairly safe value.
+            maximum_layer_used = TRACEPROV_DEFAULT_MAX_LAYER_USED; 
         }else{
             if((read(graph_file_fd, &maximum_layer_used, sizeof(uint32))) == -1){
                 elog(ERROR, "Read from graph file failed!");
