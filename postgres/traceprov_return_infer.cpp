@@ -749,7 +749,8 @@ extern "C" {
                 record[TRACEPROV_LAYER_STAT::last_allocation_size] = Int64GetDatum(layer.last_allocation_size);
                 record[TRACEPROV_LAYER_STAT::initial_allocation_size] = Int64GetDatum(layer.initial_allocation_size);
                 tuplestore_putvalues(tupstore, tupdesc, record, nulls);
-                }
+            }
+            traceprov_fail_safe_unmap(ptr, sizeof(struct local_context));
         }
         #if (PG_MAJORVERSION_NUM != 18)
         tuplestore_donestoring(tupstore);
@@ -2889,6 +2890,33 @@ extern "C" {
             traceprov_duckdb_setup_context(&traceprov_current.infer_context, &traceprov_current.cleanup_infer_context, setup_extra);
         }
         PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+    }
+
+    PG_FUNCTION_INFO_V1(traceprov_get_total_layer_size);
+
+    Datum traceprov_get_total_layer_size(PG_FUNCTION_ARGS){
+
+        uint64_t total_page_count = 0;
+
+        struct traceprov_shared_context context;
+
+        if (map_traceprov_shared_context(&context)){
+            elog(ERROR, "Error mmaping the shared context");
+        }
+
+        auto local_contexts = traceprov_get_local_contexts(context.worker_count);
+
+        for (auto local_context : *local_contexts){
+            for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
+                struct traceprov_aggregate_layer layer = local_context->cached_layers[layer_id];
+                if (layer.layer_number == 0) continue;
+                total_page_count += layer.size;
+            }
+            traceprov_fail_safe_unmap(local_context, sizeof(struct local_context));
+        }
+
+
+        PG_RETURN_UINT64(total_page_count * TRACEPROV_PAGE_SIZE);
     }
 
 };

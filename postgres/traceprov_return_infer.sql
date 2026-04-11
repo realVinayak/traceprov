@@ -80,3 +80,5 @@ DROP ACCESS METHOD IF EXISTS traceprov_am CASCADE;
 CREATE ACCESS METHOD traceprov_am TYPE TABLE HANDLER traceprov_tableam_handler;
 CREATE OR REPLACE FUNCTION traceprov_get_infer_stat (BIGINT, BOOLEAN) RETURNS text AS '$libdir/__FILE__',
     'traceprov_get_infer_stat' LANGUAGE C STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION traceprov_get_total_layer_size () RETURNS BIGINT AS '$libdir/__FILE__',
+    'traceprov_get_total_layer_size' LANGUAGE C STRICT PARALLEL SAFE;
