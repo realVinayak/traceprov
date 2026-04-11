@@ -1171,3 +1171,15 @@ void traceprov_attempt_prefaults(){
     elog(INFO, "Time for prefaults: %ld", (duration).count());
 }
 
+uint64_t traceprov_get_total_layer_size(){
+    uint64_t page_count = 0;
+    initialize_global_context();
+    for (auto entry : *g_tp_duckdb_state.worker_local_contexts){
+        for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
+            if (layer->layer_number == 0) continue;
+            page_count += layer->size;
+        }
+    }
+    return page_count * TRACEPROV_PAGE_SIZE;
+}

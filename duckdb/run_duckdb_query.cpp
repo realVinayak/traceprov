@@ -75,6 +75,16 @@ typedef struct ExtraQueryGroup {
 std::string read_file(std::string file);
 void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 
+// Some misc values that get maintained.
+// TODO: Migrate some other values from Options..
+typedef struct MiscKeyValue {
+    uint64_t total_log_size;
+} MiscKeyValue;
+
+static MiscKeyValue g_init_misc_key_value = {
+    .total_log_size = 0
+};
+
 // TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
     // via --lineage
@@ -147,6 +157,8 @@ struct Options {
     std::vector<uint64_t> *log_offsets;
     std::vector<std::string> *pre_main_sql;
     uint32_t extra_multiple_count;
+    bool get_log_size;
+    MiscKeyValue misc_store;
     /** TraceProv Settings */
     // Note that the values are not repeated here (the update is inlined for these.)
     // via --traceprov_use_partition_in_agg
@@ -198,7 +210,9 @@ struct Options parse_args(int argc, char **argv){
         .use_extra_threads = false,
         .log_offsets = new std::vector<uint64_t>,
         .pre_main_sql = new std::vector<std::string>,
-        .extra_multiple_count = 1
+        .extra_multiple_count = 1,
+        .get_log_size = false,
+        .misc_store = g_init_misc_key_value
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -362,6 +376,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_force_seq_scan")){
             traceprov_force_seq_scan = true;
+            continue;
+        } else if (IS_OPTION("--get_log_size")){
+            options.get_log_size = true;
             continue;
         }
 
@@ -553,7 +570,11 @@ void perform_query(
     }
 
     if (agg_result){
-        agg_result->push_back(make_result(duration.count(), traceprov_data, options));
+        auto result = make_result(duration.count(), traceprov_data, options);
+        if (options->get_log_size){
+            result->option.misc_store.total_log_size = traceprov_get_total_layer_size();
+        }
+        agg_result->push_back(result);
     }
 
     // This needs to run before anything else bc of overwrites.
@@ -907,6 +928,7 @@ int main(int argc, char **argv){
                 new_options.no_reinit_state = true;
                 new_options.capture_lineage = false;
                 new_options.stats_path = "";
+                new_options.get_log_size = false;
                 new_options.disable_column_optimizer = false;
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
@@ -977,6 +999,7 @@ int main(int argc, char **argv){
             extra_options.no_reinit_state = true;
             extra_options.capture_lineage = false;
             extra_options.stats_path = "";
+            extra_options.get_log_size = false;
             char final_profile_out[256] = {0};
             duckdb_prepared_statement stmt = NULL;
             for (int i = 0; i < extra_options.repeat; i++){
@@ -1118,10 +1141,11 @@ static void populate_log_offset(
     partition_info->partition_time = (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)).count();
 }
 
+bool is_initial_misc_key_value(const MiscKeyValue *key_value){
+    return memcmp(&key_value->total_log_size, &g_init_misc_key_value, sizeof(MiscKeyValue));
+}
 // This doesn't do all of option (that'll be too much)
 static std::string serialize_option(Options *option, const TraceProvNullMap *null_map){
-    if (option->_extra == NULL && !IS_SET(option->_extra_output) && (null_map == NULL))
-        return "{}";
     std::string option_serialized;
     option_serialized += "{";
     option_serialized += "\"partition\": ";
@@ -1166,6 +1190,11 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
         }
         option_serialized += "}";
     }
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_total_log_size\": ";
+    option_serialized += "[";
+    option_serialized += std::to_string(option->misc_store.total_log_size);
+    option_serialized += "]";
     option_serialized += "}";
     return option_serialized;
 }
