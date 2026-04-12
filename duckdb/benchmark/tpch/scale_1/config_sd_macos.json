@@ -2,7 +2,8 @@
     "original_queries": [
         1, 4, 6, 9, 11, 14, 15, 17, 20, 22
     ],
-    "queries": [ 1, 6, 9, 11, 14, 15, 20],
+    "queries": [ 1, 4, 6, 9, 11, 14, 15, 17, 20, 22],
+    "queries": "map(str, range(1, 23))",
     "_queries": [15],
     "validate": false,
     "subdirs": [

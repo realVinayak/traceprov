@@ -87,8 +87,8 @@
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 2,
-        "throwaway": 0
+        "repeat": 10,
+        "throwaway": 5
     },
     "q_config": {
         "15": {
