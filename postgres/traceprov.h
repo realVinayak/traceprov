@@ -171,7 +171,7 @@ struct traceprov_aggregate_layer {
     // The actual null map.
     uint64 null_map;
     uint64 last_allocation_size;
-    // For debugging.
+    // For debugging + computing the number of bytes used.
     uint64 initial_allocation_size;
 };
 

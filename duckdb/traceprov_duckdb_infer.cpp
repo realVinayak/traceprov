@@ -1171,3 +1171,45 @@ void traceprov_attempt_prefaults(){
     elog(INFO, "Time for prefaults: %ld", (duration).count());
 }
 
+TraceProvLogSize traceprov_get_total_layer_size(){
+    TraceProvLogSize log_size = {
+        .page_requested_size = 0,
+        .page_used_size = 0,
+        .bytes_used_size = 0
+    };
+    uint64_t page_requested = 0;
+    uint64_t page_used = 0;
+    uint64_t bytes_used = 0;
+    initialize_global_context();
+    for (auto entry : *g_tp_duckdb_state.worker_local_contexts){
+        for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
+            if (layer->layer_number == 0) continue;
+            page_requested += layer->size;
+            page_used += 1;
+            const uint64_t gap = ((uint64_t)layer->current_row - (uint64_t)layer->last_mapping);
+            bytes_used += gap;
+            if (layer->size > 1){
+                // Need to determine which pages were used.
+                bytes_used += TRACEPROV_PAGE_SIZE; // for the first page.
+                const int64_t allocate_count = (layer->size - 1) / TRACEPROV_INCREMENT_TRACE_BY_PG;
+                if (allocate_count <= 0){
+                    elog(ERROR, "Expected allocations to be > 1");
+                }
+                const uint64_t intermediate_page_used = (allocate_count - 1)*TRACEPROV_INCREMENT_TRACE_BY_PG;
+                page_used += intermediate_page_used;
+                bytes_used += (intermediate_page_used * TRACEPROV_PAGE_SIZE);
+                if (gap == 0){
+                    // This can never happen.
+                    // Otherwise, it will imply that the increment go through, but no nemory access was performed, which is not possible.
+                    elog(ERROR, "Should never expect gap to be 0");
+                }
+                page_used += ((gap - 1) / TRACEPROV_PAGE_SIZE) + 1;
+            }
+        }
+    }
+    log_size.page_requested_size = page_requested * TRACEPROV_PAGE_SIZE;
+    log_size.page_used_size = page_used * TRACEPROV_PAGE_SIZE;
+    log_size.bytes_used_size = bytes_used;
+    return log_size;
+}

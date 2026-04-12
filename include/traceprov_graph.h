@@ -167,4 +167,10 @@ typedef struct TraceProvEntryMetaHeader {
     uint32 num_keys;
 } TraceProvEntryMetaHeader;
 
+typedef struct TraceProvLogSize {
+    uint64_t page_requested_size;
+    uint64_t page_used_size;
+    uint64_t bytes_used_size;
+} TraceProvLogSize;
+
 #endif

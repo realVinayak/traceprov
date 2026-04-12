@@ -15,6 +15,8 @@ from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_INFER_SPEC,
     TRACEPROV_PERFORM_DERIVATION,
     TRACEPROV_SYNC_TIME,
+    traceprov_make_create_view,
+    traceprov_make_drop_view,
 )
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_with_timeout import (
@@ -49,22 +51,8 @@ def special_query(
             base=TP_SKIPPABLE_OPTION,
             key=key,
             extras=[
-                ExtraQuery(
-                    label="15_post",
-                    query="$INLINE-drop view if exists revenue0;",
-                    runs_after_base=True,
-                    skip_validation=True,
-                    capture_output=False,
-                    strict_run=True,
-                ),
-                ExtraQuery(
-                    label="15_pre",
-                    query="create_view.sql",
-                    runs_after_base=True,
-                    skip_validation=True,
-                    capture_output=False,
-                    strict_run=True,
-                ),
+                traceprov_make_drop_view("15_pre_step_1", "revenue0", strict=False),
+                traceprov_make_create_view("15_pre_step_2", "create_view.sql"),
                 ExtraQuery(
                     label="traceprov" if is_traceprov else "base",
                     query="base.sql",
@@ -75,14 +63,7 @@ def special_query(
                     preprocess=([MakeTraceProv()] if is_traceprov else []),
                 ),
                 *([TRACEPROV_INFER_SPEC()] if is_traceprov else []),
-                ExtraQuery(
-                    label="15_post",
-                    query="$INLINE-drop view revenue0;",
-                    runs_after_base=True,
-                    skip_validation=True,
-                    capture_output=False,
-                    strict_run=True,
-                ),
+                traceprov_make_drop_view("15_post_step_1", "revenue0", strict=True),
             ],
             extra_options=(
                 {

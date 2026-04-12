@@ -31,14 +31,18 @@ void print_layer(struct traceprov_aggregate_layer *layer){
     elog(INFO, "}");
 }
 
+void traceprov_fail_safe_unmap(void *ptr, size_t length){
+    if ((munmap(ptr, length))){
+        elog(ERROR, "Error unmaping");
+    }
+}
+
 int grow_layer_file(struct traceprov_aggregate_layer *current_layer){
     int rc = 0;
     // In this case, we'd have to grow the file.
     const long int initial_size = current_layer->size;
     // Unmap previous allocation.
-    if ((rc = munmap(current_layer->last_mapping, current_layer->last_allocation_size * TRACEPROV_PAGE_SIZE))){
-        elog(ERROR, "Error unmaping");
-    }
+    traceprov_fail_safe_unmap(current_layer->last_mapping, current_layer->last_allocation_size * TRACEPROV_PAGE_SIZE);
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
     const long int next_size = (current_layer->size) * TRACEPROV_PAGE_SIZE;
     if (unlikely(rc = ftruncate(current_layer->layer_fd, next_size))){

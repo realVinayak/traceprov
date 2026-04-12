@@ -13,7 +13,7 @@ static Query *perform_window_clause_rewrite_inline(
     List **extra_targets
 );
 
-static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, List *sort_clause, Bitmapset **added_refs);
+static TargetEntry *append_ordered_row_number(const List *original_target_list, Query *subquery, List *sort_clause, Bitmapset **added_refs);
 
 static bool is_empty_window_frame(const WindowClause *wc, int64 *start_offset, int64 *end_offset);
 static int64 assert_int8_const(const Node *result);
@@ -53,6 +53,10 @@ static Query *perform_window_clause_rewrite_inline(
     List *traceprov_provenance_attrs,
     List **extra_targets
 ){
+
+    // Since we might mutate the var refs in the target list, need to have a copy of the original target list.
+    const List *original_query_target_list = list_copy_deep(query->targetList);
+
     // Push down the current query.
     // This is needed because, oth
     List *shift_spec = NIL;
@@ -65,10 +69,10 @@ static Query *perform_window_clause_rewrite_inline(
     // Also adjust all the var refs in traceprov targets too.
     List *traceprov_targets_flattened = traceprov_flatten(traceprov_provenance_attrs);
     List *traceprov_exprns_flattened = traceprov_append_targets(traceprov_targets_flattened, NIL);
-    List *traceprov_vars = traceprov_assert_all_vars(traceprov_exprns_flattened);
-    current_vars = list_concat_copy(current_vars, traceprov_vars);
+    const List *traceprov_vars = traceprov_assert_all_vars(traceprov_exprns_flattened);
+    List *traceprov_current_vars = list_concat_copy(current_vars, traceprov_vars);
     ListCell *var_cursor = NULL;
-    foreach(var_cursor, current_vars){
+    foreach(var_cursor, traceprov_current_vars){
         Var *var = lfirst_node(Var, var_cursor);
         var->varattno += list_nth_int(shift_spec, var->varno - 1);
         var->varno = 1;
@@ -130,7 +134,7 @@ static Query *perform_window_clause_rewrite_inline(
 
         if (list_length(sort_clause) > 0){
 
-            TargetEntry *ordered_row_number_te = append_ordered_row_number(query, subquery, sort_clause, &added_refs);
+            TargetEntry *ordered_row_number_te = append_ordered_row_number(original_query_target_list, subquery, sort_clause, &added_refs);
             // This ends up being used in both rows and range/groups case.
             Var *ordered_row_number_var = makeVarFromTargetEntry(1, ordered_row_number_te);
             Node *frame_start_fc_node, *frame_end_fc_node;
@@ -143,7 +147,11 @@ static Query *perform_window_clause_rewrite_inline(
 
             if (wc->frameOptions & FRAMEOPTION_ROWS){
 
-                wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
+                // Previously, the ordered row number was _appended_ to the order clause.
+                // Since the row number is already sorted correctly, we can just use that, rather than sorting on the other
+                // attributes.
+                // wc->orderClause = lappend(wc->orderClause, ordered_row_number_sgc);
+                wc->orderClause = list_make1(ordered_row_number_sgc);
 
                 WindowDef *rows_window_def = makeNode(WindowDef);
 
@@ -301,14 +309,14 @@ static Query *perform_window_clause_rewrite_inline(
     return query;
 }
 
-static TargetEntry *append_ordered_row_number(Query *query, Query *subquery, List *sort_clause, Bitmapset **added_refs){
+static TargetEntry *append_ordered_row_number(const List *original_target_list, Query *subquery, List *sort_clause, Bitmapset **added_refs){
     ListCell *sort_clause_cursor = NULL;
     // Iteratre over the sort clause, and figure out the targets that
     // need to be pushed down.
     foreach(sort_clause_cursor, sort_clause){
         TargetEntry *te = get_sortgroupclause_tle(
             lfirst_node(SortGroupClause, sort_clause_cursor),
-            query->targetList
+            original_target_list
         );
         // It is possible that the same target expr appears multiple times.
         // Postgres only adds it once, which is fine, but we need to detect such cases.
