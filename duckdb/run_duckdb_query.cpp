@@ -78,7 +78,7 @@ void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 // Some misc values that get maintained.
 // TODO: Migrate some other values from Options..
 typedef struct MiscKeyValue {
-    uint64_t total_log_size;
+    TraceProvLogSize total_log_size;
 } MiscKeyValue;
 
 static MiscKeyValue g_init_misc_key_value = {
@@ -1193,7 +1193,16 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
     option_serialized += ",";
     option_serialized += "\"misc_key_value_total_log_size\": ";
     option_serialized += "[";
-    option_serialized += std::to_string(option->misc_store.total_log_size);
+    option_serialized += "{";
+    option_serialized += "\"page_requested_size\": ";
+    option_serialized += std::to_string(option->misc_store.total_log_size.page_requested_size);
+    option_serialized += ",";
+    option_serialized += "\"page_used_size\": ";
+    option_serialized += std::to_string(option->misc_store.total_log_size.page_used_size);
+    option_serialized += ",";
+    option_serialized += "\"bytes_used_size\": ";
+    option_serialized += std::to_string(option->misc_store.total_log_size.bytes_used_size);
+    option_serialized += "}";
     option_serialized += "]";
     option_serialized += "}";
     return option_serialized;

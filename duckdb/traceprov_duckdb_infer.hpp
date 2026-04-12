@@ -31,4 +31,11 @@ std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
 duckdb_table_function traceprov_create_infer_table_func();
 void traceprov_attempt_prefaults();
 void initialize_global_context();
-uint64_t traceprov_get_total_layer_size();
+
+typedef struct TraceProvLogSize {
+    uint64_t page_requested_size;
+    uint64_t page_used_size;
+    uint64_t bytes_used_size;
+} TraceProvLogSize;
+
+TraceProvLogSize traceprov_get_total_layer_size();
