@@ -294,9 +294,6 @@ def main():
     result = benchmark.run_from_argparse(
         all_dirs, RunParams(**config.get("runTimeOptions", {}))
     )
-    if "extras" in result:
-        raise Exception('Expected "extras" to be a reserved keyword.')
-
     # Also store the arguments from cmd line.
     result["extras"] = dict(config=parsed.config)
     benchmark.dump_final_result(result)

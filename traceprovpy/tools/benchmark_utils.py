@@ -115,6 +115,39 @@ TRACEPROV_PREPARE_INFER_SPEC = lambda: ExtraQuery(
     runs_after_base=True,
 )
 
+TRACEPROV_MAKE_TRUNCATE_LOGS = lambda: ExtraQuery(
+    label="truncate_logs",
+    query="$INLINE-select truncateLogs();",
+    runs_after_materialize=True,
+    skip_validation=True,
+    strict_run=True,
+)
+
+
+def traceprov_make_drop_view(label: str, view_name: str, strict: bool):
+    return ExtraQuery(
+        label=label,
+        query="$INLINE-drop view "
+        + (" if exists " if not strict else "")
+        + view_name
+        + ";",
+        runs_after_base=True,
+        skip_validation=True,
+        capture_output=False,
+        strict_run=True,
+    )
+
+
+def traceprov_make_create_view(label: str, view_file: str):
+    return ExtraQuery(
+        label=label,
+        query=view_file,
+        runs_after_base=True,
+        skip_validation=True,
+        capture_output=False,
+        strict_run=True,
+    )
+
 
 def traceprov_dump_safe_results(suff: str, results: Any):
     current_timestamp = datetime.now()

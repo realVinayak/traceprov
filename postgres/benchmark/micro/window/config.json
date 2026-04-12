@@ -1,0 +1,13 @@
+{
+    "queries": [
+        "groups_constant_frame_size",
+        "groups_increasing_frame_size",
+        "rows_constant_frame_size",
+        "rows_increasing_frame_size"
+    ],
+    "num_rows": ["1000", "2000", "4000"],
+    "runTimeOptions": {
+        "repeat": 3,
+        "throwaway": 0
+    }
+}

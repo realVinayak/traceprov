@@ -181,11 +181,16 @@ class QuerySpec(NamedTuple):
                             *(extra.preprocess or []),
                         ]
                     )
-                if extra.func:
-                    extra_result = extra.func(self, extra, extra_pack, get_run_options)
-                else:
-                    extra_result = _run_with_timeout(extra_pack)
-                extra_results[extra.label].append(extra_result)
+
+                # Assume that func is smart enough to handle the repeat correctly.
+                for _ in range(extra.repeat if not extra.func else 1):
+                    if extra.func:
+                        extra_result = extra.func(
+                            self, extra, extra_pack, get_run_options
+                        )
+                    else:
+                        extra_result = _run_with_timeout(extra_pack)
+                    extra_results[extra.label].append(extra_result)
             return extra_results
 
         original_get_options = get_run_options
@@ -451,6 +456,9 @@ class GenericBenchmark(NamedTuple):
             called_benchmark=called_benchmark,
             prefix=parsed.suff,
         )
+
+        if "extras" in final_result:
+            raise Exception('Expected "extras" to be a reserved keyword.')
         return final_result
 
     def dump_final_result(self, final_result: dict, out_dir="./results/"):
@@ -517,10 +525,12 @@ class GenericBenchmark(NamedTuple):
             )
             == 0
         )
-        for init_sql_line in init_sql or []:
+        if init_sql:
+            init_sql_joined = ";\n".join(init_sql)
+            init_sql_path = just_write("/tmp/init_sql.sql", init_sql_joined)
             assert (
                 os.system(
-                    f'echo "{init_sql_line}" | PGPASSWORD={connection_params.password} psql {connection_params.get_flat()}'
+                    f"PGPASSWORD={connection_params.password} psql {connection_params.get_flat()} -f {init_sql_path}"
                 )
                 == 0
             )

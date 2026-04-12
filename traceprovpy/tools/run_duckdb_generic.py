@@ -23,6 +23,13 @@ random.seed(10)
 TP_OFFSET_TICKER = "__TP_OFFSET__"
 TP_OUT_ID_TICKER = "%OUT_ID%"
 
+TRACEPROV_CAPTURE_ENTRY = ("capture", 0, 0)
+
+# ugh, get rid of this (make this the same as TRACEPROV_CAPTURE_ENTRY)
+# not currently done, because there are now result files that contain this.
+# the analysis code handles this case. ugh.
+TRACEPROV_CAPTURE_ENTRY_SD = ("capture", 0)
+
 
 def make_dump_query(in_query: str, out_path: str):
     in_query = in_query.replace(";", "")
@@ -48,9 +55,6 @@ def _infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
         out_ids.extend((range(row_count))[:clamped])
         out_ids.extend((range(row_count))[-clamped:])
     return out_ids
-
-
-CAPTURE_ENTRY = ("capture", 0, 0)
 
 
 def create_base_offset(query_dir: Path):
@@ -108,7 +112,7 @@ def run_sample_inference(
             sql_spec_map.append((element, sample_id, out_id))
         log_offsets.append(out_id)
 
-    sql_spec_map = [CAPTURE_ENTRY, *sql_spec_map]
+    sql_spec_map = [TRACEPROV_CAPTURE_ENTRY, *sql_spec_map]
     sql_spec_map = list(product(sql_spec_map, range(iters)))
 
     capture_options = DuckDBDriverOptions(
@@ -126,6 +130,7 @@ def run_sample_inference(
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_materialize_derivation=materialize_infer,
         pre_query=pre_query,
+        get_log_size=True,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -152,7 +157,7 @@ def run_sample_inference(
 
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
-            if map_entry == CAPTURE_ENTRY:
+            if map_entry == TRACEPROV_CAPTURE_ENTRY:
                 continue
             (_, sample_id, out_id), iter_id = map_entry
             # don't do any validation in this case.
@@ -428,7 +433,7 @@ def run_sample_inference_smokedduck(
         extra_sqls.append(final_q_path.as_posix())
         sql_spec_map.append((sample_id, out_id))
 
-    sql_spec_map = [("capture", 0), *sql_spec_map]
+    sql_spec_map = [TRACEPROV_CAPTURE_ENTRY_SD, *sql_spec_map]
     sql_spec_map = list(product(sql_spec_map, range(iters)))
     just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
 
@@ -687,6 +692,7 @@ def run_single(
         and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         extra_multiple_count=extra_multiple_count,
+        get_log_size=True,
     ).parse_optimizations(parsed)
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
