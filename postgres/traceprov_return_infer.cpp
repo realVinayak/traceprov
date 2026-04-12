@@ -2896,8 +2896,6 @@ extern "C" {
 
     Datum traceprov_get_total_layer_size(PG_FUNCTION_ARGS){
 
-        uint64 total_page_count = 0;
-
         struct traceprov_shared_context context;
 
         if (map_traceprov_shared_context(&context)){
@@ -2906,17 +2904,58 @@ extern "C" {
 
         auto local_contexts = traceprov_get_local_contexts(context.worker_count);
 
+        TraceProvLogSize log_size = {
+            .page_requested_size = 0,
+            .page_used_size = 0,
+            .bytes_used_size = 0
+        };
+        uint64_t page_requested = 0;
+        uint64_t page_used = 0;
+        uint64_t bytes_used = 0;
+
         for (auto local_context : *local_contexts){
-            for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
-                struct traceprov_aggregate_layer layer = local_context->cached_layers[layer_id];
-                if (layer.layer_number == 0) continue;
-                total_page_count += layer.size;
+            for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+                const traceprov_aggregate_layer *layer = &local_context->cached_layers[layer_idx];
+                if (layer->layer_number == 0) continue;
+                page_requested += layer->size;
+                page_used += layer->initial_allocation_size;
+                const uint64_t gap = ((uint64_t)layer->current_row - (uint64_t)layer->last_mapping);
+                bytes_used += gap;
+                if (layer->size > layer->initial_allocation_size){
+                    // Need to determine which pages were used.
+                    bytes_used += TRACEPROV_PAGE_SIZE * (layer->initial_allocation_size); // for the first page.
+                    const int64_t allocate_count = (layer->size - layer->initial_allocation_size) / TRACEPROV_INCREMENT_TRACE_BY_PG;
+                    if (allocate_count <= 0){
+                        elog(ERROR, "Expected allocations to be > 1");
+                    }
+                    const uint64_t intermediate_page_used = (allocate_count - 1)*TRACEPROV_INCREMENT_TRACE_BY_PG;
+                    page_used += intermediate_page_used;
+                    bytes_used += (intermediate_page_used * TRACEPROV_PAGE_SIZE);
+                    if (gap == 0){
+                        // This can never happen.
+                        // Otherwise, it will imply that the increment go through, but no nemory access was performed, which is not possible.
+                        elog(ERROR, "Should never expect gap to be 0");
+                    }
+                    page_used += ((gap - 1) / TRACEPROV_PAGE_SIZE) + 1;
+                }
             }
             traceprov_fail_safe_unmap(local_context, sizeof(struct local_context));
         }
+        log_size.page_requested_size = page_requested * TRACEPROV_PAGE_SIZE;
+        log_size.page_used_size = page_used * TRACEPROV_PAGE_SIZE;
+        log_size.bytes_used_size = bytes_used;
 
+        StringInfoData buf;
+        initStringInfo(&buf);
+        appendStringInfoChar(&buf, '{');
+        appendStringInfo(&buf, "\"page_requested_size\": %ld", log_size.page_requested_size);   
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"page_used_size\": %ld", log_size.page_used_size);
+        appendStringInfoChar(&buf, ',');
+        appendStringInfo(&buf, "\"bytes_used_size\": %ld", log_size.bytes_used_size);
+        appendStringInfoChar(&buf, '}');
 
-        PG_RETURN_UINT64(total_page_count * TRACEPROV_PAGE_SIZE);
+        PG_RETURN_TEXT_P(cstring_to_text(buf.data));
     }
 
 };
