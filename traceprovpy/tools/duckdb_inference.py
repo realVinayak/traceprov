@@ -64,6 +64,7 @@ class DuckDBDriverOptions(NamedTuple):
     log_offsets: list[str] = None
     pre_query: list[str] = None
     extra_multiple_count: int | None = 3
+    get_log_size: bool = False
     # All optimizations.
     traceprov_use_partition_in_agg: bool = (
         DriverDefaultValues.traceprov_use_partition_in_agg
@@ -128,6 +129,7 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_perform_derivation",
             "traceprov_materialize_derivation",
             "traceprov_dry_run_derivation",
+            "get_log_size",
         }
         assert (
             len(optimizations.intersection(base_options)) == 0

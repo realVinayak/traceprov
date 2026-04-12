@@ -52,6 +52,9 @@ extern "C" {
         PRINT_ON_DEBUG("Map shared context succesful!");
 
         memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
+        if (munmap(temp_ptr, TRACEPROV_SHARED_CONTEXT_SIZE)){
+            elog(ERROR, "Error unmaping");
+        }
 
     exit_map:
         if (shared_context_fd > 0) close(shared_context_fd);

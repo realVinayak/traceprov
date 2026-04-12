@@ -126,6 +126,7 @@ def run_sample_inference(
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_materialize_derivation=materialize_infer,
         pre_query=pre_query,
+        get_log_size=True,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -687,6 +688,7 @@ def run_single(
         and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         extra_multiple_count=extra_multiple_count,
+        get_log_size=True,
     ).parse_optimizations(parsed)
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
