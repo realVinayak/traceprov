@@ -25,7 +25,9 @@ def just_read(file: str | Path):
 def just_write(file: str | Path, contents: str):
     with open(file, "w") as f:
         f.write(contents)
-    return file
+
+    # always return the safest path possible.
+    return Path(file).as_posix()
 
 
 @safe_file

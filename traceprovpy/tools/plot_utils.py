@@ -4,11 +4,32 @@
 # Every benchmark needs to be of this class (so that arguments can be captured.)
 # This is done to improve reliability.
 import argparse
-from typing import Dict, NamedTuple, Tuple
+import glob
+from pathlib import Path
+from typing import Any, Dict, NamedTuple, Tuple
 import statistics
+
+from traceprovpy.tools.file_utils import json_read_file, just_read
+
+
+class MaskedParser(argparse.ArgumentParser):
+    _other: "BenchmarkPlot"
+
+    def __init__(self, other: "BenchmarkPlot", *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._other = other
+
+    def parse_args(self, *args, **kwargs):
+        parse_result = super().parse_args(*args, **kwargs)
+        self._other.parsed = parse_result
+        return parse_result
 
 
 class BenchmarkPlot:
+    name: str
+    plot_args: Any
+    parser: MaskedParser
+    parsed: argparse.Namespace
 
     colors = [
         "tab:blue",
@@ -30,13 +51,37 @@ class BenchmarkPlot:
         self.plot_args = None
         # Makes a simple parser.
         # The caller can add more arguments if needed.
-        parser = argparse.ArgumentParser(prog=f"result_analyzer_{self.name}")
+        parser = MaskedParser(self, prog=f"result_analyzer_{self.name}")
         parser.add_argument("-r", "--root", required=True, type=str)
-        parser.add_argument("-f", "--files", required=True, type=str, nargs="+")
+        parser.add_argument("-f", "--files", required=False, type=str, nargs="+")
+        parser.add_argument("--i", required=False, type=str)
+        parser.add_argument("--out_dir", required=True, type=str)
         self.parser = parser
 
     def plot(self, **kwargs):
         self.plot_args = kwargs
+
+    # a generator because why not.
+    def read_files(self, file_name: str):
+        parsed = self.parsed
+        files_to_read = parsed.files
+        if not files_to_read:
+            assert parsed.i is not None
+            norm_files = just_read(parsed.i)
+            assert norm_files is not None
+            files_to_read = [
+                sl
+                for sl in [l.strip() for l in norm_files.split("\n")]
+                if len(sl) > 0 and not sl.startswith("#")
+            ]
+
+        for file in files_to_read:
+            complete_path = f"{parsed.root}/{file}/{file_name}"
+            paths = glob.glob(complete_path)
+            for path in paths:
+                assert Path(path).exists(), f"Expected {path} to exist!"
+                contents = json_read_file(path)
+                yield (path, contents)
 
 
 class Plotable(NamedTuple):

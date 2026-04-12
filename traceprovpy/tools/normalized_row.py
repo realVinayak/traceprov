@@ -40,6 +40,9 @@ class NormalizedRow(object):
         return {"category", "base", "capture", "base_profile", "capture_profile"}
 
     def __init__(self, **kwargs):
+        keys = set(self.keys())
+        in_keys = kwargs.keys()
+        assert keys == in_keys, f"Got different: {keys.symmetric_difference(in_keys)}"
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -103,10 +106,12 @@ def tap_simple_result(result: dict):
 
 
 def tap_profile_result(result: dict):
-    return dict(latency=result["latency"])
+    # to handle old profile results.
+    return dict(latency=result["latency"] if "latency" in result else result["timing"])
 
 
 def sum_simple_result(left_result: dict, right_result: dict):
+    assert isinstance(left_result, dict) and isinstance(right_result, dict)
     return {
         **left_result,
         **{key: left_result.get(key) + value for (key, value) in right_result.items()},
@@ -196,9 +201,10 @@ def extract_stats_sample_infer_row(sql_map: list[dict], time_results: list[dict]
 class NormalizedSampleInferRow(NormalizedRow):
     average_time: float
     max_stdev_ratio: float
+    max_stdev: float
 
     def keys(self):
-        return super().keys() | {"average_time", "max_stdev_ratio"}
+        return super().keys() | {"average_time", "max_stdev_ratio", "max_stdev"}
 
 
 class NormalizedInferRow(NormalizedRow):
