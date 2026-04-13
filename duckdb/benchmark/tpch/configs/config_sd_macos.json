@@ -1,0 +1,29 @@
+{
+    "original_queries": [
+        1, 4, 6, 9, 11, 14, 15, 17, 20, 22
+    ],
+    "queries": [ 1, 4, 6, 9, 11, 14, 15, 17, 20, 22],
+    "queries": "map(str, range(1, 23))",
+    "_queries": [15],
+    "validate": false,
+    "subdirs": [
+        "params_default"
+    ],
+    "_subdirs": [
+        "params_1",
+        "params_2",
+        "params_3",
+        "params_4",
+        "params_5",
+        "params_default"
+    ],
+    "runTimeOptions": {
+        "repeat": 15,
+        "throwaway": 0
+    },
+    "q_config": {
+        "15": {
+            "pre_base": "create_view.sql"
+        }
+    }
+}
