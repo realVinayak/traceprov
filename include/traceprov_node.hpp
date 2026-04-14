@@ -155,6 +155,7 @@ extern "C" {
     typedef struct TraceProvDerivationSpec {
         TraceProvResultMap *result_map;
         TraceProvPointerContext *p_context;
+        uint64_t sql_compilation_time;
     } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;

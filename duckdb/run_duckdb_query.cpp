@@ -79,10 +79,16 @@ void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 // TODO: Migrate some other values from Options..
 typedef struct MiscKeyValue {
     TraceProvLogSize total_log_size;
+    uint64_t sql_compilation_time;
 } MiscKeyValue;
 
-static MiscKeyValue g_init_misc_key_value = {
-    .total_log_size = 0
+const static MiscKeyValue g_init_misc_key_value = {
+    .total_log_size = TraceProvLogSize {
+        .page_requested_size = 0,
+        .page_used_size = 0,
+        .bytes_used_size = 0
+    },
+    .sql_compilation_time = 0
 };
 
 // TODO: Migrate to a better option handling system than this in-house mess.
@@ -466,7 +472,7 @@ PerformQueryResult *make_result(int64_t computed_time, TraceProvLightData *data,
     return result;
 }
 
-void perform_query(
+PerformQueryResult *perform_query(
     const struct Options *options, 
     duckdb_connection &con, 
     std::string &in_sql,
@@ -569,8 +575,10 @@ void perform_query(
         exit(1);
     }
 
+    PerformQueryResult *result = NULL;
+
     if (agg_result){
-        auto result = make_result(duration.count(), traceprov_data, options);
+        result = make_result(duration.count(), traceprov_data, options);
         if (options->get_log_size){
             result->option.misc_store.total_log_size = traceprov_get_total_layer_size();
         }
@@ -607,6 +615,8 @@ void perform_query(
         _layer_stats_query = (TP_LAYER_STATS_OUTPUT(_layer_stats_query, layer_stats_out));
         DUCKDB_RUN_SHORT_QUERY(con, _layer_stats_query.c_str(), "layer stats out");
     }
+
+    return result;
 }
 
 typedef struct ExtraQuery {
@@ -904,11 +914,15 @@ int main(int argc, char **argv){
                 }
             }
 
-            perform_query(&options, con, in_sql, &agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
+            auto curr_result = perform_query(&options, con, in_sql, &agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
 
             auto extra_sqls_clone = (extra_sqls);
             std::vector<TraceProvTableExtra *> table_func_extra;
-            augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+
+            const auto spec_result =  augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+            if (spec_result){
+                curr_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
+            }
 
             uint32_t extra_idx = 0;
 
@@ -953,6 +967,7 @@ int main(int argc, char **argv){
         }
     }else{
         // run main once.
+        PerformQueryResult *main_result = NULL;
         {
             Options new_options = options;
             char final_stats_query[256] = {0};
@@ -973,7 +988,7 @@ int main(int argc, char **argv){
                     sprintf(profile_out, options.profile_out_path.c_str(), 0, i);
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
-                perform_query(&run_option, con, in_sql, &agg_result, final_profile_out, final_stats_query, "");               
+                main_result = perform_query(&run_option, con, in_sql, &agg_result, final_profile_out, final_stats_query, "");
             }
         }
         int extra_sql_idx = 0;
@@ -981,8 +996,10 @@ int main(int argc, char **argv){
 
         auto extra_sqls_clone = (extra_sqls);
         std::vector<TraceProvTableExtra *> table_func_extra;
-        augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
-
+        const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+        if (main_result != NULL && spec_result != NULL){
+            main_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
+        }
         // Run extra all ;)
         for (auto extra_sql: extra_sqls_clone){
 
@@ -1204,6 +1221,8 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
     option_serialized += std::to_string(option->misc_store.total_log_size.bytes_used_size);
     option_serialized += "}";
     option_serialized += "]";
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_sql_compilation_time\": " + std::to_string(option->misc_store.sql_compilation_time);
     option_serialized += "}";
     return option_serialized;
 }
@@ -1221,7 +1240,10 @@ TraceProvDerivationSpec* augment_extra_sql(
 
     TraceProvParseContext *parsed_back_context;
     char *parsed_sql = NULL;
+    const auto start_time = std::chrono::steady_clock::now();
     auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
+    const auto end_time = std::chrono::steady_clock::now();
+    result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
     for (auto log_offset: *log_offsets){
         TraceProvPartitionInfo *info = NULL;
         if (log_offset != -1){
