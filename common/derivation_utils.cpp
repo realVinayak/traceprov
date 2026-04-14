@@ -654,16 +654,26 @@ static std::string traceprov_get_column_select(
 }
 
 std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context){
+    std::string gen_sql = "";
+    if (context.cache != NULL){
+        // Check the cache, if the SQL is present, don't bother regenerating again.
+        if (context.cache->find((uint64_t)node) != context.cache->end())
+            gen_sql = context.cache->at((uint64_t)node);
+    }
+    if (gen_sql != ""){
+        return gen_sql;
+    }
+
     if (node->tag == T_TP_RELATION){
         node->alias_name = tp_parse_get_unique_alias(context.context);
-        return traceprov_relation_to_sql((TraceProvRelation *)node, context);
-    }
-    if (node->tag == T_TP_JOIN){
+        gen_sql = traceprov_relation_to_sql((TraceProvRelation *)node, context);
+    } else if (node->tag == T_TP_JOIN){
         node->alias_name = tp_parse_get_unique_alias(context.context);
-        return traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
-    }
-    if (node->tag == T_TP_APPEND){
-        return traceprov_append_to_sql((TraceProvAppend *)node, context);
+        gen_sql = traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
+    } else if (node->tag == T_TP_APPEND){
+        gen_sql = traceprov_append_to_sql((TraceProvAppend *)node, context);
+    } else {
+        EXIT_WITH_MESSAGE("Found handling invalid node in toSQL");
     }
     // if (node->tag == T_TP_WINDOW_READ){
     //     node->alias_name = tp_parse_get_unique_alias(context.context);
@@ -677,5 +687,9 @@ std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext con
     //     node->alias_name = tp_parse_get_unique_alias(context.context);
     //     return traceprov_exists_to_sql((TraceProvExists *)node, context);
     // }
-    EXIT_WITH_MESSAGE("Found handling invalid node in toSQL");
+    // Insert the node's SQL into cache.
+    if (context.cache){
+        context.cache->insert({(uint64_t)node, gen_sql});
+    }
+    return gen_sql;
 }

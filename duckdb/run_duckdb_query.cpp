@@ -386,6 +386,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--get_log_size")){
             options.get_log_size = true;
             continue;
+        } else if (IS_OPTION("--traceprov_skip_sql_cache")){
+            traceprov_skip_sql_cache = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -1244,6 +1247,43 @@ TraceProvDerivationSpec* augment_extra_sql(
     auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
     const auto end_time = std::chrono::steady_clock::now();
     result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+    std::unordered_map<TraceProvLayerNumber, std::string> layer_string_map;
+    std::vector<std::string> ddls;
+    std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+    std::unordered_map<uint64_t, std::string> sql_cache;
+    for (auto result_map_pair: *result_spec->result_map){
+        if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
+            // In this case, it is a simple scan.
+            // Apparently, for some reason, DuckDB does not parallelise this????
+            // Anyways, right now, that breaks things.
+            // So, remember that it was a simple scan.
+            TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
+            relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
+        }
+        if ((options->traceprov_layers_to_derive->size() != 0) &&
+            (std::find(
+                options->traceprov_layers_to_derive->begin(), 
+                options->traceprov_layers_to_derive->end(), result_map_pair.first
+            )) == options->traceprov_layers_to_derive->end())
+            {
+                continue;
+            }
+        const auto start_sql_time = std::chrono::steady_clock::now();
+        auto node_sql = traceprov_node_to_sql(
+            result_map_pair.second, 
+            TraceProvToSQLContext{
+                .context = parsed_back_context,
+                .use_table_def = true,
+                .ddls = &ddls,
+                .added_ddls = &added_ddls,
+                .pointer_context = NULL,
+                .cache = traceprov_skip_page_cache ? NULL : &sql_cache
+            }
+        );
+        const auto end_sql_time = std::chrono::steady_clock::now();
+        result_spec->sql_compilation_time += std::chrono::duration_cast<std::chrono::microseconds>(end_sql_time - start_sql_time).count();
+        layer_string_map.insert({result_map_pair.first, node_sql});
+    }
     for (auto log_offset: *log_offsets){
         TraceProvPartitionInfo *info = NULL;
         if (log_offset != -1){
@@ -1253,44 +1293,18 @@ TraceProvDerivationSpec* augment_extra_sql(
             info->layer_log_map = NULL;
             populate_log_offset(log_offset, result_spec->p_context, partition_layers, info);
         }
-        for (auto result_map_pair: *result_spec->result_map){
+        for (auto layer_string_pair: layer_string_map){
             auto table_extra = make_table_extra();
-            if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
-                // In this case, it is a simple scan.
-                // Apparently, for some reason, DuckDB does not parallelise this????
-                // Anyways, right now, that breaks things.
-                // So, remember that it was a simple scan.
-                TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
-                relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
-            }
-            std::vector<std::string> ddls;
-            std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
-            if ((options->traceprov_layers_to_derive->size() != 0) &&
-                (std::find(
-                    options->traceprov_layers_to_derive->begin(), 
-                    options->traceprov_layers_to_derive->end(), result_map_pair.first
-                )) == options->traceprov_layers_to_derive->end())
-                {
-                    continue;
-                }
-            auto node_sql = traceprov_node_to_sql(
-                result_map_pair.second, 
-                TraceProvToSQLContext{
-                    .context = parsed_back_context,
-                    .use_table_def = true,
-                    .ddls = &ddls,
-                    .added_ddls = &added_ddls,
-                    .pointer_context = NULL
-                }
-            );
             uint64_t extra_added = 0;
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
+            auto node_sql = layer_string_pair.second;
             if (options->traceprov_materialize_derivation){
-                std::string table_name = "traceprov_lineage_" + std::to_string(result_map_pair.first);
+                std::string table_name = "traceprov_lineage_" + std::to_string(layer_string_pair.first);
                 if (log_offset != -1){
                     table_name += "_" + std::to_string(log_offset);
                 }
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
+                // TODO: Enable this via a runtime option?
                 // for (auto ddl_string : ddls){
                 //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
                 //     extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
@@ -1309,7 +1323,7 @@ TraceProvDerivationSpec* augment_extra_sql(
                     table_func_extra->push_back(table_extra);
                 std::string extra_str = "";
                 extra_str += "[";
-                extra_str += "layer-" + std::to_string(result_map_pair.first);
+                extra_str += "layer-" + std::to_string(layer_string_pair.first);
                 if (log_offset != -1){
                     extra_str += ",";
                     extra_str += "log_offset-" + std::to_string(log_offset);

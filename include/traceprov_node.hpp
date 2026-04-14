@@ -199,6 +199,8 @@ extern "C" {
         std::vector<std::pair<uint64_t, uint64_t>> *added_ddls;
         // So that, in relation scans, we can wrap this 
         TraceProvPointerContext *pointer_context;
+        // Maintain a cache of the nodes that have been compiled.
+        std::unordered_map<uint64_t, std::string> *cache;
     } TraceProvToSQLContext;
 
     typedef struct TraceProvInferSetupExtra {

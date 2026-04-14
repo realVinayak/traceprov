@@ -26,6 +26,7 @@ class DriverDefaultValues(NamedTuple):
     traceprov_use_implicit_union: bool = True
     traceprov_use_compact: bool = False
     traceprov_force_seq_scan: bool = False
+    traceprov_skip_sql_cache: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -76,6 +77,7 @@ class DuckDBDriverOptions(NamedTuple):
     )
     traceprov_use_compact: bool = DriverDefaultValues.traceprov_use_compact
     traceprov_force_seq_scan: bool = DriverDefaultValues.traceprov_force_seq_scan
+    traceprov_skip_sql_cache: bool = DriverDefaultValues.traceprov_skip_sql_cache
 
     @staticmethod
     def get_suffix(parsed):
@@ -112,6 +114,7 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_implicit_union",
             "traceprov_use_compact",
             "traceprov_force_seq_scan",
+            "traceprov_skip_sql_cache",
         }
         recognized = set(DriverDefaultValuesInstance._fields)
         assert recognized == optimizations
