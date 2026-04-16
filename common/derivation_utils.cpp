@@ -37,29 +37,35 @@ extern "C" {
         }
         foreach(cursor, dependency->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
-            ListCell *sublink_cursor;
-            foreach(sublink_cursor, entry->sublinks){
-                TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
-                const TraceProvLayerNumber sublink_number = item->layer_number;
-                // This WON'T happen for at a single level. But, can happen if there are other RTEs that referred the same sublink.
-                // In that case, we don't really gain anything by bothering to process it again...
-                if(list_member_int(used_layer_numbers, sublink_number)) continue;
-                used_layer_numbers = lappend_int(used_layer_numbers, sublink_number);
-                // Derive everyything on this sublink.
-                const TraceProvDependency *sublink_graph = tp_get_sublink_graph(tp_context, sublink_number);
-                auto child_depth_map = new TraceProvDepthMap;
-                List *indirect_sublinks = get_used_sublinks_in_dependency(sublink_graph, child_depth_map, recursion_level, tp_context);
-                used_layer_numbers = list_concat(used_layer_numbers, indirect_sublinks);
-                if (depth_map->find(sublink_number) == depth_map->end()){
-                    depth_map->insert({sublink_number, recursion_level});
-                }else{
-                    EXIT_WITH_MESSAGE("Impossible to ever find the ref to the sublink");
-                }
-                for (auto entry: *child_depth_map){
-                    if (depth_map->find(entry.first) == depth_map->end()){
-                        depth_map->insert({entry.first, entry.second});
+            if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
+                ListCell *sublink_cursor;
+                foreach(sublink_cursor, entry->sublinks){
+                    TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+                    const TraceProvLayerNumber sublink_number = item->layer_number;
+                    // This WON'T happen for at a single level. But, can happen if there are other RTEs that referred the same sublink.
+                    // In that case, we don't really gain anything by bothering to process it again...
+                    if(list_member_int(used_layer_numbers, sublink_number)) continue;
+                    used_layer_numbers = lappend_int(used_layer_numbers, sublink_number);
+                    // Derive everyything on this sublink.
+                    const TraceProvDependency *sublink_graph = tp_get_sublink_graph(tp_context, sublink_number);
+                    auto child_depth_map = new TraceProvDepthMap;
+                    List *indirect_sublinks = get_used_sublinks_in_dependency(sublink_graph, child_depth_map, recursion_level, tp_context);
+                    used_layer_numbers = list_concat(used_layer_numbers, indirect_sublinks);
+                    if (depth_map->find(item->layer_number) == depth_map->end()){
+                        depth_map->insert({item->layer_number, recursion_level});
                     }else{
-                        EXIT_WITH_MESSAGE("Should never find the newer graphs!");
+                        uint32 old_level = depth_map->at(item->layer_number);
+                        // This is the only case where we'd be "interested" in updating the level.
+                        // But, this can never happen.
+                        if (old_level < recursion_level)
+                            EXIT_WITH_MESSAGE("found the current recursion level to be less than the old value. Should never happen!");
+                    }
+                    for (auto entry: *child_depth_map){
+                        if (depth_map->find(entry.first) == depth_map->end()){
+                            depth_map->insert({entry.first, entry.second});
+                        }else{
+                            EXIT_WITH_MESSAGE("Should never find the newer graphs!");
+                        }
                     }
                 }
             }
