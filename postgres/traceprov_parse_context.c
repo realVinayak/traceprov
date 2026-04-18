@@ -74,17 +74,25 @@ void tp_add_sublink_map_item(
     List *child_graphs = NIL;
     const int key_traceprov_target_length = list_length(key_traceprov_targets);
     foreach(target_entry_cursor, list_concat_copy(key_traceprov_targets, ptr_traceprov_targets)){
-        TraceProvEntry *tpEntry = traceprov_resolve_entry(((TraceProvTarget *)lfirst(target_entry_cursor)), &child_graphs, NULL);
+        TraceProvEntry *tp_entry = NULL;
         /**
          * Complicated.
          * The sublink list of targets gets updated as we discover their usage. If the sublink of the target list gets shared, then it is possible
          * that the later updates to the sublink gets "shared". We need to avoid that. However, that ONLY needs to happen for the key targets
          * and not the newly created targets for this graph. So, that's only done for the first part.
          */
+        TraceProvTarget *curr_target = ((TraceProvTarget *)lfirst(target_entry_cursor));
         if (foreach_current_index(target_entry_cursor) < key_traceprov_target_length){
-            tpEntry->sublinks = NIL;
+            tp_entry = makeTraceProvEntry();
+            traceprov_target_set_nullable(curr_target);
+            tp_entry = makeTraceProvEntry();
+            tp_entry->is_nullable = curr_target->is_nullable;
+            tp_entry->kind = TP_ENTRY_CORRELATION_ATTR;
+            child_graphs = lappend(child_graphs, NULL);
+        }else{
+            tp_entry = traceprov_resolve_entry(curr_target, &child_graphs, NULL);
         }
-        entries = lappend(entries, tpEntry);
+        entries = lappend(entries, tp_entry);
     }
     const TraceProvDependency *graph = make_traceprov_dependency(
         TP_LOG,
@@ -261,6 +269,9 @@ static char *tp_entry_serialize_kind(TraceProvEntryKind kind){
             break;
         case TP_ENTRY_FRAME_INHERIT:
             kind_str = "TP_ENTRY_FRAME_INHERIT";
+            break;
+        case TP_ENTRY_CORRELATION_ATTR:
+            kind_str = "TP_ENTRY_CORRELATION_ATTR";
             break;
         default:
             elog(ERROR, "Got invalid kind: %d", kind);

@@ -28,7 +28,10 @@ typedef enum TraceProvEntryKind {
     TP_ENTRY_SET_POINTER = 2,
     TP_ENTRY_FRAME_START = 3,
     TP_ENTRY_FRAME_END = 4,
-    TP_ENTRY_FRAME_INHERIT = 5
+    TP_ENTRY_FRAME_INHERIT = 5,
+    // Previously, this used to be whatever the type of the provenance attributes the correlated tables had.
+    // But, this approach makes things tidier.
+    TP_ENTRY_CORRELATION_ATTR = 6
 } TraceProvEntryKind;
 
 // Specifies what kind of graph is this

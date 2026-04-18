@@ -2582,7 +2582,7 @@ extern "C" {
                     )
                 );
             }
-            if (te->kind == TP_ENTRY_KIND_BASE_RELATION){
+            if (te->kind == TP_ENTRY_KIND_BASE_RELATION || (te->kind == TP_ENTRY_CORRELATION_ATTR)){
                 if (!did_append_self){
                     current_tree->nodes->push_back(node);
                     // Also check if any sublink are refered in the entries.
