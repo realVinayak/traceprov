@@ -147,9 +147,14 @@ extern "C" {
 
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
 
-    // This gets used to determine whether we're done processing everything we need for a sublink.
-    // It is possible that multiple paths exist to a sublink. So, that's why each graph gets a map to sublink.
-    typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
+    // TODO: Add comment to explain this (that'll take long time)
+    // In short, for each dependency, stores the count of the entries that are in sublink ref.
+    typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvEntryCountMap;
+    // Essentially, a collection of TraceProvEntryCountMap.
+    typedef std::unordered_map<TraceProvLayerNumber, TraceProvEntryCountMap *> TraceProvLayerEntryMap;
+    // Essentialy, for each layer it is the sublinks that are reachable.
+    // This can never be cyclic.
+    typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvDerivableSublinkMap;
     typedef std::unordered_map<uint32, std::vector<TraceProvLayerNumber> *> TraceProvSizeLayers;
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
     typedef struct TraceProvDerivationSpec {
@@ -159,14 +164,25 @@ extern "C" {
     } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
+
+    typedef std::unordered_map<TraceProvLayerNumber, TraceProvLayerNumber> TraceProvLastRef;
+
     // Just so they can be processed together
     typedef struct TraceProvRecursePack {
-        const TraceProvDepthMap *depth_map;
-        const uint32 level;
+        const TraceProvLayerEntryMap *layer_count_map;
+        const TraceProvDerivableSublinkMap *derivable_map;
+        const TraceProvDerivableSublinkMap *base_derivable_map;
         // If the level for a sublink has not been reached,
         // the pending are stored in pending sublinks.
         TraceProvPendingSublinks *pending_sublinks;
         TraceProvSizeLayers *size_layer_map;
+        // The current node being derived.
+        const TraceProvLayerNumber current_layer_number;
+        // Sublinks that have already been derived (we may need to redrive them.)
+        std::vector<TraceProvLayerNumber> *derived_sublinks;
+        // Stores the sublink count ref count by the base.
+        TraceProvEntryCountMap *entry_count_map;
+        const TraceProvLastRef *last_ref;
     } TraceProvRecursePack;
 
     // the abstract tree for join computation.

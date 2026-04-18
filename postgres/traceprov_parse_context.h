@@ -41,7 +41,12 @@ char *tp_parse_get_unique_alias(TraceProvParseContext *);
 int tp_parse_get_unique_number(TraceProvParseContext *);
 void tp_add_set_padding_item(TraceProvParseContext *, int, int);
 void tp_add_set_graph_item(TraceProvParseContext *, int, TraceProvDependency *);
-void tp_add_sublink_map_item(TraceProvParseContext *, List *, const List*, int);
+void tp_add_sublink_map_item(
+    TraceProvParseContext *context,
+    List *key_traceprov_targets,
+    const List *ptr_traceprov_targets,
+    const TraceProvLayerNumber layer_number
+);
 TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_context, TraceProvLayerNumber graph_number);
 TraceProvDependency *tp_get_set_graph(const TraceProvParseContext *parsed_context, const int set_number);
 TraceProvDependency *tp_get_graph_from_children(const TraceProvDependency *graph, TraceProvLayerNumber graph_number);

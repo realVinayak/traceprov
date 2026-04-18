@@ -124,4 +124,16 @@ extern "C" {
         input_list->elements[offset].int_value = value;
         return input_list;
     }
+
+    uint32_t traceprov_non_zero_count(const List *input_list){
+        ListCell *cursor;
+        uint32_t non_zero_count = 0;
+        foreach(cursor, input_list){
+            const int value = lfirst_int(cursor);
+            if (value != 0){
+                non_zero_count++;
+            }
+        }
+        return non_zero_count;
+    }
 }

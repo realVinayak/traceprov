@@ -1588,85 +1588,134 @@ extern "C" {
         elog(ERROR, "Found handling invalid node: %d", node->tag);
     }
 
-    static List *get_used_sublinks_in_dependency(
+    static void get_used_sublinks_in_dependency(
         const TraceProvDependency *dependency,
-        TraceProvDepthMap *depth_map,
-        const uint32 recursion_level,
-        TraceProvParseContext *tp_context
+        TraceProvParseContext *tp_context,
+        TraceProvEntryCountMap *entry_count_map,
+        List **sublink_ref,
+        TraceProvLastRef *last_ref
     ){
-        List *used_layer_numbers = NIL;
         ListCell *cursor;
-        // Perform everything on the child first.
-        // We can, absolutely, do this in 1 shot.
-        // But, doing it this way simplifies code.
         foreach(cursor, dependency->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            // TODO: Handle set operations here too.
             if (entry->kind == TP_ENTRY_KIND_POINTER){
                 const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(dependency->children, foreach_current_index(cursor));
-                used_layer_numbers = list_concat(used_layer_numbers, get_used_sublinks_in_dependency(child_graph, depth_map, recursion_level + 1, tp_context));
+                get_used_sublinks_in_dependency(child_graph, tp_context, entry_count_map, sublink_ref, last_ref);
             }
-        }
-        foreach(cursor, dependency->entries){
-            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
-            if (entry->kind == TP_ENTRY_KIND_BASE_RELATION) {
-                ListCell *sublink_cursor;
-                foreach(sublink_cursor, entry->sublinks){
-                    TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
-                    const TraceProvLayerNumber sublink_number = item->layer_number;
-                    // This WON'T happen for at a single level. But, can happen if there are other RTEs that referred the same sublink.
-                    // In that case, we don't really gain anything by bothering to process it again...
-                    if(traceprov_find_int_list(used_layer_numbers, sublink_number)) continue;
-                    used_layer_numbers = lappend_int(used_layer_numbers, sublink_number);
-                    // Derive everyything on this sublink.
-                    const TraceProvDependency *sublink_graph = tp_get_sublink_graph(tp_context, sublink_number);
-                    auto child_depth_map = new TraceProvDepthMap;
-                    List *indirect_sublinks = get_used_sublinks_in_dependency(sublink_graph, child_depth_map, recursion_level, tp_context);
-                    used_layer_numbers = list_concat(used_layer_numbers, indirect_sublinks);
-                    if (depth_map->find(item->layer_number) == depth_map->end()){
-                        depth_map->insert({item->layer_number, recursion_level});
-                    }else{
-                        uint32 old_level = depth_map->at(item->layer_number);
-                        // This is the only case where we'd be "interested" in updating the level.
-                        // But, this can never happen.
-                        if (old_level < recursion_level)
-                            elog(ERROR, "found the current recursion level to be less than the old value. Should never happen!");
+            ListCell *sublink_cursor;
+            foreach(sublink_cursor, entry->sublinks){
+                TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+                const TraceProvLayerNumber sublink_number = item->layer_number;
+                // Append to the sublinks found.
+                *sublink_ref = list_append_unique_int(*sublink_ref, sublink_number);
+                if (entry_count_map->find(sublink_number) == entry_count_map->end()){
+                    entry_count_map->insert({sublink_number, 0});
+                }
+                entry_count_map->at(sublink_number)++;
+                if (item->offset_in_key == 0){
+                    // This means that the current sublink is the last ref to the target sublink.
+                    // Cache that info.
+                    if (last_ref->find(sublink_number) != last_ref->end()){
+                        elog(ERROR, "Didn't expect to find :%d again!", sublink_number);
                     }
-                    for (auto entry: *child_depth_map){
-                        if (depth_map->find(entry.first) == depth_map->end()){
-                            depth_map->insert({entry.first, entry.second});
-                        }else{
-                            elog(ERROR, "Should never find the newer graphs!");
-                        }
-                    }
+                    last_ref->insert({sublink_number, dependency->headNumber});
                 }
             }
         }
-        return used_layer_numbers;
     }
 
-    static List* get_used_sublinks(List *graphs, List **p_sublink_depth_map, TraceProvParseContext *tp_context){
+    static void get_used_sublinks(
+        List *graphs,
+        TraceProvParseContext *tp_context,
+        TraceProvLayerEntryMap *p_layer_count_map,
+        TraceProvDerivableSublinkMap *p_derivable_map,
+        TraceProvLastRef *last_ref
+    ){
         // Sublinks can refer to other sublinks.
         // So, discover those cases too.
-        List *used_sublinks = NIL;
         ListCell *graph_cursor;
-        List *depth_maps = NIL;
         foreach(graph_cursor, graphs){
-            auto depth_map = new TraceProvDepthMap;
-            used_sublinks = list_concat(
-                used_sublinks,
-                get_used_sublinks_in_dependency(
-                    (TraceProvDependency *)lfirst(graph_cursor),
-                    depth_map,
-                    0,
-                    tp_context
-                )
-            );
-            depth_maps = lappend(depth_maps, depth_map);
+            const auto graph = (TraceProvDependency *)lfirst(graph_cursor);
+            List *used_sublinks = NIL;
+            auto graph_entry_count_map = new TraceProvEntryCountMap;
+            get_used_sublinks_in_dependency(
+                    graph,
+                    tp_context,
+                    graph_entry_count_map,
+                    &used_sublinks,
+                    last_ref
+                );
+            p_layer_count_map->insert({graph->headNumber, graph_entry_count_map});
+            p_derivable_map->insert({graph->headNumber, used_sublinks});
         }
-        if (p_sublink_depth_map)
-            *p_sublink_depth_map = depth_maps;
-        return used_sublinks;
     }
+
+    static List *get_directly_derivable(const TraceProvDependency *graph, const TraceProvParseContext *parse_context){
+        // All the entries that are directly derivable.
+        List *derivable = NIL;
+        derivable = lappend_int(derivable, graph->headNumber);
+        ListCell *cursor;
+        foreach(cursor, graph->entries){
+            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            // TODO: Handle set operations here too.
+            if (entry->kind == TP_ENTRY_KIND_POINTER){
+                const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(cursor));
+                derivable = list_concat(derivable, get_directly_derivable(child_graph, parse_context));
+            }
+            ListCell *sublink_cursor;
+            foreach(sublink_cursor, entry->sublinks){
+                TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+                TraceProvDependency *sublink_graph = tp_get_sublink_graph(parse_context, item->layer_number);
+                derivable = list_concat(derivable, get_directly_derivable(sublink_graph, parse_context));
+            }
+        }
+        return derivable;
+    }
+
+    // Checks if two derivable sublink maps are the same or not.
+    static bool derivable_equivalent(const TraceProvDerivableSublinkMap *base, const TraceProvDerivableSublinkMap *other){
+        if (base->size() != other->size()){
+            // This doesn't make much sense in handling this case, but does help making code cleaner later.
+            return false;
+        }
+        for (auto base_pair :*base){
+            const List *base_derivable = base_pair.second;
+            if (other->find(base_pair.first) == other->end()){
+                elog(ERROR, "Expected to find %d in the other!", base_pair.first);
+            }
+            const List *other_derivable = other->at(base_pair.first);
+            const int base_length = list_length(base_derivable);
+            const int other_length = list_length(other_derivable);
+            if (base_length != other_length){
+                return false;
+            }
+            const List *intersect = list_intersection_int(base_derivable, other_derivable);
+            if (list_length(intersect) != base_length) return false;
+        }
+        return true;
+    }
+
+    static TraceProvDerivableSublinkMap *extend_reachable(TraceProvDerivableSublinkMap *source){
+        auto extended = new TraceProvDerivableSublinkMap;
+        auto last_result = source;
+        while (true){
+            if (extended->size() == 0){
+                for (auto e_pair: *last_result){
+                    extended->insert({e_pair.first, list_copy(e_pair.second)});
+                }
+            }
+            for (auto res_pair: *extended){
+                extended->at(res_pair.first) = list_union_int(res_pair.second, last_result->at(res_pair.first));
+            }
+            if (derivable_equivalent(last_result, extended)){
+                return extended;
+            }
+            last_result = extended;
+        }
+        return NULL;
+    }
+
     // static derive_from_log(const uint8 worker_count)
     // The main entry point to all the derivation.
     PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
@@ -1886,28 +1935,82 @@ extern "C" {
         return found_worker_layers;
     }
 
+   uint32 get_reference_count(const TraceProvLayerEntryMap *layer_entry_map, const TraceProvLayerNumber query_layer_num){
+        uint32 reference_count = 0;
+        // TODO: Optimize this call away??
+        for (auto layer_map_pair: *layer_entry_map){
+            auto candidate = layer_map_pair.second;
+            if (candidate->find(query_layer_num) == candidate->end()) continue;
+            reference_count += candidate->at(query_layer_num);
+        }
+        return reference_count;
+   }
+
+   List *get_referring_layers(const TraceProvDerivableSublinkMap *derivable_sublink_map, const TraceProvLayerNumber sublink){
+        List *referring_layers = NIL;
+        for (auto derivable_pair: *derivable_sublink_map){
+            if (list_member_int(derivable_pair.second, sublink)){
+                referring_layers = lappend_int(referring_layers, derivable_pair.first);   
+            }
+        }
+        return referring_layers;
+   }
+
    
-   static TraceProvRecursePack shallow_copy_recurse_pack(const TraceProvRecursePack *reference){
+   static TraceProvRecursePack shallow_copy_recurse_pack(TraceProvRecursePack *reference, const bool copy_sublinks = false){
         TraceProvPendingSublinks *new_sublinks = new TraceProvPendingSublinks;
         // that's why you don't try constructing TraceProvRecursePack on the fly kids!
         for (auto pair: *reference->pending_sublinks){
             new_sublinks->insert({pair.first, list_copy(pair.second)});
         }
+        TraceProvEntryCountMap *entry_count_map = new TraceProvEntryCountMap;
+        for (auto pair: *reference->entry_count_map){
+            entry_count_map->insert({pair.first, pair.second});
+        }
         return TraceProvRecursePack{
-            .depth_map = reference->depth_map,
-            .level = reference->level,
+            .layer_count_map= reference->layer_count_map,
+            .derivable_map = reference->derivable_map,
+            .base_derivable_map = reference->base_derivable_map,
             .pending_sublinks = new_sublinks,
-            .size_layer_map = reference->size_layer_map
+            .size_layer_map = reference->size_layer_map,
+            .current_layer_number = reference->current_layer_number,
+            .derived_sublinks = reference->derived_sublinks,
+            .entry_count_map = entry_count_map,
+            .last_ref = reference->last_ref
         };
    }
 
-   static TraceProvRecursePack increment_recursion(const TraceProvRecursePack *reference){
-        return shallow_copy_recurse_pack(new TraceProvRecursePack{
-            .depth_map = reference->depth_map,
-            .level = reference->level + 1,
+   static TraceProvRecursePack increment_recursion(TraceProvRecursePack *reference, const bool copy_sublinks = false){
+        // Previously, this used to actually perform an increment on "level"
+        // That mess has been reimplemented away :)
+        return shallow_copy_recurse_pack(reference, copy_sublinks);
+   }
+
+   static TraceProvRecursePack reset_entry_count_map(TraceProvRecursePack *reference, const TraceProvLayerNumber next_ref = 0){
+        return TraceProvRecursePack{
+            .layer_count_map= reference->layer_count_map,
+            .derivable_map = reference->derivable_map,
+            .base_derivable_map = reference->base_derivable_map,
             .pending_sublinks = reference->pending_sublinks,
-            .size_layer_map = reference->size_layer_map
-        });
+            .size_layer_map = reference->size_layer_map,
+            .current_layer_number = next_ref == 0 ? reference->current_layer_number : next_ref,
+            .derived_sublinks = new std::vector<TraceProvLayerNumber>,
+            .entry_count_map = new TraceProvEntryCountMap,
+            .last_ref = reference->last_ref
+        };
+   }
+
+   static bool check_entry_count_equivalence(const TraceProvEntryCountMap *base, const TraceProvEntryCountMap *target){
+        if (base->size() != target->size()) return false;
+        for (auto base_pair: *base){
+            if (target->find(base_pair.first) == target->end()) continue;
+            if (target->at(base_pair.first) != base_pair.second) return false;
+        }
+        for (auto target_pair: *base){
+            if (base->find(target_pair.first) == base->end()) continue;
+            if (base->at(target_pair.first) != target_pair.second) return false;
+        }
+        return true;
    }
 
     static TraceProvInferAbstractTree *derive_aggregate_on_single_context(
@@ -1917,7 +2020,7 @@ extern "C" {
         const struct local_context *current_local_context,
         const std::vector<struct local_context *> *worker_local_contexts,
         TraceProvParseContext *parse_context,
-        const TraceProvRecursePack recurse_pack
+        TraceProvRecursePack recurse_pack
     ){
         auto current_tree = makeTraceProvInferAbstractTree(agg_graph->headNumber);
         const TraceProvLayerNumber layer_number_to_search = agg_graph->headNumber;
@@ -2087,7 +2190,7 @@ extern "C" {
                         current_local_context,
                         worker_local_contexts,
                         parse_context,
-                        shallow_copy_recurse_pack(&recurse_pack)
+                        shallow_copy_recurse_pack(&recurse_pack, true)
                     ));
 
                     current_tree->children->push_back(derive_on_node(
@@ -2097,7 +2200,7 @@ extern "C" {
                         current_local_context,
                         worker_local_contexts,
                         parse_context,
-                        shallow_copy_recurse_pack(&recurse_pack)
+                        shallow_copy_recurse_pack(&recurse_pack, true)
                     ));
                 }
             }
@@ -2115,7 +2218,7 @@ extern "C" {
         const struct local_context *current_local_context,
         const std::vector<struct local_context *> *worker_local_contexts,
         TraceProvParseContext *parse_context,
-        const TraceProvRecursePack recurse_pack
+        TraceProvRecursePack recurse_pack
     ){
         // const uint64 worker_count = worker_local_contexts->size();
         if ((agg_graph->graph_type != TraceProvGraphKind::TP_AGGREGATE) && (agg_graph->graph_type != TraceProvGraphKind::TP_PURE_AGGREGATE))
@@ -2142,7 +2245,7 @@ extern "C" {
                     context, 
                     worker_local_contexts, 
                     parse_context, 
-                    shallow_copy_recurse_pack(&recurse_pack)
+                    shallow_copy_recurse_pack(&recurse_pack, true)
                 )
             );
         }
@@ -2157,7 +2260,7 @@ extern "C" {
         const struct local_context *current_local_context,
         const std::vector<struct local_context *> *worker_local_contexts,
         TraceProvParseContext *parse_context,
-        const TraceProvRecursePack recurse_pack
+        TraceProvRecursePack recurse_pack
     ){
         auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
         const TraceProvLayerNumber layer_number_to_search = curr_graph->headNumber;
@@ -2205,7 +2308,7 @@ extern "C" {
         const struct local_context *current_local_context,
         const std::vector<struct local_context *> *worker_local_contexts,
         TraceProvParseContext *parse_context,
-        const TraceProvRecursePack recurse_pack
+        TraceProvRecursePack recurse_pack
     ){
         const int set_start_idx = find_first_set_number_entry(curr_graph->entries, set_number);
         auto current_tree = makeTraceProvInferAbstractTree(curr_graph->headNumber);
@@ -2246,7 +2349,7 @@ extern "C" {
         const struct local_context *current_local_context,
         const std::vector<struct local_context *> *worker_local_contexts,
         TraceProvParseContext *parse_context,
-        const TraceProvRecursePack recurse_pack
+        TraceProvRecursePack recurse_pack
     ){
         if (current_local_context != NULL){
             return derive_window_on_single_context(
@@ -2272,13 +2375,16 @@ extern "C" {
                     context,
                     worker_local_contexts,
                     parse_context,
-                    shallow_copy_recurse_pack(&recurse_pack)
+                    shallow_copy_recurse_pack(&recurse_pack, true)
                 )
             );
         }
         return current_tree;
     }
 
+    /**
+     * Core logic for deriving sublinks.
+    */
     static TraceProvInferAbstractTree* derive_sublinks(
         TraceProvNode *node,
         const TraceProvDependency *graph,
@@ -2292,15 +2398,15 @@ extern "C" {
         const uint32 previous_start_idx = traceprov_get_node_column_count(node);
         auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
         ListCell *entry_cursor;
-        List *sublinks_to_commit = NIL;
+        List *candidate_sublinks = NIL;
         // Bitmapset *added_sublinks = NULL;
+        const TraceProvEntryCountMap *current_entry_count_map = recurse_pack.layer_count_map->at(recurse_pack.current_layer_number);
         foreach(entry_cursor, graph->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
             if (list_length(entry->sublinks) == 0) continue;
             ListCell *sublink_ref_cursor;
             foreach(sublink_ref_cursor, entry->sublinks){
                 const TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_ref_cursor);
-                uint32 max_level = recurse_pack.depth_map->at(item->layer_number);
                 List *pending_entries = NIL;
                 if (recurse_pack.pending_sublinks->find(item->layer_number) != recurse_pack.pending_sublinks->end()){
                     pending_entries = recurse_pack.pending_sublinks->at(item->layer_number);
@@ -2311,38 +2417,82 @@ extern "C" {
                 const uint32 insert_idx = item->offset_in_key;
                 // All indexes are 1-indexed.
                 uint32 entry_idx = idx_start + foreach_current_index(entry_cursor) + 1;
-
                 pending_entries = traceprov_set_at_offset_int(pending_entries, insert_idx, entry_idx);
-
                 recurse_pack.pending_sublinks->at(item->layer_number) = pending_entries;
-
-                if (max_level == recurse_pack.level){
-                    // If it is the level when we're at the bottom,
-                    // need to "commit" and finally make the node entry.
-                    // The join conditions, with the sublink layer, will be everything that's the in the pending entries.
-                    // However, we can absolutely have multiple entries that point to the same sublink.
-                    // So need to delay the creation till we have seen all the entries. yuk.
-                    elog(INFO, "Stopping pending, for: %d", item->layer_number);
-                    sublinks_to_commit = list_append_unique_int(sublinks_to_commit, item->layer_number);
+                if (recurse_pack.entry_count_map->find(item->layer_number) == recurse_pack.entry_count_map->end()){
+                    recurse_pack.entry_count_map->insert({item->layer_number, 0});
                 }
+                recurse_pack.entry_count_map->at(item->layer_number)++;
+                candidate_sublinks = list_append_unique_int(candidate_sublinks, item->layer_number);
             }
         }
-        ListCell *pending_sublink_cursor;
-        foreach(pending_sublink_cursor, sublinks_to_commit){
-            // Need to actually derive sublinks now.
-            TraceProvLayerNumber sublink_num = lfirst_int(pending_sublink_cursor);
-            List *pending_entries = recurse_pack.pending_sublinks->at(sublink_num);
-            elog(INFO, "Handling correlated of count: %d", list_length(pending_entries));
+
+        ListCell *candidate_sublink_cursor;
+        List *sublinks_to_commit;
+        List *reachable_sublinks = NIL;
+        // Reversing to handle topological sort :)
+        foreach(candidate_sublink_cursor, traceprov_reverse_list(candidate_sublinks)){
+            TraceProvLayerNumber candidate_sublink = lfirst_int(candidate_sublink_cursor);
+            // This will differ from canidate when we utilize a proxy :)
+            const TraceProvLayerNumber original_sublink = candidate_sublink;
+            // This will happen if the topologically the sublink was derived directly by another upstream.
+            auto derived_sublink_vec = *recurse_pack.derived_sublinks;
+            if (std::find(recurse_pack.derived_sublinks->begin(), recurse_pack.derived_sublinks->end(), candidate_sublink) == recurse_pack.derived_sublinks->end()){
+                recurse_pack.derived_sublinks->push_back(candidate_sublink);
+            }
+            if (list_member_int(reachable_sublinks, candidate_sublink)){
+                continue;
+            }
+            List *derived_sublinks_copy = NIL;
+            for (auto derived_above: derived_sublink_vec){
+                derived_sublinks_copy = lappend_int(derived_sublinks_copy, derived_above);
+            }
+            const List *reachable_by_current = recurse_pack.derivable_map->at(candidate_sublink);
+            reachable_sublinks = list_union_int(reachable_sublinks, reachable_by_current);
+
+            const auto ref_count = get_reference_count(recurse_pack.layer_count_map, candidate_sublink);
+
+            auto pending_entries = recurse_pack.pending_sublinks->at(candidate_sublink);
+
+            const TraceProvLayerNumber sublink_last_ref = recurse_pack.last_ref->at(candidate_sublink);
+            if (sublink_last_ref == graph->headNumber){
+                if (traceprov_non_zero_count(pending_entries) != ref_count) continue;
+            }else{
+                // Need to check if the base counts are the same.
+                const TraceProvEntryCountMap *eager_entry_count_map = recurse_pack.entry_count_map;
+                const TraceProvEntryCountMap *expected_entry_count_map = recurse_pack.layer_count_map->at(recurse_pack.current_layer_number);
+                if (!check_entry_count_equivalence(eager_entry_count_map, expected_entry_count_map)) continue;
+            }
+            // Need to check if we also need to rederive any of the prior sublinks. ugh.
+            List *referring_links = get_referring_layers(recurse_pack.derivable_map, candidate_sublink);
+            // Need to take the intersection with the ones that we've already derived.
+            // This is also why having an over set sublinks is fine in the referring layers.
+            List *rederivables = list_intersection_int(referring_links, derived_sublinks_copy);
+            if (list_length(rederivables) > 1){
+                elog(ERROR, "Got more than 1 sublinks to rederive. This should not be possible!");
+            }
+            auto rederivable_head = list_head(rederivables);
+            TraceProvLayerNumber higher_layer_to_redrive = 0;
+            if (rederivable_head != NULL){
+                higher_layer_to_redrive = lfirst_int(rederivable_head);
+                candidate_sublink = higher_layer_to_redrive;
+                // Also set the pending entries to the higher sublink.
+                pending_entries = recurse_pack.pending_sublinks->at(candidate_sublink);
+            }
+            elog(INFO, "Handling correlated of count: %d", traceprov_non_zero_count(pending_entries));
             auto join_condition = new TraceProvJoinConditions;
             ListCell *offset_cursor;
             foreach(offset_cursor, pending_entries){
                 const int offset = lfirst_int(offset_cursor);
+                if (offset == 0){
+                    elog(ERROR, "Didn't expect zero to be a valid value here!");
+                }
                 const int other_idx = foreach_current_index(offset_cursor) + 1;
                 TraceProvColumn *join_column_1 = new TraceProvColumn(1, offset);
                 TraceProvColumn *join_column_2 = new TraceProvColumn(2, other_idx);
                 join_condition->push_back(new TraceProvJoinPair(join_column_1, join_column_2));
             }
-            TraceProvDependency *sublink_graph = tp_get_sublink_graph(parse_context, sublink_num);
+            TraceProvDependency *sublink_graph = tp_get_sublink_graph(parse_context, candidate_sublink);
             TraceProvNode *sublink_node = simple_read_from_log(sublink_graph, worker_local_contexts, parse_context);
             // need to read all the sublink logs, perform the join, and _then_ perform the derivation.
             // This is done because, otherwise, we may do a lot of work on the right hand side ultimately doing to waste
@@ -2357,18 +2507,39 @@ extern "C" {
             );
             const uint32 new_idx_start = previous_start_idx;
             // Perform all the derivation on the join exprn now.
-            current_tree->children->push_back(
-                derive_on_node(
-                    (TraceProvNode *)join_exprn,
-                    sublink_graph,
-                    new_idx_start,
-                    (struct local_context *)NULL,
-                    worker_local_contexts,
-                    parse_context,
-                    recurse_pack
-                )
+            auto ast_node = derive_on_node(
+                (TraceProvNode *)join_exprn,
+                sublink_graph,
+                new_idx_start,
+                (struct local_context *)NULL,
+                worker_local_contexts,
+                parse_context,
+                reset_entry_count_map(&recurse_pack, sublink_graph->headNumber)
             );
+            if (higher_layer_to_redrive != 0){
+                // Need to be careful in this case.
+                // Since we rederived a sublink, need to only choose the one that we orginally set out to derive.
+                TraceProvResultMap res_map;
+                const List *directly_derivable_layers = get_directly_derivable(tp_get_sublink_graph(parse_context, original_sublink), parse_context);
+                flattenTraceProvInferAbstractTree(ast_node, &res_map, parse_context);
+                ListCell *derivable_layer;
+                foreach(derivable_layer, directly_derivable_layers){
+                    const TraceProvLayerNumber derivable_layer_num = lfirst_int(derivable_layer);
+                    // Here, need to, also, get rid of things that were _directly_ derivable in that sublink anyways.
+                    if (res_map.find(derivable_layer_num) == res_map.end()){
+                        elog(INFO, "Skipping %d in ast result!", derivable_layer_num);
+                    }
+                    auto derived_node = res_map.at(derivable_layer_num);
+                    // Basically, pretend that we didn't just derive a bunch of other things.
+                    auto derived_ast_node = makeTraceProvInferAbstractTree(derivable_layer_num);
+                    derived_ast_node->nodes->push_back(derived_node);
+                    current_tree->children->push_back(derived_ast_node);
+                }
+            }else{
+                current_tree->children->push_back(ast_node);
+            }
         }
+
         return current_tree;
     }
 
@@ -2583,12 +2754,17 @@ extern "C" {
         ListCell *graph_cursor;
 
         auto worker_local_contexts = traceprov_get_local_contexts(worker_count);
-        List *base_graph_depth_map = NIL;
-        List *sublink_used_sublink_map = NIL;
-        List *base_used_sublinks = get_used_sublinks(graphs, &base_graph_depth_map, parsed_back_context);
-        List *sublink_used_sublinks = get_used_sublinks(parsed_back_context->properties->sublink_map, &sublink_used_sublink_map, parsed_back_context);
-        List *get_all_used_sublinks = list_concat_copy(base_used_sublinks, sublink_used_sublinks);
-        traceprov_assert_equal_length(list_make2(base_graph_depth_map, graphs));
+        TraceProvLayerEntryMap layer_entry_count_map;
+        TraceProvDerivableSublinkMap derivable_entry_map;
+        TraceProvLastRef last_ref;
+        get_used_sublinks(graphs, parsed_back_context, &layer_entry_count_map, &derivable_entry_map, &last_ref);
+        get_used_sublinks(parsed_back_context->properties->sublink_map, parsed_back_context, &layer_entry_count_map, &derivable_entry_map, &last_ref);
+        auto extended_derivable_map = extend_reachable(&derivable_entry_map);
+
+        List *get_all_used_sublinks = NIL;
+        for(auto res_pair: *extended_derivable_map){
+            get_all_used_sublinks = list_union_int(get_all_used_sublinks, res_pair.second);
+        }
         auto top_tree = makeTraceProvInferAbstractTree(0);
         auto size_layer_map = new TraceProvSizeLayers;
         auto setup_extra = new TraceProvInferSetupExtra;
@@ -2610,10 +2786,15 @@ extern "C" {
                     worker_local_contexts,
                     true,
                     TraceProvRecursePack {
-                        .depth_map = (TraceProvDepthMap *)list_nth(base_graph_depth_map, foreach_current_index(graph_cursor)),
-                        .level = 0,
+                        .layer_count_map = &layer_entry_count_map,
+                        .derivable_map = extended_derivable_map,
+                        .base_derivable_map = &derivable_entry_map,
                         .pending_sublinks = new TraceProvPendingSublinks,
-                        .size_layer_map = size_layer_map
+                        .size_layer_map = size_layer_map,
+                        .current_layer_number = graph->headNumber,
+                        .derived_sublinks = new std::vector<TraceProvLayerNumber>,
+                        .entry_count_map = new TraceProvEntryCountMap,
+                        .last_ref = &last_ref
                     }
                 )
             );
@@ -2635,10 +2816,15 @@ extern "C" {
                     worker_local_contexts,
                     true,
                     TraceProvRecursePack {
-                        .depth_map = (TraceProvDepthMap *)list_nth(sublink_used_sublink_map, foreach_current_index(sublink_cursor)),
-                        .level = 0,
+                        .layer_count_map = &layer_entry_count_map,
+                        .derivable_map = extended_derivable_map,
+                        .base_derivable_map = &derivable_entry_map,
                         .pending_sublinks = new TraceProvPendingSublinks,
-                        .size_layer_map = size_layer_map
+                        .size_layer_map = size_layer_map,
+                        .current_layer_number = child_sublink->headNumber,
+                        .derived_sublinks = new std::vector<TraceProvLayerNumber>,
+                        .entry_count_map = new TraceProvEntryCountMap,
+                        .last_ref = &last_ref
                     }
                 )
             );
