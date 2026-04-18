@@ -45,7 +45,15 @@ class TestRewrite(TestDbSetup):
         super().setUpClass()
         tp_root = os.getenv("tp_root")
         assert tp_root is not None
-        setup_response = traceprov_setup(cls.__name__, tp_root, cls.connection_params)
+        duckdb_path = os.getenv("TRACEPROV_TEST_DUCKDB_PATH")
+        assert duckdb_path is not None
+        setup_response = traceprov_setup(
+            cls.__name__,
+            tp_root,
+            cls.connection_params,
+            sd_lib_path=duckdb_path,
+            sd_include_path=duckdb_path,
+        )
         cls.run_sql_from_file("tests/rewriter_setup.sql")
         tables = cls.run_simple_query(ALL_TABLES_QUERY)
         assert len(tables) > 0
@@ -87,21 +95,20 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
-        print(graphs)
-
+        # print(graphs)
         expected_entry = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
-                        "graphType": "AGGREGATE",
+                        "graphType": "PURE_AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     }
@@ -120,21 +127,21 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
-        print(graphs)
+        # print(graphs)
 
         expected_entry = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
-                        "graphType": "AGGREGATE",
+                        "graphType": "PURE_AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     }
@@ -152,21 +159,21 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
-        print(graphs)
+        # print(graphs)
 
         expected_entry = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
                         "graphType": "AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     }
@@ -187,19 +194,21 @@ class TestRewrite(TestDbSetup):
         self._assert_simple_context(context)
         self.assertEqual(len(graphs), 1)
 
+        # print(graphs)
+
         expected_entry = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
                         "graphType": "AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                         ],
                         "children": [{"graphType": "NULL"}],
                     }
@@ -220,22 +229,24 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
 
+        # print(graphs)
+
         expected_entries = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
-                        "graphType": "AGGREGATE",
+                        "graphType": "PURE_AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
                         ],
                         "children": [
                             {"graphType": "NULL"},
@@ -280,25 +291,26 @@ class TestRewrite(TestDbSetup):
         self._assert_simple_context(context)
 
         # print(graphs)
+
         expected = [
             {
                 "graphType": "LOG",
                 "headNumber": 2,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
-                        "graphType": "AGGREGATE",
+                        "graphType": "PURE_AGGREGATE",
                         "headNumber": 1,
                         "entries": [
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
-                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 2, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 4, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 7, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 5, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_5}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
                         ],
                         "children": [
                             {"graphType": "NULL"},
@@ -339,29 +351,30 @@ class TestRewrite(TestDbSetup):
         graphs, context = TestRewrite.traceprov_get_graph()
         self._assert_simple_context(context)
         # print(graphs)
+
         expected = [
             {
                 "graphType": "LOG",
                 "headNumber": 6,
                 "entries": [
-                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]"
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                 ],
                 "children": [
                     {
-                        "graphType": "AGGREGATE",
+                        "graphType": "PURE_AGGREGATE",
                         "headNumber": 5,
                         "entries": [
-                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
-                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
-                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
-                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [])]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
                         ],
                         "children": [
                             {
                                 "graphType": "AGGREGATE",
                                 "headNumber": 1,
                                 "entries": [
-                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                                 ],
                                 "children": [{"graphType": "NULL"}],
                             },
@@ -369,7 +382,7 @@ class TestRewrite(TestDbSetup):
                                 "graphType": "AGGREGATE",
                                 "headNumber": 2,
                                 "entries": [
-                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                                 ],
                                 "children": [{"graphType": "NULL"}],
                             },
@@ -377,7 +390,7 @@ class TestRewrite(TestDbSetup):
                                 "graphType": "AGGREGATE",
                                 "headNumber": 3,
                                 "entries": [
-                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                                 ],
                                 "children": [{"graphType": "NULL"}],
                             },
@@ -385,7 +398,7 @@ class TestRewrite(TestDbSetup):
                                 "graphType": "AGGREGATE",
                                 "headNumber": 4,
                                 "entries": [
-                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [])]"
+                                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_4}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
                                 ],
                                 "children": [{"graphType": "NULL"}],
                             },
@@ -394,5 +407,4 @@ class TestRewrite(TestDbSetup):
                 ],
             }
         ]
-
         self.assertEqual(expected, graphs)
