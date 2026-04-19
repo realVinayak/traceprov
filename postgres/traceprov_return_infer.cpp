@@ -881,6 +881,16 @@ extern "C" {
                 elog(ERROR, "Numberig is inconsistent!");
             traceprov_assert_is_in_range(left_column_count, condition->first);
             traceprov_assert_is_in_range(right_column_count, condition->second);
+            if (condition->first->second == 0 || condition->second->second == 0){
+                elog(ERROR, "Got column 0 as the condition!");
+            }
+        }
+        if (output_columns){
+            for (auto output_column_value : *output_columns){
+                if (output_column_value->second == 0){
+                    elog(ERROR, "Got invalid value 0 as the column index!");
+                }
+            }
         }
         tp_join_exprn->join_condition = join_condition;
         tp_join_exprn->output_columns = output_columns;
@@ -1716,6 +1726,32 @@ extern "C" {
         return NULL;
     }
 
+    typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvLayerEntriesMap;
+    // Essentially, create a hash map of all the entries.
+    static void create_layer_entry_map(const TraceProvDependency *graph, TraceProvLayerEntriesMap *entries_map){
+        entries_map->insert({graph->headNumber, graph->entries});
+        ListCell *cursor;
+        foreach(cursor, graph->entries){
+            TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+            // TODO: Handle set operations here too.
+            if (entry->kind == TP_ENTRY_KIND_POINTER){
+                const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(cursor));
+                create_layer_entry_map(child_graph, entries_map);
+            }
+        }
+    }
+
+    uint32 count_correlated_attrs(const List *entries){
+        uint32 correlated_attr = 0;
+        ListCell *entry_cursor;
+        foreach(entry_cursor, entries){
+            const TraceProvEntry *te = (TraceProvEntry *) lfirst(entry_cursor);
+            if (te->kind == TP_ENTRY_CORRELATION_ATTR) continue;
+            correlated_attr++;
+        }
+        return correlated_attr;
+    }
+
     // static derive_from_log(const uint8 worker_count)
     // The main entry point to all the derivation.
     PG_FUNCTION_INFO_V1(traceprov_perform_derivation);
@@ -1976,7 +2012,8 @@ extern "C" {
             .current_layer_number = reference->current_layer_number,
             .derived_sublinks = reference->derived_sublinks,
             .entry_count_map = entry_count_map,
-            .last_ref = reference->last_ref
+            .last_ref = reference->last_ref,
+            .sublinks_to_ignore = reference->sublinks_to_ignore
         };
    }
 
@@ -1996,12 +2033,14 @@ extern "C" {
             .current_layer_number = next_ref == 0 ? reference->current_layer_number : next_ref,
             .derived_sublinks = new std::vector<TraceProvLayerNumber>,
             .entry_count_map = new TraceProvEntryCountMap,
-            .last_ref = reference->last_ref
+            .last_ref = reference->last_ref,
+            .sublinks_to_ignore = reference->sublinks_to_ignore
         };
    }
 
-   static bool check_entry_count_equivalence(const TraceProvEntryCountMap *base, const TraceProvEntryCountMap *target){
-        if (base->size() != target->size()) return false;
+
+   static bool check_entry_count_equivalence(const TraceProvEntryCountMap *base, const TraceProvEntryCountMap *target, const bool allow_partial = false){
+        if (base->size() != target->size() && (!allow_partial)) return false;
         for (auto base_pair: *base){
             if (target->find(base_pair.first) == target->end()) continue;
             if (target->at(base_pair.first) != base_pair.second) return false;
@@ -2430,6 +2469,8 @@ extern "C" {
         ListCell *candidate_sublink_cursor;
         List *sublinks_to_commit;
         List *reachable_sublinks = NIL;
+        const TraceProvEntryCountMap *expected_entry_count_map = recurse_pack.layer_count_map->at(recurse_pack.current_layer_number);
+        const TraceProvEntryCountMap *eager_entry_count_map = recurse_pack.entry_count_map;
         // Reversing to handle topological sort :)
         foreach(candidate_sublink_cursor, traceprov_reverse_list(candidate_sublinks)){
             TraceProvLayerNumber candidate_sublink = lfirst_int(candidate_sublink_cursor);
@@ -2455,13 +2496,23 @@ extern "C" {
             auto pending_entries = recurse_pack.pending_sublinks->at(candidate_sublink);
 
             const TraceProvLayerNumber sublink_last_ref = recurse_pack.last_ref->at(candidate_sublink);
-            if (sublink_last_ref == graph->headNumber){
-                if (traceprov_non_zero_count(pending_entries) != ref_count) continue;
+            // Need to check if we may ignore the sublinks.
+            if (recurse_pack.sublinks_to_ignore){
+                const bool is_ignorable = std::find(
+                    recurse_pack.sublinks_to_ignore->begin(),
+                    recurse_pack.sublinks_to_ignore->end(),
+                    candidate_sublink
+                ) != recurse_pack.sublinks_to_ignore->end();
+                if (is_ignorable) continue;
             }else{
                 // Need to check if the base counts are the same.
-                const TraceProvEntryCountMap *eager_entry_count_map = recurse_pack.entry_count_map;
-                const TraceProvEntryCountMap *expected_entry_count_map = recurse_pack.layer_count_map->at(recurse_pack.current_layer_number);
-                if (!check_entry_count_equivalence(eager_entry_count_map, expected_entry_count_map)) continue;
+                if (eager_entry_count_map->find(candidate_sublink) == eager_entry_count_map->end()){
+                    elog(ERROR, "Expected to the find %d in eager entry count map!", candidate_sublink);
+                }
+                if (expected_entry_count_map->find(candidate_sublink) == expected_entry_count_map->end()){
+                    elog(ERROR, "Expected to find %d in the expected entry count map!");
+                }
+                if (eager_entry_count_map->at(candidate_sublink) != expected_entry_count_map->at(candidate_sublink)) continue;
             }
             // Need to check if we also need to rederive any of the prior sublinks. ugh.
             List *referring_links = get_referring_layers(recurse_pack.derivable_map, candidate_sublink);
@@ -2485,7 +2536,9 @@ extern "C" {
             foreach(offset_cursor, pending_entries){
                 const int offset = lfirst_int(offset_cursor);
                 if (offset == 0){
-                    elog(ERROR, "Didn't expect zero to be a valid value here!");
+                    // This will happen, for example, when dealing with cases where there are disjoint paths
+                    // to a sublink
+                    continue;
                 }
                 const int other_idx = foreach_current_index(offset_cursor) + 1;
                 TraceProvColumn *join_column_1 = new TraceProvColumn(1, offset);
@@ -2506,6 +2559,30 @@ extern "C" {
                 true
             );
             const uint32 new_idx_start = previous_start_idx;
+            auto child_recurse_pack = reset_entry_count_map(&recurse_pack, sublink_graph->headNumber);
+            // There might be some sublinks that are, eventually, derivable by the subquery, but should NOT be derived just yet
+            // because we've not finished adding all the entries to the pending, just yet.
+            // To figure out those cases, we _could_ look at the derivable sublinks from the sublink and figure out those that need
+            // to be filtered out. Another, simpler, way is to just look at the current's layers ref count, and just consider the ones
+            // that don't have been added completely yet (whole lot more simpler)
+            std::vector<TraceProvLayerNumber> sublinks_to_ignore;
+            for (auto ref_count: *expected_entry_count_map){
+                const TraceProvLayerNumber maybe_ignorable = ref_count.first;
+                if (eager_entry_count_map->find(maybe_ignorable) == eager_entry_count_map->end()){
+                    sublinks_to_ignore.push_back(maybe_ignorable);
+                    continue;
+                }
+                // Cannot ignore in this case.
+                if (eager_entry_count_map->at(maybe_ignorable) == ref_count.second) continue;
+                sublinks_to_ignore.push_back(maybe_ignorable);
+            }
+            // Need to append the ignorable sublinks from parent too.
+            if (recurse_pack.sublinks_to_ignore){
+                for (auto ignorable: *recurse_pack.sublinks_to_ignore){
+                    sublinks_to_ignore.push_back(ignorable);
+                }
+            }
+            child_recurse_pack.sublinks_to_ignore = &sublinks_to_ignore;
             // Perform all the derivation on the join exprn now.
             auto ast_node = derive_on_node(
                 (TraceProvNode *)join_exprn,
@@ -2514,7 +2591,7 @@ extern "C" {
                 (struct local_context *)NULL,
                 worker_local_contexts,
                 parse_context,
-                reset_entry_count_map(&recurse_pack, sublink_graph->headNumber)
+                child_recurse_pack
             );
             if (higher_layer_to_redrive != 0){
                 // Need to be careful in this case.
@@ -2772,6 +2849,7 @@ extern "C" {
         setup_extra->worker_count = worker_count;
         if (p_extra)
             *p_extra = setup_extra;
+        TraceProvLayerEntriesMap layer_entries_map;
         foreach(graph_cursor, graphs){
             TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
             // The top level graph should always be the simple log.
@@ -2794,14 +2872,17 @@ extern "C" {
                         .current_layer_number = graph->headNumber,
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,
-                        .last_ref = &last_ref
+                        .last_ref = &last_ref,
+                        .sublinks_to_ignore = nullptr
                     }
                 )
             );
+            create_layer_entry_map(graph, &layer_entries_map);
         }
         ListCell *sublink_cursor;
         foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
             TraceProvDependency *child_sublink = (TraceProvDependency*)lfirst(sublink_cursor);
+            create_layer_entry_map(child_sublink, &layer_entries_map);
             // If a sublink is being used, don't derive it.
             // It should be automatically be derived as part of generic handling.
             if (traceprov_find_int_list(get_all_used_sublinks, child_sublink->headNumber)) continue;
@@ -2824,14 +2905,64 @@ extern "C" {
                         .current_layer_number = child_sublink->headNumber,
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,
-                        .last_ref = &last_ref
+                        .last_ref = &last_ref,
+                        .sublinks_to_ignore = nullptr
                     }
                 )
             );
         }
 
         auto result_map = new TraceProvResultMap;
-        flattenTraceProvInferAbstractTree(top_tree, result_map, parsed_back_context);
+        // Instead of making just one result map, we make smaller ones.
+        // Then, we look for intersections against previously derived ones.
+        // Any common ones are assumed to be sublinks (assertion), and then "joined" over.
+        for (auto child_tree: *top_tree->children){
+            auto child_result_map = new TraceProvResultMap;
+            flattenTraceProvInferAbstractTree(child_tree, child_result_map, parsed_back_context);
+            for (auto child_result_map_entry: *child_result_map){
+                const TraceProvLayerNumber child_layer_num = child_result_map_entry.first;
+                if (result_map->find(child_layer_num) == result_map->end()){
+                    result_map->insert({child_layer_num, child_result_map_entry.second});
+                    continue;
+                }
+                // In this case, we found the layer previously derived.
+                // Transform that into an join. Before we do that, need to determine what kind of node we're dealing with.
+                // If it is a sublink, with correlated attrs, also need to "ignore" them in the joined node.
+                const List *entries = layer_entries_map.at(child_layer_num);
+                const uint32 correlated_attr_count = count_correlated_attrs(entries);
+                TraceProvNode *original_node = result_map->at(child_layer_num);
+                TraceProvNode *current_node = child_result_map_entry.second;
+                const uint64 original_node_column_count = traceprov_get_node_column_count(original_node);
+                const uint64 current_node_column_count = traceprov_get_node_column_count(current_node);
+                if (original_node_column_count < correlated_attr_count){
+                    elog(ERROR, "Expected the (original) column count to at least be correlated attribute count!");
+                }
+                if (current_node_column_count < correlated_attr_count){
+                    elog(ERROR, "Expected the (current) column count to at least be correlated attribute count!");
+                }
+                auto join_condition = new TraceProvJoinConditions;
+                auto output_cols = new std::vector<TraceProvColumn *>; 
+                for (uint32_t idx = 0; idx < original_node_column_count - correlated_attr_count; idx++){
+                    output_cols->push_back(new TraceProvColumn(1, idx + 1));
+                }
+                // This does all the way (including the correlated attr count)
+                for (uint32_t idx = 0; idx < current_node_column_count; idx++){
+                    output_cols->push_back(new TraceProvColumn(2, idx + 1));
+                }
+                for (uint32_t idx = 0; idx < correlated_attr_count; idx++){
+                    auto left_column = new TraceProvColumn(1, (original_node_column_count - correlated_attr_count + idx + 1));
+                    auto right_column = new TraceProvColumn(2, (current_node_column_count - correlated_attr_count + idx + 1)); 
+                    join_condition->push_back(new TraceProvJoinPair(left_column, right_column));
+                }
+                auto join_expr = make_traceprov_join_expr(
+                    original_node,
+                    current_node,
+                    join_condition,
+                    output_cols
+                );
+                result_map->at(child_layer_num) = (TraceProvNode*)join_expr;
+            }
+        }
         return result_map;
     }
 

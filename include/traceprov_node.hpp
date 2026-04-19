@@ -183,6 +183,7 @@ extern "C" {
         // Stores the sublink count ref count by the base.
         TraceProvEntryCountMap *entry_count_map;
         const TraceProvLastRef *last_ref;
+        std::vector<TraceProvLayerNumber> *sublinks_to_ignore;
     } TraceProvRecursePack;
 
     // the abstract tree for join computation.
