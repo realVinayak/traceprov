@@ -2639,6 +2639,13 @@ extern "C" {
         auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
         ListCell *entry_cursor;
         bool did_append_self = false;
+
+        // Also check if any sublink are refered in the entries.
+        // This is also done before handling the we process the children, so that for child sublinks we're ready to process them.
+        current_tree->children->push_back(
+            derive_sublinks(node, graph, parse_context, worker_local_contexts, idx_start, recurse_pack)
+        );
+
         foreach(entry_cursor, graph->entries){
             const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
             if (te->kind == TP_ENTRY_SET_POINTER){
@@ -2662,10 +2669,6 @@ extern "C" {
             if (te->kind == TP_ENTRY_KIND_BASE_RELATION || (te->kind == TP_ENTRY_CORRELATION_ATTR)){
                 if (!did_append_self){
                     current_tree->nodes->push_back(node);
-                    // Also check if any sublink are refered in the entries.
-                    current_tree->children->push_back(
-                        derive_sublinks(node, graph, parse_context, worker_local_contexts, idx_start, recurse_pack)
-                    );
                     did_append_self = true;
                 }
             } else if (te->kind == TP_ENTRY_KIND_POINTER){
@@ -3115,12 +3118,17 @@ extern "C" {
         std::string graph_str = "{";
         graph_str.append("\"elements\": [");
         bool needs_sep = false;
+
         for (auto child: *result_map){
             if (needs_sep)
                 graph_str.append(",");
             const TraceProvLayerNumber idx = child.first;
             TraceProvNode *node = child.second;
-            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = parse_context, .use_table_def = true});
+            TraceProvParseContext temp_sql_context;
+            tp_parse_initialize_context(&temp_sql_context);
+            temp_sql_context.root_context = &temp_sql_context;
+            // This is done like this so that the numbering of nodes is always consistent.
+            const char *sql = traceprov_node_to_sql(node, TraceProvToSQLContext{.context = &temp_sql_context, .use_table_def = true});
             TraceProvData *data = nullptr;
             if (perform_execution){
                 data = traceprov_perform_duckdb_inference(sql, traceprov_current.infer_context);

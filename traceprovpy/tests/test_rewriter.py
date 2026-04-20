@@ -1179,3 +1179,78 @@ class TestRewrite(TestDbSetup):
         self.assertStrEqual(spec[1]["sql"], expected_query_1)
         self.assertStrEqual(spec[3]["sql"], expected_query["query_3"])
         self.assertStrEqual(spec[5]["sql"], expected_query["query_5"])
+
+    def test_same_sink_subquery(self):
+        query = f"""
+        select *
+        from {self.table_name_1} as a
+        where (
+                        select count(*)
+                        from {self.table_name_2} as b
+                        where (
+                                        select count(*)
+                                        from {self.table_name_3} as c
+                                        where c.id != (a.id + b.id)
+                                ) > 0
+                ) > 0
+        """
+        tp_query = traceprov_make_query(query)
+        TestRewrite.run_simple_query(tp_query)
+        graphs, context = TestRewrite.traceprov_get_graph()
+
+        expected_main_graph = [
+            {
+                "graphType": "LOG",
+                "headNumber": 5,
+                "entries": [
+                    f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_1}, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [(2, 1)], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                ],
+                "children": [{"graphType": "NULL"}],
+            }
+        ]
+
+        expected_sublinks = [
+            {
+                "graphType": "LOG",
+                "headNumber": 2,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                ],
+                "children": [
+                    {"graphType": "NULL"},
+                    {"graphType": "NULL"},
+                    {
+                        "graphType": "PURE_AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_3}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    },
+                ],
+            },
+            {
+                "graphType": "LOG",
+                "headNumber": 4,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                ],
+                "children": [
+                    {
+                        "graphType": "PURE_AGGREGATE",
+                        "headNumber": 3,
+                        "entries": [
+                            f"[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: {self.table_oid_2}, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [(2, 0)], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    }
+                ],
+            },
+        ]
+
+        self.assertEqual(graphs, expected_main_graph)
+        self.assertEqual(expected_sublinks, context["sublinks"])
+
+        spec = TestRewrite.traceprov_get_spec()
