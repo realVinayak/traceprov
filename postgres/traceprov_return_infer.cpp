@@ -2421,6 +2421,11 @@ extern "C" {
         return current_tree;
     }
 
+    void insert_duplicate_safe(std::vector<TraceProvLayerNumber> *in_vec, const TraceProvLayerNumber node_to_insert){
+        if (std::find(in_vec->begin(), in_vec->end(), node_to_insert) != in_vec->end()) return;
+        in_vec->push_back(node_to_insert);
+    }
+
     /**
      * Core logic for deriving sublinks.
     */
@@ -2438,8 +2443,6 @@ extern "C" {
         auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
         ListCell *entry_cursor;
         List *candidate_sublinks = NIL;
-        // Bitmapset *added_sublinks = NULL;
-        const TraceProvEntryCountMap *current_entry_count_map = recurse_pack.layer_count_map->at(recurse_pack.current_layer_number);
         foreach(entry_cursor, graph->entries){
             TraceProvEntry *entry = (TraceProvEntry *)lfirst(entry_cursor);
             if (list_length(entry->sublinks) == 0) continue;
@@ -2478,10 +2481,8 @@ extern "C" {
             const TraceProvLayerNumber original_sublink = candidate_sublink;
             // This will happen if the topologically the sublink was derived directly by another upstream.
             auto derived_sublink_vec = *recurse_pack.derived_sublinks;
-            if (std::find(recurse_pack.derived_sublinks->begin(), recurse_pack.derived_sublinks->end(), candidate_sublink) == recurse_pack.derived_sublinks->end()){
-                recurse_pack.derived_sublinks->push_back(candidate_sublink);
-            }
             if (list_member_int(reachable_sublinks, candidate_sublink)){
+                insert_duplicate_safe(recurse_pack.derived_sublinks, candidate_sublink);
                 continue;
             }
             List *derived_sublinks_copy = NIL;
@@ -2493,7 +2494,7 @@ extern "C" {
 
             const auto ref_count = get_reference_count(recurse_pack.layer_count_map, candidate_sublink);
 
-            auto pending_entries = recurse_pack.pending_sublinks->at(candidate_sublink);
+            auto pending_entries = recurse_pack.pending_sublinks->at(original_sublink);
 
             const TraceProvLayerNumber sublink_last_ref = recurse_pack.last_ref->at(candidate_sublink);
             // Need to check if we may ignore the sublinks.
@@ -2615,6 +2616,7 @@ extern "C" {
             }else{
                 current_tree->children->push_back(ast_node);
             }
+            insert_duplicate_safe(recurse_pack.derived_sublinks, original_sublink);
         }
 
         return current_tree;
