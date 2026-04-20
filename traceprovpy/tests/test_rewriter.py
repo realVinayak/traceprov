@@ -77,6 +77,7 @@ class TestRewrite(TestDbSetup):
         TestRewrite.run_simple_query("select reinit_state();", True)
 
     def assertStrEqual(self, left_str: str, right_str: str):
+        # print(left_str)
         return self.assertEqual(format_sql(left_str), format_sql(right_str))
 
     @classmethod
@@ -471,17 +472,17 @@ class TestRewrite(TestDbSetup):
         spec = TestRewrite.traceprov_get_spec()
 
         expected_query_1 = """
-			SELECT tp_table_4.column_0,
-				tp_table_5.column_1
-			FROM (
-					SELECT top_level_tp_table_1.column_0::bigint
-					FROM traceprov_read_worker_layer(1::int, 2::int) AS top_level_tp_table_1
-				) as tp_table_4(column_0)
-				JOIN (
-					SELECT intermediate_join_tp_table_2.column_0::bigint,
-						intermediate_join_tp_table_2.column_1::bigint
-					FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_2
-				) as tp_table_5(column_0, column_1) ON (tp_table_4.column_0 = tp_table_5.column_0)
+        SELECT tp_table_1.column_0,
+            tp_table_2.column_1
+        FROM (
+                SELECT top_level_tp_table_1.column_0::bigint
+                FROM traceprov_read_worker_layer(1::int, 2::int) AS top_level_tp_table_1
+            ) as tp_table_1(column_0)
+            JOIN (
+                SELECT intermediate_join_tp_table_2.column_0::bigint,
+                    intermediate_join_tp_table_2.column_1::bigint
+                FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_2
+            ) as tp_table_2(column_0, column_1) ON (tp_table_1.column_0 = tp_table_2.column_0)
 		"""
 
         expected_query_3 = """
@@ -552,31 +553,31 @@ class TestRewrite(TestDbSetup):
         spec = TestRewrite.traceprov_get_spec()
 
         expected_query_1 = """
-            SELECT tp_table_5.column_0,
-                tp_table_6.column_1
-            FROM (
-                    SELECT top_level_tp_table_2.column_0::bigint
-                    FROM traceprov_read_worker_layer(1::int, 2::int) AS top_level_tp_table_2
-                ) as tp_table_5(column_0)
-                JOIN (
-                    SELECT intermediate_join_tp_table_3.column_0::bigint,
-                        intermediate_join_tp_table_3.column_1::bigint
-                    FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_3
-                ) as tp_table_6(column_0, column_1) ON (tp_table_5.column_0 = tp_table_6.column_0)
+        SELECT tp_table_1.column_0,
+            tp_table_2.column_1
+        FROM (
+                SELECT top_level_tp_table_2.column_0::bigint
+                FROM traceprov_read_worker_layer(1::int, 2::int) AS top_level_tp_table_2
+            ) as tp_table_1(column_0)
+            JOIN (
+                SELECT intermediate_join_tp_table_3.column_0::bigint,
+                    intermediate_join_tp_table_3.column_1::bigint
+                FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_3
+            ) as tp_table_2(column_0, column_1) ON (tp_table_1.column_0 = tp_table_2.column_0)
             """
 
         expected_query_3 = """
-        SELECT tp_table_8.column_0,
-            tp_table_9.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_2.column_1
         FROM (
                 SELECT top_level_tp_table_0.column_0::bigint
                 FROM traceprov_read_worker_layer(1::int, 4::int) AS top_level_tp_table_0
-            ) as tp_table_8(column_0)
+            ) as tp_table_1(column_0)
             JOIN (
                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                     intermediate_join_tp_table_1.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_1
-            ) as tp_table_9(column_0, column_1) ON (tp_table_8.column_0 = tp_table_9.column_0)
+            ) as tp_table_2(column_0, column_1) ON (tp_table_1.column_0 = tp_table_2.column_0)
         """
 
         self.assertStrEqual(spec[1]["sql"], expected_query_1)
@@ -640,29 +641,29 @@ class TestRewrite(TestDbSetup):
         """
 
         expected_query_1 = """
-        SELECT tp_table_4.column_0,
-            tp_table_4.column_1,
-            tp_table_4.column_2,
-            tp_table_7.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_1.column_1,
+            tp_table_1.column_2,
+            tp_table_4.column_1
         FROM (
-                SELECT tp_table_5.column_0,
-                    tp_table_6.column_0,
-                    tp_table_6.column_1
+                SELECT tp_table_2.column_0,
+                    tp_table_3.column_0,
+                    tp_table_3.column_1
                 FROM (
                         SELECT top_level_tp_table_0.column_0::bigint
                         FROM traceprov_read_worker_layer(1::int, 3::int) AS top_level_tp_table_0
-                    ) as tp_table_5(column_0)
+                    ) as tp_table_2(column_0)
                     JOIN (
                         SELECT log_read_to_append_tp_table_1.column_0::bigint,
                             log_read_to_append_tp_table_1.column_1::bigint
                         FROM traceprov_read_worker_layer(1::int, 2::int) AS log_read_to_append_tp_table_1
-                    ) as tp_table_6(column_0, column_1) ON (tp_table_5.column_0 = tp_table_6.column_0)
-            ) as tp_table_4(column_0, column_1, column_2)
+                    ) as tp_table_3(column_0, column_1) ON (tp_table_2.column_0 = tp_table_3.column_0)
+            ) as tp_table_1(column_0, column_1, column_2)
             JOIN (
                 SELECT intermediate_join_tp_table_2.column_0::bigint,
                     intermediate_join_tp_table_2.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_2
-            ) as tp_table_7(column_0, column_1) ON (tp_table_4.column_2 = tp_table_7.column_0)
+            ) as tp_table_4(column_0, column_1) ON (tp_table_1.column_2 = tp_table_4.column_0)
         """
 
         self.assertStrEqual(spec[1]["sql"], expected_query_1)
@@ -732,55 +733,54 @@ class TestRewrite(TestDbSetup):
         spec = TestRewrite.traceprov_get_spec()
 
         expected_query_1 = """
-        SELECT tp_table_5.column_0,
-            tp_table_5.column_1,
-            tp_table_5.column_2,
-            tp_table_5.column_3,
-            tp_table_10.column_1
-        FROM (
-                SELECT tp_table_6.column_0,
-                    tp_table_6.column_1,
-                    tp_table_9.column_0,
-                    tp_table_9.column_1
-                FROM (
-                        SELECT tp_table_7.column_0,
-                            tp_table_8.column_1
-                        FROM (
-                                SELECT top_level_tp_table_0.column_0::bigint
-                                FROM traceprov_read_worker_layer(1::int, 4::int) AS top_level_tp_table_0
-                            ) as tp_table_7(column_0)
-                            JOIN (
-                                SELECT intermediate_join_tp_table_1.column_0::bigint,
-                                    intermediate_join_tp_table_1.column_1::bigint
-                                FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_1
-                            ) as tp_table_8(column_0, column_1) ON (tp_table_7.column_0 = tp_table_8.column_0)
-                    ) as tp_table_6(column_0, column_1)
-                    JOIN (
-                        SELECT log_read_to_append_tp_table_2.column_0::bigint,
-                            log_read_to_append_tp_table_2.column_1::bigint
-                        FROM traceprov_read_worker_layer(1::int, 2::int) AS log_read_to_append_tp_table_2
-                    ) as tp_table_9(column_0, column_1) ON (tp_table_6.column_1 = tp_table_9.column_0)
-            ) as tp_table_5(column_0, column_1, column_2, column_3)
-            JOIN (
-                SELECT intermediate_join_tp_table_3.column_0::bigint,
-                    intermediate_join_tp_table_3.column_1::bigint
-                FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_3
-            ) as tp_table_10(column_0, column_1) ON (tp_table_5.column_3 = tp_table_10.column_0)
-
+            SELECT tp_table_1.column_0,
+                tp_table_1.column_1,
+                tp_table_1.column_2,
+                tp_table_1.column_3,
+                tp_table_6.column_1
+            FROM (
+                    SELECT tp_table_2.column_0,
+                        tp_table_2.column_1,
+                        tp_table_5.column_0,
+                        tp_table_5.column_1
+                    FROM (
+                            SELECT tp_table_3.column_0,
+                                tp_table_4.column_1
+                            FROM (
+                                    SELECT top_level_tp_table_0.column_0::bigint
+                                    FROM traceprov_read_worker_layer(1::int, 4::int) AS top_level_tp_table_0
+                                ) as tp_table_3(column_0)
+                                JOIN (
+                                    SELECT intermediate_join_tp_table_1.column_0::bigint,
+                                        intermediate_join_tp_table_1.column_1::bigint
+                                    FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_1
+                                ) as tp_table_4(column_0, column_1) ON (tp_table_3.column_0 = tp_table_4.column_0)
+                        ) as tp_table_2(column_0, column_1)
+                        JOIN (
+                            SELECT log_read_to_append_tp_table_2.column_0::bigint,
+                                log_read_to_append_tp_table_2.column_1::bigint
+                            FROM traceprov_read_worker_layer(1::int, 2::int) AS log_read_to_append_tp_table_2
+                        ) as tp_table_5(column_0, column_1) ON (tp_table_2.column_1 = tp_table_5.column_0)
+                ) as tp_table_1(column_0, column_1, column_2, column_3)
+                JOIN (
+                    SELECT intermediate_join_tp_table_3.column_0::bigint,
+                        intermediate_join_tp_table_3.column_1::bigint
+                    FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_3
+                ) as tp_table_6(column_0, column_1) ON (tp_table_1.column_3 = tp_table_6.column_0)
         """
 
         expected_query_3 = """
-        SELECT tp_table_17.column_0,
-            tp_table_18.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_2.column_1
         FROM (
                 SELECT top_level_tp_table_0.column_0::bigint
                 FROM traceprov_read_worker_layer(1::int, 4::int) AS top_level_tp_table_0
-            ) as tp_table_17(column_0)
+            ) as tp_table_1(column_0)
             JOIN (
                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                     intermediate_join_tp_table_1.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_1
-            ) as tp_table_18(column_0, column_1) ON (tp_table_17.column_0 = tp_table_18.column_0)
+            ) as tp_table_2(column_0, column_1) ON (tp_table_1.column_0 = tp_table_2.column_0)
         """
 
         self.assertStrEqual(spec[1]["sql"], expected_query_1)
@@ -788,54 +788,54 @@ class TestRewrite(TestDbSetup):
 
     def _correlated_two_level_chain_results(self):
         expected_query_3 = """
-        SELECT tp_table_27.column_0,
-            tp_table_27.column_1,
-            tp_table_27.column_2,
-            tp_table_27.column_3,
-            tp_table_32.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_1.column_1,
+            tp_table_1.column_2,
+            tp_table_1.column_3,
+            tp_table_6.column_1
         FROM (
-                SELECT tp_table_28.column_0,
-                    tp_table_28.column_1,
-                    tp_table_31.column_0,
-                    tp_table_31.column_1
+                SELECT tp_table_2.column_0,
+                    tp_table_2.column_1,
+                    tp_table_5.column_0,
+                    tp_table_5.column_1
                 FROM (
-                        SELECT tp_table_29.column_0,
-                            tp_table_30.column_1
+                        SELECT tp_table_3.column_0,
+                            tp_table_4.column_1
                         FROM (
                                 SELECT top_level_tp_table_0.column_0::bigint
                                 FROM traceprov_read_worker_layer(1::int, 6::int) AS top_level_tp_table_0
-                            ) as tp_table_29(column_0)
+                            ) as tp_table_3(column_0)
                             JOIN (
                                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                                     intermediate_join_tp_table_1.column_1::bigint
                                 FROM traceprov_read_worker_layer(1::int, 5::int) AS intermediate_join_tp_table_1
-                            ) as tp_table_30(column_0, column_1) ON (tp_table_29.column_0 = tp_table_30.column_0)
-                    ) as tp_table_28(column_0, column_1)
+                            ) as tp_table_4(column_0, column_1) ON (tp_table_3.column_0 = tp_table_4.column_0)
+                    ) as tp_table_2(column_0, column_1)
                     JOIN (
                         SELECT log_read_to_append_tp_table_2.column_0::bigint,
                             log_read_to_append_tp_table_2.column_1::bigint
                         FROM traceprov_read_worker_layer(1::int, 4::int) AS log_read_to_append_tp_table_2
-                    ) as tp_table_31(column_0, column_1) ON (tp_table_28.column_1 = tp_table_31.column_0)
-            ) as tp_table_27(column_0, column_1, column_2, column_3)
+                    ) as tp_table_5(column_0, column_1) ON (tp_table_2.column_1 = tp_table_5.column_0)
+            ) as tp_table_1(column_0, column_1, column_2, column_3)
             JOIN (
                 SELECT intermediate_join_tp_table_3.column_0::bigint,
                     intermediate_join_tp_table_3.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_3
-            ) as tp_table_32(column_0, column_1) ON (tp_table_27.column_3 = tp_table_32.column_0)
+            ) as tp_table_6(column_0, column_1) ON (tp_table_1.column_3 = tp_table_6.column_0)
         """
 
         expected_query_5 = """
-        SELECT tp_table_39.column_0,
-            tp_table_40.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_2.column_1
         FROM (
                 SELECT top_level_tp_table_0.column_0::bigint
                 FROM traceprov_read_worker_layer(1::int, 6::int) AS top_level_tp_table_0
-            ) as tp_table_39(column_0)
+            ) as tp_table_1(column_0)
             JOIN (
                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                     intermediate_join_tp_table_1.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 5::int) AS intermediate_join_tp_table_1
-            ) as tp_table_40(column_0, column_1) ON (tp_table_39.column_0 = tp_table_40.column_0)
+            ) as tp_table_2(column_0, column_1) ON (tp_table_1.column_0 = tp_table_2.column_0)
         """
 
         return dict(query_3=expected_query_3, query_5=expected_query_5)
@@ -927,64 +927,64 @@ class TestRewrite(TestDbSetup):
         spec = TestRewrite.traceprov_get_spec()
 
         expected_query_1 = """
-        SELECT tp_table_7.column_0,
-            tp_table_7.column_1,
-            tp_table_7.column_2,
-            tp_table_7.column_3,
-            tp_table_7.column_4,
-            tp_table_7.column_5,
-            tp_table_7.column_6,
-            tp_table_16.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_1.column_1,
+            tp_table_1.column_2,
+            tp_table_1.column_3,
+            tp_table_1.column_4,
+            tp_table_1.column_5,
+            tp_table_1.column_6,
+            tp_table_10.column_1
         FROM (
-                SELECT tp_table_8.column_0,
-                    tp_table_8.column_1,
-                    tp_table_8.column_2,
-                    tp_table_8.column_3,
-                    tp_table_8.column_4,
-                    tp_table_15.column_0,
-                    tp_table_15.column_1
+                SELECT tp_table_2.column_0,
+                    tp_table_2.column_1,
+                    tp_table_2.column_2,
+                    tp_table_2.column_3,
+                    tp_table_2.column_4,
+                    tp_table_9.column_0,
+                    tp_table_9.column_1
                 FROM (
-                        SELECT tp_table_9.column_0,
-                            tp_table_9.column_1,
-                            tp_table_9.column_2,
-                            tp_table_9.column_3,
-                            tp_table_14.column_1
+                        SELECT tp_table_3.column_0,
+                            tp_table_3.column_1,
+                            tp_table_3.column_2,
+                            tp_table_3.column_3,
+                            tp_table_8.column_1
                         FROM (
-                                SELECT tp_table_10.column_0,
-                                    tp_table_10.column_1,
-                                    tp_table_13.column_0,
-                                    tp_table_13.column_1
+                                SELECT tp_table_4.column_0,
+                                    tp_table_4.column_1,
+                                    tp_table_7.column_0,
+                                    tp_table_7.column_1
                                 FROM (
-                                        SELECT tp_table_11.column_0,
-                                            tp_table_12.column_1
+                                        SELECT tp_table_5.column_0,
+                                            tp_table_6.column_1
                                         FROM (
                                                 SELECT top_level_tp_table_0.column_0::bigint
                                                 FROM traceprov_read_worker_layer(1::int, 6::int) AS top_level_tp_table_0
-                                            ) as tp_table_11(column_0)
+                                            ) as tp_table_5(column_0)
                                             JOIN (
                                                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                                                     intermediate_join_tp_table_1.column_1::bigint
                                                 FROM traceprov_read_worker_layer(1::int, 5::int) AS intermediate_join_tp_table_1
-                                            ) as tp_table_12(column_0, column_1) ON (tp_table_11.column_0 = tp_table_12.column_0)
-                                    ) as tp_table_10(column_0, column_1)
+                                            ) as tp_table_6(column_0, column_1) ON (tp_table_5.column_0 = tp_table_6.column_0)
+                                    ) as tp_table_4(column_0, column_1)
                                     JOIN (
                                         SELECT log_read_to_append_tp_table_2.column_0::bigint,
                                             log_read_to_append_tp_table_2.column_1::bigint
                                         FROM traceprov_read_worker_layer(1::int, 4::int) AS log_read_to_append_tp_table_2
-                                    ) as tp_table_13(column_0, column_1) ON (tp_table_10.column_1 = tp_table_13.column_0)
-                            ) as tp_table_9(column_0, column_1, column_2, column_3)
+                                    ) as tp_table_7(column_0, column_1) ON (tp_table_4.column_1 = tp_table_7.column_0)
+                            ) as tp_table_3(column_0, column_1, column_2, column_3)
                             JOIN (
                                 SELECT intermediate_join_tp_table_3.column_0::bigint,
                                     intermediate_join_tp_table_3.column_1::bigint
                                 FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_3
-                            ) as tp_table_14(column_0, column_1) ON (tp_table_9.column_3 = tp_table_14.column_0)
-                    ) as tp_table_8(column_0, column_1, column_2, column_3, column_4)
+                            ) as tp_table_8(column_0, column_1) ON (tp_table_3.column_3 = tp_table_8.column_0)
+                    ) as tp_table_2(column_0, column_1, column_2, column_3, column_4)
                     JOIN (
                         SELECT log_read_to_append_tp_table_4.column_0::bigint,
                             log_read_to_append_tp_table_4.column_1::bigint
                         FROM traceprov_read_worker_layer(1::int, 2::int) AS log_read_to_append_tp_table_4
-                    ) as tp_table_15(column_0, column_1) ON (tp_table_8.column_4 = tp_table_15.column_0)
-            ) as tp_table_7(
+                    ) as tp_table_9(column_0, column_1) ON (tp_table_2.column_4 = tp_table_9.column_0)
+            ) as tp_table_1(
                 column_0,
                 column_1,
                 column_2,
@@ -997,7 +997,7 @@ class TestRewrite(TestDbSetup):
                 SELECT intermediate_join_tp_table_5.column_0::bigint,
                     intermediate_join_tp_table_5.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_5
-            ) as tp_table_16(column_0, column_1) ON (tp_table_7.column_6 = tp_table_16.column_0)
+            ) as tp_table_10(column_0, column_1) ON (tp_table_1.column_6 = tp_table_10.column_0)
             """
 
         expected_query = self._correlated_two_level_chain_results()
@@ -1094,70 +1094,70 @@ class TestRewrite(TestDbSetup):
         spec = TestRewrite.traceprov_get_spec()
 
         expected_query_1 = """
-        SELECT tp_table_7.column_0,
-            tp_table_7.column_1,
-            tp_table_7.column_2,
-            tp_table_7.column_3,
-            tp_table_7.column_4,
-            tp_table_7.column_5,
-            tp_table_7.column_6,
-            tp_table_7.column_7,
-            tp_table_16.column_1
+        SELECT tp_table_1.column_0,
+            tp_table_1.column_1,
+            tp_table_1.column_2,
+            tp_table_1.column_3,
+            tp_table_1.column_4,
+            tp_table_1.column_5,
+            tp_table_1.column_6,
+            tp_table_1.column_7,
+            tp_table_10.column_1
         FROM (
-                SELECT tp_table_8.column_0,
-                    tp_table_8.column_1,
-                    tp_table_8.column_2,
-                    tp_table_8.column_3,
-                    tp_table_8.column_4,
-                    tp_table_15.column_0,
-                    tp_table_15.column_1,
-                    tp_table_15.column_2
+                SELECT tp_table_2.column_0,
+                    tp_table_2.column_1,
+                    tp_table_2.column_2,
+                    tp_table_2.column_3,
+                    tp_table_2.column_4,
+                    tp_table_9.column_0,
+                    tp_table_9.column_1,
+                    tp_table_9.column_2
                 FROM (
-                        SELECT tp_table_9.column_0,
-                            tp_table_9.column_1,
-                            tp_table_9.column_2,
-                            tp_table_9.column_3,
-                            tp_table_14.column_1
+                        SELECT tp_table_3.column_0,
+                            tp_table_3.column_1,
+                            tp_table_3.column_2,
+                            tp_table_3.column_3,
+                            tp_table_8.column_1
                         FROM (
-                                SELECT tp_table_10.column_0,
-                                    tp_table_10.column_1,
-                                    tp_table_13.column_0,
-                                    tp_table_13.column_1
+                                SELECT tp_table_4.column_0,
+                                    tp_table_4.column_1,
+                                    tp_table_7.column_0,
+                                    tp_table_7.column_1
                                 FROM (
-                                        SELECT tp_table_11.column_0,
-                                            tp_table_12.column_1
+                                        SELECT tp_table_5.column_0,
+                                            tp_table_6.column_1
                                         FROM (
                                                 SELECT top_level_tp_table_0.column_0::bigint
                                                 FROM traceprov_read_worker_layer(1::int, 6::int) AS top_level_tp_table_0
-                                            ) as tp_table_11(column_0)
+                                            ) as tp_table_5(column_0)
                                             JOIN (
                                                 SELECT intermediate_join_tp_table_1.column_0::bigint,
                                                     intermediate_join_tp_table_1.column_1::bigint
                                                 FROM traceprov_read_worker_layer(1::int, 5::int) AS intermediate_join_tp_table_1
-                                            ) as tp_table_12(column_0, column_1) ON (tp_table_11.column_0 = tp_table_12.column_0)
-                                    ) as tp_table_10(column_0, column_1)
+                                            ) as tp_table_6(column_0, column_1) ON (tp_table_5.column_0 = tp_table_6.column_0)
+                                    ) as tp_table_4(column_0, column_1)
                                     JOIN (
                                         SELECT log_read_to_append_tp_table_2.column_0::bigint,
                                             log_read_to_append_tp_table_2.column_1::bigint
                                         FROM traceprov_read_worker_layer(1::int, 4::int) AS log_read_to_append_tp_table_2
-                                    ) as tp_table_13(column_0, column_1) ON (tp_table_10.column_1 = tp_table_13.column_0)
-                            ) as tp_table_9(column_0, column_1, column_2, column_3)
+                                    ) as tp_table_7(column_0, column_1) ON (tp_table_4.column_1 = tp_table_7.column_0)
+                            ) as tp_table_3(column_0, column_1, column_2, column_3)
                             JOIN (
                                 SELECT intermediate_join_tp_table_3.column_0::bigint,
                                     intermediate_join_tp_table_3.column_1::bigint
                                 FROM traceprov_read_worker_layer(1::int, 3::int) AS intermediate_join_tp_table_3
-                            ) as tp_table_14(column_0, column_1) ON (tp_table_9.column_3 = tp_table_14.column_0)
-                    ) as tp_table_8(column_0, column_1, column_2, column_3, column_4)
+                            ) as tp_table_8(column_0, column_1) ON (tp_table_3.column_3 = tp_table_8.column_0)
+                    ) as tp_table_2(column_0, column_1, column_2, column_3, column_4)
                     JOIN (
                         SELECT log_read_to_append_tp_table_4.column_0::bigint,
                             log_read_to_append_tp_table_4.column_1::bigint,
                             log_read_to_append_tp_table_4.column_2::bigint
                         FROM traceprov_read_worker_layer(1::int, 2::int) AS log_read_to_append_tp_table_4
-                    ) as tp_table_15(column_0, column_1, column_2) ON (
-                        tp_table_8.column_4 = tp_table_15.column_0
-                        AND tp_table_8.column_1 = tp_table_15.column_1
+                    ) as tp_table_9(column_0, column_1, column_2) ON (
+                        tp_table_2.column_4 = tp_table_9.column_0
+                        AND tp_table_2.column_1 = tp_table_9.column_1
                     )
-            ) as tp_table_7(
+            ) as tp_table_1(
                 column_0,
                 column_1,
                 column_2,
@@ -1171,7 +1171,7 @@ class TestRewrite(TestDbSetup):
                 SELECT intermediate_join_tp_table_5.column_0::bigint,
                     intermediate_join_tp_table_5.column_1::bigint
                 FROM traceprov_read_worker_layer(1::int, 1::int) AS intermediate_join_tp_table_5
-            ) as tp_table_16(column_0, column_1) ON (tp_table_7.column_7 = tp_table_16.column_0)
+            ) as tp_table_10(column_0, column_1) ON (tp_table_1.column_7 = tp_table_10.column_0)
         """
 
         expected_query = self._correlated_two_level_chain_results()
