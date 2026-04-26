@@ -1254,3 +1254,105 @@ class TestRewrite(TestDbSetup):
         self.assertEqual(expected_sublinks, context["sublinks"])
 
         spec = TestRewrite.traceprov_get_spec()
+
+    def test_same_sink_subquery_correlated(self):
+        query = f"""
+        select *
+        from { self.table_name_1 } as a
+        where (
+                        select count(*)
+                        from { self.table_name_2 } as b
+                        where (
+                                        (
+                                                select count(*)
+                                                from { self.table_name_3 } as c
+                                                where (
+                                                                select count(*)
+                                                                from { self.table_name_4 } as d
+                                                                where d.id != b.id + c.id
+                                                        ) > 0
+                                                        and (c.id != a.id)
+                                        ) > 0
+                                )
+                                and b.id != a.id
+                ) > 0
+        """
+        tp_query = traceprov_make_query(query)
+        TestRewrite.run_simple_query(tp_query)
+        graphs, context = TestRewrite.traceprov_get_graph()
+
+        expected_main_graph = [
+            {
+                "graphType": "LOG",
+                "headNumber": 7,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: 410202, resno: 3, attrNumber: 1, setNumber: 0, sublinks: [(4, 0),(6, 0)], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                ],
+                "children": [{"graphType": "NULL"}],
+            }
+        ]
+
+        sublinks = [
+            {
+                "graphType": "LOG",
+                "headNumber": 2,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                ],
+                "children": [
+                    {"graphType": "NULL"},
+                    {"graphType": "NULL"},
+                    {
+                        "graphType": "PURE_AGGREGATE",
+                        "headNumber": 1,
+                        "entries": [
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: 410217, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    },
+                ],
+            },
+            {
+                "graphType": "LOG",
+                "headNumber": 4,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                ],
+                "children": [
+                    {"graphType": "NULL"},
+                    {
+                        "graphType": "PURE_AGGREGATE",
+                        "headNumber": 3,
+                        "entries": [
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: 410212, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [(2, 0)], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    },
+                ],
+            },
+            {
+                "graphType": "LOG",
+                "headNumber": 6,
+                "entries": [
+                    "[TraceProvEntry (kind: TP_ENTRY_CORRELATION_ATTR, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                    "[TraceProvEntry (kind: TP_ENTRY_KIND_POINTER, relid: 0, resno: 0, attrNumber: 0, setNumber: 0, sublinks: [], window: [], is_ptr_for_window: 0, is_nullable: 0)]",
+                ],
+                "children": [
+                    {"graphType": "NULL"},
+                    {
+                        "graphType": "PURE_AGGREGATE",
+                        "headNumber": 5,
+                        "entries": [
+                            "[TraceProvEntry (kind: TP_ENTRY_KIND_BASE_RELATION, relid: 410207, resno: 1, attrNumber: 1, setNumber: 0, sublinks: [(2, 1)], window: [], is_ptr_for_window: 0, is_nullable: 0)]"
+                        ],
+                        "children": [{"graphType": "NULL"}],
+                    },
+                ],
+            },
+        ]
+
+        spec = TestRewrite.traceprov_get_spec()
+        print(spec)
