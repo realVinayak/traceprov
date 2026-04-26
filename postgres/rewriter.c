@@ -148,6 +148,18 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomBoolVariable(
+        "traceprov.force_seq_scan",
+        "Force seq scan during log reads",
+        "Force seq scan during log reads",
+        &traceprov_force_seq_scan,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 

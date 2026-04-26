@@ -184,6 +184,8 @@ extern "C" {
         TraceProvEntryCountMap *entry_count_map;
         const TraceProvLastRef *last_ref;
         std::vector<TraceProvLayerNumber> *sublinks_to_ignore;
+        // Used in Postgres to optimize joins.
+        uint32_t combine_main_worker;
     } TraceProvRecursePack;
 
     // the abstract tree for join computation.

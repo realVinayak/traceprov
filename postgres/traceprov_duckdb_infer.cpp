@@ -4,6 +4,7 @@
 #include "traceprov_infer.hpp"
 #include "traceprov_infer_essentials.hpp"
 #include <traceprov_node.hpp>
+#include <mutex>
 
 // Duckdb integration for inference.
 // Duckdb doesn't technically do anything smart (just runs the query)
@@ -41,6 +42,8 @@ extern "C" {
         uint64_t column_width;
         uint64_t row_width;
         std::vector<TraceProvBindData *> *child_bind_data;
+        std::mutex *bind_data_mutex;
+        uint64_t max_worker_idx;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData {
@@ -55,7 +58,8 @@ extern "C" {
         // The current child that's being queried.
         uint64_t current_child_idx;
         std::vector<TraceProvInitData *> *child_init_data;
-
+        uint64_t idx_in_bind;
+        bool is_dummy;
     } TraceProvInitData;
 
     #define TRACEPROV_MAKE_WORKER_LAYER_KEY(X, Y) ((uint64_t)(((uint64_t)X << 32) | (uint64_t)Y))
@@ -162,6 +166,7 @@ extern "C" {
     TraceProvBindData *allocate_bind_data(){
         auto bind_data = (TraceProvBindData *)calloc(1, sizeof(TraceProvBindData));
         bind_data->child_bind_data = new std::vector<TraceProvBindData *>;
+        bind_data->bind_data_mutex = new std::mutex;
         return bind_data;
     }
 
@@ -188,10 +193,10 @@ extern "C" {
 
         auto bind_data = allocate_bind_data();
 
-        const uint32_t end_idx = current_worker_id == 0 ? g_tp_duckdb_state.worker_local_contexts->size() : current_worker_id + 1;
+        const uint32_t end_idx = current_worker_id == 0 ? g_tp_duckdb_state.worker_local_contexts->size() : current_worker_id;
 
         // Just means we need to do this for all the workers with this layer.
-        for (uint32_t worker_id = current_worker_id; worker_id < end_idx; worker_id++){
+        for (uint32_t worker_id = current_worker_id == 0 ? current_worker_id : current_worker_id - 1; worker_id < end_idx; worker_id++){
             auto child_bind_data = allocate_bind_data();
             if(traceprov_populate_bind_data(worker_id + 1, layer_number, child_bind_data, current_worker_id != 0)){
                 bind_data->child_bind_data->push_back(child_bind_data);
@@ -213,7 +218,7 @@ extern "C" {
             duckdb_bind_add_result_column(info, param.c_str(), type);
             duckdb_destroy_logical_type(&type);
         }
-
+        bind_data->rel_args = child_bind_data->rel_args;
         duckdb_bind_set_bind_data(info, bind_data, free);
     }
 
@@ -228,6 +233,36 @@ extern "C" {
             init_data_inst->child_init_data->push_back(child_data_inst);
         }
 
+        duckdb_init_set_init_data(info, init_data_inst, free);
+        if (!traceprov_force_seq_scan)
+            duckdb_init_set_max_threads(info, init_data_inst->child_init_data->size());
+    }
+
+    void traceprov_duckdb_local_init(duckdb_init_info info){
+        auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
+        TraceProvInitData *init_data_inst = allocate_init_data();
+        bind_data->bind_data_mutex->lock();
+        const uint64_t self_idx = bind_data->max_worker_idx++;
+        bind_data->bind_data_mutex->unlock();
+        bool is_dummy = false;
+        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN || traceprov_force_seq_scan){
+            if (self_idx == 0){
+                for(auto child_bind_data: *bind_data->child_bind_data){
+                    auto child_data_inst = allocate_init_data();
+                    traceprov_populate_init_data(child_bind_data, child_data_inst);
+                    init_data_inst->child_init_data->push_back(child_data_inst);
+                }
+            }else{
+                is_dummy = true;
+            }
+        }else{
+            auto child_data_inst = allocate_init_data();
+            traceprov_populate_init_data(bind_data->child_bind_data->at(self_idx), child_data_inst);
+            init_data_inst->child_init_data->push_back(
+                child_data_inst
+            );
+        }
+        init_data_inst->is_dummy = is_dummy;
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
@@ -310,15 +345,22 @@ extern "C" {
     void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
 
         auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
-        auto init_data_combined = (TraceProvInitData *)duckdb_function_get_init_data(info);
+        auto init_data_combined = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
 
         // End of the scan.
-        if (init_data_combined->current_child_idx >= init_data_combined->child_init_data->size()){
+        if ((init_data_combined->current_child_idx >= init_data_combined->child_init_data->size())
+            || (init_data_combined->is_dummy)
+        ){
             duckdb_data_chunk_set_size(output, 0);
             return;
         }
+
+        uint32 bind_data_idx = init_data_combined->idx_in_bind;
+        if (bind_data_combined->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN || traceprov_force_seq_scan){
+            bind_data_idx = init_data_combined->current_child_idx;
+        }
     
-        auto bind_data = bind_data_combined->child_bind_data->at(init_data_combined->current_child_idx);
+        auto bind_data = bind_data_combined->child_bind_data->at(bind_data_idx);
         auto init_data = init_data_combined->child_init_data->at(init_data_combined->current_child_idx);
     
         uint64 final_state = 0;
@@ -522,6 +564,7 @@ extern "C" {
         duckdb_table_function_set_bind(function, traceprov_duckdb_bind);
         duckdb_table_function_set_init(function, traceprov_duckdb_init);
         duckdb_table_function_set_function(function, traceprov_duckdb_func);
+        duckdb_table_function_set_local_init(function, traceprov_duckdb_local_init);
         return function;
     }
 

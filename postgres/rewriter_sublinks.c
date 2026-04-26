@@ -29,11 +29,10 @@ TraceProvParseContext *toggle_in_filter(TraceProvParseContext *context, Node *no
 void traceprov_rewrite_sublinks(Query *query, TraceProvParseContext *context, const List *added_targets_per_rte, const bool process_later){
     if (!query->hasSubLinks) return;
 
-    context->parent_targets = lappend(context->parent_targets, (List*)added_targets_per_rte);
-
     // Some types of sublink entries need to be processed later (like having clause)
+    List *initial_stack = context->parent_targets;
+    context->parent_targets = lappend(list_copy(initial_stack), (List*)added_targets_per_rte);
     if (!process_later){
-
         query->targetList = (List*)rewrite_sublinks_mutator((Node*)query->targetList, context);
         query->jointree->fromlist = (List *)rewrite_sublinks_mutator((Node *)query->jointree->fromlist, context);
         // The next shallow copy doesn't hurt us anyways.
@@ -41,6 +40,7 @@ void traceprov_rewrite_sublinks(Query *query, TraceProvParseContext *context, co
     }else{
         query->havingQual = rewrite_sublinks_mutator((Node*)query->havingQual, toggle_in_filter(context, query->havingQual));
     }
+    context->parent_targets = initial_stack;
 }
 
 static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context){

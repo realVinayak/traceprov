@@ -54,7 +54,8 @@ extern "C" {
     static TraceProvNode *simple_read_from_log(
         TraceProvDependency *graph,
         const std::vector<struct local_context *> *worker_local_contexts,
-        TraceProvParseContext *parse_context
+        TraceProvParseContext *parse_context,
+        TraceProvRecursePack recurse_pack
     );
 
     static TraceProvInferAbstractTree* derive_on_node(
@@ -2013,7 +2014,8 @@ extern "C" {
             .derived_sublinks = reference->derived_sublinks,
             .entry_count_map = entry_count_map,
             .last_ref = reference->last_ref,
-            .sublinks_to_ignore = reference->sublinks_to_ignore
+            .sublinks_to_ignore = reference->sublinks_to_ignore,
+            .combine_main_worker = reference->combine_main_worker
         };
    }
 
@@ -2034,7 +2036,8 @@ extern "C" {
             .derived_sublinks = new std::vector<TraceProvLayerNumber>,
             .entry_count_map = new TraceProvEntryCountMap,
             .last_ref = reference->last_ref,
-            .sublinks_to_ignore = reference->sublinks_to_ignore
+            .sublinks_to_ignore = reference->sublinks_to_ignore,
+            .combine_main_worker = reference->combine_main_worker
         };
    }
 
@@ -2104,7 +2107,7 @@ extern "C" {
                     reference_match_idx
                 );
 
-                get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
+                get_relation_from_join(join_exprn)->rel_args = make_relation_args(recurse_pack.combine_main_worker, layer_number_to_search);
 
                 join_exprn->is_left_star = true;
                 current_tree->children->push_back(derive_on_node(
@@ -2140,7 +2143,7 @@ extern "C" {
                 combine_logs,
                 psprintf("combined_entry")
             );
-            combine_relation->rel_args = make_relation_args(0, combine_layer_number);
+            combine_relation->rel_args = make_relation_args(recurse_pack.combine_main_worker, combine_layer_number);
             // Need to:
             // 1. Join the combine logs to the previous log.
             // 2. Join the combine logs (in an union) to all the local worker logs.
@@ -2222,6 +2225,7 @@ extern "C" {
                     }
                     current_tree->children->push_back(child_tree);
                 }else{
+                    recurse_pack.combine_main_worker = current_local_context->worker_id;
                     current_tree->children->push_back(derive_on_node(
                         (TraceProvNode*)partial_join_exprn, 
                         agg_graph, 
@@ -2552,7 +2556,7 @@ extern "C" {
                 join_condition->push_back(new TraceProvJoinPair(join_column_1, join_column_2));
             }
             TraceProvDependency *sublink_graph = tp_get_sublink_graph(parse_context, candidate_sublink);
-            TraceProvNode *sublink_node = simple_read_from_log(sublink_graph, worker_local_contexts, parse_context);
+            TraceProvNode *sublink_node = simple_read_from_log(sublink_graph, worker_local_contexts, parse_context, recurse_pack);
             // need to read all the sublink logs, perform the join, and _then_ perform the derivation.
             // This is done because, otherwise, we may do a lot of work on the right hand side ultimately doing to waste
             // IF the optimizer is not able to reorder them...
@@ -2738,7 +2742,8 @@ extern "C" {
     static TraceProvNode *simple_read_from_log(
         TraceProvDependency *graph,
         const std::vector<struct local_context *> *worker_local_contexts,
-        TraceProvParseContext *parse_context
+        TraceProvParseContext *parse_context,
+        TraceProvRecursePack recurse_pack
     ){
         const TraceProvLayerNumber log_layer_number = graph->headNumber;
         const uint32 layer_width = list_length(graph->entries);
@@ -2884,7 +2889,8 @@ extern "C" {
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,
                         .last_ref = &last_ref,
-                        .sublinks_to_ignore = nullptr
+                        .sublinks_to_ignore = nullptr,
+                        .combine_main_worker = 0
                     }
                 )
             );
@@ -2917,7 +2923,8 @@ extern "C" {
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,
                         .last_ref = &last_ref,
-                        .sublinks_to_ignore = nullptr
+                        .sublinks_to_ignore = nullptr,
+                        .combine_main_worker= 0
                     }
                 )
             );
@@ -2972,6 +2979,17 @@ extern "C" {
                     output_cols
                 );
                 result_map->at(child_layer_num) = (TraceProvNode*)join_expr;
+            }
+        }
+        // Go over the result maps and check if we need to add sequential scans.
+        for (auto result_map_pair: *result_map){
+            if (result_map_pair.second->tag == T_TP_RELATION){
+                // In this case, it is a simple scan.
+                // Apparently, for some reason, DuckDB does not parallelise this????
+                // Anyways, right now, that breaks things.
+                // So, remember that it was a simple scan.
+                TraceProvRelation *relation = (TraceProvRelation *)result_map_pair.second;
+                relation->rel_args->table_flags |= TRACEPROV_TABLE_SEQ_SCAN;
             }
         }
         return result_map;

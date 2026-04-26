@@ -127,6 +127,8 @@ typedef struct TraceProvParseGraphProperties {
     List *set_pointer_map;
 } TraceProvParseGraphProperties;
 
+typedef struct Node Node;
+
 typedef struct TraceProvSublinkContext {
     Node *and_qual;
     // Need to remember if this qual is only for something in a filter.
@@ -190,5 +192,8 @@ typedef struct TraceProvLogSize {
     uint64_t page_used_size;
     uint64_t bytes_used_size;
 } TraceProvLogSize;
+
+#define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
+#define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
 
 #endif
