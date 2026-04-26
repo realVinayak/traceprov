@@ -40,6 +40,7 @@ extern "C" {
         struct traceprov_aggregate_layer *row_null_map_layer_info;
         uint64_t column_width;
         uint64_t row_width;
+        std::vector<TraceProvBindData *> *child_bind_data;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData {
@@ -51,6 +52,10 @@ extern "C" {
         void *row_null_layer_ptr;
         uint64_t number_of_col_records;
         uint64_t current_col_idx;
+        // The current child that's being queried.
+        uint64_t current_child_idx;
+        std::vector<TraceProvInitData *> *child_init_data;
+
     } TraceProvInitData;
 
     #define TRACEPROV_MAKE_WORKER_LAYER_KEY(X, Y) ((uint64_t)(((uint64_t)X << 32) | (uint64_t)Y))
@@ -64,6 +69,16 @@ extern "C" {
         g_tp_duckdb_state.worker_local_contexts = nullptr;
     }
 
+    void initialize_g_tp_duckdb_state(){
+        if (g_tp_duckdb_state.did_initialize) return;
+        traceprov_shared_context shared_context;
+        if (map_traceprov_shared_context(&shared_context))
+            elog(ERROR, "error maping shared context!");
+
+        g_tp_duckdb_state.did_initialize = true;
+        g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
+    }
+
     bool traceprov_populate_bind_data(
         const uint32 worker_id,
         const uint32 layer_number,
@@ -74,14 +89,7 @@ extern "C" {
         bind_data->rel_args.layer_number = layer_number;
 
         // Need to figure out the number of columns and everything here.
-        if (!g_tp_duckdb_state.did_initialize){
-            traceprov_shared_context shared_context;
-            if (map_traceprov_shared_context(&shared_context))
-                elog(ERROR, "error maping shared context!");
-
-            g_tp_duckdb_state.did_initialize = true;
-            g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
-        }
+        initialize_g_tp_duckdb_state();
 
         auto current_local_context = g_tp_duckdb_state.worker_local_contexts->at(worker_id - 1);
         auto current_layer = &current_local_context->cached_layers[layer_number - 1];
@@ -151,6 +159,18 @@ extern "C" {
         }
     }
 
+    TraceProvBindData *allocate_bind_data(){
+        auto bind_data = (TraceProvBindData *)calloc(1, sizeof(TraceProvBindData));
+        bind_data->child_bind_data = new std::vector<TraceProvBindData *>;
+        return bind_data;
+    }
+
+    TraceProvInitData *allocate_init_data(){
+        auto init_data = (TraceProvInitData *)calloc(1, sizeof(TraceProvInitData));
+        init_data->child_init_data = new std::vector<TraceProvInitData *>;
+        return init_data;
+    }
+
     void traceprov_duckdb_bind(duckdb_bind_info info) {
         if (duckdb_bind_get_parameter_count(info) != 2){
             elog(ERROR, "Expected 2 params!");
@@ -164,26 +184,50 @@ extern "C" {
         duckdb_destroy_value(&param_1);
         duckdb_destroy_value(&param_2);
 
-        auto my_bind_data = (TraceProvBindData *)malloc(sizeof(TraceProvBindData));
-        memset(my_bind_data, 0, sizeof(TraceProvBindData));
-        traceprov_populate_bind_data(current_worker_id, layer_number, my_bind_data, true);
+        initialize_g_tp_duckdb_state();
 
-        for (uint64_t col_count = 0; col_count <  my_bind_data->column_width + my_bind_data->row_width; col_count++){
+        auto bind_data = allocate_bind_data();
+
+        const uint32_t end_idx = current_worker_id == 0 ? g_tp_duckdb_state.worker_local_contexts->size() : current_worker_id + 1;
+
+        // Just means we need to do this for all the workers with this layer.
+        for (uint32_t worker_id = current_worker_id; worker_id < end_idx; worker_id++){
+            auto child_bind_data = allocate_bind_data();
+            if(traceprov_populate_bind_data(worker_id + 1, layer_number, child_bind_data, current_worker_id != 0)){
+                bind_data->child_bind_data->push_back(child_bind_data);
+            }else{
+                // Free-up the child bind data if we didn't populate it.
+                free(child_bind_data);
+            }
+        }
+
+        if (bind_data->child_bind_data->size() == 0){
+            elog(ERROR, "Expected at least 1 child bind data!");
+        }
+
+        auto child_bind_data = bind_data->child_bind_data->at(0);
+
+        for (uint64_t col_count = 0; col_count <  child_bind_data->column_width + child_bind_data->row_width; col_count++){
             const std::string param = std::string("column_") + std::to_string(col_count);
             duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
             duckdb_bind_add_result_column(info, param.c_str(), type);
             duckdb_destroy_logical_type(&type);
         }
 
-        duckdb_bind_set_bind_data(info, my_bind_data, free);
+        duckdb_bind_set_bind_data(info, bind_data, free);
     }
 
     void traceprov_duckdb_init(duckdb_init_info info){
         auto bind_data = (TraceProvBindData *) duckdb_init_get_bind_data(info);
-        auto init_data_inst = (TraceProvInitData *)malloc(sizeof(TraceProvInitData));
-        memset(init_data_inst, 0, sizeof(TraceProvInitData));
+        auto init_data_inst = allocate_init_data();
+        init_data_inst->child_init_data = new std::vector<TraceProvInitData *>;
 
-        traceprov_populate_init_data(bind_data, init_data_inst);
+        for(auto child_bind_data: *bind_data->child_bind_data){
+            auto child_data_inst = allocate_init_data();
+            traceprov_populate_init_data(child_bind_data, child_data_inst);
+            init_data_inst->child_init_data->push_back(child_data_inst);
+        }
+
         duckdb_init_set_init_data(info, init_data_inst, free);
     }
 
@@ -265,8 +309,18 @@ extern "C" {
 
     void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
 
-        auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
-        auto init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
+        auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
+        auto init_data_combined = (TraceProvInitData *)duckdb_function_get_init_data(info);
+
+        // End of the scan.
+        if (init_data_combined->current_child_idx >= init_data_combined->child_init_data->size()){
+            duckdb_data_chunk_set_size(output, 0);
+            return;
+        }
+    
+        auto bind_data = bind_data_combined->child_bind_data->at(init_data_combined->current_child_idx);
+        auto init_data = init_data_combined->child_init_data->at(init_data_combined->current_child_idx);
+    
         uint64 final_state = 0;
         if (bind_data->col_layer_info->aggregate_strategy == AGG_SORTED){
             final_state = fillup_pointer_compressed(
@@ -280,12 +334,36 @@ extern "C" {
                 bind_data
             );
         }else{
-            final_state = fillup_pointer(bind_data->col_layer_info, output, init_data->col_layer_ptr, init_data->current, init_data->number_of_records, 0, bind_data->column_width, &init_data->col_layer_ptr, init_data->col_null_layer_ptr);
+            final_state = fillup_pointer(
+                bind_data->col_layer_info,
+                output,
+                init_data->col_layer_ptr,
+                init_data->current,
+                init_data->number_of_records,
+                0,
+                bind_data->column_width,
+                &init_data->col_layer_ptr,
+                init_data->col_null_layer_ptr
+            );
         }
         if (bind_data->row_layer_info){
-            fillup_pointer(bind_data->row_layer_info, output, init_data->row_layer_ptr, init_data->current, init_data->number_of_records, bind_data->column_width, bind_data->row_width, &init_data->row_layer_ptr, init_data->row_null_layer_ptr);
+            fillup_pointer(
+                bind_data->row_layer_info,
+                output,
+                init_data->row_layer_ptr,
+                init_data->current,
+                init_data->number_of_records,
+                bind_data->column_width,
+                bind_data->row_width,
+                &init_data->row_layer_ptr,
+                init_data->row_null_layer_ptr
+            );
         }
         init_data->current = final_state;
+        if (final_state >= init_data->number_of_records){
+            // Switch to the next worker data if we've read through all for this layer.
+            init_data_combined->current_child_idx++;
+        }
     }
 
     #define PG_DUCKDB_RUN_SHORT_QUERY(con, query, msg) { \
