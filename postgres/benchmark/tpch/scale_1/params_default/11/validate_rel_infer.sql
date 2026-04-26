@@ -8,7 +8,7 @@ where (ps_partkey, ps_suppkey, s_suppkey, n_nationkey) in (
             col_2,
             col_3,
             col_4
-        from traceprov_relation_infer_3_mat
+        from traceprov_relation_infer_1_mat
     )
 group by ps_partkey
 having sum(ps_supplycost * ps_availqty) > (
@@ -21,7 +21,7 @@ having sum(ps_supplycost * ps_availqty) > (
                     col_2,
                     col_3,
                     col_4
-                from traceprov_relation_infer_1_mat
+                from traceprov_relation_infer_2_mat
             )
     )
 order by value desc;

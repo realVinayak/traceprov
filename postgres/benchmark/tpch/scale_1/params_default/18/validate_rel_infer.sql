@@ -11,12 +11,11 @@ where o_orderkey in (
         select l_orderkey
         from lineitem
         where (l_orderkey, l_linenumber) in (
-                select col_1,
-                    col_2
+                select col_7,
+                    col_8
                 from traceprov_relation_infer_1_mat
             )
         group by l_orderkey
-        having sum(l_quantity) > 300
     )
     and (c_custkey, o_orderkey, l_orderkey, l_linenumber) in (
         select col_1,
@@ -32,4 +31,3 @@ group by c_name,
     o_totalprice
 order by o_totalprice desc,
     o_orderdate
-LIMIT 100;

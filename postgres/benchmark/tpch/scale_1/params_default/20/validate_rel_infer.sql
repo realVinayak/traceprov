@@ -9,7 +9,7 @@ where s_suppkey in (
                 select p_partkey
                 from part
                 where p_partkey in (
-                        select col_0
+                        select col_4
                         from traceprov_relation_infer_1_mat
                     )
             )
@@ -19,14 +19,14 @@ where s_suppkey in (
                 where l_partkey = ps_partkey
                     and l_suppkey = ps_suppkey
                     and (l_orderkey, l_linenumber) in (
-                        select col_5,
-                            col_6
+                        select col_7,
+                            col_8
                         from traceprov_relation_infer_2_mat
                     )
             )
             and (ps_partkey, ps_suppkey) in (
-                select col_0,
-                    col_1
+                select col_2,
+                    col_3
                 from traceprov_relation_infer_4_mat
             )
     )
