@@ -30,6 +30,7 @@ typedef struct TraceProvTarget {
     // we don't gain anything from deriving on it.
     bool is_pointer_for_window;
     bool is_nullable;
+    bool is_in_correlation;
 } TraceProvTarget;
 
 TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContext*);

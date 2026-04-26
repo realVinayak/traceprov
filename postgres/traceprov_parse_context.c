@@ -212,6 +212,9 @@ TraceProvEntry *traceprov_resolve_entry(
     }
     tp_entry->setNumber = tp_target->setNumber;
     tp_entry->sublinks = tp_target->sublinks;
+    if (tp_target->is_in_correlation){
+        tp_entry->kind = TP_ENTRY_IN_CORRELATION_ATTR;
+    }
     return tp_entry;
 }
 
@@ -272,6 +275,9 @@ static char *tp_entry_serialize_kind(TraceProvEntryKind kind){
             break;
         case TP_ENTRY_CORRELATION_ATTR:
             kind_str = "TP_ENTRY_CORRELATION_ATTR";
+            break;
+        case TP_ENTRY_IN_CORRELATION_ATTR:
+            kind_str = "TP_ENTRY_IN_CORRELATION_ATTR";
             break;
         default:
             elog(ERROR, "Got invalid kind: %d", kind);
@@ -734,6 +740,7 @@ TraceProvParseContext *traceprov_shallow_copy_context(const TraceProvParseContex
     memcpy(copied_context, context, sizeof(TraceProvParseContext));
     copied_context->parent_targets = list_copy(context->parent_targets);
     copied_context->root_context = context->root_context;
+    memset(&copied_context->sub_context, 0, sizeof(TraceProvSublinkContext));
     return copied_context;
 }
 
