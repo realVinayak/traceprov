@@ -100,6 +100,15 @@ class ConnectionParams(NamedTuple):
             )
         assert 0, f"Unknown option: {backend}"
 
+    def run_query(self, query: str):
+        connection = self.make_connection()
+        cursor = connection.cursor()
+        cursor.execute(query)
+        result = cursor.fetchall()
+        cursor.close()
+        connection.close()
+        return result
+
 
 class Preprocessor:
     def preprocess(self, in_content: str) -> str:
@@ -259,7 +268,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     # The caching is used just once.
     # That is, if the extras is a dict, then connection is stored.
 
-    # print(options)
+    print(options)
     cached_connection = None
     should_cache_connection = False
     if options.extras is not None:
@@ -277,6 +286,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
     if cached_connection is None:
         cursor = connection.cursor()
         for shared_library in options.shared_libraries or []:
+            print("LOADING: ", shared_library)
             cursor.execute(f"load '{shared_library}';")
         for command in options.extra_commands or []:
             cursor.execute(command)

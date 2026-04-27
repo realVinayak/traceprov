@@ -6,17 +6,22 @@ from traceprovpy.tools.run_with_timeout import ConnectionParams
 import getpass
 
 
-copy_csv_func = (
-    lambda data_dir, destination_dir: f"""
+def copy_csv_func(data_dir, destination_dir, is_reverse: bool = False):
+    copy_args = [f"{data_dir}/traceprov/graph.bin", destination_dir]
+    if is_reverse:
+        copy_args.reverse()
+    copy_args_dir = " ".join(copy_args)
+    return f"""
 #!/bin/bash
 sudo -s <<"EOF"
-cp {data_dir}/traceprov/graph.bin {destination_dir}
+cp {copy_args_dir}
 EOF
 """
-)
 
 
-def make_copy(connection_params: ConnectionParams, destination_dir: str):
+def make_copy(
+    connection_params: ConnectionParams, destination_dir: str, is_reverse: bool = False
+):
     # eh, works well enough.
     original_user = getpass.getuser()
     connection = connection_params.make_connection()
@@ -27,13 +32,15 @@ def make_copy(connection_params: ConnectionParams, destination_dir: str):
     cursor.close()
     connection.close()
 
-    assert os.system(f"mkdir -p {destination_dir}") == 0
+    if not is_reverse:
+        traceprov_assert_safe_run(f"mkdir -p {destination_dir}")
 
     with open("/tmp/prepare_for_duckdb.sh", "w") as f:
-        f.write(copy_csv_func(data_dir, destination_dir))
+        f.write(copy_csv_func(data_dir, destination_dir, is_reverse).strip())
 
     traceprov_assert_safe_run("chmod +x /tmp/prepare_for_duckdb.sh")
     traceprov_assert_safe_run("/tmp/prepare_for_duckdb.sh")
-    # traceprov_assert_safe_run(
-    #    f"sudo chown -R {original_user} {destination_dir}"
-    # )
+    if is_reverse:
+        traceprov_assert_safe_run(
+            f"sudo chown -R postgres:postgres {data_dir}/traceprov"
+        )
