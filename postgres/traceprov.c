@@ -522,6 +522,12 @@ static int initialize_local_and_layer(
     return rc;
 }
 
+static inline void validate_layer(const struct traceprov_aggregate_layer *layer, const uint32_t layer_number){
+    if (unlikely(layer->layer_number != layer_number)){
+        elog(ERROR, "Expected the layer to match!");
+    }
+}
+
 // Assumes layer has already been created.
 static inline struct traceprov_aggregate_layer *get_layer(const uint32 layer_number){
     if (layer_number == 0){
@@ -738,12 +744,13 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
 
     assert(reference_struct != 0);
     const uint32 layer_number =  TRACEPROV_GET_LAYER(reference_struct);
-
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
     uint32 combined_layer_number = 0;
     if ((combined_layer_number = main_layer->combined_aggregate_layer_number) == 0){
         combined_layer_number = ++traceprov_current.maximum_local_layer_used;
         main_layer->combined_aggregate_layer_number = combined_layer_number;
+        if (main_layer->layer_number == 0)
+            main_layer->layer_number = layer_number;
     }
     // Here, we don't care about any layer file (it is not this function's responsibility)
     // So, we do the bare minimum, just setting up the local context (vars)

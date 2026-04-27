@@ -43,7 +43,7 @@ extern "C" {
 
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
-        const struct local_context *local_context,
+        const std::vector<struct local_context *> *worker_local_context,
         const TraceProvDependency *dependency,
         bool emulate_read=false
     );
@@ -124,6 +124,13 @@ extern "C" {
         TraceProvRelation *relation = (TraceProvRelation *)node;
         return relation;
     }
+
+    std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
+        TraceProvLayerNumber log_layer_number,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        const uint32 expected_layer_width,
+        const bool do_strict = true
+    );
 
     static int find_first_set_number_entry(const List *entries, int set_number);
 
@@ -707,6 +714,7 @@ extern "C" {
                 elog(ERROR, "Error mmaping the layer file!");
             }
             struct local_context *worker_local_context = (struct local_context *)ptr;
+            std::vector<struct local_context *> local_context_vec = {worker_local_context};
 
             for (int layer_id = 0; layer_id < TRACEPROV_MAX_LAYER_PER_WORKER; layer_id++){
                 
@@ -718,13 +726,16 @@ extern "C" {
 
                 const uint64 final_ptr_offset = (uint64)get_final_ptr(NULL, &layer);
 
-                if (final_ptr_offset % record_size){
-                elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
+                if (record_size != 0){
+                    if (final_ptr_offset % record_size){
+                        elog(INFO, "Expected ptr offset to be multiple of record size at (WORKER: %d, LAYER: %d)!", worker_id, layer_id);
+                    }
                 }
             
                 int64 record_count = 0;
                 int32 is_sorted_by_group_no = -1;
-                record_count = read_all_columns(layer.layer_number , worker_local_context, nullptr)->at(0)->data->size();
+
+                record_count = layer.size == 0 ? 0 : read_all_columns(layer.layer_number , &local_context_vec, nullptr)->at(0)->data->size();
                 record[TRACEPROV_LAYER_STAT::is_leader_layer] = Int32GetDatum(layer.is_leader_layer);
                 record[TRACEPROV_LAYER_STAT::worker_id] = Int32GetDatum(worker_id + 1);
                 record[TRACEPROV_LAYER_STAT::layer_id] = Int32GetDatum(layer.layer_number);
@@ -1006,7 +1017,8 @@ extern "C" {
         //     elog(ERROR, "Currently, only handling single output columns in nesting..");
 
         const TraceProvLayerNumber agg_layer_number = child_graph->headNumber;
-        auto layer_data = read_all_columns(agg_layer_number, local_context, child_graph);
+        std::vector<struct local_context *> local_context_vector = {local_context};
+        auto layer_data = read_all_columns(agg_layer_number, &local_context_vector, child_graph);
         TraceProvJoinExpr *join_exprn = make_traceprov_simple_join(
             layer_data,
             (TraceProvNode *)join_side,
@@ -1073,14 +1085,25 @@ extern "C" {
     // If emulate read, it doesn't perform the actural read, but creates column vectors.
     static TraceProvData *read_all_columns(
         const TraceProvLayerNumber layer_number,
-        const struct local_context *local_context,
+        const std::vector<struct local_context *> *worker_local_contexts,
         const TraceProvDependency *dependency,
         bool emulate_read
     ){
         // const auto evaluate_start = std::chrono::steady_clock::now();
+        struct local_context *local_context = NULL;
+        if (worker_local_contexts->size() == 1){
+            local_context = worker_local_contexts->at(0);
+        }else{
+            auto found_layers = find_layers_across_workers(layer_number, worker_local_contexts, 0);
+            // Doesn't really matter which layer we end up choosing.
+            // This is done just so the query construction and column count is accurate.
+            local_context = worker_local_contexts->at(found_layers->at(0).first - 1);
+        }
         const struct traceprov_aggregate_layer *current_layer = &local_context->cached_layers[layer_number - 1];
         // In this case, the layer wasn't set.
-        if (current_layer->layer_number == 0) return nullptr;
+        if (current_layer->layer_number != layer_number) {
+            elog(ERROR, "Expected log to be set: %d:%d!", current_layer->layer_number, layer_number);
+        }
         std::vector<TraceProvOffset *> *data = read_all_columns_simple(current_layer, local_context, emulate_read);
 
         if (current_layer->rows_layer_number){
@@ -1882,7 +1905,7 @@ extern "C" {
 
         for (uint64 read_idx = 0; read_idx < repeat; read_idx++){
             TP_EVALUATE_START();
-            auto all_records = read_all_columns(input_layer_number, worker_context, nullptr);
+            auto all_records = read_all_columns(input_layer_number, worker_local_contexts, nullptr);
             TP_EVALUATE_END();
             read_record_spec->emplace_back(ReadResult{
                 .read_size = all_records->at(0)->data->size(),
@@ -1947,7 +1970,8 @@ extern "C" {
     std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
         TraceProvLayerNumber log_layer_number,
         const std::vector<struct local_context *> *worker_local_contexts,
-        const uint32 expected_layer_width
+        const uint32 expected_layer_width,
+        const bool do_strict
     ){
         auto found_worker_layers = new std::vector<TraceProvWorkerLayer>;
         // Can have, at most, the number of workers.
@@ -1959,6 +1983,9 @@ extern "C" {
             if (candidate_layer->layer_number != log_layer_number)
                 elog(ERROR, "Got invalid log state!");
 
+            // Don't include layers that have 0 as the size (all the layers must have at least 1 page, if inited
+            // via local_init. But, those synthetically created won't, and should be excluded anyways.
+            if (candidate_layer->size == 0 && do_strict) continue;
             if (expected_layer_width > 0 && (candidate_layer->num_pk_records != expected_layer_width))
                 elog(ERROR, "Expeced the width to be consistent!");
 
@@ -2070,7 +2097,7 @@ extern "C" {
         if (layer->layer_number == 0)
             return current_tree;
 
-        auto self_logs = read_all_columns(layer_number_to_search, current_local_context, nullptr, true);
+        auto self_logs = read_all_columns(layer_number_to_search, worker_local_contexts, nullptr, true);
         const uint64 reference_node_col_count = traceprov_get_node_column_count(reference_node);
         const bool aggregate_was_split = layer->is_leader_layer;
         // While we don't need to actually split the data (we can't do that anyways)
@@ -2123,7 +2150,7 @@ extern "C" {
         }else{
             // This is a slightly complicated case.
             // But, there is still the guarantee that only 1 worker is the main worker.
-            auto layers_across_workers = find_layers_across_workers(agg_graph->headNumber, worker_local_contexts, 0);
+            auto layers_across_workers = find_layers_across_workers(agg_graph->headNumber, worker_local_contexts, 0, false);
             TraceProvWorkerLayer leader_layer_pair;
             bool found_leader = false;
             for (auto worker_layer_pair: *layers_across_workers){
@@ -2138,12 +2165,16 @@ extern "C" {
 
             auto leader_worker_context = worker_local_contexts->at(leader_layer_pair.first - 1);
             TraceProvLayerNumber combine_layer_number = leader_layer_pair.second->combined_aggregate_layer_number;
-            auto combine_logs = read_all_columns(combine_layer_number, leader_worker_context, nullptr, true);
+            std::vector<struct local_context *> leader_worker_context_vec = {leader_worker_context};
+            auto combine_logs = read_all_columns(combine_layer_number, &leader_worker_context_vec, nullptr, true);
             TraceProvRelation *combine_relation = make_traceprov_relation(
                 combine_logs,
                 psprintf("combined_entry")
             );
-            combine_relation->rel_args = make_relation_args(recurse_pack.combine_main_worker, combine_layer_number);
+            combine_relation->rel_args = make_relation_args(
+                recurse_pack.combine_main_worker == 0 ? leader_worker_context->worker_id : recurse_pack.combine_main_worker,
+                combine_layer_number
+            );
             // Need to:
             // 1. Join the combine logs to the previous log.
             // 2. Join the combine logs (in an union) to all the local worker logs.
@@ -2174,7 +2205,7 @@ extern "C" {
 
             for (auto worker_local_pair: *layers_across_workers){
                 const uint8 worker_id = worker_local_pair.first;
-                auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts->at(worker_id - 1), nullptr, true);
+                auto base_logs = read_all_columns(agg_graph->headNumber, worker_local_contexts, nullptr, true);
                 if (base_logs == nullptr) continue;
                 auto base_log_relation = make_traceprov_relation(base_logs, psprintf("base_join_%s", tp_parse_get_unique_alias(parse_context)));
                 base_log_relation->rel_args = make_relation_args(0, agg_graph->headNumber);
@@ -2758,7 +2789,7 @@ extern "C" {
             struct traceprov_aggregate_layer *agg_layer = worker_log.second;
             TraceProvData *current_layer_data = read_all_columns(
                 agg_layer->layer_number,
-                worker_local_contexts->at(worker_id - 1),
+                worker_local_contexts,
                 nullptr,
                 true
             );
@@ -2799,9 +2830,11 @@ extern "C" {
             struct traceprov_aggregate_layer *agg_layer = worker_log.second;
             TraceProvRecursePack recurse_pack_worker = shallow_copy_recurse_pack(&recurse_pack);
             bool has_appended_self = false;
+            auto local_context = worker_local_contexts->at(worker_id - 1);
+            std::vector<struct local_context *> local_context_vec = {local_context};
             TraceProvData *current_layer_data = read_all_columns(
                 agg_layer->layer_number,
-                worker_local_contexts->at(worker_id - 1),
+                &local_context_vec,
                 nullptr,
                 !traceprov_use_top_level_log
             );
@@ -2813,7 +2846,7 @@ extern "C" {
                         (TraceProvNode *)top_level_log_relation,
                         log_dependency,
                         0,
-                        worker_local_contexts->at(worker_id - 1),
+                        local_context,
                         worker_local_contexts,
                         parsed_back_context,
                         recurse_pack_worker

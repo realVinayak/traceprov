@@ -102,13 +102,14 @@ extern "C" {
         if (current_layer->layer_number != layer_number){
             if (current_layer->layer_number != 0)
                 elog(ERROR, "Invalid state!");
-            
-                
+
+
             if (expect_present){
                 elog(ERROR, "Expected the layer number to be filled");
             }
             return false;
         }
+        if (current_layer->size == 0) return false;
 
         bind_data->col_layer_info = current_layer;
         bind_data->column_width = current_layer->num_pk_records;
