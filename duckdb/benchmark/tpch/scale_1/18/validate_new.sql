@@ -14,7 +14,7 @@ where c_custkey = o_custkey
         select l_orderkey
         from lineitem
         where lineitem.rowid in (
-                select column_1
+                select column_1_1
                 from traceprov_lineage_1
             )
         group by l_orderkey
@@ -23,7 +23,7 @@ where c_custkey = o_custkey
         select (
                 column_1,
                 column_2,
-                column_3
+                column_4
             )
         FROM traceprov_lineage_3
     )

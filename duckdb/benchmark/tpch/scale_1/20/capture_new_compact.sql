@@ -1,24 +1,30 @@
 -- using default substitutions
 select *,
-    traceprov_log_entry_2 (5, rowid_1, rowid_2)
+    traceprov_log_entry_3 (5, rowid_1::int, in_target_2::int, rowid_2::int)
 FROM (
         select s_name,
             s_address,
-            supplier.rowid::int as rowid_1,
-            nation.rowid::int as rowid_2
+            supplier.rowid as rowid_1,
+            supplier.s_suppkey as in_target_2,
+            nation.rowid as rowid_2
         from supplier,
             nation
         where s_suppkey in (
                 select ps_suppkey
                 from (
                         select ps_suppkey,
-                            traceprov_log_entry_volatile_1 (4, partsupp.rowid::int)
+                            traceprov_log_entry_volatile_3 (
+                                4,
+                                partsupp.ps_suppkey::int,
+                                partsupp.rowid::int,
+                                partsupp.ps_partkey::int
+                            )
                         from partsupp
                         where ps_partkey in (
                                 select p_partkey
                                 from (
                                         select p_partkey,
-                                            traceprov_log_entry_volatile_1 (1, part.rowid::int)
+                                            traceprov_log_entry_volatile_2 (1, part.p_partkey::int, part.rowid::int)
                                         from part
                                         where p_name like 'forest%'
                                     ) f
