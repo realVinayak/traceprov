@@ -150,6 +150,7 @@ extern "C" {
     // TODO: Add comment to explain this (that'll take long time)
     // In short, for each dependency, stores the count of the entries that are in sublink ref.
     typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvEntryCountMap;
+    typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
     // Essentially, a collection of TraceProvEntryCountMap.
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvEntryCountMap *> TraceProvLayerEntryMap;
     // Essentialy, for each layer it is the sublinks that are reachable.
@@ -167,15 +168,18 @@ extern "C" {
 
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvLayerNumber> TraceProvLastRef;
 
+
     // Just so they can be processed together
     typedef struct TraceProvRecursePack {
-        const TraceProvLayerEntryMap *layer_count_map;
-        const TraceProvDerivableSublinkMap *derivable_map;
-        const TraceProvDerivableSublinkMap *base_derivable_map;
+        const TraceProvDepthMap *depth_map;
+        const uint32 level;
         // If the level for a sublink has not been reached,
         // the pending are stored in pending sublinks.
         TraceProvPendingSublinks *pending_sublinks;
         TraceProvSizeLayers *size_layer_map;
+        const TraceProvLayerEntryMap *layer_count_map;
+        const TraceProvDerivableSublinkMap *derivable_map;
+        const TraceProvDerivableSublinkMap *base_derivable_map;
         // The current node being derived.
         const TraceProvLayerNumber current_layer_number;
         // Sublinks that have already been derived (we may need to redrive them.)

@@ -384,6 +384,10 @@ static TraceProvInferAbstractTree* derive_on_node(
     auto current_tree = makeTraceProvInferAbstractTree(graph->headNumber);
     ListCell *entry_cursor;
     bool did_append_self = false;
+    // Also check if any sublink are refered in the entries.
+    current_tree->children->push_back(
+        derive_sublinks(node, graph, parse_context, worker_local_contexts, idx_start, recurse_pack)
+    );
     foreach(entry_cursor, graph->entries){
         const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
         if (te->kind == TP_ENTRY_SET_POINTER){
@@ -407,10 +411,6 @@ static TraceProvInferAbstractTree* derive_on_node(
         if (te->kind == TP_ENTRY_KIND_BASE_RELATION){
             if (!did_append_self){
                 current_tree->nodes->push_back(node);
-                // Also check if any sublink are refered in the entries.
-                current_tree->children->push_back(
-                    derive_sublinks(node, graph, parse_context, worker_local_contexts, idx_start, recurse_pack)
-                );
                 did_append_self = true;
             }
         } else if (te->kind == TP_ENTRY_KIND_POINTER){
@@ -590,7 +590,8 @@ void traceprov_infer_sizes(
         }
 
         // Bascially, assume that if it is not base relation, then it is uint64_t.
-        if (te->kind == TP_ENTRY_KIND_BASE_RELATION && traceprov_use_compact){
+        // TODO: Fine tune this (cleaner implementation will infer pointers from the graph, rather than this heuristic.)
+        if ((te->kind == TP_ENTRY_KIND_BASE_RELATION || te->kind == TP_ENTRY_CORRELATION_ATTR || te->kind == TP_ENTRY_IN_CORRELATION_ATTR) && traceprov_use_compact){
             pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint32_t));
         }else{
             pointer_context_add_size(pointer_context, graph->headNumber, sizeof(uint64_t));
@@ -674,6 +675,58 @@ TraceProvPartitionLayers *traceprov_layers_to_partition(){
     return partition_layers;
 }
 
+void _add_stats_vector(const TraceProvLayerNumber layer, TraceProvStatsCollectorMap *stats_collector_map){
+    if (stats_collector_map->find(layer) == stats_collector_map->end()){
+        stats_collector_map->insert({layer, new std::vector<uint32_t>});
+    }
+}
+
+void populate_stat_columns(const TraceProvDependency *dependency, TraceProvStatsCollectorMap *stats_collector_map){
+    ListCell *entry_cursor;
+    const auto layer_num = dependency->headNumber;
+    if (dependency->graph_type != TP_LOG){
+        _add_stats_vector(layer_num, stats_collector_map);
+        stats_collector_map->at(layer_num)->push_back(0);
+    }
+    foreach(entry_cursor, dependency->entries){
+        const TraceProvEntry *te = (TraceProvEntry *)lfirst(entry_cursor);
+        const bool needs_stats_kind = (
+            te->kind == TP_ENTRY_KIND_POINTER
+            || te->kind == TP_ENTRY_CORRELATION_ATTR
+            || te->kind == TP_ENTRY_IN_CORRELATION_ATTR
+        );
+        const bool needs_stats_sublinks = list_length(te->sublinks) > 0;
+        const int curr_idx = foreach_current_index(entry_cursor);
+        if (needs_stats_kind  || needs_stats_sublinks){
+            _add_stats_vector(layer_num, stats_collector_map);
+            stats_collector_map->at(layer_num)->push_back(curr_idx + (dependency->graph_type == TP_LOG ? 0 : 1));
+        }
+        if (te->kind == TP_ENTRY_KIND_POINTER){
+            populate_stat_columns((TraceProvDependency *)list_nth(dependency->children, curr_idx), stats_collector_map);
+        }
+    }
+}
+
+// Figures out which columns should have 
+TraceProvStatsCollectorMap *traceprov_get_stat_columns(){
+    auto stats_collector = new TraceProvStatsCollectorMap;
+    TraceProvParseContext *parsed_back_context = NULL;
+    List *graphs = deserializeTraceProvDependency(&parsed_back_context, NULL, TRACEPROV_GRAPH_FILE, false);
+    if (graphs == NIL){
+        return NULL;
+    }
+    ListCell *graph_cursor;
+    foreach(graph_cursor, graphs){
+        TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
+        populate_stat_columns(graph, stats_collector);
+    }
+    foreach(graph_cursor, parsed_back_context->properties->sublink_map){
+        TraceProvDependency *child_sublink = (TraceProvDependency *)lfirst(graph_cursor);
+        populate_stat_columns(child_sublink, stats_collector);
+    }
+    return stats_collector;
+}
+
 static TraceProvInferAbstractTree* derive_sublinks(
     TraceProvNode *node,
     const TraceProvDependency *graph,
@@ -695,6 +748,9 @@ static TraceProvInferAbstractTree* derive_sublinks(
         ListCell *sublink_ref_cursor;
         foreach(sublink_ref_cursor, entry->sublinks){
             const TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_ref_cursor);
+            if (recurse_pack.depth_map->find(item->layer_number) == recurse_pack.depth_map->end()){
+                elog(ERROR, "Expected to find the item layer number in the depth map!");
+            }
             uint32 max_level = recurse_pack.depth_map->at(item->layer_number);
             List *pending_entries = NIL;
             if (recurse_pack.pending_sublinks->find(item->layer_number) != recurse_pack.pending_sublinks->end()){
@@ -732,6 +788,7 @@ static TraceProvInferAbstractTree* derive_sublinks(
         ListCell *offset_cursor;
         foreach(offset_cursor, pending_entries){
             const int offset = lfirst_int(offset_cursor);
+            if (offset == 0) continue;
             const int other_idx = foreach_current_index(offset_cursor) + 1;
             TraceProvColumn *join_column_1 = new TraceProvColumn(1, offset);
             TraceProvColumn *join_column_2 = new TraceProvColumn(2, other_idx);

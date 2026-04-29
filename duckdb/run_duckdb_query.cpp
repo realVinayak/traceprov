@@ -174,6 +174,7 @@ struct Options {
     // via --traceprov_use_implicit_union
     // via --traceprov_use_merge_chunks
     // via --traceprov_force_seq_scan
+    bool dump_base_table;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -218,7 +219,8 @@ struct Options parse_args(int argc, char **argv){
         .pre_main_sql = new std::vector<std::string>,
         .extra_multiple_count = 1,
         .get_log_size = false,
-        .misc_store = g_init_misc_key_value
+        .misc_store = g_init_misc_key_value,
+        .dump_base_table = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -388,6 +390,12 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_skip_sql_cache")){
             traceprov_skip_sql_cache = true;
+            continue;
+        } else if (IS_OPTION("--dump_base_table")){
+            options.dump_base_table = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_use_table_stats")){
+            traceprov_use_table_stats = true;
             continue;
         }
 
@@ -822,6 +830,7 @@ int main(int argc, char **argv){
 
     TraceProvNullMap *null_map = traceprov_infer_nulls();
     TraceProvPartitionLayers *partition_layers = traceprov_layers_to_partition();
+    TraceProvStatsCollectorMap *stats_collector_map = traceprov_get_stat_columns();
 
     const uint32_t num_args = 12;
     // duckdb_aggregate_function *funcs = traceprov_create_funcs(num_args, false, false, options.use_partition_agg);
@@ -830,7 +839,7 @@ int main(int argc, char **argv){
     auto log_funcs = traceprov_create_log_function(num_args, false, null_map, false);
     auto volatile_log_funcs = traceprov_create_log_function(num_args, true, null_map, false);
     auto boolean_log_funcs = traceprov_create_log_function(num_args, false, null_map, true);
-    traceprov_create_and_register_agg(num_args, con, null_map, partition_layers);
+    traceprov_create_and_register_agg(num_args, con, null_map, partition_layers, stats_collector_map);
     for (uint32_t farg_idx = 0; farg_idx < num_args; farg_idx++){
         // DUCKDB_EXIT_ON_ERROR(duckdb_register_aggregate_function(con, funcs[farg_idx]));
         // std::cout << "ran aggregate register successfully!" << std::endl;
@@ -928,6 +937,8 @@ int main(int argc, char **argv){
             }
 
             uint32_t extra_idx = 0;
+            // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,build_side_probe_side';", "run disable join order");
+
 
             for (auto extra_sql: extra_sqls_clone){
                 
@@ -967,6 +978,9 @@ int main(int argc, char **argv){
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
                 duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
             }
+
+            // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run enable all optimaztions");
+
         }
     }else{
         // run main once.
@@ -1304,15 +1318,16 @@ TraceProvDerivationSpec* augment_extra_sql(
                     table_name += "_" + std::to_string(log_offset);
                 }
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
-                // TODO: Enable this via a runtime option?
-                // for (auto ddl_string : ddls){
-                //     std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-                //     extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
-                //     extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-                //     elog(INFO, "Table: %s", base_table_name.c_str());
-                //     elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
-                //     extra_added += 2;
-                // }
+                if (options->dump_base_table){
+                    for (auto ddl_string : ddls){
+                        std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                        extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
+                        extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
+                        elog(INFO, "Table: %s", base_table_name.c_str());
+                        elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
+                        extra_added += 2;
+                    }
+                }
             }
             if (options->traceprov_dry_run_derivation){
                 elog(INFO, "SQL Query: %s", node_sql.c_str());

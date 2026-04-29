@@ -206,6 +206,19 @@ typedef struct TraceProvWorkerIdx {
     uint64_t offset;
 } TraceProvWorkerIdx;
 
+#define TRACEPROV_INLINE_STATS_SIZE 64
+
+// To handle statistics, we try to be a bit smart.
+// For cases like aggregate layer, we don't need to compute min and max values explictly
+// It can be done just by looking at the group count.
+// For other cases, like pointer log, we need to look explictly at whether the attribute
+// can be a pointer, or can be used as a reference.
+typedef struct TraceProvStatistics {
+    bool is_set;
+    uint64_t min_value;
+    uint64_t max_value;
+} TraceProvStatistics;
+
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -267,7 +280,10 @@ struct traceprov_aggregate_layer {
     // If the values here can be null, it stores the layer where the nulls are stored.
     uint32_t null_layer_number;
     void *slice_vectors[TRACEPROV_BUCKET_COUNT];
+    // Store stats of these many columns at once.
+    TraceProvStatistics stats[TRACEPROV_INLINE_STATS_SIZE] ;
 };
+
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
 
@@ -393,8 +409,9 @@ typedef struct TraceProvPartitionLayerItem {
 
 typedef std::vector<TraceProvPartitionLayerItem> TraceProvPartitionLayers;
 
+typedef std::unordered_map<TraceProvLayerNumber, std::vector<uint32_t> * > TraceProvStatsCollectorMap;
 
-void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map, TraceProvPartitionLayers *partition_layers);
+void traceprov_create_and_register_agg(const uint32_t max_num_args, duckdb_connection connection, TraceProvNullMap *null_map, TraceProvPartitionLayers *partition_layers, TraceProvStatsCollectorMap * stats_collector_map);
 
 ScalarFunction *traceprov_create_reinit_state();
 ScalarFunction  **traceprov_create_log_function(
@@ -407,12 +424,14 @@ ScalarFunction  **traceprov_create_log_function(
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+
 typedef struct TraceProvAggExtra {
     bool ignore_gn;
     uint64_t use_part_agg;
     std::unordered_map<TraceProvLayerNumber, std::vector<uint8_t> *> *size_map;
     TraceProvNullMap *null_map;
     TraceProvPartitionLayers *partition_layers;
+    TraceProvStatsCollectorMap *stats_collector_map;
     bool is_bool_return;
 } TraceProvAggExtra;
 
@@ -459,9 +478,6 @@ public:
 
 extern uint64_t traceprov_reinit_counter;
 
-#define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
-#define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
-
 // Only usede when combining in memory.
 // In the flags, also store which attributes are pointers.
 // It, in all the cases, only one column is the pointer. So, this is fine.
@@ -480,5 +496,23 @@ typedef struct TraceProvPartitionInfo {
     std::unordered_map<TraceProvLayerNumber, uint64_t> *layer_log_map;
     uint64_t partition_time;
 } TraceProvPartitionInfo;
+
+
+#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
+#define MIN(X, Y) (((X) > (Y)) ? (Y) : (X))
+
+inline void merge_stats(TraceProvStatistics *base, const TraceProvStatistics *other){
+    if (!other->is_set) return;
+    if (!base->is_set){
+        base->min_value = other->min_value;
+        base->max_value = other->max_value;
+        base->is_set = true;
+        return;
+    }
+    base->min_value = MIN(base->min_value, other->min_value);
+    base->max_value = MAX(base->max_value, other->max_value);
+}
+
+extern TraceProvAggExtra *g_tp_agg_extra;
 
 #endif

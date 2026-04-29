@@ -16,4 +16,5 @@ extern bool traceprov_use_compact;
 extern bool traceprov_assume_null;
 extern bool traceprov_force_seq_scan;
 extern bool traceprov_skip_sql_cache;
+extern bool traceprov_use_table_stats;
 #endif

@@ -44,3 +44,6 @@ bool traceprov_force_seq_scan = false;
 
 // Skip SQL cache?
 bool traceprov_skip_sql_cache = false;
+
+// Use table stats?
+bool traceprov_use_table_stats = false;
