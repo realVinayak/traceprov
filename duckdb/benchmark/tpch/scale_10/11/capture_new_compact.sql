@@ -5,7 +5,7 @@ FROM (
         select ps_partkey,
             sum(ps_supplycost * ps_availqty) as value,
             traceprov_agg_key_parallel_offset_3 (
-                3,
+                1,
                 partsupp.rowid::int,
                 supplier.rowid::int,
                 nation.rowid::int
@@ -22,9 +22,9 @@ FROM (
                 from (
                         select sum(ps_supplycost * ps_availqty) * 0.0000100000 as summed,
                             traceprov_log_entry_volatile_1 (
-                                2,
+                                3,
                                 traceprov_agg_key_parallel_offset_3 (
-                                    1,
+                                    2,
                                     partsupp.rowid::int,
                                     supplier.rowid::int,
                                     nation.rowid::int

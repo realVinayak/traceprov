@@ -25,9 +25,9 @@ where
     )
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
         select
-            column_1,
+            (column_1,
             column_2,
-            column_3
+            column_3)
         FROM
             LAYER_3_%OUT_ID%
     )

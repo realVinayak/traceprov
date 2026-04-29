@@ -12,7 +12,7 @@ where ps_suppkey = s_suppkey
                 column_2,
                 column_3
             )
-        FROM traceprov_lineage_3
+        FROM traceprov_lineage_1
     )
 group by ps_partkey
 having sum(ps_supplycost * ps_availqty) > (
@@ -28,7 +28,7 @@ having sum(ps_supplycost * ps_availqty) > (
                         column_2,
                         column_3
                     )
-                FROM traceprov_lineage_1
+                FROM traceprov_lineage_2
             )
     )
 order by value desc;
