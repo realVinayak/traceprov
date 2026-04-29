@@ -6,6 +6,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/optimizer.h"
 #include "parser/parse_coerce.h"
+#include "traceprov_settings.h"
 
 static Node *rewrite_sublinks_mutator(Node *, TraceProvParseContext *);
 static Node* generate_pushdown_qual(SubLink *candidate_sublink,TraceProvSublinkContext *sublink_context);
@@ -43,6 +44,16 @@ void traceprov_rewrite_sublinks(Query *query, TraceProvParseContext *context, co
     context->parent_targets = initial_stack;
 }
 
+uint32 get_resjunk_count(const List * in_list){
+    ListCell *cursor;
+    uint32 count = 0;
+    foreach(cursor, in_list){
+        TargetEntry *te = lfirst(cursor);
+        if (te->resjunk) count++;
+    }
+    return count;
+}
+
 static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context){
     // base case.
     if (node == NULL) return NULL;
@@ -72,6 +83,11 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
         );
         if ((original_target_count + list_length(added_targets)) != (list_length(rewritten_subselect->targetList))){
             elog(ERROR, "Unexpected target list addition!");
+        }
+        const uint32 original_resjunk_target_count = get_resjunk_count(subselect_query->targetList);
+        const uint32 rewritten_resjunk_target_count = get_resjunk_count(rewritten_subselect->targetList);
+        if (original_resjunk_target_count != rewritten_resjunk_target_count){
+            elog(ERROR, "Got mismatching resjunk count!: %d, %d", original_resjunk_target_count, rewritten_resjunk_target_count);
         }
         // Figure out the correlated references, and also log the provenance attributes of them.
         // This is done by going through the queue of provenance attributes, level by level.
@@ -121,7 +137,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                 foreach(cand_prov_target_cursor, candidate_provenance_targets){
                     const TraceProvTarget *prov_target = ((TraceProvTarget *)lfirst(cand_prov_target_cursor));
                     // If it is not a Var, we cannot check against the traceprov target.
-                    if (!(IsA(prov_target->targetEntry->expr, Var))) continue;
+                    if ((!IsA(prov_target->targetEntry->expr, Var)) || traceprov_use_rowid_duckdb ) continue;
                     const Var *prov_target_var = (Var *)prov_target->targetEntry->expr;
                     if (prov_target_var->varattno == left_node_var->varattno && prov_target_var->varno == left_node_var->varno){
                         correlated_table_id = prov_target_var->varno;
@@ -155,7 +171,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                     prov_target->is_in_correlation = true;
                     *p_candidate_provenance_targets = lappend(*p_candidate_provenance_targets, prov_target);
                     correlated_table_id = left_node_var->varno;
-                    correlated_target_exprn_id = left_node_var->varattno;
+                    correlated_target_exprn_id = list_length(*p_candidate_provenance_targets);
                 }
 
                 // Doesn't matter if we're dealing with an "invalid" var, since we only look at the varno and var levels up field.
@@ -174,7 +190,7 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
                 foreach(distant_tp_target_cursor, added_targets){
                     const TraceProvTarget *tp_target =  (TraceProvTarget *)lfirst(distant_tp_target_cursor);
                     const TargetEntry *distant_tp_te = tp_target->targetEntry;
-                    if (distant_te->resorigcol  == distant_tp_te->resorigcol && distant_te->resorigtbl == distant_tp_te->resorigtbl){
+                    if ((distant_te->resorigcol == distant_tp_te->resorigcol && distant_te->resorigtbl == distant_tp_te->resorigtbl) && !traceprov_use_rowid_duckdb ){
                         distant_correlated_id = foreach_current_index(distant_tp_target_cursor) + 1;
                     }
                 }
@@ -303,18 +319,10 @@ static Node *rewrite_sublinks_mutator(Node *node, TraceProvParseContext *context
             target_entry_cursor = NULL;
             List *original_without_targets = NIL;
             foreach(target_entry_cursor, rewritten_subselect->targetList){
-                ListCell *inner_cell = NULL;
-                bool found = false;
-                foreach(inner_cell, added_targets){
-                    TraceProvTarget *inner_tp_target = ((TraceProvTarget *)lfirst(inner_cell));
-                    // Don't include the inner tp target if it belongs to correlation.
-                    if ((inner_tp_target->targetEntry == (TargetEntry *)lfirst(target_entry_cursor)) && (!inner_tp_target->is_in_correlation) ){
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found){
-                    original_without_targets = lappend(original_without_targets, lfirst(target_entry_cursor));
+                const int curr_idx = (foreach_current_index(target_entry_cursor));
+                TargetEntry *te = lfirst(target_entry_cursor);
+                if ((curr_idx < (original_target_count - original_resjunk_target_count)) || (te->resjunk) ){
+                    original_without_targets = lappend(original_without_targets, te);
                 }
             }
             if (list_length(original_without_targets) != (original_target_count)){
