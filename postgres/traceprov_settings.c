@@ -12,3 +12,4 @@ bool traceprov_use_compressed_in_sort = false;
 bool traceprov_use_rowid_duckdb = false;
 // Use seq scan during log reads?
 bool traceprov_force_seq_scan = false;
+bool traceprov_use_table_stats = false;

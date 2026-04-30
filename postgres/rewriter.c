@@ -160,6 +160,18 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomBoolVariable(
+        "traceprov.use_table_stats",
+        "Utilize table stats during backtrace",
+        "Utilize table stats during backtrace",
+        &traceprov_use_table_stats,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 

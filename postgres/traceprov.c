@@ -15,6 +15,8 @@
 #include "nodes/execnodes.h"
 #include "traceprov_settings.h"
 
+#include "traceprov_interface.h"
+
 #if (PG_MAJORVERSION_NUM >= 16)
 #include "varatt.h"
 #endif
@@ -66,6 +68,17 @@ static inline void grow_if_full_bytes(struct traceprov_aggregate_layer *layer, c
 
 static inline int round_up(const int number){
     return number == 1 ? 1 : (1 << (64 - __builtin_clzl(number - 1)));
+}
+
+static inline void update_stats(TraceProvStatistics *stats, uint64_t value){
+    if (!stats->is_set){
+        stats->is_set = true;
+        stats->max_value = value;
+        stats->min_value = value;
+        return;
+    }
+    stats->max_value = TP_Max(stats->max_value, value);
+    stats->min_value = TP_Min(stats->min_value, value);
 }
 
 static int initialize_file(int fd, const int32 *magic_word, size_t size){
@@ -577,6 +590,7 @@ Datum reinit_state(PG_FUNCTION_ARGS){
         traceprov_current.infer_context = NULL;
         traceprov_current.cleanup_infer_context = NULL;
     }
+    traceprov_reset_interface();
     PG_RETURN_INT32(rc);    
 }
 
@@ -683,8 +697,26 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
 
     int64 *pk_space = (int64*)(current_rows_layer->current_row);
 
-    for (int pk_id = 3; pk_id < PG_NARGS(); pk_id++, pk_space++){
-        *pk_space = PG_GETARG_INT64(pk_id);
+    // Done this way to, hopefully, benefit from auto vectorization.
+    if (traceprov_use_table_stats){
+        const List *stat_columns = traceprov_get_null_columns(main_layer->layer_number);
+        for (int pk_id = 3; pk_id < PG_NARGS(); pk_id++, pk_space++){
+            const int stat_id = pk_id - 2;
+            const bool needs_stats = list_member_int(stat_columns, stat_id);
+            const uint64_t value = PG_GETARG_INT64(pk_id);
+            // Don't include NULL in stats.
+            if (needs_stats && (!PG_ARGISNULL(pk_id))){
+                update_stats(
+                    &current_rows_layer->stats[stat_id - 1],
+                    value
+                );
+            }
+            *pk_space = value;
+        }
+    }else{
+        for (int pk_id = 3; pk_id < PG_NARGS(); pk_id++, pk_space++){
+            *pk_space = PG_GETARG_INT64(pk_id);
+        }
     }
 
     current_rows_layer->current_row = (void *)pk_space;
@@ -760,6 +792,9 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }
 
     struct traceprov_aggregate_layer *current_layer = get_layer(combined_layer_number);
+    if (unlikely(current_layer->flags == 0)){
+        current_layer->flags |= TRACEPROV_LAYER_COMBINE_FLAG;
+    }
     main_layer->is_leader_layer = true;
 
     /**
@@ -794,6 +829,9 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     }else{
         // If the current worker is the remote 
         const uint64 absolute_group_number = reference_struct;
+        if (traceprov_use_table_stats){
+            current_layer->num_groups++;
+        }
         if (TRACEPROV_SHOULD_HASH(fcinfo->context)){
             bucket = (traceprov_hashint8(absolute_group_number)) % TRACEPROV_BUCKET_COUNT;
         }
@@ -833,6 +871,9 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
             *(uint64*)current_column_layer->current_row = group_no;
             current_column_layer->current_row += sizeof(uint64);
         }
+        if (traceprov_use_table_stats){
+            update_stats(&current_column_layer->stats[0], group_no);
+        }
     }
 
     // At this point, we've written the key column.
@@ -849,11 +890,17 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
     if (needs_logging_reference){
         *(uint64 *)(current_rows_layer->current_row) = reference_struct;
         current_rows_layer->current_row += sizeof(uint64);
+        if (traceprov_use_table_stats){
+            update_stats(&current_rows_layer->stats[0], reference_struct);
+        }
     }
 
     if (other != 0){
         *(uint64 *)(current_rows_layer->current_row) = other;
         current_rows_layer->current_row += sizeof(uint64);
+        if (traceprov_use_table_stats){
+            update_stats(&current_rows_layer->stats[0], other);
+        }
     }
 
     PG_RETURN_UINT64(group_no);
@@ -923,11 +970,29 @@ uint64 perform_log(PG_FUNCTION_ARGS, bool return_pointer_version, int offset){
     current_layer->current_row += current_layer->record_padding;    
     int64 *pk_space = (int64*)(current_layer->current_row);
     const int32 start_offset = 2 + offset;
-    for (int arg_idx = start_offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
-        // Don't bother writing, it is 0x0 (from truncate anyways)
-        if (PG_ARGISNULL(arg_idx)) continue;
-        *pk_space = PG_GETARG_INT64(arg_idx);
+    if (traceprov_use_table_stats){
+        const List *stat_columns = traceprov_get_null_columns(layer_number);
+        for (int arg_idx = start_offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
+            if (PG_ARGISNULL(arg_idx)) continue;
+            const int stat_idx = arg_idx - start_offset;
+            const bool needs_stats = list_member_int(stat_columns, stat_idx);
+            const uint64_t value = PG_GETARG_INT64(arg_idx);
+            if (needs_stats){
+                update_stats(
+                    &current_layer->stats[stat_idx],
+                    value
+                );
+            }
+            *pk_space = value;
+        }
+    }else{
+        for (int arg_idx = start_offset; arg_idx < PG_NARGS(); arg_idx++, pk_space++){
+            // Don't bother writing, it is 0x0 (from truncate anyways)
+            if (PG_ARGISNULL(arg_idx)) continue;
+            *pk_space = PG_GETARG_INT64(arg_idx);
+        }
     }
+
     if (return_pointer_version){
         current_layer->current_row = (void *)&pk_space[1];
         PG_RETURN_INT64((uint64)pk_space);

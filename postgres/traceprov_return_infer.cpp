@@ -2032,11 +2032,11 @@ extern "C" {
             entry_count_map->insert({pair.first, pair.second});
         }
         return TraceProvRecursePack{
+            .pending_sublinks = new_sublinks,
+            .size_layer_map = reference->size_layer_map,
             .layer_count_map= reference->layer_count_map,
             .derivable_map = reference->derivable_map,
             .base_derivable_map = reference->base_derivable_map,
-            .pending_sublinks = new_sublinks,
-            .size_layer_map = reference->size_layer_map,
             .current_layer_number = reference->current_layer_number,
             .derived_sublinks = reference->derived_sublinks,
             .entry_count_map = entry_count_map,
@@ -2053,12 +2053,12 @@ extern "C" {
    }
 
    static TraceProvRecursePack reset_entry_count_map(TraceProvRecursePack *reference, const TraceProvLayerNumber next_ref = 0){
-        return TraceProvRecursePack{
+        return TraceProvRecursePack {
+            .pending_sublinks = reference->pending_sublinks,
+            .size_layer_map = reference->size_layer_map,
             .layer_count_map= reference->layer_count_map,
             .derivable_map = reference->derivable_map,
             .base_derivable_map = reference->base_derivable_map,
-            .pending_sublinks = reference->pending_sublinks,
-            .size_layer_map = reference->size_layer_map,
             .current_layer_number = next_ref == 0 ? reference->current_layer_number : next_ref,
             .derived_sublinks = new std::vector<TraceProvLayerNumber>,
             .entry_count_map = new TraceProvEntryCountMap,
@@ -2913,11 +2913,13 @@ extern "C" {
                     worker_local_contexts,
                     true,
                     TraceProvRecursePack {
+                        .depth_map = NULL,
+                        .level = 0,
+                        .pending_sublinks = new TraceProvPendingSublinks,
+                        .size_layer_map = size_layer_map,
                         .layer_count_map = &layer_entry_count_map,
                         .derivable_map = extended_derivable_map,
                         .base_derivable_map = &derivable_entry_map,
-                        .pending_sublinks = new TraceProvPendingSublinks,
-                        .size_layer_map = size_layer_map,
                         .current_layer_number = graph->headNumber,
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,
@@ -2947,11 +2949,13 @@ extern "C" {
                     worker_local_contexts,
                     true,
                     TraceProvRecursePack {
+                        .depth_map = NULL,
+                        .level = 0,
+                        .pending_sublinks = new TraceProvPendingSublinks,
+                        .size_layer_map = size_layer_map,
                         .layer_count_map = &layer_entry_count_map,
                         .derivable_map = extended_derivable_map,
                         .base_derivable_map = &derivable_entry_map,
-                        .pending_sublinks = new TraceProvPendingSublinks,
-                        .size_layer_map = size_layer_map,
                         .current_layer_number = child_sublink->headNumber,
                         .derived_sublinks = new std::vector<TraceProvLayerNumber>,
                         .entry_count_map = new TraceProvEntryCountMap,

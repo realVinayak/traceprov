@@ -5,6 +5,7 @@
 #include "traceprov_infer_essentials.hpp"
 #include <traceprov_node.hpp>
 #include <mutex>
+#include "traceprov_duckdb_stats.hpp"
 
 // Duckdb integration for inference.
 // Duckdb doesn't technically do anything smart (just runs the query)
@@ -44,6 +45,8 @@ extern "C" {
         std::vector<TraceProvBindData *> *child_bind_data;
         std::mutex *bind_data_mutex;
         uint64_t max_worker_idx;
+        bool is_aggregate;
+        bool is_combine;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData {
@@ -220,6 +223,14 @@ extern "C" {
             duckdb_destroy_logical_type(&type);
         }
         bind_data->rel_args = child_bind_data->rel_args;
+        if (child_bind_data->col_layer_info->rows_layer_number){
+            // In this case, it is either aggregate or combine.
+            if (child_bind_data->col_layer_info->flags & TRACEPROV_LAYER_COMBINE_FLAG){
+                bind_data->is_combine = true;
+            }else{
+                bind_data->is_aggregate = true;
+            }
+        }
         duckdb_bind_set_bind_data(info, bind_data, free);
     }
 
@@ -554,6 +565,62 @@ extern "C" {
         return func;
     }
 
+    void handle_pointer_stats(
+        TraceProvStatistics *old_stats,
+        const struct traceprov_aggregate_layer *aggregate_layer,
+        const TraceProvRelationArgs rel_args
+    ){
+        const uint64_t min_value = TRACEPROV_SET_LAYER(TRACEPROV_SET_WORKER_ID((uint64_t)1, rel_args.worker_id), rel_args.layer_number);
+        const uint64_t max_value = TRACEPROV_SET_LAYER(TRACEPROV_SET_WORKER_ID((aggregate_layer->num_groups), rel_args.worker_id), rel_args.layer_number);
+        TraceProvStatistics stats = {
+            .is_set = true,
+            .min_value = min_value,
+            .max_value = max_value
+        };
+        merge_stats(old_stats, &stats);
+    }
+
+    void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index){
+        if (is_aggregate && (column_index == 0)) {
+            handle_pointer_stats(stats, bind_data->col_layer_info, bind_data->rel_args);
+        } else {
+            merge_stats(stats, &bind_data->col_layer_info->stats[column_index]);
+        }
+    }
+
+    bool traceprov_infer_stats(void *bind_data, const int column_idx, uint64_t *min_value, uint64_t *max_value, uint64_t * p_distinct_count){
+        // If not capturing stats, don't do anything.
+        if (!traceprov_use_table_stats) return false;
+        TraceProvStatistics stats = {
+            .is_set = false,
+            .min_value = 0,
+            .max_value = 0
+        };
+        uint64_t distinct_count = 0;
+        TraceProvBindData *tp_bind_data = (TraceProvBindData *)bind_data;
+        if (tp_bind_data->col_layer_info){
+            bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_idx);
+            if (column_idx == 0 && (tp_bind_data->is_aggregate || tp_bind_data->is_combine)){
+                distinct_count += tp_bind_data->col_layer_info->num_groups;
+            }
+        }
+        for (auto child_bind_data: *tp_bind_data->child_bind_data){
+            bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_idx);
+            if (column_idx == 0 && (tp_bind_data->is_aggregate || tp_bind_data->is_combine)){
+                distinct_count += child_bind_data->col_layer_info->num_groups;
+            }
+        }
+        if (stats.is_set){
+            // elog(INFO, "Setting stats for (%d, %d) -- [%lu, %lu]. Distinct: %lu", (uint32_t)tp_bind_data->rel_args.layer_number, column_idx, stats.min_value, stats.max_value, distinct_count);
+            *min_value = stats.min_value;
+            *max_value = stats.max_value;
+            if (distinct_count){
+                *p_distinct_count = distinct_count;
+            }
+        }
+        return stats.is_set;
+    }
+
     static duckdb_table_function setup_func(){
         auto function = duckdb_create_table_function();
         duckdb_table_function_set_name(function, "traceprov_read_worker_layer");
@@ -566,6 +633,7 @@ extern "C" {
         duckdb_table_function_set_init(function, traceprov_duckdb_init);
         duckdb_table_function_set_function(function, traceprov_duckdb_func);
         duckdb_table_function_set_local_init(function, traceprov_duckdb_local_init);
+        traceprov_duckdb_table_set_stats_function(function, traceprov_infer_stats);
         return function;
     }
 
