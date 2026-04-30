@@ -675,7 +675,7 @@ TraceProvPartitionLayers *traceprov_layers_to_partition(){
     return partition_layers;
 }
 
-void _add_stats_vector(const TraceProvLayerNumber layer, TraceProvStatsCollectorMap *stats_collector_map){
+static inline void _add_stats_vector(const TraceProvLayerNumber layer, TraceProvStatsCollectorMap *stats_collector_map){
     if (stats_collector_map->find(layer) == stats_collector_map->end()){
         stats_collector_map->insert({layer, new std::vector<uint32_t>});
     }

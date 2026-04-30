@@ -281,7 +281,7 @@ struct traceprov_aggregate_layer {
     uint32_t null_layer_number;
     void *slice_vectors[TRACEPROV_BUCKET_COUNT];
     // Store stats of these many columns at once.
-    TraceProvStatistics stats[TRACEPROV_INLINE_STATS_SIZE] ;
+    TraceProvStatistics stats[TRACEPROV_INLINE_STATS_SIZE];
 };
 
 

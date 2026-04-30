@@ -860,20 +860,20 @@ struct TraceProvCTableFunctionInfo : public TableFunctionInfo {
 };
 
 struct TraceProvCTableBindData : public TableFunctionData {
-	TraceProvCTableBindData(TraceProvCTableFunctionInfo &info) : info(info) {
-	}
-	~TraceProvCTableBindData() {
-		if (bind_data && delete_callback) {
-			delete_callback(bind_data);
-		}
-		bind_data = nullptr;
-		delete_callback = nullptr;
-	}
+    TraceProvCTableBindData(TraceProvCTableFunctionInfo &info) : info(info) {
+    }
+    ~TraceProvCTableBindData() {
+        if (bind_data && delete_callback) {
+            delete_callback(bind_data);
+        }
+        bind_data = nullptr;
+        delete_callback = nullptr;
+    }
 
-	TraceProvCTableFunctionInfo &info;
-	void *bind_data = nullptr;
-	duckdb_delete_callback_t delete_callback = nullptr;
-	unique_ptr<NodeStatistics> stats;
+    TraceProvCTableFunctionInfo &info;
+    void *bind_data = nullptr;
+    duckdb_delete_callback_t delete_callback = nullptr;
+    unique_ptr<NodeStatistics> stats;
 };
 
 
@@ -889,7 +889,7 @@ void handle_pointer_stats(TraceProvStatistics *old_stats, const struct traceprov
     merge_stats(old_stats, &stats);
 }
 
-void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index, uint64_t &distinct_count){
+void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index){
     if (is_aggregate && (column_index == 0)) {
         handle_pointer_stats(stats, bind_data->col_layer, bind_data->rel_args);
     } else {
@@ -913,13 +913,13 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
     bool is_combine = (tp_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
     TraceProvLayerNumber layer = tp_bind_data->rel_args.layer_number;
     if (tp_bind_data->col_layer){
-        bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index, distinct_count);
-        if (column_index == 0 && (tp_bind_data->is_aggregate && is_combine)){
+        bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index);
+        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine)){
             distinct_count += tp_bind_data->col_layer->num_groups;
         }
     }
     for (auto child_bind_data: *tp_bind_data->worker_bind_data){
-        bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index, distinct_count);
+        bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index);
         layer = child_bind_data->rel_args.layer_number;
         is_combine |= (child_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
         if (column_index == 0 && (child_bind_data->is_aggregate || is_combine)){
