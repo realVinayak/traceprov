@@ -876,8 +876,19 @@ struct TraceProvCTableBindData : public TableFunctionData {
     unique_ptr<NodeStatistics> stats;
 };
 
+static inline uint64_t get_layer_record_count(const struct traceprov_aggregate_layer *agg_layer){
+    if (agg_layer->record_count) return agg_layer->record_count;
+    return agg_layer->num_groups;
+}
+
 
 void handle_pointer_stats(TraceProvStatistics *old_stats, const struct traceprov_aggregate_layer *aggregate_layer, const TraceProvRelationArgs rel_args){
+    // In some cases, it's actually quite tricky to determine the min-and-max after the capture.
+    // This will happen when we do partitioning. So, in those cases, we compute stats during capture.
+    // During backtrace, we just use them.
+    if (aggregate_layer->stats[aggregate_layer->num_pk_records].is_set){
+        merge_stats(old_stats, &aggregate_layer->stats[aggregate_layer->num_pk_records]);
+    }
     // Doesn't really matter if the mask is set or not.
     const uint64_t min_value = TRACEPROV_SET_WORKER_ID((uint64_t)1, rel_args.worker_id);
     const uint64_t max_value = TRACEPROV_SET_WORKER_ID((uint64_t)aggregate_layer->num_groups, rel_args.worker_id);
@@ -915,15 +926,23 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
     if (tp_bind_data->col_layer){
         bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index);
         if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine)){
-            distinct_count += tp_bind_data->col_layer->num_groups;
+            if (tp_bind_data->col_layer->record_count){
+                distinct_count += tp_bind_data->col_layer->record_count;
+            }else{
+                distinct_count += tp_bind_data->col_layer->num_groups;
+            }
         }
     }
     for (auto child_bind_data: *tp_bind_data->worker_bind_data){
         bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index);
         layer = child_bind_data->rel_args.layer_number;
         is_combine |= (child_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
-        if (column_index == 0 && (child_bind_data->is_aggregate || is_combine)){
-            distinct_count += child_bind_data->col_layer->num_groups;
+        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine)){
+            if (child_bind_data->col_layer->record_count){
+                distinct_count += child_bind_data->col_layer->record_count;
+            }else{
+                distinct_count += child_bind_data->col_layer->num_groups;
+            }
         }
     }
     const uint8_t column_size = tp_bind_data->sizes->at(column_index);

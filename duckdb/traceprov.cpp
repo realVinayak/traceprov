@@ -634,7 +634,6 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
         const bool needs_stats = find_int_vector(stat_columns, col_idx) && traceprov_use_table_stats;
         if (needs_stats){
             // Done like this for vectorization.
-            // TODO: Migrate to templating
             TraceProvStatistics stats;
             if (col_size == sizeof(uint32_t)){
                 stats = get_chunk_statistics<uint32_t>(col_data, num_rows);
@@ -716,6 +715,9 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
     }
 
     uint32_t cursors[TRACEPROV_BUCKET_COUNT] = {0};
+    // Technically this can be optimized away if we're not using table stats, but ugh.
+    uint16_t distinct_count[TRACEPROV_BUCKET_COUNT] = {0};
+    TraceProvStatistics bucket_stats[TRACEPROV_BUCKET_COUNT] = {0};
     #if TRACEPROV_SD_MODE==1
     struct traceprov_agg_context **agg_contexts = FlatVector::GetData<struct traceprov_agg_context *>(states);
     #else
@@ -726,7 +728,8 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
     for (uint16_t row_idx = 0; row_idx < num_rows; row_idx++){
         struct traceprov_agg_context *curr_state = agg_contexts[row_idx];
         const uint32_t group_number = (uint32_t)curr_state->state;
-        if (unlikely(group_number == 0)){
+        const bool is_init = group_number == 0;
+        if (unlikely(is_init)){
             TRACEPROV_SET_BUCKET_ON_STATE(curr_state, main_layer);
         }
         const uint64_t local_bucket = TRACEPROV_GET_BUCKET(curr_state->state);
@@ -735,6 +738,13 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
         uint16_t *slice_vector = ((uint16_t *)main_layer->slice_vectors[local_bucket]);
         const int slice_idx = is_reverse ? -1*(cursor + 1) : cursor;
         slice_vector[slice_idx] = row_idx;
+        if (traceprov_use_table_stats){
+            bucket_stats[local_bucket].max_value = MAX(bucket_stats[local_bucket].max_value, curr_state->state);
+            bucket_stats[local_bucket].min_value = MAX(bucket_stats[local_bucket].min_value, curr_state->state);
+            if (unlikely(is_init)){
+                ++distinct_count[local_bucket];
+            }
+        }
     }
 
     // Technically, validity should be handled by slicing the vector.
@@ -823,6 +833,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
         }
 
         auto sizes = bind_data.sizes;
+        const std::vector<uint32_t> *stat_columns = get_stat_columns(layer_number);
         for (idx_t col_idx = 1; col_idx < orig_num_cols; col_idx++){
             inputs[col_idx].Flatten(count);
             #if TRACEPROV_SD_MODE==1
@@ -832,23 +843,50 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
             #endif
             const uint8_t curr_column_size = sizes->at(col_idx - 1);
             const uint32_t compact_chunk_size = (curr_column_size*slice_size);
+            const bool needs_stats = find_int_vector(stat_columns, col_idx) && traceprov_use_table_stats;
             TRACEPROV_GROW_IF_TRUE(
                 current_layer,
                 (((uint64_t)current_layer->current_row + compact_chunk_size) > (uint64_t)current_layer->end_of_memory_zone)
             );
+            uint64_t max_value = 0;
+            uint64_t min_value = -1;
             if (curr_column_size == sizeof(uint32_t)){
                 for (int32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
                     const uint16_t row_idx = (is_reverse ? (slice_vector[-curr_slice_idx - 1]) : slice_vector[curr_slice_idx]);
-                    *((uint32_t *)current_layer->current_row) = ((uint32_t *)col_data)[row_idx];
+                    const uint32_t value = ((uint32_t *)col_data)[row_idx];
+                    if (needs_stats){
+                        max_value = MAX(value, max_value);
+                        min_value = MIN(value, min_value);
+                    }
+                    *((uint32_t *)current_layer->current_row) = value;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint32_t));
                 }
             }else{
                 for (int32_t curr_slice_idx = 0; curr_slice_idx < slice_size; curr_slice_idx++){
                     const uint16_t row_idx = (is_reverse ? (slice_vector[-curr_slice_idx - 1]) : slice_vector[curr_slice_idx]);
-                    *((uint64_t *)current_layer->current_row) = ((uint64_t *)col_data)[row_idx];
+                    const uint64_t value = ((uint64_t *)col_data)[row_idx];
+                    if (needs_stats){
+                        max_value = MAX(value, max_value);
+                        min_value = MIN(value, min_value);
+                    }
+                    *((uint64_t *)current_layer->current_row) = value;
                     current_layer->current_row = INCR_BY_BYTES(current_layer->current_row, sizeof(uint64_t));
                 }
             }
+            if (needs_stats){
+                TraceProvStatistics local_stats = {
+                    .is_set = true,
+                    .min_value = min_value,
+                    .max_value = max_value
+                };
+                merge_stats(&current_layer->stats[col_idx - 1], &local_stats);
+            }
+        }
+        if (traceprov_use_table_stats){
+            // Also adjust the distinct layer count.
+            // We, here, misuse the record count because otherwise we'll heavily overstimate distinct count for the main layer.
+            current_layer->record_count += distinct_count[idx];
+            merge_stats(&current_layer->stats[orig_num_cols], &bucket_stats[idx]);
         }
         struct traceprov_aggregate_layer *chunk_size_layer = get_layer(current_layer->rows_layer_number);
         TP_APPEND_CHUNK_SIZE(chunk_size_layer, slice_size);
