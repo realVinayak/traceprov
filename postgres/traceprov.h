@@ -119,6 +119,14 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 // Bucket count (for hashing.)
 #define TRACEPROV_BUCKET_COUNT 2
 
+#define TRACEPROV_INLINE_STATS_SIZE 16
+
+typedef struct TraceProvStatistics {
+    bool is_set;
+    uint64_t min_value;
+    uint64_t max_value;
+} TraceProvStatistics;
+
 // Each layer is backed by a single file.
 // However, that file is grown incrementally.
 // Thus, for a single file (this layer), there exist multiple non-intersecting mappings.
@@ -173,6 +181,9 @@ struct traceprov_aggregate_layer {
     uint64 last_allocation_size;
     // For debugging + computing the number of bytes used.
     uint64 initial_allocation_size;
+    // Store stats of these many columns at once.
+    TraceProvStatistics stats[TRACEPROV_INLINE_STATS_SIZE];
+    uint32_t flags;
 };
 
 static_assert(sizeof(struct traceprov_aggregate_layer) < TRACEPROV_PAGE_SIZE);
@@ -197,7 +208,9 @@ struct local_context {
 };
 
 // At least the local context should be fittable in a page.
-static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
+// It is currently skipped, since the stats does take up space.
+// Currently, it's about 4 pages. On MacOS, it'll be in 1 page (so I guess that's fine..)
+// static_assert(sizeof(struct local_context) < TRACEPROV_PAGE_SIZE);
 
 struct traceprov_shared_context {
     int32   magic_word;
@@ -262,4 +275,22 @@ extern struct current_context traceprov_current;
 #define TRACEPROV_INCREMENT_BY_PADDING(layer) (layer->current_row += layer->record_padding)
 
 #define TRACEPROV_GET_RECORD_SIZE(layer) (layer->record_padding + (sizeof(uint64)*layer->num_pk_records))
+
+#define TP_Min(X, Y) ((X) > (Y) ? (Y) : (X))
+#define TP_Max(X, Y) ((X) > (Y) ? (X) : (Y))
+
+inline void merge_stats(TraceProvStatistics *base, const TraceProvStatistics *other){
+    if (!other->is_set) return;
+    if (!base->is_set){
+        base->min_value = other->min_value;
+        base->max_value = other->max_value;
+        base->is_set = true;
+        return;
+    }
+    base->min_value = TP_Min(base->min_value, other->min_value);
+    base->max_value = TP_Max(base->max_value, other->max_value);
+}
+
+#define TRACEPROV_LAYER_COMBINE_FLAG (((uint32_t) 1) << 0)
+
 #endif

@@ -54,6 +54,7 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
     ):
         assert query_spec.extra_options is not None
         layers_to_derive = query_spec.extra_options[TRACEPROV_LAYERS_TO_DERIVE_KEY]
+        print("Deriving layers: ", layers_to_derive)
         is_validate = query_spec.extra_options[TRACEPROV_MATERIALIZE_LAYER_KEY]
         conn = run_time_options.run_connection_strict()
         cursor = conn.cursor()

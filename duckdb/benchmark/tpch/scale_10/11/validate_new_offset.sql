@@ -17,7 +17,7 @@ where
             column_2,
             column_3
         FROM
-            LAYER_3_%OUT_ID%
+            LAYER_1_%OUT_ID%
     )
 group by
 	ps_partkey having
@@ -31,7 +31,14 @@ group by
 			where
 				ps_suppkey = s_suppkey
 				and s_nationkey = n_nationkey
-				and n_name = 'GERMANY'
+				and (partsupp.rowid, supplier.rowid, nation.rowid) in (
+					select (
+							column_1,
+							column_2,
+							column_3
+						)
+					FROM LAYER_2_%OUT_ID%
+				)
 		)
 order by
 	value desc;

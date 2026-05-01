@@ -8,10 +8,11 @@ FROM (
             o_orderdate,
             o_totalprice,
             sum(l_quantity),
-            traceprov_agg_key_parallel_offset_3 (
+            traceprov_agg_key_parallel_offset_4 (
                 3,
                 customer.rowid::int,
                 orders.rowid::int,
+                o_orderkey::int,
                 lineitem.rowid::int
             ) as mapped_agg
         from customer,
@@ -21,8 +22,9 @@ FROM (
                 select l_orderkey
                 from (
                         select l_orderkey,
-                            traceprov_log_entry_volatile_1 (
+                            traceprov_log_entry_volatile_2 (
                                 2,
+                                l_orderkey::int,
                                 traceprov_agg_key_parallel_offset_1 (1, lineitem.rowid::int)
                             )
                         from lineitem

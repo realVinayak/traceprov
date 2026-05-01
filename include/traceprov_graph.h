@@ -28,7 +28,12 @@ typedef enum TraceProvEntryKind {
     TP_ENTRY_SET_POINTER = 2,
     TP_ENTRY_FRAME_START = 3,
     TP_ENTRY_FRAME_END = 4,
-    TP_ENTRY_FRAME_INHERIT = 5
+    TP_ENTRY_FRAME_INHERIT = 5,
+    // Previously, this used to be whatever the type of the provenance attributes the correlated tables had.
+    // But, this approach makes things tidier.
+    TP_ENTRY_CORRELATION_ATTR = 6,
+    // If we made an entry that corresponds to a IN, need to remember that.
+    TP_ENTRY_IN_CORRELATION_ATTR = 7
 } TraceProvEntryKind;
 
 // Specifies what kind of graph is this
@@ -122,6 +127,19 @@ typedef struct TraceProvParseGraphProperties {
     List *set_pointer_map;
 } TraceProvParseGraphProperties;
 
+typedef struct Node Node;
+
+typedef struct TraceProvSublinkContext {
+    Node *and_qual;
+    // Need to remember if this qual is only for something in a filter.
+    bool is_in_filter;
+    // Have we seen an OR so far?
+    bool has_seen_or;
+    // If it is filter, it is the copy of the top level qual (OR having.)
+    Node *qual_copy;
+} TraceProvSublinkContext;
+
+
 typedef struct TraceProvParseContext {
     TraceProvLayerNumber global_layer_number;
     unsigned long long int unique_idx;
@@ -130,6 +148,8 @@ typedef struct TraceProvParseContext {
     // Used in sublinks.
     List *parent_targets;
     struct TraceProvParseContext *root_context;
+    // Some specialized things that are helpful to have for the sublinks.
+    TraceProvSublinkContext sub_context;
 } TraceProvParseContext;
 
 typedef struct TraceProvTargetSublinkItem {
@@ -172,5 +192,8 @@ typedef struct TraceProvLogSize {
     uint64_t page_used_size;
     uint64_t bytes_used_size;
 } TraceProvLogSize;
+
+#define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
+#define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
 
 #endif

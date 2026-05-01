@@ -119,4 +119,6 @@ List *get_nulling_set(FromExpr *from_expr);
 // If the value is 0, then no values can be null. We optimize for that case, because that's the most common one.
 uint64 get_null_entry_map(List *entries);
 uint64 get_null_targets_map(List *entries);
+List *traceprov_get_ref_list(List *initial_list);
+List *traceprov_filter_in_correlation(List *traceprov_targets);
 #endif

@@ -373,6 +373,31 @@ bench_has_duckdb_infer = bench_has_bool_option(INFER_DUCKDB_OPTION)
 bench_has_smokedduck = bench_has_bool_option(SMOKEDDUCK_OPTION)
 
 
+class TraceProvOptimizations(NamedTuple):
+    traceprov_use_table_stats: bool = False
+
+    @staticmethod
+    def _bool_to_switch(val: bool):
+        return "on" if val else "off"
+
+    def get_options(self):
+        options = []
+        if self.traceprov_use_table_stats:
+            options.append(("traceprov.use_table_stats", True))
+
+        return [f"set {opt[0]}={self._bool_to_switch(opt[1])}" for opt in options]
+
+    @classmethod
+    def make_from_parsed(cls, parsed):
+        kwargs = dict()
+        for field in TraceProvOptimizationsInstance._fields:
+            kwargs[field] = getattr(parsed, field)
+        return cls(**kwargs)
+
+
+TraceProvOptimizationsInstance = TraceProvOptimizations()
+
+
 class GenericBenchmark(NamedTuple):
     name: str
 
@@ -424,6 +449,13 @@ class GenericBenchmark(NamedTuple):
             action=argparse.BooleanOptionalAction,
             default=False,
         )
+
+        for optimizations in TraceProvOptimizationsInstance._fields:
+            parser.add_argument(
+                f"--{optimizations}",
+                action=argparse.BooleanOptionalAction,
+                default=TraceProvOptimizationsInstance._field_defaults[optimizations],
+            )
         parsed, _ = parser.parse_known_args()
 
         connection_params = ConnectionParams(
@@ -442,10 +474,15 @@ class GenericBenchmark(NamedTuple):
             parsed.sd_num_threads,
             parsed.sd_create_idx,
         )
-
+        local_optimization_instance = TraceProvOptimizations.make_from_parsed(parsed)
         start = time.perf_counter()
         called_benchmark, result = setup_bench.run(
-            parsed.test_root, directories, connection_params, params, init_sql
+            parsed.test_root,
+            directories,
+            connection_params,
+            params,
+            init_sql,
+            self_extra_sql=local_optimization_instance.get_options(),
         )
         end = time.perf_counter()
         final_result = dict(
@@ -517,7 +554,9 @@ class GenericBenchmark(NamedTuple):
         connection_params: ConnectionParams,
         params=RunParams(),
         init_sql: list[str] = None,
+        self_extra_sql: list[str] = None,
     ):
+        print("Extra SQL: ", self_extra_sql)
         # Always run the analyze for statistics initially.
         assert (
             os.system(
@@ -553,7 +592,10 @@ class GenericBenchmark(NamedTuple):
                         if not self.skip_load
                         else []
                     ),
-                    extra_commands=list(query.extra_commands or []),
+                    extra_commands=[
+                        *(self_extra_sql or []),
+                        *(query.extra_commands or []),
+                    ],
                 )
 
             return _get_options_from_file

@@ -55,6 +55,7 @@ typedef struct TraceProvBindData {
     std::vector<uint8_t> *sizes;
     // Needs mask?
     bool first_mask;
+    bool is_aggregate;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData {
@@ -511,10 +512,13 @@ void traceprov_duckdb_bind(duckdb_bind_info info){
     }else{
         const TraceProvPointerContext *pc = extra_info->pointer_spec;
         sizes = pc->size_map->at(layer_number);
+        const bool is_agg = std::find(pc->aggregate_layers->begin(), pc->aggregate_layers->end(), (uint32_t)layer_number) != pc->aggregate_layers->end();
         if (table_flags & TRACEPROV_TABLE_COMBINE){
             sizes = new std::vector<uint8_t>(bind_data->column_width, sizeof(uint64_t));
         }else{
-            if (traceprov_use_compact && std::find(pc->aggregate_layers->begin(), pc->aggregate_layers->end(), (uint32_t)layer_number) != pc->aggregate_layers->end()){
+            // Don't set is agg when dealing with combines (since they are "faked") as an combine.
+            bind_data->is_aggregate = is_agg;
+            if (traceprov_use_compact && is_agg){
                 bind_data->first_mask = true;
             }
             if (sizes->size() != bind_data->column_width){
@@ -838,6 +842,142 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output){
     traceprov_duckdb_func_huge_incremental(info, output);
 }
 
+struct TraceProvCTableFunctionInfo : public TableFunctionInfo {
+    ~TraceProvCTableFunctionInfo() {
+        if (extra_info && delete_callback) {
+            delete_callback(extra_info);
+        }
+        extra_info = nullptr;
+        delete_callback = nullptr;
+    }
+
+    duckdb_table_function_bind_t bind = nullptr;
+    duckdb_table_function_init_t init = nullptr;
+    duckdb_table_function_init_t local_init = nullptr;
+    duckdb_table_function_t function = nullptr;
+    void *extra_info = nullptr;
+    duckdb_delete_callback_t delete_callback = nullptr;
+};
+
+struct TraceProvCTableBindData : public TableFunctionData {
+    TraceProvCTableBindData(TraceProvCTableFunctionInfo &info) : info(info) {
+    }
+    ~TraceProvCTableBindData() {
+        if (bind_data && delete_callback) {
+            delete_callback(bind_data);
+        }
+        bind_data = nullptr;
+        delete_callback = nullptr;
+    }
+
+    TraceProvCTableFunctionInfo &info;
+    void *bind_data = nullptr;
+    duckdb_delete_callback_t delete_callback = nullptr;
+    unique_ptr<NodeStatistics> stats;
+};
+
+static inline uint64_t get_layer_record_count(const struct traceprov_aggregate_layer *agg_layer){
+    if (agg_layer->record_count) return agg_layer->record_count;
+    return agg_layer->num_groups;
+}
+
+
+void handle_pointer_stats(TraceProvStatistics *old_stats, const struct traceprov_aggregate_layer *aggregate_layer, const TraceProvRelationArgs rel_args){
+    // In some cases, it's actually quite tricky to determine the min-and-max after the capture.
+    // This will happen when we do partitioning. So, in those cases, we compute stats during capture.
+    // During backtrace, we just use them.
+    if (aggregate_layer->stats[aggregate_layer->num_pk_records].is_set){
+        merge_stats(old_stats, &aggregate_layer->stats[aggregate_layer->num_pk_records]);
+    }
+    // Doesn't really matter if the mask is set or not.
+    const uint64_t min_value = TRACEPROV_SET_WORKER_ID((uint64_t)1, rel_args.worker_id);
+    const uint64_t max_value = TRACEPROV_SET_WORKER_ID((uint64_t)aggregate_layer->num_groups, rel_args.worker_id);
+    TraceProvStatistics stats = {
+        .is_set = true,
+        .min_value = min_value,
+        .max_value = max_value
+    };
+    merge_stats(old_stats, &stats);
+}
+
+void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index){
+    if (is_aggregate && (column_index == 0)) {
+        handle_pointer_stats(stats, bind_data->col_layer, bind_data->rel_args);
+    } else {
+        merge_stats(stats, &bind_data->col_layer->stats[column_index]);
+    }
+}
+
+unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
+    ClientContext &context,
+    const FunctionData *bind_data,
+    column_t column_index
+){
+    if (column_index == 0) elog(INFO, "Calling with 0 as col idx!");
+    uint64_t distinct_count = 0;
+    TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
+    TraceProvStatistics stats = {
+        .is_set = false,
+        .min_value = 0,
+        .max_value = 0
+    };
+    bool is_combine = (tp_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
+    TraceProvLayerNumber layer = tp_bind_data->rel_args.layer_number;
+    if (tp_bind_data->col_layer){
+        bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index);
+        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine)){
+            if (tp_bind_data->col_layer->record_count){
+                distinct_count += tp_bind_data->col_layer->record_count;
+            }else{
+                distinct_count += tp_bind_data->col_layer->num_groups;
+            }
+        }
+    }
+    for (auto child_bind_data: *tp_bind_data->worker_bind_data){
+        bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index);
+        layer = child_bind_data->rel_args.layer_number;
+        is_combine |= (child_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
+        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine)){
+            if (child_bind_data->col_layer->record_count){
+                distinct_count += child_bind_data->col_layer->record_count;
+            }else{
+                distinct_count += child_bind_data->col_layer->num_groups;
+            }
+        }
+    }
+    const uint8_t column_size = tp_bind_data->sizes->at(column_index);
+    auto result = NumericStats::CreateEmpty(  column_size == sizeof(uint64_t ) ? LogicalType::UBIGINT : LogicalType::UINTEGER );
+    elog(INFO, "Asking stats for (%d, %d)", layer, column_index);
+    if (g_tp_agg_extra->stats_collector_map != NULL){
+        if (g_tp_agg_extra->stats_collector_map->find(layer) != g_tp_agg_extra->stats_collector_map->end() ){
+            auto stats_cols = g_tp_agg_extra->stats_collector_map->at(layer);
+            for (auto col: *stats_cols){
+                elog(INFO, "Spec stats (%d, %d)", layer, col);
+            }
+        }
+    }
+    if (stats.is_set && traceprov_use_table_stats){
+        elog(INFO, "Setting stats for (%d, %d) -- [%lu, %lu]. Distinct: %lu", layer, column_index, stats.min_value, stats.max_value, distinct_count);
+        if (column_size == sizeof(uint64_t)){
+            NumericStats::SetMin(result, Value::UBIGINT(stats.min_value));
+            NumericStats::SetMax(result, Value::UBIGINT(stats.max_value));
+        }else{
+            NumericStats::SetMin(result, Value::UINTEGER(stats.min_value));
+            NumericStats::SetMax(result, Value::UINTEGER(stats.max_value));
+        }
+
+        if (distinct_count != 0){
+            result.SetDistinctCount(distinct_count);
+        }
+    }
+	return result.ToUnique();
+}
+
+// Taken from DuckDB.
+duckdb::TableFunction *GetCTableFunction(duckdb_table_function function) {
+    return reinterpret_cast<duckdb::TableFunction *>(function);
+}
+
 duckdb_table_function traceprov_create_table_func(){
     auto function = duckdb_create_table_function();
     duckdb_table_function_set_name(function, "traceprov_read_worker_layer");
@@ -851,6 +991,8 @@ duckdb_table_function traceprov_create_table_func(){
     duckdb_table_function_set_init(function, traceprov_duckdb_init);
     duckdb_table_function_set_function(function, traceprov_duckdb_func);
     duckdb_table_function_set_local_init(function, traceprov_duckdb_local_init);
+    auto duckdb_function = GetCTableFunction(function);
+    duckdb_function->statistics = traceprov_duckdb_table_stats;
     return function;
 }
 

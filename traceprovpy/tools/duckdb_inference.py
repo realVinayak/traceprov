@@ -12,6 +12,7 @@ from traceprovpy.tools.run_with_timeout import (
     DEFAULT_THROWAWAY,
     TP_SKIPPABLE_OPTION,
     RunWithTimeoutOptions,
+    run_with_timeout,
 )
 from traceprovpy.tools.copy_traceprov_dump import make_copy
 import os
@@ -26,6 +27,8 @@ class DriverDefaultValues(NamedTuple):
     traceprov_use_implicit_union: bool = True
     traceprov_use_compact: bool = False
     traceprov_force_seq_scan: bool = False
+    traceprov_skip_sql_cache: bool = False
+    traceprov_use_table_stats: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -76,6 +79,8 @@ class DuckDBDriverOptions(NamedTuple):
     )
     traceprov_use_compact: bool = DriverDefaultValues.traceprov_use_compact
     traceprov_force_seq_scan: bool = DriverDefaultValues.traceprov_force_seq_scan
+    traceprov_skip_sql_cache: bool = DriverDefaultValues.traceprov_skip_sql_cache
+    traceprov_use_table_stats: bool = DriverDefaultValues.traceprov_use_table_stats
 
     @staticmethod
     def get_suffix(parsed):
@@ -112,6 +117,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_use_implicit_union",
             "traceprov_use_compact",
             "traceprov_force_seq_scan",
+            "traceprov_skip_sql_cache",
+            "traceprov_use_table_stats",
         }
         recognized = set(DriverDefaultValuesInstance._fields)
         assert recognized == optimizations
@@ -362,3 +369,35 @@ class DuckDbInferenceBinQuerySpec(QuerySpec):
         assert self.extra_options is not None
         destination_dir: Path = self.extra_options["destination_dir"]
         make_copy(pg_pack.connection_params, destination_dir.as_posix())
+
+
+class ExtractJsonGraphQuerySpec(QuerySpec):
+    def run_packs(self, top_dir, get_run_options, benchmark):
+        pg_pack = get_run_options(TP_SKIPPABLE_OPTION)
+        assert self.extra_options is not None
+        source_path: Path = self.extra_options["source_graph_path"]
+        target_path: Path = self.extra_options["target_graph_path"]
+        make_copy(pg_pack.connection_params, source_path.as_posix(), True)
+        query_file = just_write(
+            "/tmp/traceprov_json_query.sql", "select * from traceprov_json_graph();"
+        )
+        pg_pack = pg_pack._replace(
+            strict_run=True,
+            capture_output=True,
+            file_path=query_file,
+            skip_validation=True,
+            shared_libraries=[
+                *pg_pack.shared_libraries,
+                benchmark.traceprov_path,
+                benchmark.traceprov_infer_set_path,
+            ],
+        )
+        source_graph = json.loads(run_with_timeout(pg_pack)["captured"][0][0])
+        make_copy(pg_pack.connection_params, target_path.as_posix(), True)
+        target_graph = json.loads(run_with_timeout(pg_pack)["captured"][0][0])
+        print(source_path, "Same: ", source_graph == target_graph)
+        return dict(
+            source_graph=source_graph,
+            target_graph=target_graph,
+            same=source_graph == target_graph,
+        )

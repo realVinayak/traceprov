@@ -11,6 +11,7 @@ extern "C" {
 
     std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32 worker_count);
     List *traceprov_set_at_offset_int(List *input_list, const uint32 offset, const int value);
+    uint32_t traceprov_non_zero_count(const List *input_list);
 
     // this is fine, even within the same "scope", because they can be separated by {....}
     #define TP_EVALUATE_START() const auto evaluate_start = std::chrono::steady_clock::now()

@@ -69,6 +69,7 @@ extern "C" {
     List *traceprov_set_at_offset_int(List *input_list, const uint32 offset, const int value);
     TraceProvRelation* traceprov_get_relation_from_join(TraceProvJoinExpr *join_exprn, bool right=true);
     void flattenTraceProvInferAbstractTree(TraceProvInferAbstractTree *tree, TraceProvResultMap *result_map, TraceProvParseContext *parse_context);
+    uint32_t traceprov_non_zero_count(const List *input_list);
 }
 std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context);
 

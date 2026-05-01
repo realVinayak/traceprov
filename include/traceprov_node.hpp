@@ -147,17 +147,28 @@ extern "C" {
 
     typedef std::pair<TraceProvJoinConditions *, TraceProvDependency *> TraceProvSublinkMapInferItem;
 
-    // This gets used to determine whether we're done processing everything we need for a sublink.
-    // It is possible that multiple paths exist to a sublink. So, that's why each graph gets a map to sublink.
+    // TODO: Add comment to explain this (that'll take long time)
+    // In short, for each dependency, stores the count of the entries that are in sublink ref.
+    typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvEntryCountMap;
     typedef std::unordered_map<TraceProvLayerNumber, uint32> TraceProvDepthMap;
+    // Essentially, a collection of TraceProvEntryCountMap.
+    typedef std::unordered_map<TraceProvLayerNumber, TraceProvEntryCountMap *> TraceProvLayerEntryMap;
+    // Essentialy, for each layer it is the sublinks that are reachable.
+    // This can never be cyclic.
+    typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvDerivableSublinkMap;
     typedef std::unordered_map<uint32, std::vector<TraceProvLayerNumber> *> TraceProvSizeLayers;
     typedef std::unordered_map<TraceProvLayerNumber, TraceProvNode *> TraceProvResultMap;
     typedef struct TraceProvDerivationSpec {
         TraceProvResultMap *result_map;
         TraceProvPointerContext *p_context;
+        uint64_t sql_compilation_time;
     } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
+
+    typedef std::unordered_map<TraceProvLayerNumber, TraceProvLayerNumber> TraceProvLastRef;
+
+
     // Just so they can be processed together
     typedef struct TraceProvRecursePack {
         const TraceProvDepthMap *depth_map;
@@ -166,6 +177,19 @@ extern "C" {
         // the pending are stored in pending sublinks.
         TraceProvPendingSublinks *pending_sublinks;
         TraceProvSizeLayers *size_layer_map;
+        const TraceProvLayerEntryMap *layer_count_map;
+        const TraceProvDerivableSublinkMap *derivable_map;
+        const TraceProvDerivableSublinkMap *base_derivable_map;
+        // The current node being derived.
+        const TraceProvLayerNumber current_layer_number;
+        // Sublinks that have already been derived (we may need to redrive them.)
+        std::vector<TraceProvLayerNumber> *derived_sublinks;
+        // Stores the sublink count ref count by the base.
+        TraceProvEntryCountMap *entry_count_map;
+        const TraceProvLastRef *last_ref;
+        std::vector<TraceProvLayerNumber> *sublinks_to_ignore;
+        // Used in Postgres to optimize joins.
+        uint32_t combine_main_worker;
     } TraceProvRecursePack;
 
     // the abstract tree for join computation.
@@ -198,6 +222,8 @@ extern "C" {
         std::vector<std::pair<uint64_t, uint64_t>> *added_ddls;
         // So that, in relation scans, we can wrap this 
         TraceProvPointerContext *pointer_context;
+        // Maintain a cache of the nodes that have been compiled.
+        std::unordered_map<uint64_t, std::string> *cache;
     } TraceProvToSQLContext;
 
     typedef struct TraceProvInferSetupExtra {

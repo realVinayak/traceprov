@@ -10,7 +10,7 @@ where s_suppkey in (
                 select p_partkey
                 from part
                 where p_partkey in (
-                        select column_0
+                        select column_0_1
                         from traceprov_lineage_1
                     )
             )
@@ -28,7 +28,7 @@ where s_suppkey in (
                     )
             )
             and (ps_partkey, ps_suppkey) in (
-                select (column_0, column_1)
+                select (column_0_1, column_1_1)
                 from traceprov_lineage_4
             )
     )

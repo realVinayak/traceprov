@@ -55,9 +55,9 @@ void traceprov_assert_is_subquery(const RangeTblEntry *rte){
 
 // Helper that also sets the resno of target entry appropriately.
 List *_appendAndAdjustResno(List *in_list, TargetEntry *toAdd){
-    List *newList = lappend(in_list, toAdd);
-    toAdd->resno = list_length(newList);
-    return newList;
+    List *new_list = lappend(in_list, toAdd);
+    toAdd->resno = list_length(new_list);
+    return new_list;
 }
 
 List *traceprov_append_at_resjunk(List *old, TargetEntry *newTe){
@@ -67,22 +67,22 @@ List *traceprov_append_at_resjunk(List *old, TargetEntry *newTe){
     }
 
     // Need to find the first resjunk, and then append it there.
-    List *newList = NIL;
+    List *new_list = NIL;
     ListCell *cursor;
-    bool hasSeenResJunk = false;
+    bool has_seen_res_junk = false;
     foreach(cursor, old){
-        TargetEntry *targetEntry = (TargetEntry *)lfirst(cursor);
-        if (targetEntry->resjunk && !hasSeenResJunk){
-            newList = _appendAndAdjustResno(newList, newTe);
-            hasSeenResJunk = true;
+        TargetEntry *target_entry = (TargetEntry *)lfirst(cursor);
+        if (target_entry->resjunk && !has_seen_res_junk){
+            new_list = _appendAndAdjustResno(new_list, newTe);
+            has_seen_res_junk = true;
         }
-        newList = _appendAndAdjustResno(newList, targetEntry);
+        new_list = _appendAndAdjustResno(new_list, target_entry);
     }
-    if (!hasSeenResJunk){
-        newList = _appendAndAdjustResno(newList, newTe);
+    if (!has_seen_res_junk){
+        new_list = _appendAndAdjustResno(new_list, newTe);
     }
-    Assert(list_length(newList) == (list_length(old) + 1));
-    return newList;
+    Assert(list_length(new_list) == (list_length(old) + 1));
+    return new_list;
 }
 
 List *traceprov_get_null_list(unsigned count, Oid consttype, int32 consttypmod, Oid constcollid){
@@ -157,17 +157,14 @@ List *traceprov_dup_oid(Oid element, int count){
 }
 List *traceprov_flatten(List *in_list){
 
-    List *newList = NIL;
+    List *new_list = NIL;
     
-    ListCell *outerCursor;
-    foreach(outerCursor, in_list){
-        List *innerList = lfirst(outerCursor);
-        ListCell *innerCursor;
-        foreach(innerCursor, innerList){
-            newList = lappend(newList, lfirst(innerCursor));
-        }
+    ListCell *outer_cursor;
+    foreach(outer_cursor, in_list){
+        List *inner_list = lfirst(outer_cursor);
+        new_list = list_concat(new_list, inner_list);
     }
-    return newList;
+    return new_list;
 }
 
 List* traceprov_append_targets(List *traceProvTargets, List *targetList){
@@ -974,4 +971,29 @@ uint64 get_null_targets_map(List *entries){
         }
     }
     return null_bit_map;
+}
+
+// Returns a list which is composed of the address to the ptr values.
+// Postgres implementation does add the condition that the initial list
+// is not directly altered (appended, deleted), throughout the life cycle of the returned list
+// Otherwise, the addresses may not be valid anymore (due to shifting.)
+List *traceprov_get_ref_list(List *initial_list){
+    List *ref_list = NIL;
+    ListCell *cursor;
+    foreach(cursor, initial_list){
+        ref_list = lappend(ref_list, &cursor->ptr_value);
+    }
+    return ref_list;
+}
+
+// Filters out traceprov targets used in-correlation (they don't really resemble correlation, so don't need to be considered for reference)
+List *traceprov_filter_in_correlation(List *traceprov_targets){
+    List *filtered = NIL;
+    ListCell *cursor;
+    foreach(cursor, traceprov_targets){
+        TraceProvTarget *tp_target = (TraceProvTarget *)lfirst(cursor);
+        if (tp_target->is_in_correlation) continue;
+        filtered = lappend(filtered, tp_target);
+    }
+    return filtered;
 }

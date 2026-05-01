@@ -148,6 +148,30 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomBoolVariable(
+        "traceprov.force_seq_scan",
+        "Force seq scan during log reads",
+        "Force seq scan during log reads",
+        &traceprov_force_seq_scan,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_table_stats",
+        "Utilize table stats during backtrace",
+        "Utilize table stats during backtrace",
+        &traceprov_use_table_stats,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 
@@ -556,15 +580,14 @@ Query *traceprov_perform_rewrite(
         }else{
             rteTargets = NIL;
         }
-        targets_to_add = list_concat(targets_to_add, rteTargets);
         targets_per_rte = lappend(targets_per_rte, rteTargets);
     }
 
     // if there are sublinks, need to go, also, go over them.
     // we log all of the matching keys, from the left side.
-    if (parse->hasSubLinks){
-        traceprov_rewrite_sublinks(parse, tp_context, targets_per_rte);
-    }
+    // First process everything that needs to be done before we actually process the targets.
+    traceprov_rewrite_sublinks(parse, tp_context, traceprov_get_ref_list(targets_per_rte), false);
+    targets_to_add = traceprov_flatten(targets_per_rte);
 
     if (parse->hasAggs){
         // We're in an aggregation.
@@ -641,7 +664,15 @@ Query *traceprov_perform_rewrite(
         targets_to_add = added_from_set_ops;
     }
 
+    if (parse->havingQual){
+        List *targets_per_rte_having = list_make1(targets_to_add);
+        traceprov_rewrite_sublinks(parse, tp_context, traceprov_get_ref_list(targets_per_rte_having), true);
+        targets_to_add = traceprov_flatten(targets_per_rte_having);
+    }
+
+
     if (addedTargets) *addedTargets = targets_to_add;
+
 
     return parse;
 }

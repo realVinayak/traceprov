@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import List
 from traceprovpy.tools.benchmark import (
     ExtraQuery,
@@ -18,6 +20,7 @@ from traceprovpy.tools.benchmark_utils import (
     traceprov_make_create_view,
     traceprov_make_drop_view,
 )
+from traceprovpy.tools.duckdb_inference import DuckDbInferenceBinQuerySpec
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
@@ -112,10 +115,12 @@ def make_normal_query(
 
 def get_query(
     query_name: str,
-    is_validate: bool,
+    parsed,
     extra_commands: list[str] = [],
     layers_to_derive=[],
 ):
+    is_validate = parsed.validate
+    is_dump_graph_mode = parsed.dump_graph_mode
     subdir_queries: List[Query] = []
 
     special_query_maybe = special_query(
@@ -148,6 +153,21 @@ def get_query(
             )
         )
 
+    if is_dump_graph_mode:
+        opt_choice = "optimized" if parsed.use_optimized_query else "non_optimized"
+        out_dir = Path(parsed.dump_graph_dir) / opt_choice / query_name
+        os.makedirs(out_dir, exist_ok=True)
+        subdir_queries.append(
+            Query(
+                query_name=query_name,
+                spec=DuckDbInferenceBinQuerySpec(
+                    base=TP_SKIPPABLE_OPTION,
+                    key="bin_copy",
+                    extra_options=dict(destination_dir=out_dir),
+                ),
+            )
+        )
+
     if is_validate:
         subdir_queries.append(
             Query(
@@ -159,6 +179,7 @@ def get_query(
                 ),
             )
         )
+
     return subdir_queries
 
 
@@ -176,6 +197,10 @@ def main():
     parser.add_argument(
         "--validate", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--dump_graph_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
     parsed, _ = parser.parse_known_args()
     config = json_read_file(parsed.config)
     derive_config = json_read_file(parsed.derive_config)
@@ -186,13 +211,16 @@ def main():
         extra_commands = ["set traceprov.use_rowid_duckdb=on;"]
     for subdir in config["subdirs"]:
         subdir_queries = []
-        for query_name in config["queries"]:
+        queries = config["queries"]
+        if isinstance(queries, str):
+            queries = eval(queries)
+        for query_name in queries:
             query_name = str(query_name)
             subdir_queries = [
                 *subdir_queries,
                 *get_query(
                     query_name,
-                    parsed.validate,
+                    parsed,
                     extra_commands,
                     layers_to_derive=derive_config[query_name]["layers_used"],
                 ),
