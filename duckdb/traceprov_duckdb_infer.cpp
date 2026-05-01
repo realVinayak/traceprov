@@ -913,7 +913,9 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
     const FunctionData *bind_data,
     column_t column_index
 ){
+    #if DEBUG_MODE
     if (column_index == 0) elog(INFO, "Calling with 0 as col idx!");
+    #endif
     uint64_t distinct_count = 0;
     TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
     TraceProvStatistics stats = {
@@ -947,6 +949,7 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
     }
     const uint8_t column_size = tp_bind_data->sizes->at(column_index);
     auto result = NumericStats::CreateEmpty(  column_size == sizeof(uint64_t ) ? LogicalType::UBIGINT : LogicalType::UINTEGER );
+    #if DEBUG_MODE
     elog(INFO, "Asking stats for (%d, %d)", layer, column_index);
     if (g_tp_agg_extra->stats_collector_map != NULL){
         if (g_tp_agg_extra->stats_collector_map->find(layer) != g_tp_agg_extra->stats_collector_map->end() ){
@@ -956,8 +959,11 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
             }
         }
     }
+    #endif
     if (stats.is_set && traceprov_use_table_stats){
+        #if DEBUG_MODE
         elog(INFO, "Setting stats for (%d, %d) -- [%lu, %lu]. Distinct: %lu", layer, column_index, stats.min_value, stats.max_value, distinct_count);
+        #endif
         if (column_size == sizeof(uint64_t)){
             NumericStats::SetMin(result, Value::UBIGINT(stats.min_value));
             NumericStats::SetMax(result, Value::UBIGINT(stats.max_value));
@@ -1328,30 +1334,31 @@ TraceProvLogSize traceprov_get_total_layer_size(){
             const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
             if (layer->layer_number == 0) continue;
             page_requested += layer->size;
-            page_used += 1;
             const uint64_t gap = ((uint64_t)layer->current_row - (uint64_t)layer->last_mapping);
-            bytes_used += gap;
+            uint64_t middle_allocation = 0;
             if (layer->size > 1){
                 // Need to determine which pages were used.
-                bytes_used += TRACEPROV_PAGE_SIZE; // for the first page.
+                middle_allocation += TRACEPROV_PAGE_SIZE;
                 const int64_t allocate_count = (layer->size - 1) / TRACEPROV_INCREMENT_TRACE_BY_PG;
                 if (allocate_count <= 0){
                     elog(ERROR, "Expected allocations to be > 1");
                 }
                 const uint64_t intermediate_page_used = (allocate_count - 1)*TRACEPROV_INCREMENT_TRACE_BY_PG;
-                page_used += intermediate_page_used;
-                bytes_used += (intermediate_page_used * TRACEPROV_PAGE_SIZE);
+                middle_allocation += (intermediate_page_used * TRACEPROV_PAGE_SIZE);
                 if (gap == 0){
                     // This can never happen.
                     // Otherwise, it will imply that the increment go through, but no nemory access was performed, which is not possible.
                     elog(ERROR, "Should never expect gap to be 0");
                 }
-                page_used += ((gap - 1) / TRACEPROV_PAGE_SIZE) + 1;
             }
+            // The pages used and the bytes used only differ in how they handle the gap.
+            // All the other parts are the same.
+            bytes_used += middle_allocation + gap;
+            page_used += middle_allocation + (gap == 0 ? 0 : (((gap - 1) / TRACEPROV_BACK_PAGE_SIZE) + 1))*TRACEPROV_BACK_PAGE_SIZE;
         }
     }
     log_size.page_requested_size = page_requested * TRACEPROV_PAGE_SIZE;
-    log_size.page_used_size = page_used * TRACEPROV_PAGE_SIZE;
+    log_size.page_used_size = page_used;
     log_size.bytes_used_size = bytes_used;
     return log_size;
 }

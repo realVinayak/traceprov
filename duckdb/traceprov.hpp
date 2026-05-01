@@ -46,7 +46,6 @@ using namespace duckdb;
 // #define TRACEPROV_GRAPH_FILE            DEFINE_TRACE_PROV_FILE("/graph.bin")
 #define TRACEPROV_WORKER_LAYER_MAP      DEFINE_TRACE_PROV_FILE("/worker_%d_layers.tp")
 
-#define TRACEPROV_NUM_REGIONS_GROUP(pgno)   (pgno == 1 ? 1 : (((pgno - 2) / TRACEPROV_INCREMENT_GROUP_BY_PG) + 2))
 #define TRACEPROV_SIZE_OF_ALLOCATION(last_alloc) (last_alloc == 1 ? 1 : TRACEPROV_INCREMENT_TRACE_BY_PG)
 
 
@@ -57,23 +56,19 @@ using namespace duckdb;
 #define TP_MAP_HUGE_1GB    (30 << MAP_HUGE_SHIFT)
 #define TP_MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
 
-// Whether to use 2 MB page
-#define TRACEPROV_USE_HUGE_PAGE 1
 // Whether to map memory page or not (otherwise file system is used)
-#define TRACEPROV_USE_MMEM_PAGE 1
+#define TRACEPROV_USE_MMEM_PAGE 0
+
+// Whether to use 2 MB page
+#define TRACEPROV_USE_HUGE_PAGE 0
+
 // Whether to map the memory page via huge page.
 #define TRACEPROV_MAP_HUGE_PAGE 0
 
-#define TRACEPROV_DEBUG_PERF 1
+#define TRACEPROV_DEBUG_PERF 0
 
 #if TRACEPROV_USE_MMEM_PAGE==0
 static_assert(TRACEPROV_MAP_HUGE_PAGE==0, "invalid config!");
-#endif
-
-#if TRACEPROV_MAP_HUGE_PAGE==1
-#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB )
-#else
-#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS )
 #endif
 
 // The intention here is to align with the OS' page size.
@@ -93,6 +88,20 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_INCREMENT_TRACE_BY_PG 32
 #endif
 
+
+// This is the _backing_ page size (assumes that the OS allocates these many bytes at once)
+// This is different than raw page size if we're using huge pages.
+#define TRACEPROV_BACK_PAGE_SIZE TRACEPROV_PAGE_SIZE_RAW
+
+#if TRACEPROV_MAP_HUGE_PAGE==1
+// Use the huge page size as the backing page.
+#undef TRACEPROV_BACK_PAGE_SIZE
+#define TRACEPROV_BACK_PAGE_SIZE TRACEPROV_PAGE_SIZE
+#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB )
+#else
+#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS )
+#endif
+
 // Defines the maximum number of workers currently supported.
 #define TRACEPROV_MAX_WORKERS           255
 // Defines the maximum number of layers per worker, before it begins
@@ -103,10 +112,8 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 4096
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 1024
 #endif
-// Increase the group-mapping by these many pages at once.
-#define TRACEPROV_INCREMENT_GROUP_BY_PG 4096
 
 #define TRACEPROV_PG_MAPPING_INCR_STEP  4096
 
