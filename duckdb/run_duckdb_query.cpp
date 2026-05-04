@@ -175,6 +175,7 @@ struct Options {
     // via --traceprov_use_merge_chunks
     // via --traceprov_force_seq_scan
     bool dump_base_table;
+    uint64_t warm_up_time;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -220,7 +221,8 @@ struct Options parse_args(int argc, char **argv){
         .extra_multiple_count = 1,
         .get_log_size = false,
         .misc_store = g_init_misc_key_value,
-        .dump_base_table = false
+        .dump_base_table = false,
+        .warm_up_time = 0
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -396,6 +398,10 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--traceprov_use_table_stats")){
             traceprov_use_table_stats = true;
+            continue;
+        } else if (IS_OPTION("--warm_up_time")){
+            // Switch from seconds to microseconds.
+            options.warm_up_time = std::atol(argv[++i]) * (1000*1000);
             continue;
         }
 
@@ -897,6 +903,25 @@ int main(int argc, char **argv){
     }
 
     if (!options.main_once_extra_all){
+
+        // If there is a warm up time, need to rerun the query those many times before we actually run it.
+        if (options.warm_up_time){
+            Options warm_up_options = options;
+            warm_up_options.stats_path = "";
+            uint64_t elapsed = 0;
+            if (options.pre_main_sql->size()){
+                for (auto pre_main_sql: *options.pre_main_sql){
+                    DUCKDB_RUN_SHORT_QUERY(con, pre_main_sql.c_str(), "pre-main-sql");
+                }
+            }
+            elog(INFO, "Warming up for %ld\n", warm_up_options.warm_up_time);
+            while (elapsed < options.warm_up_time){
+                const auto start_time = std::chrono::steady_clock::now();
+                perform_query(&warm_up_options, con, in_sql, NULL, NULL, NULL, "");
+                const auto end_time = std::chrono::steady_clock::now();
+                elapsed += (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)).count();
+            }
+        }
         for (int i = 0; i < options.repeat; i++){
             char final_profile_out[256] = {0};
             char final_stats_query[256] = {0};
