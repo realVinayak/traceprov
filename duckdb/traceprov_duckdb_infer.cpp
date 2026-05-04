@@ -900,11 +900,11 @@ void handle_pointer_stats(TraceProvStatistics *old_stats, const struct traceprov
     merge_stats(old_stats, &stats);
 }
 
-void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index){
+void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const int column_index){
     if (is_aggregate && (column_index == 0)) {
         handle_pointer_stats(stats, bind_data->col_layer, bind_data->rel_args);
     } else {
-        merge_stats(stats, &bind_data->col_layer->stats[column_index]);
+        merge_stats(stats, &bind_data->col_layer->stats[is_aggregate ? column_index - 1 : column_index]);
     }
 }
 
