@@ -88,6 +88,14 @@ TRACEPROV_GET_DERIVATION_SPEC = lambda: ExtraQuery(
     capture_output=True,
 )
 
+TRACEPROV_GET_LAYER_SIZE = lambda: ExtraQuery(
+    label="traceprov_get_total_layer_size",
+    query=f"$INLINE-select * from traceprov_get_total_layer_size();",
+    runs_after_base=True,
+    strict_run=True,
+    capture_output=True,
+)
+
 TRACEPROV_GET_GENERIC_DERIVATION_SPEC = lambda: ExtraQuery(
     label="traceprov_generic_derivation_spec",
     query=f"$INLINE-select * from traceprov_get_generic_derivation_spec();",

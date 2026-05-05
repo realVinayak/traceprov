@@ -398,6 +398,32 @@ class TraceProvOptimizations(NamedTuple):
 TraceProvOptimizationsInstance = TraceProvOptimizations()
 
 
+# Warning: AI generated.
+def delete_traceprov_tables(conn, shared_libraries: list[str]):
+    with conn.cursor() as cur:
+        for shared_lib in shared_libraries:
+            print("Loading: ", shared_lib)
+            cur.execute(f"load '{shared_lib}';")
+        cur.execute("""
+            SELECT tablename 
+            FROM pg_tables 
+            WHERE schemaname = 'public' 
+              AND tablename LIKE 'traceprov_relation_infer_%'
+        """)
+        tables = cur.fetchall()
+
+        if not tables:
+            print("No matching tables found.")
+            return
+
+        for (table_name,) in tables:
+            cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+            print(f"Dropped table: {table_name}")
+
+        conn.commit()
+        print(f"Done. {len(tables)} table(s) dropped.")
+
+
 class GenericBenchmark(NamedTuple):
     name: str
 
@@ -496,6 +522,16 @@ class GenericBenchmark(NamedTuple):
 
         if "extras" in final_result:
             raise Exception('Expected "extras" to be a reserved keyword.')
+        connection = connection_params.make_connection()
+        delete_traceprov_tables(
+            connection,
+            [
+                setup_bench.traceprov_rewriter_path,
+                setup_bench.traceprov_path,
+                setup_bench.traceprov_infer_set_path,
+            ],
+        )
+        connection.close()
         return final_result
 
     def dump_final_result(self, final_result: dict, out_dir="./results/"):
