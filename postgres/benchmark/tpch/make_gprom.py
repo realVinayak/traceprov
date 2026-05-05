@@ -20,6 +20,9 @@ from traceprovpy.tools.run_with_timeout import ConnectionParams
 needs_unnest = ["02", "17", "15", "22"]
 needs_lateral = ["02", "17", "11"]
 
+# needs_unnest = []
+# needs_lateral = []
+
 
 def get_file(options: GpromOptions):
     flat = ["gprom", options.mode]
@@ -50,7 +53,7 @@ def main():
     connection_params = ConnectionParams.make_from_parsed(
         parsed, backend=parsed.backend
     )
-    queries = [str(q).rjust(2, "0") for q in range(1, 23) if q not in [21]]
+    queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
     # queries = ["13"]
     passed = defaultdict(dict)
