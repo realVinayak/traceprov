@@ -14,6 +14,7 @@ from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_CAPTURE_QUERY,
     TRACEPROV_GET_DERIVATION_SPEC,
     TRACEPROV_GET_GENERIC_DERIVATION_SPEC,
+    TRACEPROV_GET_LAYER_SIZE,
     TRACEPROV_INFER_SPEC,
     TRACEPROV_PERFORM_DERIVATION,
     TRACEPROV_SYNC_TIME,
@@ -65,7 +66,11 @@ def special_query(
                     strict_run=False,
                     preprocess=([MakeTraceProv()] if is_traceprov else []),
                 ),
-                *([TRACEPROV_INFER_SPEC()] if is_traceprov else []),
+                *(
+                    [TRACEPROV_INFER_SPEC(), TRACEPROV_GET_LAYER_SIZE()]
+                    if is_traceprov
+                    else []
+                ),
                 traceprov_make_drop_view("15_post_step_1", "revenue0", strict=True),
             ],
             extra_options=(
@@ -96,7 +101,7 @@ def make_normal_query(
     # don't need to check if we'll dump or not.
     # extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
     assert len(layers_to_derive) > 0
-    extras = [TRACEPROV_INFER_SPEC()]
+    extras = [TRACEPROV_INFER_SPEC(), TRACEPROV_GET_LAYER_SIZE()]
     return Query(
         query_name=query_name,
         extra_commands=extra_commands,
