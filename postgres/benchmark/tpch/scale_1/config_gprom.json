@@ -2,13 +2,13 @@
     "_queries": [
         1
     ],
-    "queries": "range(1, 5)",
+    "queries": "range(1, 23)",
     "validate": false,
     "subdirs": [
         "params_default"
     ],
     "runTimeOptions": {
-        "repeat": 3,
-        "throwaway": 2
+        "repeat": 10,
+        "throwaway": 5
     }
 }
