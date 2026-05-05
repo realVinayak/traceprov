@@ -57,7 +57,7 @@ using namespace duckdb;
 #define TP_MAP_HUGE_2MB    (21 << MAP_HUGE_SHIFT)
 
 // Whether to map memory page or not (otherwise file system is used)
-#define TRACEPROV_USE_MMEM_PAGE 0
+#define TRACEPROV_USE_MMEM_PAGE 1
 
 // Whether to use 2 MB page
 #define TRACEPROV_USE_HUGE_PAGE 0
@@ -112,7 +112,7 @@ static_assert(0, "page size not defined!");
 #define TRACEPROV_MAX_LAYER_PER_WORKER  32
 #ifndef TRACEPROV_INCREMENT_TRACE_BY_PG
 // Increase the trace file by this many number of PAGES.
-#define TRACEPROV_INCREMENT_TRACE_BY_PG 1024
+#define TRACEPROV_INCREMENT_TRACE_BY_PG 256
 #endif
 
 #define TRACEPROV_PG_MAPPING_INCR_STEP  4096

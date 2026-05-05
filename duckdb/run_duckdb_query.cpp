@@ -897,6 +897,8 @@ int main(int argc, char **argv){
     sprintf(thread_set_query, "SET threads=%d;", options.num_threads);
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
 
+    // DUCKDB_RUN_SHORT_QUERY(con, "set memory_limit='58GiB';", "setting memory");
+
     if (IS_SET(options.index_scan_percentage)){
         std::string indx_set_query = "SET index_scan_percentage=" + options.index_scan_percentage + ";";
         DUCKDB_RUN_SHORT_QUERY(con, indx_set_query.c_str(), "setting index scan percent");
