@@ -57,11 +57,14 @@ def main():
         for query_name in query_repr:
             print(query_name)
             query_name = str(query_name)
+            original_query_name = query_name
             if query_name not in gprom_config:
-                continue
+                query_name = query_name.rjust(2, "0")
+                if query_name not in gprom_config:
+                    continue
             g_config_item = gprom_config[query_name]
             subdir_queries.extend(
-                make_gprom_query(query_name, parsed.mode, g_config_item)
+                make_gprom_query(original_query_name, parsed.mode, g_config_item)
             )
         dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
 
