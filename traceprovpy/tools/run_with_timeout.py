@@ -67,7 +67,7 @@ class ConnectionParams(NamedTuple):
             for pack in dict(
                 U=self.user, h=self.host, p=self.port, d=self.database
             ).items()
-            for cell in [f"-{pack[0]}", pack[1]]
+            for cell in [f"-{pack[0]}", pack[1]] if pack[1] is not None
         ]
         return " ".join(flat_options)
 

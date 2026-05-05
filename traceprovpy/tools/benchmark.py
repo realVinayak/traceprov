@@ -611,7 +611,7 @@ class GenericBenchmark(NamedTuple):
             )
         print(directories)
 
-        call_options = (top_dir, directories, connection_params, params)
+        call_options = (top_dir, directories, connection_params, params, init_sql, self_extra_sql)
         # params.validate()
 
         def _get_options_from_query(query: Query):
