@@ -131,6 +131,14 @@ TRACEPROV_MAKE_TRUNCATE_LOGS = lambda: ExtraQuery(
     strict_run=True,
 )
 
+MULLER_GET_LOG_SIZE = lambda: ExtraQuery(
+    label="muller_get_log_size",
+    query=f"$INLINE-select * from logSize();",
+    runs_after_base=True,
+    strict_run=True,
+    capture_output=True,
+)
+
 
 def traceprov_make_drop_view(label: str, view_name: str, strict: bool):
     return ExtraQuery(
