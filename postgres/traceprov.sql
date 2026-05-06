@@ -762,3 +762,23 @@ FUNCTION 1 traceprov_ptr_type_abs_cmp (traceprov_ptr_type, traceprov_ptr_type);
 -- Both of the below don't cause a function invocation.
 create cast (traceprov_ptr_type as bigint) without function as implicit;
 create cast (bigint as traceprov_ptr_type) without function as implicit;
+-- GProM functions
+CREATE OR REPLACE FUNCTION _tid2int8 (t tid) RETURNS int8 AS $$
+SELECT CASE
+        WHEN t IS NULL THEN NULL
+        ELSE (
+            ((t::text::point) [0]::bigint << 32) | (t::text::point) [1]::bigint
+        )
+    END AS i $$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define MERGE_ROWID_FUNC_NAME POSTGRES_MERGE_ROWID_FUNC
+CREATE OR REPLACE FUNCTION _mergerowid (l int8, r int8) RETURNS int8 AS $$
+SELECT hash_record_extended((l, r), 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define MERGE_ROWID_13_FUNC_NAME POSTGRES_MERGE_ROWID_FUNC
+CREATE OR REPLACE FUNCTION _mergerowid (l int8, r int8) RETURNS int8 AS $$
+SELECT hash_array_extended(ARRAY [l,r], 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define VARIADIC_HASH_FUNC_NAME POSTGRES_VARIADIC_HASH_FUNC
+CREATE OR REPLACE FUNCTION _variadic_hash (VARIADIC args anyarray) RETURNS text AS $$
+SELECT hash_array_extended(args, 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
