@@ -235,10 +235,12 @@ class QuerySpec(NamedTuple):
             base_extra_results = _run_extras(base_extras_to_run, base_context)
             base_pack.close_all()
             materialize_context = dict()
+            is_timeout = False
             if materialize_pack:
                 materialize_pack = materialize_pack._replace(extras=materialize_context)
                 materialize_time = _run_with_timeout(materialize_pack)
                 assert len(materialize_context) != 0
+                is_timeout = materialize_time is None
 
             if (
                 base_pack.params.throwaway is not None
@@ -247,6 +249,10 @@ class QuerySpec(NamedTuple):
                 if materialize_pack:
                     materialize_pack.close_all()
                 iter_count += 1
+                # Break just at throwaway here.
+                if is_timeout:
+                    results['materialize'].append(dict(timeout=True))
+                    break
                 continue
             results["base"].append(base_time)
 
@@ -276,6 +282,10 @@ class QuerySpec(NamedTuple):
                 results["extras"].append(merged_extra_results)
 
             iter_count += 1
+            # if the materialize query also timed out, also break out
+            if is_timeout:
+                results['materialize'].append(dict(timeout=True))
+                break
 
         return results
 
