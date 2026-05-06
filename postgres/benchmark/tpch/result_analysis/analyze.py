@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from traceprovpy.tools.file_utils import json_read_file, just_write
+from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
 from traceprovpy.tools.normalized_row import Extendable, Normalizable
 
 import duckdb
@@ -114,7 +114,7 @@ def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
 
 
 def make_log_size(size: int):
-    return dict(log_size_bytes_used_size=size)
+    return dict(bytes_used_size=int(size))
 
 
 def handle_q15_muller(query_num, query_data):
@@ -124,7 +124,7 @@ def handle_q15_muller(query_num, query_data):
         for item in muller_data["extras"]
     ]
     phase_2 = [
-        dict(explain_time=item["phase_2_capture"][0]["explain_time"])
+        dict(time=item["phase_2_capture"][0]["explain_time"])
         for item in muller_data["extras"]
     ]
     log_size = [
@@ -151,7 +151,7 @@ def handle_muller(query_num: str, query_data: dict) -> dict:
     if base_contains_timeout or mat_contains_timeout or len(base) == 0 or len(mat) == 0:
         return dict(query_num=query_num, phase_1=None, phase_2=None, log_size=None)
     phase_1 = [dict(explain_time=item["explain_time"]) for item in base]
-    phase_2 = [dict(explain_time=item["explain_time"]) for item in mat]
+    phase_2 = [dict(time=item["explain_time"]) for item in mat]
     log_size = [
         make_log_size(item["muller_get_log_size"][0]["captured"][0][0])
         for item in muller_data["extras"]
@@ -247,6 +247,9 @@ def main():
     cursor.execute(
         f"create or replace table normalized as (select * from read_json_auto('{path}'))"
     )
+    stats_sql = just_read("./query_stats.sql")
+    cursor.execute(stats_sql)
+
     cursor.close()
     conn.close()
 
