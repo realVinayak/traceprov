@@ -1,33 +1,33 @@
 
-SELECT F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F0_0.prov_orders_o__orderkey AS prov_orders_o__orderkey
+SELECT F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY, F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
 FROM (
-SELECT F0_0."GROUP_0" AS c_count, F0_0."AGGR_0" AS custdist, F1_0.prov_customer_c__custkey AS prov_customer_c__custkey, F1_0.prov_orders_o__orderkey AS prov_orders_o__orderkey
+SELECT F0_0."GROUP_0" AS C_COUNT, F0_0."AGGR_0" AS CUSTDIST, F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY, F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
 FROM ((
-SELECT count(1) AS "AGGR_0", F0_0."AGGR_0" AS "GROUP_0"
+SELECT COUNT(1) AS "AGGR_0", F0_0."AGGR_0" AS "GROUP_0"
 FROM (
-SELECT count(F1_0.o_orderkey) AS "AGGR_0", F0_0.c_custkey AS "GROUP_0"
+SELECT COUNT(F1_0.O_ORDERKEY) AS "AGGR_0", F0_0.C_CUSTKEY AS "GROUP_0"
 FROM ((
-SELECT F0_0.c_custkey AS c_custkey
-FROM customer F0_0) F0_0 LEFT OUTER JOIN (
-SELECT F0_0.o_orderkey AS o_orderkey, F0_0.o_custkey AS o_custkey, F0_0.o_comment AS o_comment
-FROM orders F0_0) F1_0 ON (((F0_0.c_custkey = F1_0.o_custkey) AND (NOT ((F1_0.o_comment LIKE '%special%requests%'))))))
-GROUP BY F0_0.c_custkey) F0_0
+SELECT F0_0.C_CUSTKEY AS C_CUSTKEY
+FROM CUSTOMER F0_0) F0_0 LEFT OUTER JOIN (
+SELECT F0_0.O_ORDERKEY AS O_ORDERKEY, F0_0.O_CUSTKEY AS O_CUSTKEY, F0_0.O_COMMENT AS O_COMMENT
+FROM ORDERS F0_0) F1_0 ON (((F0_0.C_CUSTKEY = F1_0.O_CUSTKEY) AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%'))))))
+GROUP BY F0_0.C_CUSTKEY) F0_0
 GROUP BY F0_0."AGGR_0") F0_0 JOIN (
-SELECT F0_0."AGGR_0" AS "_P_SIDE_GROUP_0", F1_0.prov_customer_c__custkey AS prov_customer_c__custkey, F1_0.prov_orders_o__orderkey AS prov_orders_o__orderkey
+SELECT F0_0."AGGR_0" AS "_P_SIDE_GROUP_0", F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY, F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
 FROM ((
-SELECT count(F1_0.o_orderkey) AS "AGGR_0", F0_0.c_custkey AS "GROUP_0"
+SELECT COUNT(F1_0.O_ORDERKEY) AS "AGGR_0", F0_0.C_CUSTKEY AS "GROUP_0"
 FROM ((
-SELECT F0_0.c_custkey AS c_custkey
-FROM customer F0_0) F0_0 LEFT OUTER JOIN (
-SELECT F0_0.o_orderkey AS o_orderkey, F0_0.o_custkey AS o_custkey, F0_0.o_comment AS o_comment
-FROM orders F0_0) F1_0 ON (((F0_0.c_custkey = F1_0.o_custkey) AND (NOT ((F1_0.o_comment LIKE '%special%requests%'))))))
-GROUP BY F0_0.c_custkey) F0_0 JOIN (
-SELECT F0_0.c_custkey AS "_P_SIDE_GROUP_0", F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F1_0.prov_orders_o__orderkey AS prov_orders_o__orderkey
+SELECT F0_0.C_CUSTKEY AS C_CUSTKEY
+FROM CUSTOMER F0_0) F0_0 LEFT OUTER JOIN (
+SELECT F0_0.O_ORDERKEY AS O_ORDERKEY, F0_0.O_CUSTKEY AS O_CUSTKEY, F0_0.O_COMMENT AS O_COMMENT
+FROM ORDERS F0_0) F1_0 ON (((F0_0.C_CUSTKEY = F1_0.O_CUSTKEY) AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%'))))))
+GROUP BY F0_0.C_CUSTKEY) F0_0 JOIN (
+SELECT F0_0.C_CUSTKEY AS "_P_SIDE_GROUP_0", F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY, F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
 FROM ((
-SELECT F0_0.c_custkey AS c_custkey, F0_0.c_custkey AS prov_customer_c__custkey
-FROM customer F0_0) F0_0 LEFT OUTER JOIN (
-SELECT F0_0.o_custkey AS o_custkey, F0_0.o_comment AS o_comment, F0_0.o_orderkey AS prov_orders_o__orderkey
-FROM orders F0_0) F1_0 ON (((F0_0.c_custkey = F1_0.o_custkey) AND (NOT ((F1_0.o_comment LIKE '%special%requests%'))))))) F1_0 ON ((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")))) F1_0 ON ((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")))
-ORDER BY custdist DESC NULLS LAST, c_count DESC NULLS LAST) F0_0;
+SELECT F0_0.C_CUSTKEY AS C_CUSTKEY, F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+FROM CUSTOMER F0_0) F0_0 LEFT OUTER JOIN (
+SELECT F0_0.O_CUSTKEY AS O_CUSTKEY, F0_0.O_COMMENT AS O_COMMENT, F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+FROM ORDERS F0_0) F1_0 ON (((F0_0.C_CUSTKEY = F1_0.O_CUSTKEY) AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%'))))))) F1_0 ON (((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0") OR ((F0_0."GROUP_0" IS NULL) AND (F1_0."_P_SIDE_GROUP_0" IS NULL)))))) F1_0 ON ((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")))
+ORDER BY CUSTDIST DESC NULLS LAST, C_COUNT DESC NULLS LAST) F0_0;
 
 
