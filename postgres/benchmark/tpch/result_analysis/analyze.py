@@ -2,11 +2,42 @@ import argparse
 import json
 import os
 from pathlib import Path
+from typing import Tuple
 
-from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
+from matplotlib import pyplot as plt
+import matplotlib as mpl
+
+import numpy as np
+
+from traceprovpy.tools.file_utils import (
+    json_read_file,
+    just_read,
+    just_write,
+    null_safe,
+)
 from traceprovpy.tools.normalized_row import Extendable, Normalizable
 
 import duckdb
+from traceprovpy.tools.plot_utils import BenchmarkPlot
+
+mpl.rcParams.update(
+    {
+        # fonts
+        "font.family": "serif",
+        "font.size": 16,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 15,
+        "axes.titlesize": 18,
+        # cleaner look
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        # lines
+        "lines.linewidth": 2,
+        "patch.linewidth": 1.5,
+    }
+)
 
 
 class NormalizedPgTPCHRow(Normalizable):
@@ -219,11 +250,120 @@ class ResultAnalyzer:
         return all_rows
 
 
+def plot_data(
+    data: list[Tuple[str, dict]],
+    categories: list[str],
+    label: str,
+    sf: str,
+    out_dir: Path,
+    width: float,
+    group_gap: float,
+    category_label_mapping: dict = None,
+):
+    x_axis_values = list(map(str, range(1, 23)))
+    x_axis = np.arange(len(x_axis_values))
+    slowdown_fig, slowdown_axis = plt.subplots(1, 1, figsize=(14, 3))
+    data = [item for item in data if item[0] in categories]
+    result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
+    q11_idx = x_axis_values.index("11")
+    for category_idx, (category, catagory_data) in enumerate(result_sorted):
+        x_axis_adjusted = (
+            x_axis * (len(categories) * width + group_gap) + width * category_idx
+        )
+
+        def _get_key_in_dict(in_key: str):
+            return null_safe(
+                [
+                    catagory_data[q][in_key] if q in catagory_data else 0
+                    for q in x_axis_values
+                ]
+            )
+
+        phase_all_slowdown = _get_key_in_dict("phase_all_slowdown")
+
+        slowdown_axis.bar(
+            x_axis_adjusted,
+            phase_all_slowdown,
+            width=width,
+            label=(category_label_mapping or dict()).get(category, category),
+            color=BenchmarkPlot.colors[category_idx],
+        )
+
+        slowdown_axis.legend()
+
+    slowdown_axis.set_ylim(bottom=0.5, top=100)
+    slowdown_axis.annotate(
+        "~3000x",
+        xy=(q11_idx * (len(categories) * width + group_gap + 0.3), 50),
+        ha="center",
+        fontsize=14,
+        color="red",
+        fontweight="bold",
+    )
+
+    slowdown_axis.axhline(y=1, color="r", linestyle="--")
+    slowdown_axis.axhline(y=2, color="r", linestyle="--")
+    slowdown_axis.set_ylabel("Slowdown")
+    slowdown_axis.set_xlabel("Query")
+    slowdown_axis.set_yscale("log")
+    slowdown_axis.set_xticks(
+        x_axis * (len(categories) * width + group_gap) + width * (len(categories) / 3),
+        x_axis_values,
+    )
+    slowdown_fig.suptitle(f"PostgreSQL Slowdown for SF={sf}")
+    slowdown_fig.savefig(out_dir / f"{label}_slowdown.pdf", bbox_inches="tight")
+
+
+def gen_plots(database_file: Path, out_dir: Path, sf):
+    con = duckdb.connect(database_file)
+    cursor = con.cursor()
+    query = """
+    SELECT category, list(normalized_slowdown) AS rows
+    FROM normalized_slowdown
+    GROUP BY category;
+    """
+    cursor.execute(query)
+    results = cursor.fetchall()
+    cursor.close()
+    con.close()
+    result_mapped = [
+        (key, {query_data["query_num"]: query_data for query_data in data})
+        for (key, data) in results
+    ]
+    all_categories = [
+        "gprom_join",
+        "gprom_window",
+        "gprom_join_heuristics",
+        "gprom_window_heuristics",
+        "muller",
+        "traceprov_no_stats",
+        "traceprov_stats",
+    ]
+    interesting_categories = ["gprom_window_heuristics", "muller", "traceprov_stats"]
+    plot_data(result_mapped, all_categories, "all", sf, out_dir, 0.1, 0.0)
+    mapping = {
+        "gprom_window_heuristics": "GProM Win. Heu.",
+        "muller": "Muller",
+        "traceprov_stats": "TraceProv",
+    }
+    plot_data(
+        result_mapped,
+        interesting_categories,
+        "postgres_interesting",
+        sf,
+        out_dir,
+        0.7,
+        0.8,
+        mapping,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser("tpch_analyzer")
     parser.add_argument("--dir", required=True)
     parser.add_argument("--config", required=True)
     parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--sf", required=True)
     parsed = parser.parse_args()
     config = json_read_file(parsed.config, True)
     out_dir = Path(parsed.out_dir)
@@ -242,16 +382,19 @@ def main():
     path = just_write(out_dir / "flat.json", json.dumps(flatted))
     if isinstance(path, Path):
         path = path.as_posix()
-    conn = duckdb.connect(out_dir / "analyze.db")
+    db_file = out_dir / "analyze.db"
+    conn = duckdb.connect(db_file)
     cursor = conn.cursor()
     cursor.execute(
         f"create or replace table normalized as (select * from read_json_auto('{path}'))"
     )
     stats_sql = just_read("./query_stats.sql")
     cursor.execute(stats_sql)
-
+    slowdown_sql = just_read("./query_slowdown.sql")
+    cursor.execute(slowdown_sql)
     cursor.close()
     conn.close()
+    gen_plots(db_file, out_dir, parsed.sf)
 
 
 if __name__ == "__main__":

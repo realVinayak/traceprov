@@ -68,3 +68,7 @@ def traceprov_assert_safe_run(cmd: str):
     print("Running: ", cmd)
     assert os.system(cmd) == 0
     return 0
+
+
+def null_safe(in_list: list):
+    return [0 if i is None else i for i in in_list]
