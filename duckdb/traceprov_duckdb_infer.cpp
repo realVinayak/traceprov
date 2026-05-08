@@ -975,8 +975,17 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
         if (distinct_count != 0){
             result.SetDistinctCount(distinct_count);
         }
+    }else{
+        if (column_size == sizeof(uint64_t)){
+              NumericStats::SetMin(result, Value::UBIGINT(0));
+              NumericStats::SetMax(result, Value::UBIGINT((uint64_t)-1));
+        }else{
+              NumericStats::SetMin(result, Value::UINTEGER(0));
+              NumericStats::SetMax(result, Value::UINTEGER((uint32_t)-1));
+        }
     }
-	return result.ToUnique();
+    //return nullptr;
+    return result.ToUnique();
 }
 
 // Taken from DuckDB.
