@@ -29,6 +29,27 @@ from traceprovpy.tools.run_duckdb_generic import (
 
 import duckdb
 
+import matplotlib as mpl
+
+mpl.rcParams.update(
+    {
+        # fonts
+        "font.family": "serif",
+        "font.size": 16,
+        "axes.labelsize": 18,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "legend.fontsize": 15,
+        "axes.titlesize": 18,
+        # cleaner look
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        # lines
+        "lines.linewidth": 2,
+        "patch.linewidth": 1.5,
+    }
+)
+
 
 class TpchRow(NormalizedSampleInferRow):
     query_num: str
@@ -226,6 +247,17 @@ CATEGORIES = [
     "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y",
 ]
 
+INTERESTING_CATEGORIES = [
+    "SmokedDuck",
+    "optimized-y__threads-1__compact-y__merge_chunks-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y",
+]
+
+INTERESTING_CATEGORIES_MAP = {
+    "optimized-y__threads-1__compact-y__merge_chunks-y": "TraceProv",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y": "TraceProv (Partition)",
+}
+
 LOG_SIZE_CATEGORY = [
     "SmokedDuck",
     "optimized-y__threads-1",
@@ -235,16 +267,23 @@ LOG_SIZE_CATEGORY = [
 ]
 
 
-def plot_result(fetched_result: list[tuple[str, list]], sf: str):
+def plot_result(
+    fetched_result: list[tuple[str, list]],
+    sf: str,
+    categories: list[str],
+    figsize=(20, 6),
+    width=0.1,
+    mapping: dict = None,
+):
     x_axis_values = list(map(str, range(1, 23)))
     x_axis = np.arange(len(x_axis_values))
-    width = 0.1
     log_size_width = 0.15
-    fig, (fig_axis, infer_time_axis) = plt.subplots(2, 1, figsize=(20, 6))
+    fig, (fig_axis, infer_time_axis) = plt.subplots(2, 1, figsize=figsize)
     log_size_fig, log_size_axis = plt.subplots(1, 3, figsize=(25, 6), sharey=True)
     stdev_fig, (stdev_base_axis, stdev_capture_axis) = plt.subplots(
         2, 1, figsize=(20, 6), sharex=True
     )
+    fetched_result = [item for item in fetched_result if item[0] in categories]
     result_sorted = sorted(fetched_result, key=lambda x: CATEGORIES.index(x[0]))
     log_size_incr = 0
     fig_axis.axhline(y=10, color="r", linestyle="--")
@@ -290,9 +329,14 @@ def plot_result(fetched_result: list[tuple[str, list]], sf: str):
             y_values,
             width=width,
             label=(
-                f"{parsed_category} Capture"
-                if parsed_category != "SmokedDuck"
-                else "SmokedDuck (Phase I)"
+                (mapping or dict()).get(
+                    category,
+                    (
+                        f"{parsed_category} Capture"
+                        if parsed_category != "SmokedDuck"
+                        else "SmokedDuck"
+                    ),
+                )
             ),
             color=BenchmarkPlot.colors[category_idx],
         )
@@ -316,9 +360,14 @@ def plot_result(fetched_result: list[tuple[str, list]], sf: str):
             y_infer_time_values,
             width=width,
             label=(
-                f"{parsed_category} Backtrace"
-                if parsed_category != "SmokedDuck"
-                else "SmokedDuck (Phase II)"
+                (mapping or dict()).get(
+                    category,
+                    (
+                        f"{parsed_category} Backtrace"
+                        if parsed_category != "SmokedDuck"
+                        else "SmokedDuck"
+                    ),
+                )
             ),
             yerr=y_infer_time_values_error,
         )
@@ -338,22 +387,24 @@ def plot_result(fetched_result: list[tuple[str, list]], sf: str):
                 )
             log_size_incr += 1
 
-    fig_axis.set_ylabel("Relative Overhead (%)")
+    fig_axis.set_ylabel("Rel. Ovh. (%)")
     # fig_axis.set_yscale("log")
     if sf == "1":
-        fig_axis.legend(bbox_to_anchor=(0.95, 0.3))
+        fig_axis.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
     else:
-        fig_axis.legend(loc=(0.95, 0.3))
+        fig_axis.legend()
         # fig_axis.legend(loc="right", bbox_to_anchor=(0.95, 0.3))
 
-    infer_time_axis.set_ylabel("Backtrace Time (s)")
+    infer_time_axis.set_ylabel("Backtrace (s)")
     infer_time_axis.set_yscale("log")
-    infer_time_axis.legend(bbox_to_anchor=(0.95, 1))
+    infer_time_axis.set_xlabel("Query")
+    # infer_time_axis.legend()
 
-    fig_axis.set_xticks(x_axis + width * (len(CATEGORIES) / 2), x_axis_values)
+    fig_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
+    fig_axis.set_yticks([0, 10, 20, 30, 40])
     fig.suptitle(f"Relative Overhead and Backtrace Time for SF={sf}")
 
-    infer_time_axis.set_xticks(x_axis + width * (len(CATEGORIES) / 2), x_axis_values)
+    infer_time_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
     for log_size_axe in log_size_axis:
         log_size_axe.set_xticks(
             x_axis + log_size_width * (len(LOG_SIZE_CATEGORY) / 2), x_axis_values
@@ -366,11 +417,11 @@ def plot_result(fetched_result: list[tuple[str, list]], sf: str):
     log_size_axis[0].set_yscale("log")
     log_size_axis[1].set_yscale("log")
     log_size_axis[2].set_yscale("log")
-    log_size_axis[2].legend(bbox_to_anchor=(0.95, 0.5))
+    log_size_axis[2].legend()
     log_size_fig.suptitle(f"Log Size for SF={sf}")
 
-    stdev_capture_axis.set_xticks(x_axis + width * (len(CATEGORIES) / 2), x_axis_values)
-    stdev_capture_axis.legend(bbox_to_anchor=(0.95, 0.5))
+    stdev_capture_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
+    stdev_capture_axis.legend()
     stdev_capture_axis.set_ylabel("Standard Deviation / Mean")
     stdev_base_axis.set_ylabel("Standard Deviation / Mean")
 
@@ -483,10 +534,24 @@ def main():
     fetched_result = cursor.fetchall()
     for fetched in fetched_result:
         print(fetched[0])
-    fig, log_size_fig, stdev_fig = plot_result(fetched_result, parsed.sf)
-    fig.savefig(out_dir / "capture_backtrace.png")
-    log_size_fig.savefig(out_dir / "log_size.png")
-    stdev_fig.savefig(out_dir / "stdev.png")
+    fig, log_size_fig, stdev_fig = plot_result(
+        fetched_result, parsed.sf, categories=CATEGORIES
+    )
+    fig.savefig(out_dir / "capture_backtrace.pdf", bbox_inches="tight")
+    log_size_fig.savefig(out_dir / "log_size.pdf", bbox_inches="tight")
+    stdev_fig.savefig(out_dir / "stdev.pdf", bbox_inches="tight")
+
+    fig, log_size_fig, stdev_fig = plot_result(
+        fetched_result,
+        parsed.sf,
+        categories=INTERESTING_CATEGORIES,
+        mapping=INTERESTING_CATEGORIES_MAP,
+        width=0.25,
+        figsize=(14, 5),
+    )
+    fig.savefig(out_dir / "interesting_capture_backtrace.pdf", bbox_inches="tight")
+    log_size_fig.savefig(out_dir / "interesting_log_size.pdf", bbox_inches="tight")
+    stdev_fig.savefig(out_dir / "interesting_stdev.pdf", bbox_inches="tight")
 
 
 if __name__ == "__main__":

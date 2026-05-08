@@ -130,8 +130,10 @@ def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
         return handle_q15_base(query_num, query_data)
     base_data = query_data["base"]
     contains_timeout = any("timeout" in item for item in base_data["base"])
-    if contains_timeout or len(base_data) == 0:
-        phase_1 = None
+    if len(base_data) == 0:
+        raise Exception("expected base to be set")
+    if contains_timeout:
+        phase_1 = [dict(explain_time=-1)]
     else:
         phase_1 = [
             dict(explain_time=item["explain_time"]) for item in base_data["base"]
@@ -179,10 +181,19 @@ def handle_muller(query_num: str, query_data: dict) -> dict:
     mat = muller_data["materialize"]
     base_contains_timeout = any("timeout" in item for item in base)
     mat_contains_timeout = any("timeout" in item for item in mat)
-    if base_contains_timeout or mat_contains_timeout or len(base) == 0 or len(mat) == 0:
-        return dict(query_num=query_num, phase_1=None, phase_2=None, log_size=None)
-    phase_1 = [dict(explain_time=item["explain_time"]) for item in base]
-    phase_2 = [dict(time=item["explain_time"]) for item in mat]
+    if len(base) == 0 or len(mat) == 0:
+        raise Exception("Expected to be set!")
+    if base_contains_timeout:
+        phase_1 = [dict(explain_time=-1)]
+    else:
+        phase_1 = [dict(explain_time=item["explain_time"]) for item in base]
+    if mat_contains_timeout:
+        phase_2 = [dict(explain_time=-1) for _ in range(len(phase_1))]
+    else:
+        phase_2 = [
+            dict(time=item["explain_time"])
+            for item in mat
+        ]
     log_size = [
         make_log_size(item["muller_get_log_size"][0]["captured"][0][0])
         for item in muller_data["extras"]
