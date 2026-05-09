@@ -399,7 +399,7 @@ def main():
     parser.add_argument("--sf", required=True)
     parsed = parser.parse_args()
     config = json_read_file(parsed.config, True)
-    out_dir = Path(parsed.out_dir)
+    out_dir = Path(parsed.out_dir) / parsed.sf
     os.makedirs(out_dir, exist_ok=True)
     assert config is not None
     in_dir = Path(parsed.dir)

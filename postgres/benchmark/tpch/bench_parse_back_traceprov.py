@@ -48,6 +48,8 @@ def special_query(
         return None
     key = "traceprov_15_skippable" if is_traceprov else "base_15_skippable"
     assert not is_traceprov or len(layers_to_derive) > 0
+    extra_commands = extra_commands or []
+    extra_commands = [*extra_commands, *enable_join_choices()]
     return Query(
         query_name=query_name,
         extra_commands=extra_commands,
@@ -85,23 +87,49 @@ def special_query(
     )
 
 
+def set_hashjoin(switch: bool):
+    value = "on" if switch else "off"
+    return f"SET enable_hashjoin = {value};"
+
+
+def set_mergejoin(switch: bool):
+    value = "on" if switch else "off"
+    return f"SET enable_mergejoin = {value};"
+
+
+def disable_join_choices():
+    return [set_hashjoin(False), set_mergejoin(False)]
+
+
+def enable_join_choices():
+    return [set_hashjoin(True), set_mergejoin(True)]
+
+
 def make_normal_query(
     query_name: str,
     is_traceprov=False,
     extra_commands: list[str] = None,
     layers_to_derive=[],
     is_validate=False,
+    toggle_join_choices=True,
 ):
     if not is_traceprov:
         return Query(
             query_name=query_name,
             spec=QuerySpec(base="base.sql", key="base"),
+            extra_commands=[*enable_join_choices()],
         )
 
     # don't need to check if we'll dump or not.
     # extras = [TRACEPROV_SYNC_TIME(), TRACEPROV_GET_DERIVATION_SPEC()]
     assert len(layers_to_derive) > 0
     extras = [TRACEPROV_INFER_SPEC(), TRACEPROV_GET_LAYER_SIZE()]
+    extra_commands = extra_commands or []
+
+    if int(query_name) == 4 and toggle_join_choices:
+        extra_commands = [*extra_commands, *disable_join_choices()]
+    else:
+        extra_commands = [*extra_commands, *enable_join_choices()]
     return Query(
         query_name=query_name,
         extra_commands=extra_commands,
@@ -204,6 +232,9 @@ def main():
     )
     parser.add_argument(
         "--dump_graph_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--toggle_join_choices", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
     parsed, _ = parser.parse_known_args()
