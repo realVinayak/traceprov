@@ -888,6 +888,7 @@ void handle_pointer_stats(TraceProvStatistics *old_stats, const struct traceprov
     // During backtrace, we just use them.
     if (aggregate_layer->stats[aggregate_layer->num_pk_records].is_set){
         merge_stats(old_stats, &aggregate_layer->stats[aggregate_layer->num_pk_records]);
+        return;
     }
     // Doesn't really matter if the mask is set or not.
     const uint64_t min_value = TRACEPROV_SET_WORKER_ID((uint64_t)1, rel_args.worker_id);

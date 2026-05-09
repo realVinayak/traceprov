@@ -739,8 +739,12 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
         const int slice_idx = is_reverse ? -1*(cursor + 1) : cursor;
         slice_vector[slice_idx] = row_idx;
         if (traceprov_use_table_stats){
-            bucket_stats[local_bucket].max_value = MAX(bucket_stats[local_bucket].max_value, curr_state->state);
-            bucket_stats[local_bucket].min_value = MAX(bucket_stats[local_bucket].min_value, curr_state->state);
+            TraceProvStatistics local_stats = {
+                .is_set = true,
+                .min_value = curr_state->state,
+                .max_value = curr_state->state
+            };
+            merge_stats(&bucket_stats[local_bucket], &local_stats);
             if (unlikely(is_init)){
                 ++distinct_count[local_bucket];
             }
