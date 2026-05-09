@@ -110,9 +110,17 @@ def tap_simple_result(result: dict):
     )
 
 
+def make_dummy_simple_result(time):
+    return dict(time=time, width=-1, row_count=0)
+
+
 def tap_profile_result(result: dict):
     # to handle old profile results.
     return dict(latency=result["latency"] if "latency" in result else result["timing"])
+
+
+def make_dummy_profile_result(time):
+    return dict(latency=time)
 
 
 def sum_simple_result(left_result: dict, right_result: dict):

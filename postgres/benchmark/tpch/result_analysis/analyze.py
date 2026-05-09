@@ -179,30 +179,31 @@ def handle_muller(query_num: str, query_data: dict) -> dict:
     muller_data = query_data["phase_1_2_combined"]
     base = muller_data["base"]
     mat = muller_data["materialize"]
-    base_contains_timeout = any("timeout" in item for item in base)
+    base_contains_timeout = (
+        any("timeout" in item for item in base) or len(base) == 0 or len(mat) == 0
+    )
     mat_contains_timeout = any("timeout" in item for item in mat)
-    if len(base) == 0 or len(mat) == 0:
-        raise Exception("Expected to be set!")
-    if base_contains_timeout:
+    # if len(base) == 0 or len(mat) == 0:
+    #     raise Exception("Expected to be set!")
+    if base_contains_timeout or mat_contains_timeout:
         phase_1 = [dict(explain_time=-1)]
     else:
         phase_1 = [dict(explain_time=item["explain_time"]) for item in base]
     if mat_contains_timeout:
         phase_2 = [dict(explain_time=-1) for _ in range(len(phase_1))]
     else:
-        phase_2 = [
-            dict(time=item["explain_time"])
-            for item in mat
-        ]
+        phase_2 = [dict(time=item["explain_time"]) for item in mat]
     log_size = [
         make_log_size(item["muller_get_log_size"][0]["captured"][0][0])
         for item in muller_data["extras"]
     ]
+    if len(log_size) < len(phase_1):
+        log_size = None
     args = dict(
         query_num=query_num,
         phase_1=Extendable(phase_1),
         phase_2=Extendable(phase_2),
-        log_size=Extendable(log_size),
+        log_size=Extendable(log_size) if log_size is not None else None,
     )
     return args
 
@@ -277,6 +278,7 @@ def plot_data(
     data = [item for item in data if item[0] in categories]
     result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
     q11_idx = x_axis_values.index("11")
+    pending_bars = []
     for category_idx, (category, catagory_data) in enumerate(result_sorted):
         x_axis_adjusted = (
             x_axis * (len(categories) * width + group_gap) + width * category_idx
@@ -290,8 +292,15 @@ def plot_data(
                 ]
             )
 
+        y_values = _get_key_in_dict("phase_1_explain_time_mean")
+        y_timeout_values = [
+            y_idx for y_idx, y in enumerate(y_values) if -1.5 < y and y < -0.5
+        ]
         phase_all_slowdown = _get_key_in_dict("phase_all_slowdown")
-
+        phase_all_slowdown = [
+            0 if (idx in [*y_timeout_values]) else val
+            for (idx, val) in enumerate(phase_all_slowdown)
+        ]
         slowdown_axis.bar(
             x_axis_adjusted,
             phase_all_slowdown,
@@ -299,8 +308,21 @@ def plot_data(
             label=(category_label_mapping or dict()).get(category, category),
             color=BenchmarkPlot.colors[category_idx],
         )
-
-        slowdown_axis.legend()
+        if y_timeout_values:
+            pending_bars.append(
+                dict(
+                    x=[x_axis_adjusted[idx] for idx in y_timeout_values],
+                    height=10**5,
+                    width=width,
+                    label="Timeout (> 10 min)",
+                    color="lightgray",
+                    hatch="///",
+                    edgecolor="red",
+                )
+            )
+    for bar in pending_bars:
+        slowdown_axis.bar(**bar)
+    slowdown_axis.legend(loc="upper right", bbox_to_anchor=(1.1, 1.2))
 
     slowdown_axis.set_ylim(bottom=0.5, top=100)
     slowdown_axis.annotate(

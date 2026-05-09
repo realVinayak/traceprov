@@ -30,6 +30,7 @@ from traceprovpy.tools.run_duckdb_generic import (
 import duckdb
 
 import matplotlib as mpl
+from matplotlib.patches import Patch
 
 mpl.rcParams.update(
     {
@@ -235,6 +236,26 @@ def null_safe(in_list: list):
     return [0 if i is None else i for i in in_list]
 
 
+ALL_CATEGORIES = [
+    "SmokedDuck",
+    "optimized-y__threads-1",
+    "optimized-y__threads-1__compact-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y__table_stats-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
+    "optimized-y__threads-1__compact-y__partition_in_agg-y",
+    "optimized-y__threads-1__compact-y__partition_in_agg-y__table_stats-y",
+    "optimized-y__threads-1__compact-y__table_stats-y",
+    "optimized-y__threads-1__merge_chunks-y",
+    "optimized-y__threads-1__merge_chunks-y__partition_in_agg-y",
+    "optimized-y__threads-1__merge_chunks-y__partition_in_agg-y__table_stats-y",
+    "optimized-y__threads-1__merge_chunks-y__table_stats-y",
+    "optimized-y__threads-1__partition_in_agg-y",
+    "optimized-y__threads-1__partition_in_agg-y__table_stats-y",
+    "optimized-y__threads-1__table_stats-y",
+]
+
 CATEGORIES = [
     "SmokedDuck",
     "optimized-y__threads-1",
@@ -249,13 +270,15 @@ CATEGORIES = [
 
 INTERESTING_CATEGORIES = [
     "SmokedDuck",
-    "optimized-y__threads-1__compact-y__merge_chunks-y",
-    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y",
+    # "optimized-y__threads-1__compact-y__merge_chunks-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
+    # "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y__table_stats-y",
 ]
 
 INTERESTING_CATEGORIES_MAP = {
-    "optimized-y__threads-1__compact-y__merge_chunks-y": "TraceProv",
-    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y": "TraceProv (Partition)",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y": "TraceProv",
+    "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y__table_stats-y": "TraceProv (Partition)",
 }
 
 LOG_SIZE_CATEGORY = [
@@ -284,10 +307,11 @@ def plot_result(
         2, 1, figsize=(20, 6), sharex=True
     )
     fetched_result = [item for item in fetched_result if item[0] in categories]
-    result_sorted = sorted(fetched_result, key=lambda x: CATEGORIES.index(x[0]))
+    result_sorted = sorted(fetched_result, key=lambda x: categories.index(x[0]))
     log_size_incr = 0
     fig_axis.axhline(y=10, color="r", linestyle="--")
     fig_axis.axhline(y=20, color="r", linestyle="--")
+    extra_labels = dict()
     for category_idx, (category, category_data) in enumerate(result_sorted):
 
         remapped_data = {item["query_num"]: item for item in category_data}
@@ -303,10 +327,79 @@ def plot_result(
                 ]
             )
 
+        def _get_not_present(in_key: str):
+            return list(
+                [
+                    qidx
+                    for qidx, q in enumerate(x_axis_values)
+                    if q not in remapped_data or remapped_data[q][in_key] is None
+                ]
+            )
+
         y_values = _get_key_in_dict("relative_overhead")
         y_infer_time_values = _get_key_in_dict("average_time")
         # y_infer_time_values_error = _get_key_in_dict("mean_stdev")
         y_infer_time_values_error = _get_key_in_dict("max_stdev")
+        not_present = _get_not_present("average_time")
+        print(not_present)
+        if category == "SmokedDuck":
+            # y_values_absent = _get_not_present("relative_overhead")
+            cap_value = 10 ** (-2)
+            for qidx in not_present:
+                x_pos = qidx + width * category_idx
+                infer_time_axis.bar(
+                    x_pos,
+                    cap_value,
+                    width=width,
+                    color="lightgray",
+                    hatch="///",
+                    edgecolor="red",
+                )
+                infer_time_axis.annotate(
+                    "",
+                    xy=(x_pos, cap_value),
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                    color="red",
+                    fontweight="bold",
+                )
+            na_result = Patch(
+                facecolor="lightgray",
+                hatch="///",
+                edgecolor="red",
+                label="Not Available",
+            )
+            extra_labels["Not Available"] = na_result
+        else:
+            cap_value = 10 ** (-2)
+            for qidx in not_present:
+                x_pos = qidx + width * category_idx
+                infer_time_axis.bar(
+                    x_pos,
+                    cap_value,
+                    width=width,
+                    color="lightgray",
+                    hatch="///",
+                    edgecolor="green",
+                )
+                infer_time_axis.annotate(
+                    "",
+                    xy=(x_pos, cap_value),
+                    ha="center",
+                    va="bottom",
+                    fontsize=10,
+                    color="green",
+                    fontweight="bold",
+                )
+            np_result = Patch(
+                facecolor="lightgray",
+                hatch="///",
+                edgecolor="green",
+                label="Not Applicable",
+            )
+            extra_labels["Not Applicable"] = np_result
+
         log_size_values = map(
             _get_key_in_dict,
             [
@@ -390,7 +483,13 @@ def plot_result(
     fig_axis.set_ylabel("Rel. Ovh. (%)")
     # fig_axis.set_yscale("log")
     if sf == "1":
-        fig_axis.legend(loc="upper right", bbox_to_anchor=(1.1, 1.1))
+        handles, labels = fig_axis.get_legend_handles_labels()
+        if extra_labels:
+            handles.extend(extra_labels.values())
+            labels.extend(extra_labels.keys())
+        fig_axis.legend(
+            handles=handles, labels=labels, loc="upper right", bbox_to_anchor=(1.1, 1.5)
+        )
     else:
         fig_axis.legend()
         # fig_axis.legend(loc="right", bbox_to_anchor=(0.95, 0.3))
@@ -398,13 +497,14 @@ def plot_result(
     infer_time_axis.set_ylabel("Backtrace (s)")
     infer_time_axis.set_yscale("log")
     infer_time_axis.set_xlabel("Query")
+
     # infer_time_axis.legend()
 
-    fig_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
+    fig_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     fig_axis.set_yticks([0, 10, 20, 30, 40])
     fig.suptitle(f"Relative Overhead and Backtrace Time for SF={sf}")
 
-    infer_time_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
+    infer_time_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     for log_size_axe in log_size_axis:
         log_size_axe.set_xticks(
             x_axis + log_size_width * (len(LOG_SIZE_CATEGORY) / 2), x_axis_values
