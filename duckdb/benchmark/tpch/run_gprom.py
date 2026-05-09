@@ -101,11 +101,14 @@ def run():
     for query_name in query_repr:
         print(query_name)
         query_name = str(query_name)
+        original_query_name = query_name
         if query_name not in gprom_config:
-            continue
+            query_name = query_name.rjust(2, "0")
+            if query_name not in gprom_config:
+                continue
         g_config_item = gprom_config[query_name]
         result = run_possible_queries(
-            query_name, parsed.mode, g_config_item, parsed, total_iters
+            original_query_name, parsed.mode, g_config_item, parsed, total_iters
         )
         new_result = {**query_results, **result}
         assert len(new_result) > len(query_results), "Got some duplicated keys!"

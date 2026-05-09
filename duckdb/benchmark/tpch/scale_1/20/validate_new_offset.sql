@@ -18,7 +18,10 @@ where
 				from
 					part
 				where
-					p_name like 'forest%'
+					part.rowid in (
+                        select column_1_1
+                        from LAYER_1_%OUT_ID%
+                    )
 			)
 			and ps_availqty > (
 				select
@@ -27,14 +30,19 @@ where
 					lineitem
 				where
 					l_partkey = ps_partkey
-					and l_suppkey = ps_suppkey
-					and l_shipdate >= date '1994-01-01'
-					and l_shipdate < date '1994-01-01' + interval '1' year
+                    and lineitem.rowid in (
+                        select column_1_1
+                        from LAYER_2_%OUT_ID%
+                    )
 			)
+            and partsupp.rowid in (
+                select column_1_1
+                from LAYER_4_%OUT_ID%
+            )
 	)
 	and s_nationkey = n_nationkey
     and (supplier.rowid, nation.rowid) in (
-        select (column_0, column_1)
+        select (column_0, column_2)
         from
             LAYER_5_%OUT_ID%
     )

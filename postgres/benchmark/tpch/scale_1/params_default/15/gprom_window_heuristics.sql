@@ -9,7 +9,7 @@ SELECT F0_0.s_suppkey AS s_suppkey, F1_0.supplier_no AS supplier_no, F1_0.total_
 FROM ((
 SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_suppkey AS prov_supplier_s__suppkey
 FROM supplier F0_0) F0_0 CROSS JOIN (
-SELECT F0_0.l_suppkey AS supplier_no, SUM((F0_0.l_extendedprice * ((1)::NUMERIC - F0_0.l_discount))) OVER (PARTITION BY F0_0.l_suppkey) AS total_revenue, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber
+SELECT F0_0.l_suppkey AS supplier_no, SUM((F0_0.l_extendedprice * ((1)::numeric - F0_0.l_discount))) OVER (PARTITION BY F0_0.l_suppkey) AS total_revenue, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber
 FROM (
 SELECT F0_0.l_suppkey AS l_suppkey, F0_0.l_extendedprice AS l_extendedprice, F0_0.l_discount AS l_discount, F0_0.l_shipdate AS l_shipdate, F0_0.l_orderkey AS prov_lineitem_l__orderkey, F0_0.l_linenumber AS prov_lineitem_l__linenumber
 FROM lineitem F0_0) F0_0
@@ -20,7 +20,7 @@ SELECT F0_0.total_revenue AS total_revenue, F0_0."prov_lineitem_1_l__orderkey" A
 FROM ((
 SELECT F0_0."AGGR_0" AS total_revenue, F0_0."prov_lineitem_1_l__orderkey" AS "prov_lineitem_1_l__orderkey", F0_0."prov_lineitem_1_l__linenumber" AS "prov_lineitem_1_l__linenumber", dense_rank() OVER ( ORDER BY F0_0."AGG_GB_ARG1") AS _result_tid, row_number() OVER (PARTITION BY F0_0."AGG_GB_ARG1" ORDER BY F0_0."AGG_GB_ARG1") AS _setprov_dup_count
 FROM (
-SELECT (F0_0.l_extendedprice * ((1)::NUMERIC - F0_0.l_discount)) AS "AGG_GB_ARG0", F0_0.l_suppkey AS "AGG_GB_ARG1", F0_0."prov_lineitem_1_l__orderkey" AS "prov_lineitem_1_l__orderkey", F0_0."prov_lineitem_1_l__linenumber" AS "prov_lineitem_1_l__linenumber", SUM((F0_0.l_extendedprice * ((1)::NUMERIC - F0_0.l_discount))) OVER (PARTITION BY F0_0.l_suppkey) AS "AGGR_0"
+SELECT (F0_0.l_extendedprice * ((1)::numeric - F0_0.l_discount)) AS "AGG_GB_ARG0", F0_0.l_suppkey AS "AGG_GB_ARG1", F0_0."prov_lineitem_1_l__orderkey" AS "prov_lineitem_1_l__orderkey", F0_0."prov_lineitem_1_l__linenumber" AS "prov_lineitem_1_l__linenumber", SUM((F0_0.l_extendedprice * ((1)::numeric - F0_0.l_discount))) OVER (PARTITION BY F0_0.l_suppkey) AS "AGGR_0"
 FROM (
 SELECT F0_0.l_suppkey AS l_suppkey, F0_0.l_extendedprice AS l_extendedprice, F0_0.l_discount AS l_discount, F0_0.l_shipdate AS l_shipdate, F0_0.l_orderkey AS "prov_lineitem_1_l__orderkey", F0_0.l_linenumber AS "prov_lineitem_1_l__linenumber"
 FROM lineitem F0_0) F0_0

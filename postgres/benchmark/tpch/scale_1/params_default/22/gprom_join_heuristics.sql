@@ -22,7 +22,7 @@ WHERE ((substr(F0_0.c_phone, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
 GROUP BY F0_0."AGG_GB_ARG2") F0_0 JOIN (
 SELECT substr(F0_0.c_phone, 1, 2) AS "_P_SIDE_GROUP_0", F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F0_0."prov_customer_1_c__custkey" AS "prov_customer_1_c__custkey"
 FROM (
-SELECT F0_0.c_custkey AS c_custkey, F0_0.c_phone AS c_phone, F0_0.c_acctbal AS c_acctbal, F0_0."avg(c_acctbal)" AS "avg(c_acctbal)", F1_0."c_custkey1" AS "c_custkey1", F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F0_0."prov_customer_1_c__custkey" AS "prov_customer_1_c__custkey"
+SELECT DISTINCT F0_0.c_custkey AS c_custkey, F0_0.c_phone AS c_phone, F0_0.c_acctbal AS c_acctbal, F0_0."avg(c_acctbal)" AS "avg(c_acctbal)", F1_0."c_custkey1" AS "c_custkey1", F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F0_0."prov_customer_1_c__custkey" AS "prov_customer_1_c__custkey"
 FROM ((
 SELECT F0_0.c_custkey AS c_custkey, F0_0.c_phone AS c_phone, F0_0.c_acctbal AS c_acctbal, F1_0."avg(c_acctbal)" AS "avg(c_acctbal)", F0_0.prov_customer_c__custkey AS prov_customer_c__custkey, F1_0."prov_customer_1_c__custkey" AS "prov_customer_1_c__custkey"
 FROM ((

@@ -81,6 +81,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_force_seq_scan: bool = DriverDefaultValues.traceprov_force_seq_scan
     traceprov_skip_sql_cache: bool = DriverDefaultValues.traceprov_skip_sql_cache
     traceprov_use_table_stats: bool = DriverDefaultValues.traceprov_use_table_stats
+    warm_up_time: int = 0
 
     @staticmethod
     def get_suffix(parsed):
@@ -166,6 +167,7 @@ class DuckDBDriverOptions(NamedTuple):
             type=int,
             default=DuckDBDriverOptions._field_defaults["extra_multiple_count"],
         )
+        parser.add_argument("--warm_up_time", type=int, default=0)
 
     def parse_optimizations(self, parsed):
         optimizations = self._optimizations()

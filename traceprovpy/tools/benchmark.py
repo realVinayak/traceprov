@@ -235,10 +235,12 @@ class QuerySpec(NamedTuple):
             base_extra_results = _run_extras(base_extras_to_run, base_context)
             base_pack.close_all()
             materialize_context = dict()
+            is_timeout = False
             if materialize_pack:
                 materialize_pack = materialize_pack._replace(extras=materialize_context)
                 materialize_time = _run_with_timeout(materialize_pack)
                 assert len(materialize_context) != 0
+                is_timeout = materialize_time is None
 
             if (
                 base_pack.params.throwaway is not None
@@ -247,6 +249,10 @@ class QuerySpec(NamedTuple):
                 if materialize_pack:
                     materialize_pack.close_all()
                 iter_count += 1
+                # Break just at throwaway here.
+                if is_timeout:
+                    results['materialize'].append(dict(timeout=True))
+                    break
                 continue
             results["base"].append(base_time)
 
@@ -276,6 +282,10 @@ class QuerySpec(NamedTuple):
                 results["extras"].append(merged_extra_results)
 
             iter_count += 1
+            # if the materialize query also timed out, also break out
+            if is_timeout:
+                results['materialize'].append(dict(timeout=True))
+                break
 
         return results
 
@@ -398,6 +408,32 @@ class TraceProvOptimizations(NamedTuple):
 TraceProvOptimizationsInstance = TraceProvOptimizations()
 
 
+# Warning: AI generated.
+def delete_traceprov_tables(conn, shared_libraries: list[str]):
+    with conn.cursor() as cur:
+        for shared_lib in shared_libraries:
+            print("Loading: ", shared_lib)
+            cur.execute(f"load '{shared_lib}';")
+        cur.execute("""
+            SELECT tablename 
+            FROM pg_tables 
+            WHERE schemaname = 'public' 
+              AND tablename LIKE 'traceprov_relation_infer_%'
+        """)
+        tables = cur.fetchall()
+
+        if not tables:
+            print("No matching tables found.")
+            return
+
+        for (table_name,) in tables:
+            cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
+            print(f"Dropped table: {table_name}")
+
+        conn.commit()
+        print(f"Done. {len(tables)} table(s) dropped.")
+
+
 class GenericBenchmark(NamedTuple):
     name: str
 
@@ -496,6 +532,16 @@ class GenericBenchmark(NamedTuple):
 
         if "extras" in final_result:
             raise Exception('Expected "extras" to be a reserved keyword.')
+        connection = connection_params.make_connection()
+        delete_traceprov_tables(
+            connection,
+            [
+                setup_bench.traceprov_rewriter_path,
+                setup_bench.traceprov_path,
+                setup_bench.traceprov_infer_set_path,
+            ],
+        )
+        connection.close()
         return final_result
 
     def dump_final_result(self, final_result: dict, out_dir="./results/"):
@@ -575,7 +621,7 @@ class GenericBenchmark(NamedTuple):
             )
         print(directories)
 
-        call_options = (top_dir, directories, connection_params, params)
+        call_options = (top_dir, directories, connection_params, params, init_sql, self_extra_sql)
         # params.validate()
 
         def _get_options_from_query(query: Query):

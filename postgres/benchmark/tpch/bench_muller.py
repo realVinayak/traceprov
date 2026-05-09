@@ -8,6 +8,7 @@ from traceprovpy.tools.benchmark import (
     QuerySpec,
 )
 from traceprovpy.tools.benchmark_utils import (
+    MULLER_GET_LOG_SIZE,
     TRACEPROV_MAKE_TRUNCATE_LOGS,
     traceprov_make_create_view,
     traceprov_make_drop_view,
@@ -59,6 +60,7 @@ def make_query_15(query_name: str, is_rows: bool):
                     capture_output=False,
                     strict_run=False,
                 ),
+                MULLER_GET_LOG_SIZE(),
                 traceprov_make_drop_view("drop_view_phase_1", phase_1_view, True),
                 traceprov_make_drop_view("drop_view_phase_2", phase_2_view, True),
                 TRACEPROV_MAKE_TRUNCATE_LOGS(),
@@ -78,7 +80,7 @@ def make_query(query_name: str, is_rows: bool):
             base="phase_1.sql",
             key="phase_1_2_combined",
             materialize=add_row("phase_2.sql", is_rows),
-            extras=[TRACEPROV_MAKE_TRUNCATE_LOGS()],
+            extras=[MULLER_GET_LOG_SIZE(), TRACEPROV_MAKE_TRUNCATE_LOGS()],
         ),
     )
 

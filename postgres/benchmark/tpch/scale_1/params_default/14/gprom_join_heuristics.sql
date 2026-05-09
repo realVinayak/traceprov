@@ -1,4 +1,13 @@
 
+SELECT F1_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F1_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F1_0.prov_part_p__partkey AS prov_part_p__partkey
+FROM ((
+SELECT count(0) AS __dummy_empty
+FROM ((
+SELECT F0_0.l_partkey AS l_partkey, F0_0.l_shipdate AS l_shipdate
+FROM lineitem F0_0) F0_0 CROSS JOIN (
+SELECT F0_0.p_partkey AS p_partkey
+FROM part F0_0) F1_0)
+WHERE (((F0_0.l_partkey = F1_0.p_partkey) AND (F0_0.l_shipdate >= '1995-09-01')) AND (F0_0.l_shipdate < '1995-10-01'))) F0_0 LEFT OUTER JOIN (
 SELECT F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F0_0.prov_part_p__partkey AS prov_part_p__partkey
 FROM (
 SELECT F0_0.l_partkey AS l_partkey, F0_0.l_shipdate AS l_shipdate, F1_0.p_partkey AS p_partkey, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F1_0.prov_part_p__partkey AS prov_part_p__partkey
@@ -7,6 +16,6 @@ SELECT F0_0.l_partkey AS l_partkey, F0_0.l_shipdate AS l_shipdate, F0_0.l_orderk
 FROM lineitem F0_0) F0_0 CROSS JOIN (
 SELECT F0_0.p_partkey AS p_partkey, F0_0.p_partkey AS prov_part_p__partkey
 FROM part F0_0) F1_0)) F0_0
-WHERE (((F0_0.l_partkey = F0_0.p_partkey) AND (F0_0.l_shipdate >= '1995-09-01')) AND (F0_0.l_shipdate < '1995-10-01'));
+WHERE (((F0_0.l_partkey = F0_0.p_partkey) AND (F0_0.l_shipdate >= '1995-09-01')) AND (F0_0.l_shipdate < '1995-10-01'))) F1_0 ON ((1 = 1)));
 
 

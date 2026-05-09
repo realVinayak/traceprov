@@ -1,18 +1,11 @@
 -- traceprov_agg_key aggregate.
 DROP AGGREGATE IF EXISTS traceprov_agg_key (BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key (int, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (int, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (int, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     int,
     BIGINT,
@@ -22,7 +15,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     int,
     BIGINT,
@@ -33,7 +25,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     int,
     BIGINT,
@@ -45,7 +36,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     int,
     BIGINT,
@@ -58,7 +48,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     int,
     BIGINT,
@@ -72,18 +61,12 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel (
     BIGINT,
     BIGINT
 );
-
 -- traceprov_agg_key_offset aggregate.
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (int, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -93,7 +76,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -104,7 +86,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -116,7 +97,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -129,7 +109,6 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     BIGINT,
     BIGINT
 );
-
 DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -143,28 +122,18 @@ DROP AGGREGATE IF EXISTS traceprov_agg_key_parallel_offset (
     BIGINT,
     BIGINT
 );
-
 -- traceprov_agg_from_ptr aggregate
 DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr (int, int, BIGINT);
-
 DROP AGGREGATE IF EXISTS traceprov_agg_from_ptr_dup_aware (int, int, BIGINT);
-
 -- Functions
 DROP FUNCTION IF EXISTS reinit_state (INTEGER);
-
 -- This is here for historical reasons.
 DROP FUNCTION IF EXISTS reinit_state ();
-
 DROP FUNCTION IF EXISTS test_local_setup (INTEGER, INTEGER);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, bigint);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -173,7 +142,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -183,7 +151,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -194,7 +161,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -206,7 +172,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -219,7 +184,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -233,7 +197,6 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -248,54 +211,32 @@ DROP FUNCTION IF EXISTS traceprov_agg_key_sfunc (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_finalfunc (state bigint);
-
 -- Agg key offset (stores the offset.)
 DROP FUNCTION IF EXISTS traceprov_agg_key_offset_finalfunc (state bigint);
-
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_sfunc (state bigint, INT, INT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_combine (internal, internal);
-
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_serialize (internal);
-
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_deserialize (bytea, internal);
-
 DROP FUNCTION IF EXISTS traceprov_agg_from_ptr_finalfunc (state bigint);
-
 -- serialize and deserialize
 DROP FUNCTION IF EXISTS traceprov_agg_key_serialize (internal);
-
 DROP FUNCTION IF EXISTS traceprov_agg_key_deserialize (bytea, internal);
-
 -- combine
 DROP FUNCTION IF EXISTS traceprov_agg_key_combine (bigint, bigint);
-
 -- nops.
 DROP AGGREGATE IF EXISTS traceprov_nop (int, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_nop_sfunc (state internal, int, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_nop_finalfunc (state internal);
-
 DROP FUNCTION IF EXISTS traceprov_nop_combine (internal, internal);
-
 DROP FUNCTION IF EXISTS traceprov_nop_serialize (internal);
-
 DROP FUNCTION IF EXISTS traceprov_nop_deserialize (bytea, internal);
-
 -- log input->pointers
 DROP FUNCTION IF EXISTS traceprov_make_ptr (INT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_make_ptr (INT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_make_ptr (INT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_make_ptr (INT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_make_ptr (INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_make_ptr (
     INT,
     BIGINT,
@@ -305,17 +246,11 @@ DROP FUNCTION IF EXISTS traceprov_make_ptr (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (INT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (INT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (INT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (INT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (
     INT,
     BIGINT,
@@ -325,7 +260,6 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (
     INT,
     BIGINT,
@@ -336,8 +270,6 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
     BIGINT,
     BIGINT
 );
-
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (
     INT,
     BIGINT,
@@ -349,8 +281,6 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
     BIGINT,
     BIGINT
 );
-
-
 DROP FUNCTION IF EXISTS traceprov_log_entry (
     INT,
     BIGINT,
@@ -363,16 +293,10 @@ DROP FUNCTION IF EXISTS traceprov_log_entry (
     BIGINT,
     BIGINT
 );
-
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (
     INT,
     BIGINT,
@@ -383,7 +307,6 @@ DROP FUNCTION IF EXISTS traceprov_log_entry_n (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_n (
     INT,
     BIGINT,
@@ -395,17 +318,11 @@ DROP FUNCTION IF EXISTS traceprov_log_entry_n (
     BIGINT,
     BIGINT
 );
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (INT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (INT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (INT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (INT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (INT, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT);
-
 DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (
     INT,
     BIGINT,
@@ -415,28 +332,20 @@ DROP FUNCTION IF EXISTS traceprov_log_entry_volatile (
     BIGINT,
     BIGINT
 );
-
 CREATE FUNCTION reinit_state () RETURNS INTEGER AS '$libdir/__FILE__',
 'reinit_state' LANGUAGE C;
-
 CREATE FUNCTION test_local_setup (INTEGER, INTEGER) RETURNS INTEGER AS '$libdir/__FILE__',
 'test_local_setup' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, bigint) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_combine (bigint, bigint) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_combine' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_offset_finalfunc (state bigint) RETURNS bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_offset_finalfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (state bigint, int, BIGINT, BIGINT, BIGINT) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -446,7 +355,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -457,7 +365,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -469,7 +376,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -482,7 +388,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -496,7 +401,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -511,7 +415,6 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_agg_key_sfunc (
     state bigint,
     int,
@@ -527,81 +430,60 @@ CREATE FUNCTION traceprov_agg_key_sfunc (
     BIGINT
 ) returns bigint AS '$libdir/__FILE__',
 'traceprov_agg_key_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_nop_sfunc (state internal, int, BIGINT) RETURNS internal AS '$libdir/__FILE__',
 'traceprov_nop_sfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_nop_finalfunc (state internal) RETURNS bigint AS '$libdir/__FILE__',
 'traceprov_nop_finalfunc' LANGUAGE C;
-
 CREATE FUNCTION traceprov_nop_combine (internal, internal) RETURNS internal AS '$libdir/__FILE__',
 'traceprov_nop_combine' LANGUAGE C;
-
 CREATE FUNCTION traceprov_nop_serialize (internal) RETURNS bytea AS '$libdir/__FILE__',
 'traceprov_nop_serialize' LANGUAGE C;
-
 CREATE FUNCTION traceprov_nop_deserialize (bytea, internal) RETURNS internal AS '$libdir/__FILE__',
 'traceprov_nop_deserialize' LANGUAGE C;
-
 CREATE AGGREGATE traceprov_nop (int, BIGINT) (
     SFUNC = traceprov_nop_sfunc,
-    STYPE= internal,
-
+    STYPE = internal,
     FINALFUNC = traceprov_nop_finalfunc,
     COMBINEFUNC = traceprov_nop_combine,
     SERIALFUNC = traceprov_nop_serialize,
     DESERIALFUNC = traceprov_nop_deserialize,
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
     STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (int, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -612,12 +494,11 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -629,15 +510,11 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -650,15 +527,11 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -672,15 +545,11 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     int,
     BIGINT,
@@ -695,30 +564,21 @@ CREATE AGGREGATE traceprov_agg_key_parallel_offset (
     BIGINT
 ) (
     SFUNC = traceprov_agg_key_sfunc,
-    STYPE= bigint,
-
+    STYPE = bigint,
     FINALFUNC = traceprov_agg_key_offset_finalfunc,
     COMBINEFUNC = traceprov_agg_key_combine,
-    
-
     PARALLEL = SAFE
 );
-
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (
     INTEGER,
     BIGINT,
@@ -730,7 +590,6 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry (
     INTEGER,
     BIGINT,
@@ -741,8 +600,6 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
-
 CREATE FUNCTION traceprov_log_entry (
     INTEGER,
     BIGINT,
@@ -755,8 +612,6 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
-
 CREATE FUNCTION traceprov_log_entry (
     INTEGER,
     BIGINT,
@@ -770,20 +625,14 @@ CREATE FUNCTION traceprov_log_entry (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE STABLE;
-
-
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_n (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_n (
     INTEGER,
     BIGINT,
@@ -795,7 +644,6 @@ CREATE FUNCTION traceprov_log_entry_n (
     BIGINT
 ) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_n (
     INTEGER,
     BIGINT,
@@ -808,22 +656,16 @@ CREATE FUNCTION traceprov_log_entry_n (
     BIGINT
 ) RETURNS BIGINT AS '$libdir/__FILE__',
 'traceprov_log_entry_n' LANGUAGE C PARALLEL SAFE STABLE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (INTEGER, BIGINT, BIGINT, BIGINT, BIGINT, BIGINT) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 CREATE FUNCTION traceprov_log_entry_volatile (
     INTEGER,
     BIGINT,
@@ -834,21 +676,15 @@ CREATE FUNCTION traceprov_log_entry_volatile (
     BIGINT
 ) RETURNS BOOLEAN AS '$libdir/__FILE__',
 'traceprov_log_entry' LANGUAGE C PARALLEL SAFE VOLATILE;
-
 DROP TYPE IF EXISTS traceprov_ptr_type CASCADE;
-
 CREATE FUNCTION traceprov_ptr_type_in (cstring) RETURNS traceprov_ptr_type AS '$libdir/__FILE__',
 'traceprov_ptr_type_in' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_out (traceprov_ptr_type) RETURNS cstring AS '$libdir/__FILE__',
 'traceprov_ptr_type_out' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_recv (internal) RETURNS traceprov_ptr_type AS '$libdir/__FILE__',
 'traceprov_ptr_type_recv' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_send (traceprov_ptr_type) RETURNS bytea AS '$libdir/__FILE__',
 'traceprov_ptr_type_send' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE TYPE traceprov_ptr_type (
     internallength = 8,
     input = traceprov_ptr_type_in,
@@ -858,23 +694,17 @@ CREATE TYPE traceprov_ptr_type (
     alignment = double,
     PASSEDBYVALUE
 );
-
 -- Sort operators.
 CREATE FUNCTION traceprov_ptr_type_lt (traceprov_ptr_type, traceprov_ptr_type) RETURNS bool AS '$libdir/__FILE__',
 'traceprov_ptr_type_lt' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_gt (traceprov_ptr_type, traceprov_ptr_type) RETURNS bool AS '$libdir/__FILE__',
 'traceprov_ptr_type_gt' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_le (traceprov_ptr_type, traceprov_ptr_type) RETURNS bool AS '$libdir/__FILE__',
 'traceprov_ptr_type_le' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_eq (traceprov_ptr_type, traceprov_ptr_type) RETURNS bool AS '$libdir/__FILE__',
 'traceprov_ptr_type_eq' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE FUNCTION traceprov_ptr_type_ge (traceprov_ptr_type, traceprov_ptr_type) RETURNS bool AS '$libdir/__FILE__',
 'traceprov_ptr_type_ge' LANGUAGE C IMMUTABLE STRICT;
-
 CREATE OPERATOR < (
     leftarg = traceprov_ptr_type,
     rightarg = traceprov_ptr_type,
@@ -884,7 +714,6 @@ CREATE OPERATOR < (
     restrict = scalarltsel,
     join = scalarltjoinsel
 );
-
 CREATE OPERATOR <= (
     leftarg = traceprov_ptr_type,
     rightarg = traceprov_ptr_type,
@@ -894,7 +723,6 @@ CREATE OPERATOR <= (
     restrict = scalarlesel,
     join = scalarlejoinsel
 );
-
 CREATE OPERATOR = (
     leftarg = traceprov_ptr_type,
     rightarg = traceprov_ptr_type,
@@ -905,7 +733,6 @@ CREATE OPERATOR = (
     restrict = eqsel,
     join = eqjoinsel
 );
-
 CREATE OPERATOR >= (
     leftarg = traceprov_ptr_type,
     rightarg = traceprov_ptr_type,
@@ -915,7 +742,6 @@ CREATE OPERATOR >= (
     restrict = scalargesel,
     join = scalargejoinsel
 );
-
 CREATE OPERATOR > (
     leftarg = traceprov_ptr_type,
     rightarg = traceprov_ptr_type,
@@ -925,19 +751,34 @@ CREATE OPERATOR > (
     restrict = scalargtsel,
     join = scalargtjoinsel
 );
-
 CREATE FUNCTION traceprov_ptr_type_abs_cmp (traceprov_ptr_type, traceprov_ptr_type) RETURNS int4 AS '$libdir/__FILE__',
 'traceprov_ptr_type_cmp' LANGUAGE C IMMUTABLE STRICT;
-
-CREATE OPERATOR CLASS traceprov_ptr_type_abs_ops DEFAULT FOR
-TYPE traceprov_ptr_type USING btree AS OPERATOR 1 <,
+CREATE OPERATOR CLASS traceprov_ptr_type_abs_ops DEFAULT FOR TYPE traceprov_ptr_type USING btree AS OPERATOR 1 <,
 OPERATOR 2 <=,
 OPERATOR 3 =,
 OPERATOR 4 >=,
 OPERATOR 5 >,
 FUNCTION 1 traceprov_ptr_type_abs_cmp (traceprov_ptr_type, traceprov_ptr_type);
-
 -- Both of the below don't cause a function invocation.
 create cast (traceprov_ptr_type as bigint) without function as implicit;
-
 create cast (bigint as traceprov_ptr_type) without function as implicit;
+-- GProM functions
+CREATE OR REPLACE FUNCTION _tid2int8 (t tid) RETURNS int8 AS $$
+SELECT CASE
+        WHEN t IS NULL THEN NULL
+        ELSE (
+            ((t::text::point) [0]::bigint << 32) | (t::text::point) [1]::bigint
+        )
+    END AS i $$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define MERGE_ROWID_FUNC_NAME POSTGRES_MERGE_ROWID_FUNC
+CREATE OR REPLACE FUNCTION _mergerowid (l int8, r int8) RETURNS int8 AS $$
+SELECT hash_record_extended((l, r), 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define MERGE_ROWID_13_FUNC_NAME POSTGRES_MERGE_ROWID_FUNC
+CREATE OR REPLACE FUNCTION _mergerowid (l int8, r int8) RETURNS int8 AS $$
+SELECT hash_array_extended(ARRAY [l,r], 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+-- #define VARIADIC_HASH_FUNC_NAME POSTGRES_VARIADIC_HASH_FUNC
+CREATE OR REPLACE FUNCTION _variadic_hash (VARIADIC args anyarray) RETURNS text AS $$
+SELECT hash_array_extended(args, 1);
+$$ LANGUAGE SQL IMMUTABLE STRICT;

@@ -17,7 +17,6 @@ from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
-
 random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
@@ -131,6 +130,7 @@ def run_sample_inference(
         traceprov_materialize_derivation=materialize_infer,
         pre_query=pre_query,
         get_log_size=True,
+        warm_up_time=parsed.warm_up_time,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -251,6 +251,7 @@ def run_single_smokedduck(
         profile="./tmp/base_profile_%d.json",
         settings="./tmp/base_settings.json",
         pre_query=pre_query,
+        warm_up_time=parsed.warm_up_time,
     )
     return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
     if return_code != 0:
@@ -449,6 +450,7 @@ def run_sample_inference_smokedduck(
         stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
         main_once_extra_all=True,
+        warm_up_time=parsed.warm_up_time,
     )
 
     rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
@@ -598,6 +600,7 @@ def run_single_query_dry(
         time="./tmp/base_time.json",
         profile="./tmp/base_profile_%d.json",
         settings="./tmp/base_settings.json",
+        warm_up_time=parsed.warm_up_time,
     )
 
     return (exec_str, base_options)
@@ -675,6 +678,7 @@ def run_single(
         settings="./tmp/base_settings.json",
         pending=pending,
         pre_query=pre_query,
+        warm_up_time=parsed.warm_up_time,
     )
 
     traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")

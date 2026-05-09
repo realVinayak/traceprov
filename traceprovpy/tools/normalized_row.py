@@ -29,22 +29,16 @@ def merge(multiples: Iterable[dict]) -> dict:
     return reduce(lambda prev, curr: ({**prev, **curr}), multiples, dict())
 
 
-class NormalizedRow(object):
-    category: str
-    base: Extendable
-    capture: Extendable
-    base_profile: Extendable
-    capture_profile: Extendable
-
-    def keys(self):
-        return {"category", "base", "capture", "base_profile", "capture_profile"}
-
+class Normalizable(object):
     def __init__(self, **kwargs):
         keys = set(self.keys())
         in_keys = kwargs.keys()
         assert keys == in_keys, f"Got different: {keys.symmetric_difference(in_keys)}"
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+    def keys(self):
+        raise Exception("Expected to be implemented")
 
     def normalize(self) -> list[dict]:
         keys = self.keys()
@@ -67,6 +61,17 @@ class NormalizedRow(object):
             for _idx, extended_cell in enumerate(extended, start=1)
         ]
         return rows
+
+
+class NormalizedRow(Normalizable):
+    category: str
+    base: Extendable
+    capture: Extendable
+    base_profile: Extendable
+    capture_profile: Extendable
+
+    def keys(self):
+        return {"category", "base", "capture", "base_profile", "capture_profile"}
 
 
 def extract_bucket_category(file_name: str):
@@ -105,9 +110,17 @@ def tap_simple_result(result: dict):
     )
 
 
+def make_dummy_simple_result(time):
+    return dict(time=time, width=-1, row_count=0)
+
+
 def tap_profile_result(result: dict):
     # to handle old profile results.
     return dict(latency=result["latency"] if "latency" in result else result["timing"])
+
+
+def make_dummy_profile_result(time):
+    return dict(latency=time)
 
 
 def sum_simple_result(left_result: dict, right_result: dict):

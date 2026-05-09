@@ -11,7 +11,7 @@ SELECT F0_0.s_suppkey AS s_suppkey, F0_0.s_suppkey AS prov_supplier_s__suppkey
 FROM supplier F0_0) F0_0 CROSS JOIN (
 SELECT F0_0."GROUP_0" AS supplier_no, F0_0."AGGR_0" AS total_revenue, F1_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey, F1_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber
 FROM ((
-SELECT SUM((F0_0.l_extendedprice * ((1)::NUMERIC - F0_0.l_discount))) AS "AGGR_0", F0_0.l_suppkey AS "GROUP_0"
+SELECT SUM((F0_0.l_extendedprice * ((1)::numeric - F0_0.l_discount))) AS "AGGR_0", F0_0.l_suppkey AS "GROUP_0"
 FROM (
 SELECT F0_0.l_suppkey AS l_suppkey, F0_0.l_extendedprice AS l_extendedprice, F0_0.l_discount AS l_discount, F0_0.l_shipdate AS l_shipdate
 FROM lineitem F0_0) F0_0
@@ -26,7 +26,7 @@ SELECT F0_0."AGGR_0" AS "max(total_revenue)", F1_0."prov_lineitem_1_l__orderkey"
 FROM ((
 SELECT max(F0_0."AGGR_0") AS "AGGR_0"
 FROM (
-SELECT SUM((F0_0.l_extendedprice * ((1)::NUMERIC - F0_0.l_discount))) AS "AGGR_0", F0_0.l_suppkey AS "GROUP_0"
+SELECT SUM((F0_0.l_extendedprice * ((1)::numeric - F0_0.l_discount))) AS "AGGR_0", F0_0.l_suppkey AS "GROUP_0"
 FROM (
 SELECT F0_0.l_suppkey AS l_suppkey, F0_0.l_extendedprice AS l_extendedprice, F0_0.l_discount AS l_discount, F0_0.l_shipdate AS l_shipdate
 FROM lineitem F0_0) F0_0

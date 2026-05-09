@@ -1,0 +1,18 @@
+{
+  "gprom": {
+    "file": "macos_gprom_all_2026_05_05_15_58_07",
+    "handler": "gprom"
+  },
+  "muller": {
+    "file": "macos_muller_log_size_2026_05_05_22_56_29",
+    "handler": "muller"
+  },
+  "traceprov_stats": {
+    "file": "macos_tpch_stats_2026_05_06_00_30_34",
+    "handler": "traceprov"
+  },
+  "traceprov_no_stats": {
+    "file": "macos_tpch_no_stats_2026_05_06_00_24_41",
+    "handler": "traceprov"
+  }
+}
