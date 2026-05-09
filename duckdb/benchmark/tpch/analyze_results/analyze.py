@@ -380,7 +380,7 @@ def plot_result(
                     cap_value,
                     width=width,
                     color="lightgray",
-                    hatch="///",
+                    hatch="...",
                     edgecolor="green",
                 )
                 infer_time_axis.annotate(
@@ -394,7 +394,7 @@ def plot_result(
                 )
             np_result = Patch(
                 facecolor="lightgray",
-                hatch="///",
+                hatch="...",
                 edgecolor="green",
                 label="Not Applicable",
             )
@@ -502,7 +502,7 @@ def plot_result(
 
     fig_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     fig_axis.set_yticks([0, 10, 20, 30, 40])
-    fig.suptitle(f"Relative Overhead and Backtrace Time for SF={sf}")
+    fig.suptitle(f"DuckDB Relative Overhead & Backtrace Time - SF {sf}")
 
     infer_time_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     for log_size_axe in log_size_axis:
