@@ -11,7 +11,10 @@ from traceprovpy.tools.benchmark_utils import (
     infer_gprom_candidates,
     traceprov_dump_safe_results,
 )
-from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
+from traceprovpy.tools.duckdb_parse_options import (
+    make_duckdb_parse,
+    traceprov_handle_suffix,
+)
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_duckdb_generic import (
@@ -38,6 +41,7 @@ def run_possible_queries(
         # first, run it just once with a timeout, to check if it'll finish in timeout or not.
         exec_str, options = run_single_query_dry(query_str.as_posix(), parsed, 1)
         repeat_options = options._replace(repeat=iters)
+        options = options._replace(threads=parsed.threads)
         try:
             sub_result = subprocess.run(
                 [
@@ -85,6 +89,7 @@ def run():
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("-g_cfg", "--gprom_config", required=True, type=str)
     add_gprom_candidates(base_parser)
+    traceprov_handle_suffix(parsed)
 
     parsed = base_parser.parse_args()
     config: dict = json_read_file(parsed.config)
