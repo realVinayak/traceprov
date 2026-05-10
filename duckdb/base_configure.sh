@@ -1,0 +1,1 @@
+CC=clang CXX=clang++ ./configure --with-smokedduck_include=/Users/uicdbgroup/vinny/git_experiments/duckdb_prebuilt --with-smokedduck=/Users/uicdbgroup/vinny/git_experiments/duckdb_prebuilt --prefix=$PWD/bld

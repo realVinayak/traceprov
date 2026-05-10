@@ -1,0 +1,1 @@
+CC=clang CXX=clang++ ./configure --with-smokedduck_include=/Users/uicdbgroup/vinny/git_experiments/sd_smokedduck_2025_f/src/include --with-smokedduck=/Users/uicdbgroup/vinny/git_experiments/sd_smokedduck_2025_f/bld_bench/src --prefix=$PWD/bld --enable-sd_mode
