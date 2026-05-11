@@ -89,9 +89,10 @@ def run():
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("-g_cfg", "--gprom_config", required=True, type=str)
     add_gprom_candidates(base_parser)
-    traceprov_handle_suffix(parsed)
+    # traceprov_handle_suffix(parsed)
 
     parsed = base_parser.parse_args()
+    traceprov_handle_suffix(parsed)
     config: dict = json_read_file(parsed.config)
     assert config is not None
     gprom_config: dict = json_read_file(parsed.gprom_config)
