@@ -1,6 +1,7 @@
 import argparse
 import os
 from pathlib import Path
+from utils import get_filter_group, make_replacer
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_duckdb_generic import (
@@ -19,12 +20,6 @@ import random
 
 # to make sampling reproducible.
 random.seed(10)
-
-
-def get_filter_group(num_groups, selectivity, mode):
-    multiplier = -1 if mode == "pre" else 1
-    print(num_groups * selectivity, "num_gs")
-    return int(selectivity * num_groups / 100) * multiplier
 
 
 def run():
@@ -70,13 +65,9 @@ def run():
             selectivity = get_filter_group(
                 parsed.num_groups, raw_selectivity, parsed.mode
             )
-
-            def replacer(in_sql: str):
-                query_str = in_sql.replace("ROW_COUNT", str(query_dir["num_rows"]))
-                query_str = query_str.replace(":selectivity", str(selectivity))
-                if not parsed.random:
-                    query_str = query_str.replace("_random", "")
-                return query_str
+            replacer = make_replacer(
+                str(query_dir["num_rows"]), selectivity, parsed.random
+            )
 
             just_write(tmp / query / "base.sql", replacer(base_sql))
             just_write(tmp / query / "base_offset.sql", replacer(base_offset_sql))

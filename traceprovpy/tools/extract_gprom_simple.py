@@ -32,6 +32,9 @@ class GpromOptions(NamedTuple):
         parser.add_argument(
             "--is_unnest", action=argparse.BooleanOptionalAction, default=False
         )
+        parser.add_argument(
+            "--backend", choices=["postgres", "duckdb"], default="postgres"
+        )
 
     def to_str(self):
         return f"({self.mode} - {self.heuristics})"

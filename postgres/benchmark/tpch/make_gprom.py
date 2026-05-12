@@ -39,7 +39,6 @@ def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
     parser.add_argument("--dest", type=str)
-    parser.add_argument("--backend", choices=["postgres", "duckdb"], default="postgres")
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
     print("Handling: ", curr_args)

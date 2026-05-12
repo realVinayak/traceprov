@@ -100,3 +100,4 @@ package.json
 common/Makefile
 common/Makefile.in
 common/bld/
+*.tmp.sql
