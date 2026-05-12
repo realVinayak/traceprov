@@ -362,7 +362,7 @@ void extract_partition_info(
 ){
     will_be_dummy = false;
     log_offset = -1;
-    if (extra_info->partition_spec != NULL & ((table_flags & TRACEPROV_TABLE_COMBINE) == 0)){
+    if (extra_info->partition_spec != NULL && ((table_flags & TRACEPROV_TABLE_COMBINE) == 0)){
         auto partition_data = extra_info->partition_spec->partition_data;
         if (partition_data != NULL){
             if (partition_data->find(layer_number) != partition_data->end()){
