@@ -6,7 +6,8 @@ from pathlib import Path
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.extract_gprom_simple import GPROM_OPTIONS_MAPPING
 from traceprovpy.tools.run_duckdb_generic import run_single_query
-from utils import get_filter_group, make_replacer
+from traceprovpy.utils import get_filter_group
+from utils import make_replacer
 from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,

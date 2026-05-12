@@ -1,7 +1,8 @@
 import argparse
 import os
 from pathlib import Path
-from utils import get_filter_group, make_replacer
+from traceprovpy.utils import get_filter_group
+from utils import make_replacer
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_duckdb_generic import (
@@ -29,13 +30,16 @@ def run():
     base_parser.add_argument(
         "--random", action=argparse.BooleanOptionalAction, default=True
     )
+    base_parser.add_argument(
+        "--top_k_mode", action=argparse.BooleanOptionalAction, default=False
+    )
     base_parser.add_argument("--mode", choices=["pre", "post"], default="post")
     parsed = base_parser.parse_args()
 
     result = []
     tmp = Path("./tmp/")
     os.makedirs(tmp, exist_ok=True)
-    total_iters = 10
+
     base_sql = just_read(Path(f"queries/{parsed.mode}_base.sql"))
     base_offset_sql = just_read(Path(f"queries/{parsed.mode}_base_offset.sql"))
     capture_sql = just_read(Path(f"queries/{parsed.mode}_capture.sql"))
@@ -53,20 +57,21 @@ def run():
     validate_sd_new_sql = just_read(Path(f"queries/{parsed.mode}_validate_new_sd.sql"))
     config = json_read_file(parsed.config)
     assert config is not None
-
+    run_time_options = config["runTimeOptions"]
+    total_iters = run_time_options["repeat"] + run_time_options["throwaway"]
     query = "query"
     os.makedirs(tmp / query, exist_ok=True)
     parsed.root = tmp.as_posix()
     parsed.base_root = tmp.as_posix()
-
-    for query_dir in config:
+    replace_clause = ":selectivity" if not parsed.top_k_mode else ":top_k_limit"
+    for query_dir in config["dirs"]:
 
         def run(raw_selectivity):
             selectivity = get_filter_group(
                 parsed.num_groups, raw_selectivity, parsed.mode
             )
             replacer = make_replacer(
-                str(query_dir["num_rows"]), selectivity, parsed.random
+                str(query_dir["num_rows"]), selectivity, parsed.random, replace_clause
             )
 
             just_write(tmp / query / "base.sql", replacer(base_sql))

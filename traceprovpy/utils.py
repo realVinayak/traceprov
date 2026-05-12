@@ -16,6 +16,12 @@ def add_underscores_numbers(input_number: int, chunk_by: int = 3):
     return "_".join(chunks)
 
 
+def get_filter_group(num_groups, selectivity, mode):
+    multiplier = -1 if mode == "pre" else 1
+    print(num_groups * selectivity, "num_gs")
+    return int(selectivity * num_groups / 100) * multiplier
+
+
 if __name__ == "__main__":
     print(add_underscores_numbers(86243234))
     print(add_underscores_numbers(1_000_000))

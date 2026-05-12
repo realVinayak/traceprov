@@ -19,12 +19,7 @@ from traceprovpy.tools.run_with_timeout import (
     ReplaceSelectivity,
     RunParams,
 )
-
-
-def get_filter_group(num_groups, selectivity, mode):
-    multiplier = -1 if mode == "pre" else 1
-    print(num_groups * selectivity, "num_gs")
-    return int(selectivity * num_groups / 100) * multiplier
+from traceprovpy.utils import get_filter_group
 
 
 def make_simple_directory(
