@@ -7,15 +7,10 @@
         {
             "num_rows": "5_000_000",
             "queries": "_all_"
-        },
-        {
-            "num_rows": "10_000_000",
-            "queries": "_all_"
-        },
-        {
-            "num_rows": "50_000_000",
-            "queries": "_all_"
         }
     ],
-    "repeat": 5
+    "runTimeOptions": {
+        "repeat": 5,
+        "throwaway": 1
+    }
 }
