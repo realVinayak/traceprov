@@ -263,7 +263,7 @@ FROM (
                                                                                     F0_0.P_MFGR AS P_MFGR,
                                                                                     F0_0.P_TYPE AS P_TYPE,
                                                                                     F0_0.P_SIZE AS P_SIZE,
-                                                                                    F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                                                                                    F0_0.rowid AS PROV_PART_P__PARTKEY
                                                                                 FROM PART F0_0
                                                                             ) F0_0
                                                                             CROSS JOIN (
