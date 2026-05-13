@@ -1,0 +1,48 @@
+SELECT F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+FROM (
+        (
+            SELECT COUNT(0) AS __DUMMY_EMPTY
+            FROM (
+                    SELECT F0_0.L_QUANTITY AS L_QUANTITY,
+                        F0_0.L_DISCOUNT AS L_DISCOUNT,
+                        F0_0.L_SHIPDATE AS L_SHIPDATE
+                    FROM LINEITEM F0_0
+                ) F0_0
+            WHERE (
+                    (
+                        (
+                            (
+                                (F0_0.L_SHIPDATE >= '1994-01-01')
+                                AND (F0_0.L_SHIPDATE < '1995-01-01')
+                            )
+                            AND (F0_0.L_DISCOUNT >= 0.050000)
+                        )
+                        AND (F0_0.L_DISCOUNT <= 0.070000)
+                    )
+                    AND (F0_0.L_QUANTITY < 24)
+                )
+        ) F0_0
+        LEFT OUTER JOIN (
+            SELECT F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+            FROM (
+                    SELECT F0_0.L_QUANTITY AS L_QUANTITY,
+                        F0_0.L_DISCOUNT AS L_DISCOUNT,
+                        F0_0.L_SHIPDATE AS L_SHIPDATE,
+                        F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
+                    FROM LINEITEM F0_0
+                ) F0_0
+            WHERE (
+                    (
+                        (
+                            (
+                                (F0_0.L_SHIPDATE >= '1994-01-01')
+                                AND (F0_0.L_SHIPDATE < '1995-01-01')
+                            )
+                            AND (F0_0.L_DISCOUNT >= 0.050000)
+                        )
+                        AND (F0_0.L_DISCOUNT <= 0.070000)
+                    )
+                    AND (F0_0.L_QUANTITY < 24)
+                )
+        ) F1_0 ON ((1 = 1))
+    );

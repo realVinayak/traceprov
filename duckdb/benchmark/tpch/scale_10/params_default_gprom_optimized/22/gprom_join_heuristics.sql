@@ -1,0 +1,166 @@
+SELECT F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+    F0_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+FROM (
+        SELECT F0_0."GROUP_0" AS CNTRYCODE,
+            F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F1_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+        FROM (
+                (
+                    SELECT SUBSTR(F0_0.C_PHONE, 1, 2) AS "GROUP_0"
+                    FROM (
+                            SELECT DISTINCT F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                F0_0.C_PHONE AS C_PHONE,
+                                F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                F1_0."AVG(C_ACCTBAL)" AS "AVG(C_ACCTBAL)",
+                                F2_0."C_CUSTKEY1" AS "C_CUSTKEY1"
+                            FROM (
+                                    (
+                                        (
+                                            SELECT F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                                F0_0.C_PHONE AS C_PHONE,
+                                                F0_0.C_ACCTBAL AS C_ACCTBAL
+                                            FROM CUSTOMER F0_0
+                                        ) F0_0
+                                        CROSS JOIN (
+                                            SELECT AVG(F0_0.C_ACCTBAL) AS "AVG(C_ACCTBAL)"
+                                            FROM (
+                                                    SELECT F0_0.C_PHONE AS C_PHONE,
+                                                        F0_0.C_ACCTBAL AS C_ACCTBAL
+                                                    FROM CUSTOMER F0_0
+                                                ) F0_0
+                                            WHERE (
+                                                    (F0_0.C_ACCTBAL > 0.000000)
+                                                    AND SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                                                )
+                                        ) F1_0
+                                    )
+                                    CROSS JOIN (
+                                        (
+                                            SELECT F0_0.C_CUSTKEY AS "C_CUSTKEY1"
+                                            FROM CUSTOMER F0_0
+                                            EXCEPT ALL
+                                            SELECT F0_0.O_CUSTKEY AS O_CUSTKEY
+                                            FROM ORDERS F0_0
+                                        )
+                                    ) F2_0
+                                )
+                        ) F0_0
+                    WHERE (
+                            (
+                                SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                                AND (F0_0.C_ACCTBAL > F0_0."AVG(C_ACCTBAL)")
+                            )
+                            AND (F0_0."C_CUSTKEY1" = F0_0.C_CUSTKEY)
+                        )
+                    GROUP BY SUBSTR(F0_0.C_PHONE, 1, 2)
+                ) F0_0
+                JOIN (
+                    SELECT SUBSTR(F0_0.C_PHONE, 1, 2) AS "_P_SIDE_GROUP_0",
+                        F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                        F0_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                    FROM (
+                            SELECT F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                F0_0.C_PHONE AS C_PHONE,
+                                F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                F0_0."AVG(C_ACCTBAL)" AS "AVG(C_ACCTBAL)",
+                                F1_0."C_CUSTKEY1" AS "C_CUSTKEY1",
+                                F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                                F0_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                            FROM (
+                                    (
+                                        SELECT F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                            F0_0.C_PHONE AS C_PHONE,
+                                            F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                            F1_0."AVG(C_ACCTBAL)" AS "AVG(C_ACCTBAL)",
+                                            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                                            F1_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                                        FROM (
+                                                (
+                                                    SELECT F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                                        F0_0.C_PHONE AS C_PHONE,
+                                                        F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                                        F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
+                                                    FROM CUSTOMER F0_0
+                                                ) F0_0
+                                                CROSS JOIN (
+                                                    SELECT F0_0."AGGR_0" AS "AVG(C_ACCTBAL)",
+                                                        F1_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                                                    FROM (
+                                                            (
+                                                                SELECT AVG(F0_0.C_ACCTBAL) AS "AGGR_0"
+                                                                FROM (
+                                                                        SELECT F0_0.C_PHONE AS C_PHONE,
+                                                                            F0_0.C_ACCTBAL AS C_ACCTBAL
+                                                                        FROM CUSTOMER F0_0
+                                                                    ) F0_0
+                                                                WHERE (
+                                                                        (F0_0.C_ACCTBAL > 0.000000)
+                                                                        AND SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                                                                    )
+                                                            ) F0_0
+                                                            LEFT OUTER JOIN (
+                                                                SELECT F0_0.C_PHONE AS C_PHONE,
+                                                                    F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                                                    F0_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                                                                FROM (
+                                                                        SELECT F0_0.C_PHONE AS C_PHONE,
+                                                                            F0_0.C_ACCTBAL AS C_ACCTBAL,
+                                                                            F0_0.rowid AS "PROV_CUSTOMER_1_C__CUSTKEY"
+                                                                        FROM CUSTOMER F0_0
+                                                                    ) F0_0
+                                                                WHERE (
+                                                                        (F0_0.C_ACCTBAL > 0.000000)
+                                                                        AND SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                                                                    )
+                                                            ) F1_0 ON ((1 = 1))
+                                                        )
+                                                ) F1_0
+                                            )
+                                    ) F0_0
+                                    CROSS JOIN (
+                                        SELECT F0_0."C_CUSTKEY1" AS "C_CUSTKEY1"
+                                        FROM (
+                                                (
+                                                    (
+                                                        SELECT DISTINCT F0_0.C_CUSTKEY AS "C_CUSTKEY1"
+                                                        FROM CUSTOMER F0_0
+                                                        EXCEPT ALL
+                                                        SELECT DISTINCT F0_0.O_CUSTKEY AS O_CUSTKEY
+                                                        FROM ORDERS F0_0
+                                                    )
+                                                ) F0_0
+                                                JOIN (
+                                                    SELECT F0_0.C_CUSTKEY AS "C_CUSTKEY1"
+                                                    FROM CUSTOMER F0_0
+                                                ) F1_0 ON (
+                                                    (
+                                                        (F0_0."C_CUSTKEY1" = F1_0."C_CUSTKEY1")
+                                                        OR (
+                                                            (F0_0."C_CUSTKEY1" IS NULL)
+                                                            AND (F1_0."C_CUSTKEY1" IS NULL)
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                    ) F1_0
+                                )
+                        ) F0_0
+                    WHERE (
+                            (
+                                SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                                AND (F0_0.C_ACCTBAL > F0_0."AVG(C_ACCTBAL)")
+                            )
+                            AND (F0_0."C_CUSTKEY1" = F0_0.C_CUSTKEY)
+                        )
+                ) F1_0 ON (
+                    (
+                        (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
+                        OR (
+                            (F0_0."GROUP_0" IS NULL)
+                            AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
+                        )
+                    )
+                )
+            )
+        ORDER BY CNTRYCODE ASC NULLS LAST
+    ) F0_0;
