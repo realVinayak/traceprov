@@ -26,7 +26,12 @@ from traceprovpy.tools.run_duckdb_generic import (
 
 
 def run_possible_queries(
-    query_name: str, gprom_mode: str, gprom_config: dict, parsed, iters
+    query_name: str,
+    gprom_mode: str,
+    gprom_config: dict,
+    parsed,
+    iters,
+    gprom_query_dir: Path,
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     result = dict()
@@ -34,7 +39,7 @@ def run_possible_queries(
     for valid_spec in valid_specs:
         safe_key = valid_spec.safe_key()
         assert safe_key not in result
-        query = Path("./params_default_gprom") / query_name / f"{safe_key}.sql"
+        query = gprom_query_dir / query_name / f"{safe_key}.sql"
         assert query.exists(), f"Expected {query} to exist!"
         queries[safe_key] = query
     for key, query_str in queries.items():
@@ -87,7 +92,7 @@ def run_possible_queries(
 def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("-cfg", "--config", required=True)
-    base_parser.add_argument("-g_cfg", "--gprom_config", required=True, type=str)
+    base_parser.add_argument("-g_cfg", "--gprom_config", required=False, type=str)
     add_gprom_candidates(base_parser)
     # traceprov_handle_suffix(parsed)
 
@@ -95,15 +100,20 @@ def run():
     traceprov_handle_suffix(parsed)
     config: dict = json_read_file(parsed.config)
     assert config is not None
-    gprom_config: dict = json_read_file(parsed.gprom_config)
-    assert gprom_config is not None
-
     run_time_options = config["runTimeOptions"]
     total_iters = run_time_options["repeat"] + run_time_options["throwaway"]
     query_repr = config["queries"]
     if isinstance(query_repr, str):
         query_repr = eval(query_repr)
     query_results = {}
+    if parsed.optimized:
+        gprom_query_dir = Path("./params_default_gprom_optimized")
+    else:
+        gprom_query_dir = Path("./params_default_gprom")
+
+    gprom_config: dict = json_read_file(gprom_query_dir / "config_gprom_settings.json")
+    assert gprom_config is not None
+
     for query_name in query_repr:
         print(query_name)
         query_name = str(query_name)
@@ -114,7 +124,12 @@ def run():
                 continue
         g_config_item = gprom_config[query_name]
         result = run_possible_queries(
-            original_query_name, parsed.mode, g_config_item, parsed, total_iters
+            original_query_name,
+            parsed.mode,
+            g_config_item,
+            parsed,
+            total_iters,
+            gprom_query_dir,
         )
         new_result = {**query_results, **result}
         assert len(new_result) > len(query_results), "Got some duplicated keys!"
