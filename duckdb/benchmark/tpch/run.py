@@ -91,7 +91,7 @@ def run():
             out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
-                query_id = 4
+                query_id = 3
                 sample_inference_result = run_sample_inference_smokedduck(
                     query_num=query,
                     samples=out_ids,

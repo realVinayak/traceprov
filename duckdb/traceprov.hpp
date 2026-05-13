@@ -65,6 +65,7 @@ using namespace duckdb;
 // Whether to map the memory page via huge page.
 #define TRACEPROV_MAP_HUGE_PAGE 0
 
+// if this is being changed, need to also update the query IDs used in lineage result.
 #define TRACEPROV_DEBUG_PERF 0
 
 #if TRACEPROV_USE_MMEM_PAGE==0
