@@ -17,8 +17,8 @@ from traceprovpy.tools.extract_gprom_simple import (
 from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
-needs_unnest = ["02", "17", "15", "22"]
-needs_lateral = ["02", "17", "11"]
+needs_unnest = ["02", "17", "15", "22", "11"]
+needs_lateral = ["02", "17"]
 
 # needs_unnest = []
 # needs_lateral = []
@@ -39,6 +39,8 @@ def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
     parser.add_argument("--dest", type=str)
+    parser.add_argument("-q", required=False, nargs="*")
+
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
     print("Handling: ", curr_args)
@@ -53,18 +55,18 @@ def main():
         parsed, backend=parsed.backend
     )
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
-    # queries = ["04"]
-    # queries = ["13"]
+    if parsed.q:
+        queries = parsed.q
     passed = defaultdict(dict)
     for query in queries:
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
         for gprom_mode in GPROM_OPTIONS_MAPPING:
             options = GPROM_OPTIONS_MAPPING[gprom_mode]
+            options = options.from_parsed(parsed)
             if query in needs_lateral:
                 options = options._replace(is_lateral=True)
             if query in needs_unnest:
                 options = options._replace(is_unnest=True)
-            options = options.from_parsed(parsed)
             try:
                 gprom_sql = gprom_from_file(
                     options, connection_params, absolute_input_path

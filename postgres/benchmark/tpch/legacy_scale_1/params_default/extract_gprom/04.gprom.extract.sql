@@ -1,4 +1,3 @@
-
 SELECT prov_orders_o__orderkey,
     prov_lineitem_l__linenumber,
     prov_lineitem_l__orderkey
@@ -8,8 +7,7 @@ FROM (
                 count(*) as order_count
             from orders USE PROVENANCE (o_orderkey)
                 join (
-                    SELECT 1,
-                        l_orderkey
+                    SELECT l_orderkey
                     FROM lineitem USE PROVENANCE (l_linenumber, l_orderkey)
                     WHERE l_commitdate < l_receiptdate
                     group by l_orderkey
@@ -20,7 +18,6 @@ FROM (
             order by o_orderpriority
         )
     );
-
 -- NOT DONE --
 -- -- using default substitutions
 -- select
