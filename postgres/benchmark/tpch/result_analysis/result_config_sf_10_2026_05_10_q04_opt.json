@@ -1,0 +1,14 @@
+{
+  "gprom": {
+    "file": "macos_gprom_all_2026_05_08_02_25_56",
+    "handler": "gprom"
+  },
+  "traceprov_stats": {
+    "file": "macos_tpch_q4_special_stats_2026_05_09_18_30_53",
+    "handler": "traceprov"
+  },
+  "traceprov_no_stats": {
+    "file": "macos_tpch_q4_special_2026_05_09_19_26_26",
+    "handler": "traceprov"
+  }
+}

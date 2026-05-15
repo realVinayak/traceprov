@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 from typing import Tuple
 
 from matplotlib import pyplot as plt
@@ -19,25 +20,6 @@ from traceprovpy.tools.normalized_row import Extendable, Normalizable
 
 import duckdb
 from traceprovpy.tools.plot_utils import BenchmarkPlot
-
-mpl.rcParams.update(
-    {
-        # fonts
-        "font.family": "serif",
-        "font.size": 16,
-        "axes.labelsize": 18,
-        "xtick.labelsize": 16,
-        "ytick.labelsize": 16,
-        "legend.fontsize": 15,
-        "axes.titlesize": 18,
-        # cleaner look
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        # lines
-        "lines.linewidth": 2,
-        "patch.linewidth": 1.5,
-    }
-)
 
 
 class NormalizedPgTPCHRow(Normalizable):
@@ -427,6 +409,7 @@ def main():
     cursor.execute(slowdown_sql)
     cursor.close()
     conn.close()
+    just_write(out_dir / "run.txt", " ".join(sys.argv))
     gen_plots(db_file, out_dir, parsed.sf)
 
 
