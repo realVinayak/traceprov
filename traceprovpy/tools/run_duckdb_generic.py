@@ -383,6 +383,12 @@ def validate_query(
     )
 
 
+def run_nice(cmd: str):
+    print("Running without crash: ", cmd)
+    rc = os.system(cmd)
+    return rc
+
+
 def run_sample_inference_smokedduck(
     query_num: str,
     samples: list[int],
@@ -403,7 +409,7 @@ def run_sample_inference_smokedduck(
     query_dir = root / query_num
     base_sql = base_dir / "base.sql"
     exec_str = exe.as_posix()
-    run_cmd = traceprov_assert_safe_run if parsed.crash_on_error else os.system
+    run_cmd = traceprov_assert_safe_run if parsed.crash_on_error else run_nice
     if validate:
         iters = 1
     if pre_base:
@@ -455,7 +461,8 @@ def run_sample_inference_smokedduck(
 
     rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
     if rc != 0:
-        return dict(type="crash_on_capture", return_code=rc)
+        stats = json_read_iters(capture_options.stats, 1)
+        return dict(type="crash_on_capture", return_code=rc, stats=stats)
     capture_result_time = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
@@ -500,11 +507,13 @@ def run_sample_inference_smokedduck(
                 base_out.parts[-1],
             )
 
+    stats = json_read_iters(capture_options.stats, 1)
     return dict(
         result_time=capture_result_time,
         profile=capture_profile_out,
         settings=capture_settings,
         sql_spec_map=sql_spec_map,
+        stats=stats,
     )
 
 
@@ -792,14 +801,14 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
         out_ids = infer_sample_id(base_row_count, parsed)
 
         if parsed.sd_mode:
-            query_id = 4
+            query_id = 3
             sample_inference_result = run_sample_inference_smokedduck(
                 query_num=query,
                 samples=out_ids,
                 query_id=query_id,
                 parsed=parsed,
                 iters=total_iters,
-                pre_query=pre_query,
+                pre_base=None,
             )
         else:
             sample_inference_result = run_sample_inference(
