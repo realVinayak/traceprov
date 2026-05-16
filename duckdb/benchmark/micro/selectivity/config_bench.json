@@ -18,7 +18,7 @@
     }
   ],
   "runTimeOptions": {
-    "repeat": 15,
-    "throwaway": 0
+    "repeat": 30,
+    "throwaway": 5
   }
 }
