@@ -17,17 +17,19 @@ from traceprovpy.tools.extract_gprom_simple import (
 from traceprovpy.tools.file_utils import just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
-needs_unnest = ["02", "17", "15", "22"]
-needs_lateral = ["02", "17", "11"]
+needs_unnest = ["02", "17", "15", "22", "11"]
+needs_lateral = ["02", "17"]
 
 # needs_unnest = []
 # needs_lateral = []
 
 
-def get_file(options: GpromOptions):
+def get_file(options: GpromOptions, parsed):
     flat = ["gprom", options.mode]
     if options.heuristics:
         flat = [*flat, "heuristics"]
+    if parsed.is_all:
+        flat = [*flat, "all"]
     combined = "_".join(flat)
     return f"{combined}.sql"
 
@@ -39,6 +41,9 @@ def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
     parser.add_argument("--dest", type=str)
+    parser.add_argument(
+        "--is_all", action=argparse.BooleanOptionalAction, default=False
+    )
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
     print("Handling: ", curr_args)
@@ -54,10 +59,14 @@ def main():
     )
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
-    # queries = ["13"]
+    # queries = ["11"]
     passed = defaultdict(dict)
     for query in queries:
-        absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
+        if parsed.is_all:
+            absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract_all.sql"
+        else:
+            absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
+        assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
         for gprom_mode in GPROM_OPTIONS_MAPPING:
             options = GPROM_OPTIONS_MAPPING[gprom_mode]
             if query in needs_lateral:
@@ -90,13 +99,13 @@ def main():
 
     for query, query_options in passed.items():
         for option, query_contents in query_options.items():
-            file_name = get_file(option)
+            file_name = get_file(option, parsed)
             if parsed.dest:
                 dest = Path(parsed.dest)
                 abs_file_path: Path = dest / str(int(query)) / file_name
                 os.makedirs(abs_file_path.parent, exist_ok=True)
                 just_write(abs_file_path, query_contents["query"])
-            print(get_file(option))
+            print(get_file(option, parsed))
 
     if parsed.dest:
         config_file: Path = Path(parsed.dest) / "config_gprom.json"
