@@ -13,11 +13,11 @@ WHERE (F0_0.l_commitdate < F0_0.l_receiptdate)) F1_0 ON ((F0_0."GROUP_0" = F1_0.
 temp_view_1 AS (
 SELECT /*+ materialize */ 1 AS "AGG_GB_ARG0", F0_0.o_orderpriority AS "AGG_GB_ARG1", F0_0.prov_orders_o__orderkey AS prov_orders_o__orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey
 FROM (
-SELECT F0_0.o_orderkey AS o_orderkey, F0_0.o_custkey AS o_custkey, F0_0.o_orderstatus AS o_orderstatus, F0_0.o_totalprice AS o_totalprice, F0_0.o_orderdate AS o_orderdate, F0_0.o_orderpriority AS o_orderpriority, F0_0.o_clerk AS o_clerk, F0_0.o_shippriority AS o_shippriority, F0_0.o_comment AS o_comment, F1_0."1" AS "1", F1_0.l_orderkey AS l_orderkey, F0_0.prov_orders_o__orderkey AS prov_orders_o__orderkey, F1_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F1_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey
+SELECT F0_0.o_orderkey AS o_orderkey, F0_0.o_custkey AS o_custkey, F0_0.o_orderstatus AS o_orderstatus, F0_0.o_totalprice AS o_totalprice, F0_0.o_orderdate AS o_orderdate, F0_0.o_orderpriority AS o_orderpriority, F0_0.o_clerk AS o_clerk, F0_0.o_shippriority AS o_shippriority, F0_0.o_comment AS o_comment, F1_0.l_orderkey AS l_orderkey, F0_0.prov_orders_o__orderkey AS prov_orders_o__orderkey, F1_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F1_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey
 FROM ((
 SELECT F0_0.o_orderkey AS o_orderkey, F0_0.o_custkey AS o_custkey, F0_0.o_orderstatus AS o_orderstatus, F0_0.o_totalprice AS o_totalprice, F0_0.o_orderdate AS o_orderdate, F0_0.o_orderpriority AS o_orderpriority, F0_0.o_clerk AS o_clerk, F0_0.o_shippriority AS o_shippriority, F0_0.o_comment AS o_comment, F0_0.o_orderkey AS prov_orders_o__orderkey
 FROM orders F0_0) F0_0 JOIN (
-SELECT 1 AS "1", F0_0."GROUP_0" AS l_orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey
+SELECT F0_0."GROUP_0" AS l_orderkey, F0_0.prov_lineitem_l__linenumber AS prov_lineitem_l__linenumber, F0_0.prov_lineitem_l__orderkey AS prov_lineitem_l__orderkey
 FROM (SELECT * FROM temp_view_2) F0_0) F1_0 ON ((F0_0.o_orderkey = F1_0.l_orderkey)))) F0_0
 WHERE ((F0_0.o_orderdate >= '1993-07-01') AND (F0_0.o_orderdate < '1993-10-01'))),
 temp_view_0 AS (
@@ -25,7 +25,7 @@ SELECT /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0", F0_0."GROUP_0" AS "GROUP_0"
 FROM ((
 SELECT count(1) AS "AGGR_0", F0_0.o_orderpriority AS "GROUP_0"
 FROM (orders F0_0 JOIN (
-SELECT 1 AS "1", F0_0.l_orderkey AS l_orderkey
+SELECT F0_0.l_orderkey AS l_orderkey
 FROM lineitem F0_0
 WHERE (F0_0.l_commitdate < F0_0.l_receiptdate)
 GROUP BY F0_0.l_orderkey) F1_0 ON ((F0_0.o_orderkey = F1_0.l_orderkey)))
