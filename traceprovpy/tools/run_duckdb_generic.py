@@ -157,7 +157,7 @@ def run_sample_inference(
 
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
-            if map_entry == TRACEPROV_CAPTURE_ENTRY:
+            if map_entry[0] == TRACEPROV_CAPTURE_ENTRY:
                 continue
             (_, sample_id, out_id), iter_id = map_entry
             # don't do any validation in this case.
@@ -801,7 +801,7 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
         out_ids = infer_sample_id(base_row_count, parsed)
 
         if parsed.sd_mode:
-            query_id = 3
+            query_id = infer_detailed_option_setting(parsed.exe)
             sample_inference_result = run_sample_inference_smokedduck(
                 query_num=query,
                 samples=out_ids,
@@ -830,6 +830,17 @@ def add_query_options(parser: argparse.ArgumentParser):
     parser.add_argument("--spec", required=True)
     parser.add_argument("--base_root", required=True)
     parser.add_argument("--root", required=True)
+
+
+def infer_detailed_option_setting(executable_path: str):
+    header_file = Path(executable_path).parent / "../../traceprov.hpp"
+    assert header_file.exists(), f"Expected {executable_path} to exist!"
+    header_contents = just_read(header_file)
+    if "#define TRACEPROV_DEBUG_PERF 0" in header_contents:
+        return 3
+    if "#define TRACEPROV_DEBUG_PERF 1" in header_contents:
+        return 4
+    assert False, "didn't expect to reach here!"
 
 
 def main():

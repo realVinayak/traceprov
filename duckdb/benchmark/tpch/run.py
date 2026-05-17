@@ -17,6 +17,7 @@ from traceprovpy.tools.duckdb_parse_options import (
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
     extract_graph_dir,
+    infer_detailed_option_setting,
     infer_sample_id,
     json_read_file,
     run_sample_inference,
@@ -91,7 +92,7 @@ def run():
             out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
-                query_id = 3
+                query_id = infer_detailed_option_setting(parsed.exe)
                 sample_inference_result = run_sample_inference_smokedduck(
                     query_num=query,
                     samples=out_ids,
