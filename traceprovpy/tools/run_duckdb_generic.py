@@ -389,6 +389,57 @@ def run_nice(cmd: str):
     return rc
 
 
+def parse_sd_result_multiple(
+    capture_options: DuckDBDriverOptions, sql_spec_map, extra_sqls
+):
+    capture_result_time = json_read_file(capture_options.time)
+    if capture_options.profile:
+        capture_profile_out = json_read_two_iters(
+            capture_options.profile,
+            range(0, len(extra_sqls) + 1),
+            range(capture_options.repeat),
+        )
+    else:
+        capture_profile_out = None
+    if capture_options.settings:
+        capture_settings = json_read_file(capture_options.settings)
+    else:
+        capture_settings = None
+
+    assert len(capture_result_time) == len(sql_spec_map)
+    stats = json_read_iters(capture_options.stats, 1)
+    return dict(
+        result_time=capture_result_time,
+        profile=capture_profile_out,
+        settings=capture_settings,
+        sql_spec_map=sql_spec_map,
+        stats=stats,
+    )
+
+
+def parse_sd_result_single(capture_options: DuckDBDriverOptions):
+
+    capture_result_time = json_read_file(capture_options.time)
+    capture_profile_out = json_read_iters(
+        capture_options.profile, capture_options.repeat
+    )
+    capture_settings = json_read_file(capture_options.settings)
+
+    collection_size = int(len(capture_result_time) / (capture_options.repeat)) - 1
+    # print(capture_options)
+    capture_result_time, infer_results = extract_extras(
+        capture_result_time, capture_profile_out, capture_options, collection_size
+    )
+    stats = json_read_iters(capture_options.stats, capture_options.repeat)
+    return dict(
+        capture_time=capture_result_time,
+        capture_profile=capture_profile_out,
+        capture_settings=capture_settings,
+        infer_results=infer_results,
+        stats=stats,
+    )
+
+
 def run_sample_inference_smokedduck(
     query_num: str,
     samples: list[int],
@@ -444,41 +495,36 @@ def run_sample_inference_smokedduck(
     sql_spec_map = list(product(sql_spec_map, range(iters)))
     just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
 
+    if parsed.single_row_mode:
+        profile_path = "./tmp/infer_profile_%d.json"
+    else:
+        profile_path = "./tmp/infer_profile_%d_%d.json"
+
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
         threads=parsed.threads,
         i=base_sql.as_posix(),
         time="./tmp/infer_time.json",
-        profile=("./tmp/infer_profile_%d_%d.json"),
-        settings=("./tmp/capture_settings.json"),
+        profile=profile_path,
+        settings="./tmp/capture_settings.json",
         extra_file="./tmp/extra_file.txt",
         stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
-        main_once_extra_all=True,
+        main_once_extra_all=not parsed.single_row_mode,
         warm_up_time=parsed.warm_up_time,
     )
 
     rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
     if rc != 0:
         stats = json_read_iters(capture_options.stats, 1)
-        return dict(type="crash_on_capture", return_code=rc, stats=stats)
-    capture_result_time = json_read_file(capture_options.time)
-    if capture_options.profile:
-        capture_profile_out = json_read_two_iters(
-            capture_options.profile,
-            range(0, len(extra_sqls) + 1),
-            range(capture_options.repeat),
+        final_result = dict(type="crash_on_capture", return_code=rc, stats=stats)
+    elif parsed.single_row_mode:
+        final_result = parse_sd_result_single(capture_options)
+    else:
+        final_result = parse_sd_result_multiple(
+            capture_options, sql_spec_map, extra_sqls
         )
-    else:
-        capture_profile_out = None
-    if capture_options.settings:
-        capture_settings = json_read_file(capture_options.settings)
-    else:
-        capture_settings = None
-
-    assert len(capture_result_time) == len(sql_spec_map)
-
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
             if map_idx == 0:
@@ -507,14 +553,7 @@ def run_sample_inference_smokedduck(
                 base_out.parts[-1],
             )
 
-    stats = json_read_iters(capture_options.stats, 1)
-    return dict(
-        result_time=capture_result_time,
-        profile=capture_profile_out,
-        settings=capture_settings,
-        sql_spec_map=sql_spec_map,
-        stats=stats,
-    )
+    return final_result
 
 
 def extract_extras(
@@ -525,7 +564,7 @@ def extract_extras(
 ):
     # first will be the base.
     # rest will be the extras.
-    assert driver_options.extra_file is None
+    # assert driver_options.extra_file is None
     assert driver_options.extra is None
     collection_size = extra_count + 1
     assert len(time_results) == (collection_size * driver_options.repeat)
@@ -647,7 +686,9 @@ def run_single(
     root = Path(parsed.root)
     validate = parsed.validate
     materialize_infer = parsed.mat_infer
-    run_inference = parsed.infer and parsed.sample_inference is None
+    run_inference = parsed.infer and (
+        parsed.sample_inference is None or parsed.single_row_mode
+    )
     pending = parsed.pending
     use_optimized = parsed.optimized
     use_aggresive_optimized = parsed.agg_optimized
@@ -707,6 +748,10 @@ def run_single(
         extra_multiple_count=extra_multiple_count,
         get_log_size=True,
     ).parse_optimizations(parsed)
+
+    if parsed.single_row_mode:
+        capture_options = capture_options._replace(log_offsets=[0])
+        parsed.sample_inference = None
 
     graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
     os.makedirs(graph_file_dest, exist_ok=True)

@@ -958,7 +958,7 @@ int main(int argc, char **argv){
             auto extra_sqls_clone = (extra_sqls);
             std::vector<TraceProvTableExtra *> table_func_extra;
 
-            const auto spec_result =  augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+            const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
             if (spec_result){
                 curr_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
             }

@@ -36,7 +36,12 @@ def run():
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--query_layer_cfg", required=True)
-
+    base_parser.add_argument(
+        "--single_row_mode",
+        required=False,
+        default=False,
+        action=argparse.BooleanOptionalAction,
+    )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     print("USING SUFFIX --> ", parsed.suff)
@@ -89,7 +94,10 @@ def run():
             else:
                 base_result = query_result["base_time"][0]
             base_row_count: int = base_result["row_count"]
-            out_ids = infer_sample_id(base_row_count, parsed)
+            if parsed.single_row_mode:
+                out_ids = [0]
+            else:
+                out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
                 query_id = infer_detailed_option_setting(parsed.exe)
