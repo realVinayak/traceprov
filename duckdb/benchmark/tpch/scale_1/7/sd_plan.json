@@ -1,0 +1,113 @@
+{
+    "name": "PROJECTION",
+    "opid": "20",
+    "children": [
+        {
+            "name": "ORDER_BY",
+            "opid": "19",
+            "children": [
+                {
+                    "name": "PROJECTION",
+                    "opid": "18",
+                    "children": [
+                        {
+                            "name": "PROJECTION",
+                            "opid": "17",
+                            "children": [
+                                {
+                                    "name": "HASH_GROUP_BY",
+                                    "opid": "16",
+                                    "children": [
+                                        {
+                                            "name": "FILTER",
+                                            "opid": "11",
+                                            "children": [
+                                                {
+                                                    "name": "HASH_JOIN",
+                                                    "opid": "10",
+                                                    "children": [
+                                                        {
+                                                            "name": "HASH_JOIN",
+                                                            "opid": "6",
+                                                            "children": [
+                                                                {
+                                                                    "name": "HASH_JOIN",
+                                                                    "opid": "2",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "SEQ_SCAN ",
+                                                                            "opid": "0",
+                                                                            "children": [],
+                                                                            "extra": ""
+                                                                        },
+                                                                        {
+                                                                            "name": "SEQ_SCAN ",
+                                                                            "opid": "1",
+                                                                            "children": [],
+                                                                            "extra": ""
+                                                                        }
+                                                                    ],
+                                                                    "extra": ""
+                                                                },
+                                                                {
+                                                                    "name": "HASH_JOIN",
+                                                                    "opid": "5",
+                                                                    "children": [
+                                                                        {
+                                                                            "name": "SEQ_SCAN ",
+                                                                            "opid": "3",
+                                                                            "children": [],
+                                                                            "extra": ""
+                                                                        },
+                                                                        {
+                                                                            "name": "SEQ_SCAN ",
+                                                                            "opid": "4",
+                                                                            "children": [],
+                                                                            "extra": ""
+                                                                        }
+                                                                    ],
+                                                                    "extra": ""
+                                                                }
+                                                            ],
+                                                            "extra": ""
+                                                        },
+                                                        {
+                                                            "name": "HASH_JOIN",
+                                                            "opid": "9",
+                                                            "children": [
+                                                                {
+                                                                    "name": "SEQ_SCAN ",
+                                                                    "opid": "7",
+                                                                    "children": [],
+                                                                    "extra": ""
+                                                                },
+                                                                {
+                                                                    "name": "SEQ_SCAN ",
+                                                                    "opid": "8",
+                                                                    "children": [],
+                                                                    "extra": ""
+                                                                }
+                                                            ],
+                                                            "extra": ""
+                                                        }
+                                                    ],
+                                                    "extra": ""
+                                                }
+                                            ],
+                                            "extra": ""
+                                        }
+                                    ],
+                                    "extra": ""
+                                }
+                            ],
+                            "extra": ""
+                        }
+                    ],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}
