@@ -28,7 +28,11 @@ from traceprovpy.tools.normalized_row import (
     tap_profile_result,
     tap_simple_result,
 )
-from traceprovpy.tools.plot_utils import BenchmarkPlot
+from traceprovpy.tools.plot_utils import (
+    BenchmarkPlot,
+    get_unique_handles_labels,
+    setup_tpch_analyzer_parser,
+)
 from traceprovpy.tools.run_duckdb_generic import add_query_options
 import duckdb
 
@@ -529,9 +533,9 @@ def gen_time_plots(
 
 DATA_SPEC_THREADS = lambda threads_count: [
     ("base", threads_count),
-    f"gprom_join_optimized-n__threads-{threads_count}",
-    f"gprom_join_heuristics_optimized-n__threads-{threads_count}",
-    f"gprom_window_optimized-n__threads-{threads_count}",
+    # f"gprom_join_optimized-n__threads-{threads_count}",
+    # f"gprom_join_heuristics_optimized-n__threads-{threads_count}",
+    # f"gprom_window_optimized-n__threads-{threads_count}",
     f"gprom_window_heuristics_optimized-n__threads-{threads_count}",
     f"traceprov_optimized-y__threads-{threads_count}__compact-y__merge_chunks-y__table_stats-y",
 ]
@@ -553,6 +557,8 @@ def gen_generate_shared_plots(
     out_dir: Path,
     labels,
     categories,
+    title,
+    ylabel,
     value_data_key,
     value_median_key,
     needs_extra=False,
@@ -648,34 +654,28 @@ def gen_generate_shared_plots(
         top_plot_axis.axhline(y=1, color="r", linestyle="--")
         top_plot_axis.axhline(y=2, color="r", linestyle="--")
     top_plot_axis.set_yscale("log", base=10)
-    top_plot_axis.set_title(
-        f"End To End Comparison (threads {thread_count}) ({value_data_key.capitalize()})"
-    )
+    time_plot_fig.suptitle(title)
     top_plot_axis.set_xticks(
         x_axis + width * (len(categories) / 2),
         x_axis_values,
     )
-    legend_labels_all = []
-    handles_all = []
-    for _bar_idx, bar in enumerate(pending_bars):
+    top_plot_axis.set_xlabel("Query")
+    top_plot_axis.set_ylabel(ylabel)
+    for bar in pending_bars:
         bar["height"] = timeout_max
         top_plot_axis.bar(**bar)
-        handles, legend_labels = top_plot_axis.get_legend_handles_labels()
-        legend_filtered = list(
-            _idx
-            for (_idx, ll) in enumerate(legend_labels)
-            if (ll not in legend_labels_all)
-        )
-        handles_all.extend(handles[idx] for idx in legend_filtered)
-        legend_labels_all.extend(legend_labels[idx] for idx in legend_filtered)
+
+    legend_labels_all, handles_all = get_unique_handles_labels(top_plot_axis)
     top_plot_axis.legend(
         handles=handles_all,
         labels=legend_labels_all,
         loc="center right",
         bbox_to_anchor=(1.10, 0.95),
+        prop=dict(size=8),
     )
     time_plot_fig.savefig(
-        out_dir / f"end_to_end_comparison_{thread_count}_{value_data_key}.pdf"
+        out_dir / f"end_to_end_comparison_{thread_count}_{value_data_key}.pdf",
+        bbox_inches="tight",
     )
 
 
@@ -754,15 +754,16 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
         value_data_key="phase_total_time",
     )
     interesting_labels = [
-        "GProM Join",
-        "GProM Join Heu.",
-        "GProM Window",
+        # "GProM Join",
+        # "GProM Join Heu.",
+        # "GProM Window",
         "GProM Window Heu.",
         "TraceProv Stats",
     ]
     threads = [1, 2, 4, 8, 10, 12]
     for thread in threads:
         categories = DATA_SPEC_THREADS(thread)
+
         gen_generate_shared_plots(
             thread,
             result_mapped,
@@ -770,6 +771,8 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
             out_dir,
             ["base", *interesting_labels],
             categories,
+            f"End-to-end Time for DuckDB (SF={sf})",
+            "Total end-to-end time (s)",
             value_data_key="phase_total_time_median",
             value_median_key="phase_total_time_stdev",
         )
@@ -778,8 +781,22 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
             result_mapped,
             0.15,
             out_dir,
+            ["base", *interesting_labels],
+            categories,
+            f"Phase 1 Time for DuckDB (SF={sf})",
+            "Phase 1 Time (s)",
+            value_data_key="phase_1_explain_time_median",
+            value_median_key="phase_1_explain_time_stdev",
+        )
+        gen_generate_shared_plots(
+            thread,
+            result_mapped,
+            0.15,
+            out_dir,
             [*interesting_labels],
             categories[1:],
+            f"End-to-end Slowdown for DuckDB (SF={sf})",
+            "Total end-to-end time (s)",
             value_data_key="phase_all_slowdown",
             value_median_key=None,
             needs_extra=True,
@@ -787,41 +804,8 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
 
 
 def main():
-    parser = argparse.ArgumentParser("tpch_analyzer")
-    parser.add_argument("--dir", required=True)
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--out_dir", required=True)
-    parser.add_argument("--sf", required=True)
-    parser.add_argument(
-        "--poster_mode", action=argparse.BooleanOptionalAction, default=False
-    )
-    parser.add_argument(
-        "--use_cache", action=argparse.BooleanOptionalAction, default=False
-    )
-
-    parsed = parser.parse_args()
-    if parsed.poster_mode:
-        mpl.rcParams.update(
-            {
-                # fonts
-                "font.family": "serif",
-                "font.size": 16,
-                "axes.labelsize": 18,
-                "xtick.labelsize": 16,
-                "ytick.labelsize": 16,
-                "legend.fontsize": 15,
-                "axes.titlesize": 18,
-                # cleaner look
-                "axes.spines.top": False,
-                "axes.spines.right": False,
-                # lines
-                "lines.linewidth": 2,
-                "patch.linewidth": 1.5,
-            }
-        )
+    parsed, out_dir = setup_tpch_analyzer_parser(mpl)
     config = json_read_file(parsed.config, True)
-    out_dir = Path(parsed.out_dir) / parsed.sf
-    os.makedirs(out_dir, exist_ok=True)
     assert config is not None
     db_file = out_dir / "analyze.db"
     if not parsed.use_cache:
