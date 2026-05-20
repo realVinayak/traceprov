@@ -1,7 +1,5 @@
 import argparse
-from itertools import product
 from pathlib import Path
-from unittest import result
 
 from traceprovpy.tools.benchmark import (
     GenericBenchmark,
@@ -11,10 +9,8 @@ from traceprovpy.tools.benchmark import (
 )
 from traceprovpy.tools.benchmark_utils import (
     add_gprom_candidates,
-    get_gprom_candidates,
     infer_gprom_candidates,
 )
-from traceprovpy.tools.extract_gprom_simple import GpromOptions
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_with_timeout import RunParams
 
@@ -74,7 +70,7 @@ def main():
     dir_queries.append(QueryDirectory(dir_name=cleaned_dir, queries=subdir_queries))
 
     result = benchmark.run_from_argparse(
-        dir_queries, RunParams(**config.get("runTimeOptions", {})), can_skip_build=False
+        dir_queries, RunParams(**config.get("runTimeOptions", {}))
     )
     result_prefix = result["prefix"]
     result["prefix"] = f"{result_prefix}_{cleaned_dir}"
