@@ -27,9 +27,7 @@ needs_lateral = ["02", "17"]
 def get_file(options: GpromOptions, parsed):
     flat = ["gprom", options.mode]
     if options.heuristics:
-        flat = [*flat, "heuristics"]
-    if parsed.is_all:
-        flat = [*flat, "all"]
+        flat.append("heuristics")
     combined = "_".join(flat)
     return f"{combined}.sql"
 
@@ -43,6 +41,9 @@ def main():
     parser.add_argument("--dest", type=str)
     parser.add_argument(
         "--is_all", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--original", action=argparse.BooleanOptionalAction, default=False
     )
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
@@ -62,11 +63,17 @@ def main():
     # queries = ["11"]
     passed = defaultdict(dict)
     for query in queries:
+        gprom_suffixes = ["extract"]
         if parsed.is_all:
-            absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract_all.sql"
-        else:
-            absolute_input_path = Path(parsed.source) / f"{query}.gprom.extract.sql"
-        assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
+            gprom_suffixes.append("all")
+        if parsed.original:
+            gprom_suffixes.append("original")
+        path = "_".join(gprom_suffixes)
+        absolute_input_path = Path(parsed.source) / f"{query}.gprom.{path}.sql"
+        if not absolute_input_path.exists():
+            print("Skipping: ", absolute_input_path)
+            continue
+        # assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
         for gprom_mode in GPROM_OPTIONS_MAPPING:
             options = GPROM_OPTIONS_MAPPING[gprom_mode]
             if query in needs_lateral:
@@ -116,6 +123,7 @@ def main():
             }
             for (query, query_options) in passed.items()
         }
+        passed_remap["call_mode"] = dict(all=parsed.is_all, original=parsed.original)
         just_write(config_file, json.dumps(passed_remap))
 
     # print(json.dumps(passed))

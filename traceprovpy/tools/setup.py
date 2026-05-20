@@ -13,11 +13,12 @@ def traceprov_setup(
     sd_include_path: str = "",
     sd_num_threads: None | int = None,
     sd_create_idx: bool = False,
+    can_skip_build=False,
 ):
     assert suff is not None
 
     skip_build = int(os.getenv("tp_skip_build", "0"))
-    if not skip_build:
+    if not skip_build and not can_skip_build:
         build_and_install = f"./build_and_install.sh {suff}"
         if sd_lib_path:
             assert sd_include_path

@@ -1,5 +1,6 @@
 import argparse
 from itertools import product
+from pathlib import Path
 from unittest import result
 
 from traceprovpy.tools.benchmark import (
@@ -37,41 +38,48 @@ def main():
     benchmark = GenericBenchmark("tpch-driver-gprom")
     parser = argparse.ArgumentParser(prog="tpch-driver")
     parser.add_argument("-cfg", "--config", required=True, type=str)
-    parser.add_argument("-g_cfg", "--gprom_config", required=True, type=str)
+    parser.add_argument("-t_root", "--test_root", required=True)
+    parser.add_argument("--dir", required=True)
     # Useful for debugging.
     add_gprom_candidates(parser)
     parsed, _ = parser.parse_known_args()
     config = json_read_file(parsed.config)
     assert config is not None
-    gprom_config = json_read_file(parsed.gprom_config)
+    subdirs = config["subdirs"]
+    assert len(subdirs) == 1
+    gprom_config_file = Path(parsed.test_root) / (parsed.dir) / "config_gprom.json"
+    gprom_config = json_read_file(gprom_config_file)
     assert gprom_config is not None
 
     # Figure out which queries to include now.
     dir_queries = []
-
-    for subdir in config["subdirs"]:
-        subdir_queries = []
-        query_repr = config["queries"]
-        if isinstance(query_repr, str):
-            query_repr = eval(query_repr)
-        for query_name in query_repr:
-            print(query_name)
-            query_name = str(query_name)
-            original_query_name = query_name
+    cleaned_dir = Path(parsed.dir).name
+    assert "/" not in cleaned_dir
+    subdir_queries = []
+    query_repr = config["queries"]
+    if isinstance(query_repr, str):
+        query_repr = eval(query_repr)
+    for query_name in query_repr:
+        print(query_name)
+        query_name = str(query_name)
+        original_query_name = query_name
+        if query_name not in gprom_config:
+            query_name = query_name.rjust(2, "0")
             if query_name not in gprom_config:
-                query_name = query_name.rjust(2, "0")
-                if query_name not in gprom_config:
-                    continue
-            g_config_item = gprom_config[query_name]
-            subdir_queries.extend(
-                make_gprom_query(original_query_name, parsed.mode, g_config_item)
-            )
-        dir_queries.append(QueryDirectory(dir_name=subdir, queries=subdir_queries))
+                continue
+        g_config_item = gprom_config[query_name]
+        subdir_queries.extend(
+            make_gprom_query(original_query_name, parsed.mode, g_config_item)
+        )
+    dir_queries.append(QueryDirectory(dir_name=cleaned_dir, queries=subdir_queries))
 
     result = benchmark.run_from_argparse(
-        dir_queries, RunParams(**config.get("runTimeOptions", {}))
+        dir_queries, RunParams(**config.get("runTimeOptions", {})), can_skip_build=False
     )
+    result_prefix = result["prefix"]
+    result["prefix"] = f"{result_prefix}_{cleaned_dir}"
     result["extras"] = dict(config=parsed.config)
+    result["call_options"] = gprom_config["call_mode"]
     benchmark.dump_final_result(result)
 
 

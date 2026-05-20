@@ -251,7 +251,7 @@ class QuerySpec(NamedTuple):
                 iter_count += 1
                 # Break just at throwaway here.
                 if is_timeout:
-                    results['materialize'].append(dict(timeout=True))
+                    results["materialize"].append(dict(timeout=True))
                     break
                 continue
             results["base"].append(base_time)
@@ -284,7 +284,7 @@ class QuerySpec(NamedTuple):
             iter_count += 1
             # if the materialize query also timed out, also break out
             if is_timeout:
-                results['materialize'].append(dict(timeout=True))
+                results["materialize"].append(dict(timeout=True))
                 break
 
         return results
@@ -453,6 +453,7 @@ class GenericBenchmark(NamedTuple):
         params=RunParams(),
         parser=None,
         init_sql: list[str] = None,
+        can_skip_build=False,
     ):
         if len(directories) == 0:
             raise Exception("Trying to run test without any dirs!")
@@ -509,6 +510,7 @@ class GenericBenchmark(NamedTuple):
             parsed.sd_include,
             parsed.sd_num_threads,
             parsed.sd_create_idx,
+            can_skip_build,
         )
         local_optimization_instance = TraceProvOptimizations.make_from_parsed(parsed)
         start = time.perf_counter()
@@ -580,6 +582,7 @@ class GenericBenchmark(NamedTuple):
         sd_include_path: str = "",
         sd_num_threads: int | None = None,
         sd_create_idx: bool = False,
+        can_skip_build=False,
     ):
         setup_response = traceprov_setup(
             suff or self.name,
@@ -589,6 +592,7 @@ class GenericBenchmark(NamedTuple):
             sd_include_path,
             sd_num_threads,
             sd_create_idx,
+            can_skip_build,
         )
 
         return self._replace(**setup_response)
@@ -621,7 +625,14 @@ class GenericBenchmark(NamedTuple):
             )
         print(directories)
 
-        call_options = (top_dir, directories, connection_params, params, init_sql, self_extra_sql)
+        call_options = (
+            top_dir,
+            directories,
+            connection_params,
+            params,
+            init_sql,
+            self_extra_sql,
+        )
         # params.validate()
 
         def _get_options_from_query(query: Query):
