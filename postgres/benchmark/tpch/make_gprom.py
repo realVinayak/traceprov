@@ -14,7 +14,7 @@ from traceprovpy.tools.extract_gprom_simple import (
     GpromOptions,
     gprom_from_file,
 )
-from traceprovpy.tools.file_utils import just_write
+from traceprovpy.tools.file_utils import just_read, just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
 needs_unnest = ["02", "17", "15", "22", "11"]
@@ -35,6 +35,20 @@ def get_file(options: GpromOptions, parsed):
 import sys
 
 
+def handle_special_cases(parsed, query_path: Path, query_num: str):
+    # Previously, I was against an approach like this, because it is hacky.
+    # for this case, it is fine (just the extraction -- all the other places handle it the old way)
+    if int(query_num) != 11 or parsed.sf != 10:
+        return query_path
+    sf_10_value = "0.0000100000"
+    sf_1_value = "0.0001000000"
+    query_contents = just_read(query_path)
+    occur_count = query_contents.count(sf_1_value)
+    assert occur_count == 1, f"Got {occur_count} occurences"
+    query_contents = query_contents.replace(sf_1_value, sf_10_value)
+    return just_write("/tmp/query_11_adjusted.sql", query_contents)
+
+
 def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
@@ -45,6 +59,7 @@ def main():
     parser.add_argument(
         "--original", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument("--sf", type=int, required=True)
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
     print("Handling: ", curr_args)
@@ -74,6 +89,7 @@ def main():
             print("Skipping: ", absolute_input_path)
             continue
         # assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
+        absolute_input_path = handle_special_cases(parsed, absolute_input_path, query)
         for gprom_mode in GPROM_OPTIONS_MAPPING:
             options = GPROM_OPTIONS_MAPPING[gprom_mode]
             if query in needs_lateral:
@@ -104,18 +120,22 @@ def main():
                 print(e)
                 print(f"Failed explain check!: ", query, options)
 
+    out_path = (
+        None
+        if parsed.dest is None
+        else Path(parsed.dest) / parsed.backend / str(parsed.sf)
+    )
     for query, query_options in passed.items():
         for option, query_contents in query_options.items():
             file_name = get_file(option, parsed)
-            if parsed.dest:
-                dest = Path(parsed.dest)
-                abs_file_path: Path = dest / str(int(query)) / file_name
+            if out_path:
+                abs_file_path: Path = out_path / str(int(query)) / file_name
                 os.makedirs(abs_file_path.parent, exist_ok=True)
                 just_write(abs_file_path, query_contents["query"])
             print(get_file(option, parsed))
 
-    if parsed.dest:
-        config_file: Path = Path(parsed.dest) / "config_gprom.json"
+    if out_path:
+        config_file: Path = out_path / "config_gprom.json"
         passed_remap = {
             query: {
                 option.to_str(): dict(passed=option_data["passed"])
