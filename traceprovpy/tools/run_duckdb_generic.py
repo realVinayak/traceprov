@@ -17,6 +17,8 @@ from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
+import re
+
 random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
@@ -204,6 +206,43 @@ def get_is_new_sd(parsed):
     return parsed.sd_mode == "new"
 
 
+TICKER_REGEX = r"traceprov_lineage_\d+"
+
+
+def sub_view(in_query: str, query_id: int):
+    return in_query.replace("QID", str(query_id))
+
+
+def is_ticker_end(line_content: str):
+    match = re.search(TICKER_REGEX, line_content)
+    if match:
+        return match.group(0)
+    return None
+
+
+DEFAULT_TICKER = "traceprov_lineage_1"
+
+
+def parse_backtrace_queries(in_path: Path):
+    queries = []
+    pending_query = ""
+    last_ticker = None
+    contents = just_read(in_path).splitlines(keepends=True)
+    for content in contents:
+        ticker_end = is_ticker_end(content)
+        if ticker_end:
+            if pending_query:
+                queries.append((last_ticker or DEFAULT_TICKER, pending_query))
+                pending_query = ""
+            last_ticker = ticker_end
+            continue
+        pending_query += content
+    if pending_query:
+        queries.append((last_ticker or DEFAULT_TICKER, pending_query))
+    print(queries)
+    return {val[0]: val[1] for val in queries}
+
+
 def run_single_smokedduck(
     query_num: str,
     parsed,
@@ -217,9 +256,7 @@ def run_single_smokedduck(
     root = Path(parsed.root)
     validate = parsed.validate
     materialize_infer = parsed.mat_infer
-    run_inference = (
-        parsed.infer and parsed.sample_inference is None and parsed.sd_mode != "old"
-    )
+    run_inference = parsed.infer and parsed.sample_inference is None
     is_new_sd = get_is_new_sd(parsed)
     run_sd = parsed.sample_inference is None
 
@@ -228,7 +265,7 @@ def run_single_smokedduck(
     )
     crash_on_error = parsed.crash_on_error
 
-    run_cmd = traceprov_assert_safe_run if crash_on_error else os.system
+    run_cmd = traceprov_assert_safe_run if crash_on_error else run_nice
 
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -252,6 +289,7 @@ def run_single_smokedduck(
         settings="./tmp/base_settings.json",
         pre_query=pre_query,
         warm_up_time=parsed.warm_up_time,
+        extra_multiple_count=1,
     )
     return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
     if return_code != 0:
@@ -272,23 +310,56 @@ def run_single_smokedduck(
     )
 
     extras = []
+
+    def run_new_sd():
+        infer_sql = "select * from read_block(0)"
+        if materialize_infer or validate:
+            if materialize_infer:
+                # so that it's easier to differniate them :)
+                table = f"LAYER_1_{query_num}_new_sd"
+            else:
+                table = f"LAYER_1"
+            infer_sql = f"create or replace table {table} AS ({infer_sql})"
+
+        return [
+            just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
+            just_write("./tmp/run_infer.sql", infer_sql),
+        ]
+
+    def run_old_sd():
+        thread_combined_sql = base_dir / f"sd_thread_{parsed.threads}_combined.sql"
+        backtrace_queries = parse_backtrace_queries(thread_combined_sql)
+        query_id = infer_detailed_option_setting(exe)
+        backtrace_queries_sub = {
+            key: sub_view(q, query_id) for (key, q) in backtrace_queries.items()
+        }
+        _extras = []
+        for idx, (lineage_table_name, lineage_query) in enumerate(
+            backtrace_queries_sub.items()
+        ):
+            if materialize_infer or validate:
+                backtrace_sql = [
+                    f"create or replace table {lineage_table_name} AS (",
+                    lineage_query.replace(";", ""),
+                    ");",
+                ]
+            else:
+                backtrace_sql = [lineage_query]
+            backtrace_joined = "\n".join(backtrace_sql)
+            _extras.append(
+                just_write(
+                    Path("./tmp/") / f"sd_capture_{idx}_{lineage_table_name}.sql",
+                    backtrace_joined,
+                )
+            )
+        return _extras
+
     if run_inference:
         if is_new_sd:
-            infer_sql = "select * from read_block(0)"
-            if materialize_infer or validate:
-                if materialize_infer:
-                    # so that it's easier to differniate them :)
-                    table = f"LAYER_1_{query_num}_new_sd"
-                else:
-                    table = f"LAYER_1"
-                infer_sql = f"create or replace table {table} AS ({infer_sql})"
-
-            extras = [
-                just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
-                just_write("./tmp/run_infer.sql", infer_sql),
-            ]
+            extras = run_new_sd()
         else:
-            assert 0, "not supported yet, use sample inference branch"
+            # vooho.
+            extras = run_old_sd()
 
     capture_result_time = None
     capture_profile_out = None
@@ -311,20 +382,19 @@ def run_single_smokedduck(
 
             if validate:
                 if is_new_sd:
-                    validate_query(
-                        root / query_num,
-                        "validate_new_sd.sql",
-                        capture_options.db,
-                        exec_str,
-                    )
+                    validate_query_name = "validate_new_sd.sql"
                 else:
-                    assert (
-                        0
-                    ), "no validaton support in this call path for old smokedduck"
+                    validate_query_name = "validate_new.sql"
+                validate_query(
+                    root / query_num, validate_query_name, capture_options.db, exec_str
+                )
 
             if run_inference:
                 capture_result_time, infer_results = extract_extras(
-                    capture_result_time, capture_profile_out, capture_options
+                    capture_result_time,
+                    capture_profile_out,
+                    capture_options,
+                    len(extras),
                 )
             else:
                 infer_results = None
@@ -882,9 +952,9 @@ def infer_detailed_option_setting(executable_path: str):
     assert header_file.exists(), f"Expected {executable_path} to exist!"
     header_contents = just_read(header_file)
     if "#define TRACEPROV_DEBUG_PERF 0" in header_contents:
-        return 3
+        return 0
     if "#define TRACEPROV_DEBUG_PERF 1" in header_contents:
-        return 4
+        return 1
     assert False, "didn't expect to reach here!"
 
 

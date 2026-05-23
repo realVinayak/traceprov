@@ -13,7 +13,7 @@ FROM supplier,
 			) AS total_revenue
 		FROM lineitem
 		WHERE lineitem.rowid in (
-				select iid from LAYER_1_SD_%OUT_ID% where "table" = 6
+				select iid from LAYER_1_SD_%OUT_ID% where "table" = 1
 			)
 		GROUP BY lineitem.l_suppkey
 	) revenue0
@@ -33,7 +33,7 @@ WHERE (
 									) AS total_revenue
 								FROM lineitem
 								WHERE lineitem.rowid in (
-										select iid from LAYER_1_SD_%OUT_ID% where "table" = 1
+										select iid from LAYER_1_SD_%OUT_ID% where "table" = 6
 									)
 								GROUP BY lineitem.l_suppkey
 							) revenue0_1

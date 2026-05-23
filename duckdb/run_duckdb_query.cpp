@@ -51,12 +51,37 @@ extern "C" {
 #define TP_DISABLE_LINEAGE_NEW "PRAGMA set_lineage(False)"
 #define TP_CLEAR_LINEAGE_NEW TP_CLEAR_LINEAGE
 
-#define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
+#define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list()) TO '%s'"
 #define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
 
 #define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
 #define TP_LAYER_STATS_OUTPUT(QUERY, OUT) ("copy (select * from (" + QUERY + ")) to '" + OUT + "'")
+
+
+void wrapped_enable_lineage();
+void wrapped_disable_lineage();
+void wrapped_clear_lineage();
+
+// Add dummy definitions.
+#if TRACEPROV_SD_MODE==0
+void wrapped_enable_lineage(){}
+void wrapped_disable_lineage(){};
+void wrapped_clear_lineage(){};
+#else
+//  Ugh.
+#define LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+void wrapped_enable_lineage(){
+    duckdb::gEnableLineage();
+}
+void wrapped_disable_lineage(){
+    duckdb::gDisableLineage();
+};
+void wrapped_clear_lineage(){
+    duckdb::gClearLineage();
+};
+#endif
 
 typedef struct TraceProvLogExtra {
     // what is the log offset?
@@ -517,11 +542,6 @@ PerformQueryResult *perform_query(
     }
 
 
-    if (options->capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
-    }
-
     if (IS_SET(options->profile_out_path) && final_profile_out != NULL){
         DUCKDB_RUN_SHORT_QUERY(con, (options->query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
         #if TRACEPROV_DEBUG_PERF==1
@@ -530,6 +550,12 @@ PerformQueryResult *perform_query(
         DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
     }
 
+    if (options->capture_lineage){
+        wrapped_clear_lineage();
+        wrapped_enable_lineage();
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
+    }
 
     // Need to use both, the pending and the streaming API.
     duckdb_prepared_statement stmt = NULL;
@@ -602,12 +628,13 @@ PerformQueryResult *perform_query(
         agg_result->push_back(result);
     }
 
+    if (options->capture_lineage){
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
+        wrapped_disable_lineage();
+    }
+
     // This needs to run before anything else bc of overwrites.
     DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
-
-    if (options->capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
-    }
 
     std::cout << "Chunks: " << chunk_count;
 
@@ -620,7 +647,7 @@ PerformQueryResult *perform_query(
             if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
                 std::cout << duckdb_prepare_error(stmt) << std::endl;
             }
-            DUCKDB_EXIT_ON_ERROR(duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
+            (duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
             DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
             duckdb_destroy_result(&final_result);
             duckdb_destroy_prepare(&stmt);

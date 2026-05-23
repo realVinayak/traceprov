@@ -16,7 +16,10 @@ from lineage_view(1, 24) t_24
     join lineage_view(1, 17) t_17 on t_21.in_index = t_17.out_index
     join lineage_view(1, 16) t_16 on t_17.in_index = t_16.out_index
     join lineage_view(1, 8) t_8 on t_16.lhs_index = t_8.out_index
-    join lineage_view(1, 0) t_0 on t_8.lhs_index = t_0.out_index;
+    join lineage_view(1, 0) t_0 on t_8.lhs_index = t_0.out_index
+    join lineage_view(1, 7) t_7 on t_8.rhs_index = t_7.out_index
+    join lineage_view(1, 6) t_6 on t_7.in_index = t_6.out_index
+    join lineage_view(1, 1) t_1 on t_6.lhs_index = t_1.out_index;
 ---
 select t_24.out_index,
     t_1.in_index
