@@ -22,6 +22,7 @@ DROP FUNCTION IF EXISTS traceprov_perf_read (INT, BIGINT);
 drop function if EXISTS traceprov_perform_duckdb_inference_fast (BIGINT);
 drop function if EXISTS traceprov_get_generic_derivation_spec (BOOLEAN);
 DROP FUNCTION IF EXISTS traceprov_prepare_for_scan();
+DROP FUNCTION IF EXISTS traceprov_prepare_for_scan(BIGINT);
 DROP FUNCTION IF EXISTS traceprov_run_duckdb_query(cstring);
 DROP function if EXISTS traceprov_tableam_handler(internal) CASCADE;
 DROP ACCESS METHOD IF EXISTS traceprov_am CASCADE;
@@ -76,6 +77,8 @@ CREATE FUNCTION traceprov_perform_duckdb_inference_fast (BIGINT) RETURNS SETOF r
 'traceprov_perform_duckdb_inference_fast' LANGUAGE C STRICT PARALLEL SAFE;
 CREATE FUNCTION traceprov_get_generic_derivation_spec (BOOLEAN) RETURNS text AS '$libdir/__FILE__',
 'traceprov_get_generic_derivation_spec' LANGUAGE C STRICT PARALLEL SAFE;
+CREATE FUNCTION traceprov_prepare_for_scan (BIGINT) RETURNS text AS '$libdir/__FILE__',
+'traceprov_prepare_for_scan' LANGUAGE C STRICT PARALLEL SAFE;
 CREATE FUNCTION traceprov_prepare_for_scan () RETURNS text AS '$libdir/__FILE__',
 'traceprov_prepare_for_scan' LANGUAGE C STRICT PARALLEL SAFE;
 CREATE FUNCTION traceprov_run_duckdb_query (cstring) RETURNS SETOF record AS '$libdir/__FILE__',
