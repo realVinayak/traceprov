@@ -361,6 +361,8 @@ class QueryLimitQuerySpec(QuerySpec):
             ],
         )
         result = _run_with_timeout(back_pack)
+        if result is None:
+            return dict(timeout=True)
         filtered_dict = {
             key: value
             for (key, value) in result["captured"][0].items()

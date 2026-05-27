@@ -37,6 +37,11 @@ def make_duckdb_parse():
     parser.add_argument(
         "--backtrace_all_sd", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--single_row_mode",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+    )
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
 

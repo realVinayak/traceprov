@@ -247,13 +247,18 @@ TO_QUOTE_STRING = [str, date]
 
 
 def get_value(value: Any):
-    if value is None:
-        return "NULL"
+    assert value is not None
     if type(value) in TO_STRING:
         return str(value)
     if type(value) in TO_QUOTE_STRING:
         return f"'{value}'"
     assert False, f"Got unhandled value: {value}, {type(value)}"
+
+
+def make_predicate(key, value):
+    if value is None:
+        return f"{key} is NULL"
+    return f"{key} = {get_value(value)}"
 
 
 class MakeKeySelection(Preprocessor):
@@ -262,8 +267,7 @@ class MakeKeySelection(Preprocessor):
 
     def get_predicate(self):
         predicates = [
-            f"{key} IS NOT DISTINCT FROM {get_value(value)}"
-            for (key, value) in self.filter_pack.items()
+            make_predicate(key, value) for (key, value) in self.filter_pack.items()
         ]
         combined = " and ".join(predicates)
         return combined
@@ -414,6 +418,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
                 cursor.close()
                 cursor = connection.cursor(cursor_factory=RealDictCursor)
 
+            cursor.execute(timeout_stmt)
             cursor.execute(flattend_sql_query)
             try:
                 captured_result = cursor.fetchall()
