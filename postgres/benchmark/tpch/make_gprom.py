@@ -93,6 +93,9 @@ def main():
     parser.add_argument(
         "--add_keys", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--optimized", action=argparse.BooleanOptionalAction, default=False
+    )
     parser.add_argument("--sf", type=int, required=True)
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
@@ -118,6 +121,8 @@ def main():
             gprom_suffixes.append("all")
         if parsed.original:
             gprom_suffixes.append("original")
+        if parsed.optimized:
+            gprom_suffixes.append("optimized")
         path = "_".join(gprom_suffixes)
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.{path}.sql"
         if not absolute_input_path.exists():
@@ -180,7 +185,10 @@ def main():
             for (query, query_options) in passed.items()
         }
         passed_remap["call_mode"] = dict(
-            all=parsed.is_all, original=parsed.original, is_keys=parsed.add_keys
+            all=parsed.is_all,
+            original=parsed.original,
+            is_keys=parsed.add_keys,
+            optimized=parsed.optimized,
         )
         just_write(config_file, json.dumps(passed_remap))
 
