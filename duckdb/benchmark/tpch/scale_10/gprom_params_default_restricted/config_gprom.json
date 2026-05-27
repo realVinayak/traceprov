@@ -1,1 +1,419 @@
-{"01": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "02": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "03": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "04": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "05": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "06": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "07": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "08": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "09": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "10": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "11": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "12": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "13": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "14": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "16": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "17": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "18": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "19": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "20": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "21": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join_composable - False)": {"passed": true}}, "22": {"(join - False)": {"passed": true}, "(window - False)": {"passed": true}, "(join - True)": {"passed": true}, "(window - True)": {"passed": true}, "(join_composable - False)": {"passed": true}, "(join_composable - True)": {"passed": true}}, "call_mode": {"all": false, "original": false, "is_keys": false}}
+{
+    "01": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "02": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "03": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "04": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "05": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "06": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "07": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "08": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "09": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "10": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "11": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "12": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "13": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "14": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "16": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "17": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "18": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "19": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "20": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "21": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        }
+    },
+    "22": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
+    "call_mode": {
+        "all": false,
+        "original": false,
+        "is_keys": false,
+        "optimized": false
+    }
+}
