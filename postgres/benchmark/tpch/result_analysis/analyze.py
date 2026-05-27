@@ -124,7 +124,11 @@ def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
     if query_num == "15" and handle_special:
         return handle_q15_base(query_num, query_data)
     base_data = query_data["base"]
-    contains_timeout = any("timeout" in item for item in base_data["base"])
+    contains_timeout = (
+        any("timeout" in item for item in base_data["base"])
+        if "base" in base_data
+        else "timeout" in base_data
+    )
     if len(base_data) == 0:
         raise Exception("expected base to be set")
     if contains_timeout:
@@ -227,7 +231,8 @@ class ResultAnalyzer:
                 base_row_args = handle_base(
                     query_num, dict(base=category_data), handle_special=False
                 )
-                base_args = {**base_row_args, "category": category}
+                category_key = f"{key}_{category}"
+                base_args = {**base_row_args, "category": category_key}
                 rows.append(NormalizedPgTPCHRow(**base_args))
         return rows
 
