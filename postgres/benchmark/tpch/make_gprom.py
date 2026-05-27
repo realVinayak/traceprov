@@ -115,7 +115,7 @@ def main():
     )
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
-    # queries = ["11"]
+    # queries = ["21"]
     # queries = ["22"]
     passed = defaultdict(dict)
     gprom_suffixes = ["extract"]
@@ -167,7 +167,7 @@ def main():
     out_path = (
         None
         if parsed.dest is None
-        else Path(parsed.dest) / path / parsed.backend / str(parsed.sf)
+        else Path(parsed.dest) / parsed.backend / str(parsed.sf)
     )
     for query, query_options in passed.items():
         for option, query_contents in query_options.items():
