@@ -3,7 +3,7 @@ PROVENANCE OF (
 	select s_name,
 		count(*) as numwait
 	from supplier USE PROVENANCE (s_suppkey),
-		lineitem USE PROVENANCE (l_orderkey, l_linenumber) l1,
+		lineitem USE PROVENANCE (l_orderkey) l1,
 		orders USE PROVENANCE (o_orderkey),
 		nation USE PROVENANCE (n_nationkey)
 	where s_suppkey = l1.l_suppkey
@@ -12,13 +12,13 @@ PROVENANCE OF (
 		and l1.l_receiptdate > l1.l_commitdate
 		and exists (
 			select *
-			from lineitem USE PROVENANCE (l_orderkey, l_linenumber) l2
+			from lineitem USE PROVENANCE (l_orderkey) l2
 			where l2.l_orderkey = l1.l_orderkey
 				and l2.l_suppkey <> l1.l_suppkey
 		)
 		and not exists (
 			select *
-			from lineitem USE PROVENANCE (l_orderkey, l_linenumber) l3
+			from lineitem USE PROVENANCE (l_orderkey) l3
 			where l3.l_orderkey = l1.l_orderkey
 				and l3.l_suppkey <> l1.l_suppkey
 				and l3.l_receiptdate > l3.l_commitdate

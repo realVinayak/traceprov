@@ -1,5 +1,4 @@
 SELECT prov_partsupp_ps__partkey,
-	prov_partsupp_ps__suppkey,
 	prov_part_p__partkey
 FROM (
 		PROVENANCE OF (
@@ -7,7 +6,7 @@ FROM (
 				p_type,
 				p_size,
 				count(distinct ps_suppkey) as supplier_cnt
-			from partsupp USE PROVENANCE (ps_partkey, ps_suppkey),
+			from partsupp USE PROVENANCE (ps_partkey),
 				part USE PROVENANCE (p_partkey)
 			where p_partkey = ps_partkey
 				and p_brand <> 'Brand#45'
