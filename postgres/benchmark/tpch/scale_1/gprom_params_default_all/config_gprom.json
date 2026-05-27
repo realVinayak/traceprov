@@ -279,26 +279,6 @@
             "passed": true
         }
     },
-    "15": {
-        "(join - False)": {
-            "passed": true
-        },
-        "(window - False)": {
-            "passed": true
-        },
-        "(join - True)": {
-            "passed": true
-        },
-        "(window - True)": {
-            "passed": true
-        },
-        "(join_composable - False)": {
-            "passed": true
-        },
-        "(join_composable - True)": {
-            "passed": true
-        }
-    },
     "16": {
         "(join - False)": {
             "passed": true
@@ -411,12 +391,25 @@
         "(join - False)": {
             "passed": true
         },
+        "(window - False)": {
+            "passed": true
+        },
         "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
             "passed": true
         }
     },
     "call_mode": {
         "all": true,
-        "original": false
+        "original": false,
+        "is_keys": false
     }
 }

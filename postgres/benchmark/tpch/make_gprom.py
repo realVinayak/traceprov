@@ -110,7 +110,7 @@ def main():
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
     # queries = ["11"]
-    queries = ["22"]
+    # queries = ["22"]
     passed = defaultdict(dict)
     for query in queries:
         gprom_suffixes = ["extract"]
