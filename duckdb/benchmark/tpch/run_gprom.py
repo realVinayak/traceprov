@@ -1,4 +1,5 @@
 # gprom driver.
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -16,13 +17,43 @@ from traceprovpy.tools.duckdb_parse_options import (
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
-from traceprovpy.tools.file_utils import json_read_file
+from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
     infer_option_results,
     run_single_query,
     run_single_query_dry,
 )
+from traceprovpy.tools.run_with_timeout import MakeKeySelection
+
+
+def handle_rewrite_single_row_mode(query_name: str, query_str: Path, temp_dir: Path):
+    query = just_read(query_str)
+    query_out_path = temp_dir / "query_out.json"
+    query_rewritten = temp_dir / f"query_rewritten_{query_name}.sql"
+    query = query.replace(";", "")
+    query = f"copy (select * from ({query}) LIMIT 1 OFFSET 0) to '{query_out_path.as_posix()}'"
+    just_write(query_rewritten, query)
+    return query_rewritten, query_out_path
+
+
+def add_predicates(
+    query_name: str, query_path: Path, result_path: Path, temp_dir: Path
+):
+    query_result = json_read_file(result_path)
+    print(query_result)
+    assert isinstance(query_result, dict)
+    query = just_read(query_path)
+    filter_pack = {
+        key: value
+        for (key, value) in query_result.items()
+        if not key.lower().startswith("prov_")
+    }
+    preprocessor = MakeKeySelection(filter_pack)
+    filtered = preprocessor.preprocess(query)
+    query_rewritten_file = temp_dir / f"filtered_{query_name}.sql"
+    just_write(query_rewritten_file, filtered)
+    return query_rewritten_file
 
 
 def run_possible_queries(
@@ -32,6 +63,7 @@ def run_possible_queries(
     parsed,
     iters,
     gprom_query_dir: Path,
+    temp_dir: Path,
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     result = dict()
@@ -44,6 +76,11 @@ def run_possible_queries(
         queries[safe_key] = query
     for key, query_str in queries.items():
         # first, run it just once with a timeout, to check if it'll finish in timeout or not.
+        original_query_str = query_str
+        if parsed.single_row_mode:
+            query_str, query_out_path = handle_rewrite_single_row_mode(
+                query_name, query_str, temp_dir
+            )
         exec_str, options = run_single_query_dry(query_str.as_posix(), parsed, 1)
         repeat_options = options._replace(repeat=iters)
         options = options._replace(threads=parsed.threads)
@@ -66,6 +103,12 @@ def run_possible_queries(
         if sub_result.returncode != 0:
             result[key] = dict(errorcode=sub_result.returncode)
             continue
+
+        if parsed.single_row_mode:
+            filtered = add_predicates(
+                query_name, original_query_str, query_out_path, temp_dir
+            )
+            repeat_options = repeat_options._replace(i=filtered.as_posix())
 
         try:
             later_sub_result = subprocess.run(
@@ -92,7 +135,8 @@ def run_possible_queries(
 def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("-cfg", "--config", required=True)
-    base_parser.add_argument("-g_cfg", "--gprom_config", required=False, type=str)
+    base_parser.add_argument("--dir", required=True)
+    base_parser.add_argument("--temp_dir", required=False, default="./tmp/")
     add_gprom_candidates(base_parser)
     # traceprov_handle_suffix(parsed)
 
@@ -106,14 +150,14 @@ def run():
     if isinstance(query_repr, str):
         query_repr = eval(query_repr)
     query_results = {}
-    if parsed.optimized:
-        gprom_query_dir = Path("./params_default_gprom_optimized")
-    else:
-        gprom_query_dir = Path("./params_default_gprom")
+    gprom_query_dir = Path(parsed.dir)
+    assert not parsed.optimized or "optimized" in str(gprom_query_dir)
 
-    gprom_config: dict = json_read_file(gprom_query_dir / "config_gprom_settings.json")
+    gprom_config: dict = json_read_file(gprom_query_dir / "config_gprom.json")
     assert gprom_config is not None
 
+    temp_dir = Path(parsed.temp_dir)
+    os.makedirs(temp_dir, exist_ok=True)
     for query_name in query_repr:
         print(query_name)
         query_name = str(query_name)
@@ -130,6 +174,7 @@ def run():
             parsed,
             total_iters,
             gprom_query_dir,
+            temp_dir,
         )
         new_result = {**query_results, **result}
         assert len(new_result) > len(query_results), "Got some duplicated keys!"

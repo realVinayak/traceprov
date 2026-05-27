@@ -36,12 +36,6 @@ def run():
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--query_layer_cfg", required=True)
-    base_parser.add_argument(
-        "--single_row_mode",
-        required=False,
-        default=False,
-        action=argparse.BooleanOptionalAction,
-    )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     print("USING SUFFIX --> ", parsed.suff)
