@@ -14,10 +14,12 @@ from traceprovpy.tools.extract_gprom_simple import (
     GpromOptions,
     gprom_from_file,
 )
-from traceprovpy.tools.file_utils import just_read, just_write
+from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
 from traceprovpy.tools.run_with_timeout import ConnectionParams
 
-needs_unnest = ["02", "17", "15", "22", "11"]
+import re
+
+needs_unnest = ["02", "17", "15", "11"]
 needs_lateral = ["02", "17"]
 
 # needs_unnest = []
@@ -46,7 +48,36 @@ def handle_special_cases(parsed, query_path: Path, query_num: str):
     occur_count = query_contents.count(sf_1_value)
     assert occur_count == 1, f"Got {occur_count} occurences"
     query_contents = query_contents.replace(sf_1_value, sf_10_value)
-    return just_write("/tmp/query_11_adjusted.sql", query_contents)
+    os.makedirs("./tmp/adjusted", exist_ok=True)
+    return just_write("./tmp/adjusted/query_11_adjusted.sql", query_contents)
+
+
+def handle_keys(parsed, query_path: Path, in_query_num: str):
+    if not parsed.add_keys:
+        return query_path
+    raw_file = just_read(query_path)
+    all_keys = json_read_file(Path(parsed.source) / "keys.json")
+    assert all_keys
+    for query_num, query_keys in all_keys.items():
+        if int(query_num) == int(in_query_num):
+            break
+    else:
+        raise Exception(f"Expected to find: {in_query_num}")
+    regexes = [
+        (r"FROM\s*\(\n*\s*PROVENANCE", "FROM"),
+        (r"from\s*\(\n*\s*PROVENANCE", "from"),
+    ]
+    for regex in regexes:
+        if re.search(regex[0], raw_file):
+            break
+    else:
+        raise Exception(f"Expected to match either in {query_path}")
+    split = raw_file.split(regex[1], maxsplit=1)
+    assert len(split) == 2
+    with_keys = ",".join([split[0], *query_keys])
+    new_sql = [with_keys, " from ", split[1]]
+    query_contents = "\n".join(new_sql)
+    return just_write(f"/tmp/query_keys_{in_query_num}.sql", query_contents)
 
 
 def main():
@@ -58,6 +89,9 @@ def main():
     )
     parser.add_argument(
         "--original", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--add_keys", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument("--sf", type=int, required=True)
     GpromOptions.add_parse_options(parser)
@@ -76,6 +110,7 @@ def main():
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
     # queries = ["11"]
+    queries = ["22"]
     passed = defaultdict(dict)
     for query in queries:
         gprom_suffixes = ["extract"]
@@ -90,6 +125,7 @@ def main():
             continue
         # assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
         absolute_input_path = handle_special_cases(parsed, absolute_input_path, query)
+        absolute_input_path = handle_keys(parsed, absolute_input_path, query)
         for gprom_mode in GPROM_OPTIONS_MAPPING:
             options = GPROM_OPTIONS_MAPPING[gprom_mode]
             if query in needs_lateral:
@@ -143,7 +179,9 @@ def main():
             }
             for (query, query_options) in passed.items()
         }
-        passed_remap["call_mode"] = dict(all=parsed.is_all, original=parsed.original)
+        passed_remap["call_mode"] = dict(
+            all=parsed.is_all, original=parsed.original, is_keys=parsed.add_keys
+        )
         just_write(config_file, json.dumps(passed_remap))
 
     # print(json.dumps(passed))

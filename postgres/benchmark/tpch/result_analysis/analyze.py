@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 from typing import Tuple
 
 from matplotlib import pyplot as plt
@@ -103,12 +104,20 @@ def handle_traceprov(query_num: str, query_data: dict) -> dict:
 def handle_q15_base(query_num: str, query_data: dict) -> dict:
     base_data = query_data["base_15_skippable"]
     phase_1 = [
-        dict(explain_time=item["base"][0]["explain_time"])
+        dict(
+            explain_time=item["base"][0]["explain_time"],
+            row_count=item["base"][0]["complete_plan"],
+        )
         for item in base_data["extras"]
     ]
     return dict(
         query_num=query_num, phase_1=Extendable(phase_1), phase_2=None, log_size=None
     )
+
+
+def parse_row_count(complete_plan):
+    plan = json.loads(complete_plan)
+    return plan["Plan"]["Actual Rows"]
 
 
 def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
@@ -122,7 +131,11 @@ def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
         phase_1 = [dict(explain_time=-1)]
     else:
         phase_1 = [
-            dict(explain_time=item["explain_time"]) for item in base_data["base"]
+            dict(
+                explain_time=item["explain_time"],
+                row_count=parse_row_count(item["complete_plan"]),
+            )
+            for item in base_data["base"]
         ]
     return dict(
         query_num=query_num,
@@ -194,6 +207,11 @@ def handle_muller(query_num: str, query_data: dict) -> dict:
     return args
 
 
+def get_first(result):
+    assert len(result) == 1
+    return list(result.values())[0]
+
+
 class ResultAnalyzer:
 
     def __init__(self):
@@ -202,7 +220,7 @@ class ResultAnalyzer:
     def gprom(self, key: str, path: Path) -> list[NormalizedPgTPCHRow]:
         print("Handling GProM!", key)
         result = json_read_file(path, True)
-        query_results = result["result"]["params_default"]
+        query_results = get_first(result["result"])
         rows: list[NormalizedPgTPCHRow] = []
         for query_num, query_data in query_results.items():
             for category, category_data in query_data.items():
@@ -231,7 +249,7 @@ class ResultAnalyzer:
     ) -> list[NormalizedPgTPCHRow]:
         print("Handling TraceProv!", key)
         result = json_read_file(path, True)
-        query_results = result["result"]["params_default"]
+        query_results = get_first(result["result"])
         base_rows: list[NormalizedPgTPCHRow] = []
         traceprov_rows: list[NormalizedPgTPCHRow] = []
         for query_num, query_data in query_results.items():
@@ -457,6 +475,8 @@ def main():
     cursor.execute(slowdown_sql)
     cursor.close()
     conn.close()
+    call_options = " ".join(sys.argv)
+    just_write(out_dir / "call_options.txt", call_options)
     gen_plots(db_file, out_dir, parsed.sf)
 
 
