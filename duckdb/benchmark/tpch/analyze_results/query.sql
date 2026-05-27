@@ -42,7 +42,7 @@ from (
             stddev(log_sizes_page_requested_size) as log_sizes_page_requested_size_stdev,
             stddev(log_sizes_page_used_size) as log_sizes_page_used_size_stdev,
             stddev(log_sizes_bytes_used_size) as log_sizes_bytes_used_size_stdev,
-            any_value(average_time) as average_time,
+            any_value(average_time + index_build_time) as average_time,
             any_value(max_stdev_ratio) as max_stdev_ratio,
             any_value(max_stdev) as max_stdev,
             any_value(mean_stdev) as mean_stdev
