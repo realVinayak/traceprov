@@ -237,3 +237,9 @@ def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
         if config_spec["passed"]:
             valid_specs.append(cand)
     return valid_specs
+
+
+def parse_queries(query_repr):
+    if isinstance(query_repr, str):
+        query_repr = eval(query_repr)
+    return query_repr

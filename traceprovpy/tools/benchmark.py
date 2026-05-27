@@ -24,6 +24,8 @@ from traceprovpy.tools.file_utils import just_write, traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     ConnectionParams,
+    MakeKeySelection,
+    MakeLimitOne,
     MakeTraceProv,
     MatMaterialize,
     Preprocessor,
@@ -343,6 +345,33 @@ class SketchValidationQuerySpec(QuerySpec):
         cursor.close()
         con.close()
         return 0
+
+
+class QueryLimitQuerySpec(QuerySpec):
+
+    def run_packs(self, top_dir, get_run_options, benchmark):
+        original_pack = self.get_pack(top_dir, self.base, get_run_options)
+        back_pack = original_pack._replace(
+            use_dict_cursor=True,
+            capture_output=True,
+            strict_run=True,
+            preprocessors=[
+                *(original_pack.preprocessors or []),
+                MakeLimitOne(offset=0),
+            ],
+        )
+        result = _run_with_timeout(back_pack)
+        filtered_dict = {
+            key: value
+            for (key, value) in result["captured"][0].items()
+            if not (key.lower().startswith("prov_"))
+        }
+        make_selection_preprocessor = MakeKeySelection(filter_pack=filtered_dict)
+        new_query = QuerySpec(*self)
+        new_query = new_query._replace(
+            preprocess=[*(self.preprocess or []), make_selection_preprocessor]
+        )
+        return new_query.run_packs(top_dir, get_run_options, benchmark)
 
 
 class Query(NamedTuple):

@@ -7,11 +7,15 @@ from traceprovpy.tools.run_with_timeout import RunWithTimeoutOptions, run_with_t
 
 TRACEPROV_LAYERS_TO_DERIVE_KEY = "TRACEPROV_LAYERS_TO_DERIVE_KEY"
 TRACEPROV_MATERIALIZE_LAYER_KEY = "TRACEPROV_MATERIALIZE_LAYER_KEY"
+TRACEPROV_DERIVE_OFFSET_KEY = "TRACEPROV_DERIVE_OFFSET_KEY"
 
 TRACEPROV_INFER_SPEC_QUERY = (
     "select * from traceprov_get_generic_derivation_spec(false);"
 )
-TRACEPROV_PREPARE_FOR_SCAN = "select * from traceprov_prepare_for_scan();"
+TRACEPROV_PREPARE_FOR_SCAN = (
+    lambda offset: f"select * from traceprov_prepare_for_scan({offset});"
+)
+
 
 TRACEPROV_INFER_QUERY = (
     lambda idx, cols: f"select * from traceprov_perform_duckdb_inference_fast({idx}) as {cols}"
@@ -56,14 +60,18 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         layers_to_derive = query_spec.extra_options[TRACEPROV_LAYERS_TO_DERIVE_KEY]
         print("Deriving layers: ", layers_to_derive)
         is_validate = query_spec.extra_options[TRACEPROV_MATERIALIZE_LAYER_KEY]
+        offset_to_derive = query_spec.extra_options[TRACEPROV_DERIVE_OFFSET_KEY]
+        prepare_for_scan = TRACEPROV_PREPARE_FOR_SCAN(
+            "" if offset_to_derive == -1 else str(offset_to_derive)
+        )
         conn = run_time_options.run_connection_strict()
         cursor = conn.cursor()
         prepare_cursor_explain = (
-            f"{run_time_options.get_explain(conn)} {TRACEPROV_PREPARE_FOR_SCAN}"
+            f"{run_time_options.get_explain(conn)} {prepare_for_scan}"
         )
         cursor.execute(prepare_cursor_explain)
         prepare_for_scan_analyze_result = cursor.fetchall()[0][0][0]
-        cursor.execute(TRACEPROV_PREPARE_FOR_SCAN)
+        cursor.execute(prepare_for_scan)
         infer_spec = json.loads(cursor.fetchall()[0][0])
         print(infer_spec)
         elements = infer_spec["sql"]

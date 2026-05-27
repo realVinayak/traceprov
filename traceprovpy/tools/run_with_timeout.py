@@ -2,6 +2,8 @@
 # Returns the time took (via EXPLAIN ANALYZE)
 # Here, we also do the repeated runs (+ throwaways)
 
+from datetime import date
+import decimal
 import json
 import re
 from typing import Any, Dict, List, Literal, NamedTuple
@@ -9,6 +11,8 @@ import psycopg2
 import os
 import argparse
 from pathlib import PosixPath
+from psycopg2.extras import RealDictCursor
+
 
 from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.validate_query import validate_sql, ALL_CHECKS
@@ -67,7 +71,8 @@ class ConnectionParams(NamedTuple):
             for pack in dict(
                 U=self.user, h=self.host, p=self.port, d=self.database
             ).items()
-            for cell in [f"-{pack[0]}", pack[1]] if pack[1] is not None
+            for cell in [f"-{pack[0]}", pack[1]]
+            if pack[1] is not None
         ]
         return " ".join(flat_options)
 
@@ -220,6 +225,64 @@ class MakeTraceProv(Preprocessor):
         return "MakeTraceProv"
 
 
+class MakeLimitOne(Preprocessor):
+    def __init__(self, offset):
+        self.offset = offset
+
+    def preprocess(self, in_content):
+        in_content = in_content.replace(";", "")
+        in_content = f"select * from ({in_content}) LIMIT 1 OFFSET {self.offset}"
+        return in_content
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.offset))
+
+    def __repr__(self):
+        return f"MakeLimitOne({self.offset})"
+
+
+TO_STRING = [int, decimal.Decimal, float]
+
+TO_QUOTE_STRING = [str, date]
+
+
+def get_value(value: Any):
+    if value is None:
+        return "NULL"
+    if type(value) in TO_STRING:
+        return str(value)
+    if type(value) in TO_QUOTE_STRING:
+        return f"'{value}'"
+    assert False, f"Got unhandled value: {value}, {type(value)}"
+
+
+class MakeKeySelection(Preprocessor):
+    def __init__(self, filter_pack):
+        self.filter_pack = filter_pack
+
+    def get_predicate(self):
+        predicates = [
+            f"{key} IS NOT DISTINCT FROM {get_value(value)}"
+            for (key, value) in self.filter_pack.items()
+        ]
+        combined = " and ".join(predicates)
+        return combined
+
+    def preprocess(self, in_content):
+        in_content = in_content.replace(";", "")
+        combined = self.get_predicate()
+        in_content = f"select * from ({in_content})"
+        if self.filter_pack:
+            in_content = f"{in_content} where {combined}"
+        return in_content
+
+    def __hash__(self):
+        return hash((self.__class__.__name__, self.get_predicate()))
+
+    def __repr__(self):
+        return f"MakeKeySelection({self.get_predicate()})"
+
+
 class RunWithTimeoutOptions(NamedTuple):
     file_path: str
     connection_params: ConnectionParams
@@ -233,6 +296,7 @@ class RunWithTimeoutOptions(NamedTuple):
     shared_libraries: list[str] | None = None
     # extra commands that need to be run, when opening the connection.
     extra_commands: list[str] | None = None
+    use_dict_cursor: bool = False
 
     def close_all(self):
         if self.extras is None:
@@ -304,7 +368,7 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         "SKIP VALIDATION: ",
         options.skip_validation,
     )
-    print("RUNNING: ", just_read(options.file_path))
+
     # Don't bother verifying, for now....
     if not options.skip_validation and len(options.preprocessors or []) == 0:
         validate_sql(connection, file_dir, ALL_CHECKS, options.file_path)
@@ -320,6 +384,8 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
 
     for preprocessor in options.preprocessors or []:
         flattend_sql_query = preprocessor.preprocess(flattend_sql_query)
+
+    print("RUNNING: ", flattend_sql_query)
 
     timeout_stmt = f"SET statement_timeout = '{options.params.timeout}s';"
     augmented_sql = f"{options.get_explain(connection)} {flattend_sql_query}"
@@ -344,6 +410,10 @@ def run_with_timeout(options: RunWithTimeoutOptions) -> float | None | dict:
         # print(flattend_sql_query)
         if options.capture_output or options.strict_run:
             # Now, need to run the query again.
+            if options.use_dict_cursor:
+                cursor.close()
+                cursor = connection.cursor(cursor_factory=RealDictCursor)
+
             cursor.execute(flattend_sql_query)
             try:
                 captured_result = cursor.fetchall()

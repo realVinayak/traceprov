@@ -47,7 +47,7 @@ class GpromOptions(NamedTuple):
                 mode = "join_composable"
             else:
                 mode = "join"
-        heu = "True" in self_str
+        heu = "True" in self_str or "heu" in self_str
         return GpromOptions(mode=mode, heuristics=heu)
 
     def safe_key(self):
