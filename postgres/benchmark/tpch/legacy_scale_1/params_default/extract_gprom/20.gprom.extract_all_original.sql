@@ -2,19 +2,19 @@
 PROVENANCE OF (
 	select s_name,
 		s_address
-	from supplier,
-		nation
+	from supplier USE PROVENANCE (s_suppkey),
+		nation USE PROVENANCE (n_nationkey)
 	where s_suppkey in (
 			select ps_suppkey
-			from partsupp
+			from partsupp USE PROVENANCE (ps_partkey, ps_suppkey)
 			where ps_partkey in (
 					select p_partkey
-					from part
+					from part USE PROVENANCE (p_partkey)
 					where p_name like 'forest%'
 				)
 				and ps_availqty > (
 					select 0.5 * sum(l_quantity)
-					from lineitem
+					from lineitem USE PROVENANCE (l_orderkey, l_linenumber)
 					where l_partkey = ps_partkey
 						and l_suppkey = ps_suppkey
 						and l_shipdate >= '1994-01-01'

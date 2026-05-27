@@ -12,12 +12,12 @@ FROM (
                 o_orderdate,
                 o_totalprice,
                 sum(l_quantity)
-            from customer,
-                orders,
-                lineitem
+            from customer USE PROVENANCE (c_custkey),
+                orders USE PROVENANCE (o_orderkey),
+                lineitem USE PROVENANCE (l_orderkey, l_linenumber)
             where o_orderkey in (
                     select l_orderkey
-                    from lineitem
+                    from lineitem USE PROVENANCE (l_orderkey, l_linenumber)
                     group by l_orderkey
                     having sum(l_quantity) > 300
                 )

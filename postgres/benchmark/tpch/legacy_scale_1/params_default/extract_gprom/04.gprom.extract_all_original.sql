@@ -1,12 +1,12 @@
 PROVENANCE OF (
     select o_orderpriority,
         count(*) as order_count
-    from orders
+    from orders USE PROVENANCE (o_orderkey)
     where o_orderdate >= '1993-07-01'
         and o_orderdate < '1993-10-01'
         and exists (
             select *
-            from lineitem
+            from lineitem USE PROVENANCE (l_orderkey, l_linenumber)
             where l_orderkey = o_orderkey
                 and l_commitdate < l_receiptdate
         )
