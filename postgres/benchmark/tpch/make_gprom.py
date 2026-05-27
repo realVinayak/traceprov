@@ -57,6 +57,9 @@ def handle_keys(parsed, query_path: Path, in_query_num: str):
         return query_path
     raw_file = just_read(query_path)
     all_keys = json_read_file(Path(parsed.source) / "keys.json")
+    raw_file_split = raw_file.splitlines()
+    raw_file_split = [line for line in raw_file_split if not line.startswith("--")]
+    raw_file = "\n".join(raw_file_split)
     assert all_keys
     for query_num, query_keys in all_keys.items():
         if int(query_num) == int(in_query_num):
@@ -77,7 +80,7 @@ def handle_keys(parsed, query_path: Path, in_query_num: str):
     with_keys = ",".join([split[0], *query_keys])
     new_sql = [with_keys, " from ", split[1]]
     query_contents = "\n".join(new_sql)
-    return just_write(f"/tmp/query_keys_{in_query_num}.sql", query_contents)
+    return just_write(f"./tmp/query_keys_{in_query_num}.sql", query_contents)
 
 
 def main():
@@ -115,15 +118,15 @@ def main():
     # queries = ["11"]
     # queries = ["22"]
     passed = defaultdict(dict)
+    gprom_suffixes = ["extract"]
+    if parsed.is_all:
+        gprom_suffixes.append("all")
+    if parsed.original:
+        gprom_suffixes.append("original")
+    if parsed.optimized:
+        gprom_suffixes.append("optimized")
+    path = "_".join(gprom_suffixes)
     for query in queries:
-        gprom_suffixes = ["extract"]
-        if parsed.is_all:
-            gprom_suffixes.append("all")
-        if parsed.original:
-            gprom_suffixes.append("original")
-        if parsed.optimized:
-            gprom_suffixes.append("optimized")
-        path = "_".join(gprom_suffixes)
         absolute_input_path = Path(parsed.source) / f"{query}.gprom.{path}.sql"
         if not absolute_input_path.exists():
             print("Skipping: ", absolute_input_path)
@@ -164,7 +167,7 @@ def main():
     out_path = (
         None
         if parsed.dest is None
-        else Path(parsed.dest) / parsed.backend / str(parsed.sf)
+        else Path(parsed.dest) / path / parsed.backend / str(parsed.sf)
     )
     for query, query_options in passed.items():
         for option, query_contents in query_options.items():

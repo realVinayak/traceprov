@@ -279,6 +279,26 @@
             "passed": true
         }
     },
+    "15": {
+        "(join - False)": {
+            "passed": true
+        },
+        "(window - False)": {
+            "passed": true
+        },
+        "(join - True)": {
+            "passed": true
+        },
+        "(window - True)": {
+            "passed": true
+        },
+        "(join_composable - False)": {
+            "passed": true
+        },
+        "(join_composable - True)": {
+            "passed": true
+        }
+    },
     "16": {
         "(join - False)": {
             "passed": true
@@ -410,6 +430,7 @@
     "call_mode": {
         "all": true,
         "original": false,
-        "is_keys": false
+        "is_keys": false,
+        "optimized": false
     }
 }
