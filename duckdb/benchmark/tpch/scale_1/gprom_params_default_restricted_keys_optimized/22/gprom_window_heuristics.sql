@@ -5,7 +5,7 @@ SELECT
 FROM
   (
     SELECT
-      SUBSTR(F0_0.C_PHONE, 1, 2) AS CNTRYCODE,
+      SUBSTRING(F0_0.C_PHONE, 1, 2) AS CNTRYCODE,
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
       F0_0."PROV_CUSTOMER_1_C__CUSTKEY" AS "PROV_CUSTOMER_1_C__CUSTKEY"
     FROM
@@ -40,11 +40,11 @@ FROM
                   F0_0.C_CUSTKEY AS C_CUSTKEY,
                   F0_0.C_PHONE AS C_PHONE,
                   F0_0.C_ACCTBAL AS C_ACCTBAL,
-                  F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                  F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY,
                   1 AS left__SETPROV_DUP_COUNT
                 FROM
-                  CUSTOMER F0_0
-              ) F0_0,
+                  CUSTOMER AS F0_0
+              ) AS F0_0,
               LATERAL (
                 SELECT
                   F0_1."AGGR_0" AS "NESTING_EVAL_1",
@@ -70,15 +70,15 @@ FROM
                               SELECT
                                 F0_1.C_PHONE AS C_PHONE,
                                 F0_1.C_ACCTBAL AS C_ACCTBAL,
-                                F0_1.C_CUSTKEY AS "PROV_CUSTOMER_1_C__CUSTKEY",
+                                F0_1.rowid AS PROV_CUSTOMER_1_C__CUSTKEY,
                                 F0_1.rowid AS _RESULT_TID
                               FROM
-                                CUSTOMER F0_1
-                            ) F0_1
+                                CUSTOMER AS F0_1
+                            ) AS F0_1
                           WHERE
                             (
                               (F0_1.C_ACCTBAL > 0.000000)
-                              AND SUBSTR(F0_1.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+                              AND SUBSTRING(F0_1.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
                             )
                           UNION ALL
                           (
@@ -88,15 +88,15 @@ FROM
                               -1 AS _RESULT_TID
                           )
                         )
-                      ) F0_1
-                  ) F0_1
+                      ) AS F0_1
+                  ) AS F0_1
                 WHERE
                   (
                     (F0_1.__DUMMY_CNT = 1)
                     OR (F0_1._RESULT_TID <> -1)
                   )
-              ) F1_0
-          ) F0_0,
+              ) AS F1_0
+          ) AS F0_0,
           LATERAL (
             SELECT
               (F0_1."AGGR_0" > 0) AS "NESTING_EVAL_2",
@@ -117,8 +117,8 @@ FROM
                             F0_1.O_CUSTKEY AS O_CUSTKEY,
                             F0_1.rowid AS _RESULT_TID
                           FROM
-                            ORDERS F0_1
-                        ) F0_1
+                            ORDERS AS F0_1
+                        ) AS F0_1
                       WHERE
                         (F0_1.O_CUSTKEY = F0_0.C_CUSTKEY)
                       UNION ALL
@@ -127,23 +127,23 @@ FROM
                           -1 AS _RESULT_TID
                       )
                     )
-                  ) F0_1
-              ) F0_1
+                  ) AS F0_1
+              ) AS F0_1
             WHERE
               (
                 (F0_1."AGGR_0" = 0)
                 OR (F0_1._RESULT_TID <> -1)
               )
-          ) F1_0
-      ) F0_0
+          ) AS F1_0
+      ) AS F0_0
     WHERE
       (
         (
-          SUBSTR(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
+          SUBSTRING(F0_0.C_PHONE, 1, 2) IN ('13', '31', '23', '29', '30', '18', '17')
           AND (F0_0.C_ACCTBAL > F0_0."NESTING_EVAL_1")
         )
         AND (NOT (F0_0."NESTING_EVAL_2"))
       )
     ORDER BY
-      CNTRYCODE ASC NULLS LAST
-  ) F0_0;
+      CNTRYCODE ASC
+  ) AS F0_0

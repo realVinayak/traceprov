@@ -15,26 +15,26 @@ FROM
                 F0_0.L_PARTKEY AS L_PARTKEY,
                 F0_0.L_QUANTITY AS L_QUANTITY
               FROM
-                LINEITEM F0_0
-            ) F0_0
+                LINEITEM AS F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 F0_0.P_PARTKEY AS P_PARTKEY,
                 F0_0.P_BRAND AS P_BRAND,
                 F0_0.P_CONTAINER AS P_CONTAINER
               FROM
-                PART F0_0
-            ) F1_0
+                PART AS F0_0
+            ) AS F1_0
           )
           CROSS JOIN (
             SELECT
               (0.200000 * AVG(F0_0.L_QUANTITY)) AS "(0200000*AVG(L_QUANTITY))",
               F0_0.L_PARTKEY AS "L_PARTKEY_1"
             FROM
-              LINEITEM F0_0
+              LINEITEM AS F0_0
             GROUP BY
               F0_0.L_PARTKEY
-          ) F2_0
+          ) AS F2_0
         )
       WHERE
         (
@@ -52,7 +52,7 @@ FROM
           )
           AND (F1_0.P_PARTKEY = F2_0."L_PARTKEY_1")
         )
-    ) F0_0
+    ) AS F0_0
     LEFT OUTER JOIN (
       SELECT
         F0_0.L_PARTKEY AS L_PARTKEY,
@@ -95,21 +95,21 @@ FROM
                       SELECT
                         F0_0.L_PARTKEY AS L_PARTKEY,
                         F0_0.L_QUANTITY AS L_QUANTITY,
-                        F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                        F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                       FROM
-                        LINEITEM F0_0
-                    ) F0_0
+                        LINEITEM AS F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.P_PARTKEY AS P_PARTKEY,
                         F0_0.P_BRAND AS P_BRAND,
                         F0_0.P_CONTAINER AS P_CONTAINER,
-                        F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                        F0_0.rowid AS PROV_PART_P__PARTKEY
                       FROM
-                        PART F0_0
-                    ) F1_0
+                        PART AS F0_0
+                    ) AS F1_0
                   )
-              ) F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   (0.200000 * F0_0."AGGR_0") AS "(0200000*AVG(L_QUANTITY))",
@@ -122,17 +122,17 @@ FROM
                         AVG(F0_0.L_QUANTITY) AS "AGGR_0",
                         F0_0.L_PARTKEY AS "L_PARTKEY_1"
                       FROM
-                        LINEITEM F0_0
+                        LINEITEM AS F0_0
                       GROUP BY
                         F0_0.L_PARTKEY
-                    ) F0_0
+                    ) AS F0_0
                     JOIN (
                       SELECT
                         F0_0.L_PARTKEY AS "_P_SIDE_L_PARTKEY_1",
-                        F0_0.L_ORDERKEY AS "PROV_LINEITEM_1_L__ORDERKEY"
+                        F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY
                       FROM
-                        LINEITEM F0_0
-                    ) F1_0 ON (
+                        LINEITEM AS F0_0
+                    ) AS F1_0 ON (
                       (
                         (F0_0."L_PARTKEY_1" = F1_0."_P_SIDE_L_PARTKEY_1")
                         OR (
@@ -142,9 +142,9 @@ FROM
                       )
                     )
                   )
-              ) F1_0
+              ) AS F1_0
             )
-        ) F0_0
+        ) AS F0_0
       WHERE
         (
           (
@@ -161,5 +161,5 @@ FROM
           )
           AND (F0_0.P_PARTKEY = F0_0."L_PARTKEY_1")
         )
-    ) F1_0 ON ((1 = 1))
-  );
+    ) AS F1_0 ON ((1 = 1))
+  )

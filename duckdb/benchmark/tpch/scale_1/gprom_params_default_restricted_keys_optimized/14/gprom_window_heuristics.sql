@@ -35,7 +35,7 @@ FROM
                 F1_0.P_TYPE AS P_TYPE,
                 F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
                 F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
-                hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
               FROM
                 (
                   (
@@ -44,22 +44,22 @@ FROM
                       F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
                       F0_0.L_DISCOUNT AS L_DISCOUNT,
                       F0_0.L_SHIPDATE AS L_SHIPDATE,
-                      F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                      F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                       F0_0.rowid AS _RESULT_TID
                     FROM
-                      LINEITEM F0_0
-                  ) F0_0
+                      LINEITEM AS F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.P_PARTKEY AS P_PARTKEY,
                       F0_0.P_TYPE AS P_TYPE,
-                      F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY,
+                      F0_0.rowid AS PROV_PART_P__PARTKEY,
                       F0_0.rowid AS _RESULT_TID
                     FROM
-                      PART F0_0
-                  ) F1_0
+                      PART AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -78,10 +78,10 @@ FROM
               -1 AS _RESULT_TID
           )
         )
-      ) F0_0
-  ) F0_0
+      ) AS F0_0
+  ) AS F0_0
 WHERE
   (
     (F0_0.__DUMMY_CNT = 1)
     OR (F0_0._RESULT_TID <> -1)
-  );
+  )

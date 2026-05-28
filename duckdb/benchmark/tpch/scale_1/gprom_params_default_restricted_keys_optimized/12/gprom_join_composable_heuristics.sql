@@ -19,8 +19,8 @@ FROM
                 SELECT
                   F0_0.O_ORDERKEY AS O_ORDERKEY
                 FROM
-                  ORDERS F0_0
-              ) F0_0
+                  ORDERS AS F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -29,8 +29,8 @@ FROM
                   F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
                   F0_0.L_SHIPMODE AS L_SHIPMODE
                 FROM
-                  LINEITEM F0_0
-              ) F1_0
+                  LINEITEM AS F0_0
+              ) AS F1_0
             )
           WHERE
             (
@@ -51,7 +51,7 @@ FROM
             )
           GROUP BY
             F1_0.L_SHIPMODE
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.L_SHIPMODE AS "_P_SIDE_GROUP_0",
@@ -73,10 +73,10 @@ FROM
                   (
                     SELECT
                       F0_0.O_ORDERKEY AS O_ORDERKEY,
-                      F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                      F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                     FROM
-                      ORDERS F0_0
-                  ) F0_0
+                      ORDERS AS F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -84,12 +84,12 @@ FROM
                       F0_0.L_COMMITDATE AS L_COMMITDATE,
                       F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
                       F0_0.L_SHIPMODE AS L_SHIPMODE,
-                      F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                      F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                     FROM
-                      LINEITEM F0_0
-                  ) F1_0
+                      LINEITEM AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -107,7 +107,7 @@ FROM
               )
               AND (F0_0.L_RECEIPTDATE < '1995-01-01')
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -118,5 +118,5 @@ FROM
         )
       )
     ORDER BY
-      L_SHIPMODE ASC NULLS LAST
-  ) F0_0;
+      L_SHIPMODE ASC
+  ) AS F0_0
