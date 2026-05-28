@@ -29,16 +29,16 @@ FROM
                   F0_0.C_ACCTBAL AS C_ACCTBAL,
                   F0_0.C_COMMENT AS C_COMMENT
                 FROM
-                  CUSTOMER F0_0
-              ) F0_0
+                  CUSTOMER AS F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   F0_0.O_ORDERKEY AS O_ORDERKEY,
                   F0_0.O_CUSTKEY AS O_CUSTKEY,
                   F0_0.O_ORDERDATE AS O_ORDERDATE
                 FROM
-                  ORDERS F0_0
-              ) F1_0
+                  ORDERS AS F0_0
+              ) AS F1_0
             )
             CROSS JOIN (
               SELECT
@@ -47,16 +47,16 @@ FROM
                 F0_0.L_DISCOUNT AS L_DISCOUNT,
                 F0_0.L_RETURNFLAG AS L_RETURNFLAG
               FROM
-                LINEITEM F0_0
-            ) F2_0
+                LINEITEM AS F0_0
+            ) AS F2_0
           )
           CROSS JOIN (
             SELECT
               F0_0.N_NATIONKEY AS N_NATIONKEY,
               F0_0.N_NAME AS N_NAME
             FROM
-              NATION F0_0
-          ) F3_0
+              NATION AS F0_0
+          ) AS F3_0
         )
       WHERE
         (
@@ -84,10 +84,10 @@ FROM
         F0_0.C_ADDRESS,
         F0_0.C_COMMENT
       ORDER BY
-        REVENUE DESC NULLS LAST
+        REVENUE DESC
       LIMIT
         20
-    ) F0_0
+    ) AS F0_0
     JOIN (
       SELECT
         F0_0."GROUP_0" AS C_CUSTKEY,
@@ -128,16 +128,16 @@ FROM
                         F0_0.C_ACCTBAL AS C_ACCTBAL,
                         F0_0.C_COMMENT AS C_COMMENT
                       FROM
-                        CUSTOMER F0_0
-                    ) F0_0
+                        CUSTOMER AS F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.O_ORDERKEY AS O_ORDERKEY,
                         F0_0.O_CUSTKEY AS O_CUSTKEY,
                         F0_0.O_ORDERDATE AS O_ORDERDATE
                       FROM
-                        ORDERS F0_0
-                    ) F1_0
+                        ORDERS AS F0_0
+                    ) AS F1_0
                   )
                   CROSS JOIN (
                     SELECT
@@ -146,16 +146,16 @@ FROM
                       F0_0.L_DISCOUNT AS L_DISCOUNT,
                       F0_0.L_RETURNFLAG AS L_RETURNFLAG
                     FROM
-                      LINEITEM F0_0
-                  ) F2_0
+                      LINEITEM AS F0_0
+                  ) AS F2_0
                 )
                 CROSS JOIN (
                   SELECT
                     F0_0.N_NATIONKEY AS N_NATIONKEY,
                     F0_0.N_NAME AS N_NAME
                   FROM
-                    NATION F0_0
-                ) F3_0
+                    NATION AS F0_0
+                ) AS F3_0
               )
             WHERE
               (
@@ -182,7 +182,7 @@ FROM
               F3_0.N_NAME,
               F0_0.C_ADDRESS,
               F0_0.C_COMMENT
-          ) F0_0
+          ) AS F0_0
           JOIN (
             SELECT
               F0_0.C_CUSTKEY AS "_P_SIDE_GROUP_0",
@@ -263,41 +263,41 @@ FROM
                                     F0_0.C_PHONE AS C_PHONE,
                                     F0_0.C_ACCTBAL AS C_ACCTBAL,
                                     F0_0.C_COMMENT AS C_COMMENT,
-                                    F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                                    F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
                                   FROM
-                                    CUSTOMER F0_0
-                                ) F0_0
+                                    CUSTOMER AS F0_0
+                                ) AS F0_0
                                 CROSS JOIN (
                                   SELECT
                                     F0_0.O_ORDERKEY AS O_ORDERKEY,
                                     F0_0.O_CUSTKEY AS O_CUSTKEY,
                                     F0_0.O_ORDERDATE AS O_ORDERDATE,
-                                    F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                                    F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                                   FROM
-                                    ORDERS F0_0
-                                ) F1_0
+                                    ORDERS AS F0_0
+                                ) AS F1_0
                               )
-                          ) F0_0
+                          ) AS F0_0
                           CROSS JOIN (
                             SELECT
                               F0_0.L_ORDERKEY AS L_ORDERKEY,
                               F0_0.L_RETURNFLAG AS L_RETURNFLAG,
-                              F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                              F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                             FROM
-                              LINEITEM F0_0
-                          ) F1_0
+                              LINEITEM AS F0_0
+                          ) AS F1_0
                         )
-                    ) F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.N_NATIONKEY AS N_NATIONKEY,
                         F0_0.N_NAME AS N_NAME,
-                        F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                        F0_0.rowid AS PROV_NATION_N__NATIONKEY
                       FROM
-                        NATION F0_0
-                    ) F1_0
+                        NATION AS F0_0
+                    ) AS F1_0
                   )
-              ) F0_0
+              ) AS F0_0
             WHERE
               (
                 (
@@ -315,7 +315,7 @@ FROM
                 )
                 AND (F0_0.C_NATIONKEY = F0_0.N_NATIONKEY)
               )
-          ) F1_0 ON (
+          ) AS F1_0 ON (
             (
               (
                 (F0_0."GROUP_6" = F1_0."_P_SIDE_GROUP_6")
@@ -380,8 +380,8 @@ FROM
           )
         )
       ORDER BY
-        REVENUE DESC NULLS LAST
-    ) F1_0 ON (
+        REVENUE DESC
+    ) AS F1_0 ON (
       (
         (
           (
@@ -405,4 +405,4 @@ FROM
         AND (F0_0.C_COMMENT = F1_0.C_COMMENT)
       )
     )
-  );
+  )

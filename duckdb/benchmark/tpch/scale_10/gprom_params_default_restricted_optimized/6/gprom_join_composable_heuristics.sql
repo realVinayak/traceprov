@@ -12,8 +12,8 @@ FROM
             F0_0.L_DISCOUNT AS L_DISCOUNT,
             F0_0.L_SHIPDATE AS L_SHIPDATE
           FROM
-            LINEITEM F0_0
-        ) F0_0
+            LINEITEM AS F0_0
+        ) AS F0_0
       WHERE
         (
           (
@@ -28,7 +28,7 @@ FROM
           )
           AND (F0_0.L_QUANTITY < 24)
         )
-    ) F0_0
+    ) AS F0_0
     LEFT OUTER JOIN (
       SELECT
         F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
@@ -38,10 +38,10 @@ FROM
             F0_0.L_QUANTITY AS L_QUANTITY,
             F0_0.L_DISCOUNT AS L_DISCOUNT,
             F0_0.L_SHIPDATE AS L_SHIPDATE,
-            F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+            F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
           FROM
-            LINEITEM F0_0
-        ) F0_0
+            LINEITEM AS F0_0
+        ) AS F0_0
       WHERE
         (
           (
@@ -56,5 +56,5 @@ FROM
           )
           AND (F0_0.L_QUANTITY < 24)
         )
-    ) F1_0 ON ((1 = 1))
-  );
+    ) AS F1_0 ON ((1 = 1))
+  )

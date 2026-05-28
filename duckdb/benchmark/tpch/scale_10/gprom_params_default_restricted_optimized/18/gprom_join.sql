@@ -1,7 +1,7 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0.L_ORDERKEY AS L_ORDERKEY,
+      F0_0.L_ORDERKEY AS L_ORDERKEY /* + materialize */,
       F0_0.L_PARTKEY AS L_PARTKEY,
       F0_0.L_SUPPKEY AS L_SUPPKEY,
       F0_0.L_LINENUMBER AS L_LINENUMBER,
@@ -17,13 +17,13 @@ WITH
       F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
       F0_0.L_SHIPMODE AS L_SHIPMODE,
       F0_0.L_COMMENT AS L_COMMENT,
-      F0_0.L_ORDERKEY AS "PROV_LINEITEM_1_L__ORDERKEY"
+      F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY
     FROM
-      LINEITEM F0_0
+      LINEITEM AS F0_0
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."GROUP_0" AS "GROUP_0",
       F0_0."GROUP_1" AS "GROUP_1",
       F0_0."GROUP_2" AS "GROUP_2",
@@ -46,21 +46,21 @@ WITH
           FROM
             (
               (
-                CUSTOMER F0_0
-                CROSS JOIN LINEITEM F1_0
+                CUSTOMER AS F0_0
+                CROSS JOIN LINEITEM AS F1_0
               )
               CROSS JOIN (
-                ORDERS F2_0
+                ORDERS AS F2_0
                 JOIN (
                   SELECT
                     F0_0.L_ORDERKEY AS INNER_L_ORDERKEY
                   FROM
-                    LINEITEM F0_0
+                    LINEITEM AS F0_0
                   GROUP BY
                     F0_0.L_ORDERKEY
                   HAVING
                     (SUM(F0_0.L_QUANTITY) > 300)
-                ) F3_0 ON ((F3_0.INNER_L_ORDERKEY = F0_0.C_CUSTKEY))
+                ) AS F3_0 ON ((F3_0.INNER_L_ORDERKEY = F0_0.C_CUSTKEY))
               )
             )
           WHERE
@@ -74,7 +74,7 @@ WITH
             F2_0.O_ORDERKEY,
             F2_0.O_ORDERDATE,
             F2_0.O_TOTALPRICE
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.C_NAME AS "_P_SIDE_GROUP_0",
@@ -169,10 +169,10 @@ WITH
                             F0_0.C_ACCTBAL AS C_ACCTBAL,
                             F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
                             F0_0.C_COMMENT AS C_COMMENT,
-                            F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                            F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
                           FROM
-                            CUSTOMER F0_0
-                        ) F0_0
+                            CUSTOMER AS F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -191,12 +191,12 @@ WITH
                             F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                             F0_0.L_SHIPMODE AS L_SHIPMODE,
                             F0_0.L_COMMENT AS L_COMMENT,
-                            F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                            F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                           FROM
-                            LINEITEM F0_0
-                        ) F1_0
+                            LINEITEM AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -224,10 +224,10 @@ WITH
                             F0_0.O_CLERK AS O_CLERK,
                             F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                             F0_0.O_COMMENT AS O_COMMENT,
-                            F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                           FROM
-                            ORDERS F0_0
-                        ) F0_0
+                            ORDERS AS F0_0
+                        ) AS F0_0
                         JOIN (
                           SELECT
                             F0_0."GROUP_0" AS INNER_L_ORDERKEY,
@@ -245,10 +245,10 @@ WITH
                                       SUM(F0_0.L_QUANTITY) AS "AGGR_0",
                                       F0_0.L_ORDERKEY AS "GROUP_0"
                                     FROM
-                                      LINEITEM F0_0
+                                      LINEITEM AS F0_0
                                     GROUP BY
                                       F0_0.L_ORDERKEY
-                                  ) F0_0
+                                  ) AS F0_0
                                   JOIN (
                                     SELECT
                                       F0_0.L_ORDERKEY AS "_P_SIDE_GROUP_0",
@@ -259,8 +259,8 @@ WITH
                                           *
                                         FROM
                                           temp_view_2
-                                      ) F0_0
-                                  ) F1_0 ON (
+                                      ) AS F0_0
+                                  ) AS F1_0 ON (
                                     (
                                       (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
                                       OR (
@@ -270,20 +270,20 @@ WITH
                                     )
                                   )
                                 )
-                            ) F0_0
+                            ) AS F0_0
                           WHERE
                             (F0_0."AGGR_0" > 300)
-                        ) F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
+                        ) AS F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
                       )
-                  ) F1_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
               AND (F0_0.O_ORDERKEY = F0_0.L_ORDERKEY)
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (
               (F0_0."GROUP_4" = F1_0."_P_SIDE_GROUP_4")
@@ -332,7 +332,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.C_NAME AS C_NAME,
+      F0_0.C_NAME AS C_NAME /* + materialize */,
       F0_0.C_CUSTKEY AS C_CUSTKEY,
       F0_0.O_ORDERKEY AS O_ORDERKEY,
       F0_0.O_ORDERDATE AS O_ORDERDATE,
@@ -355,21 +355,21 @@ WITH
           FROM
             (
               (
-                CUSTOMER F0_0
-                CROSS JOIN LINEITEM F1_0
+                CUSTOMER AS F0_0
+                CROSS JOIN LINEITEM AS F1_0
               )
               CROSS JOIN (
-                ORDERS F2_0
+                ORDERS AS F2_0
                 JOIN (
                   SELECT
                     F0_0.L_ORDERKEY AS INNER_L_ORDERKEY
                   FROM
-                    LINEITEM F0_0
+                    LINEITEM AS F0_0
                   GROUP BY
                     F0_0.L_ORDERKEY
                   HAVING
                     (SUM(F0_0.L_QUANTITY) > 300)
-                ) F3_0 ON ((F3_0.INNER_L_ORDERKEY = F0_0.C_CUSTKEY))
+                ) AS F3_0 ON ((F3_0.INNER_L_ORDERKEY = F0_0.C_CUSTKEY))
               )
             )
           WHERE
@@ -384,11 +384,11 @@ WITH
             F2_0.O_ORDERDATE,
             F2_0.O_TOTALPRICE
           ORDER BY
-            O_TOTALPRICE DESC NULLS LAST,
-            O_ORDERDATE ASC NULLS LAST
+            O_TOTALPRICE DESC,
+            O_ORDERDATE ASC
           LIMIT
             100
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."GROUP_0" AS C_NAME,
@@ -407,11 +407,11 @@ WITH
                 *
               FROM
                 temp_view_1
-            ) F0_0
+            ) AS F0_0
           ORDER BY
-            O_TOTALPRICE DESC NULLS LAST,
-            O_ORDERDATE ASC NULLS LAST
-        ) F1_0 ON (
+            O_TOTALPRICE DESC,
+            O_ORDERDATE ASC
+        ) AS F1_0 ON (
           (
             (
               (
@@ -442,4 +442,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

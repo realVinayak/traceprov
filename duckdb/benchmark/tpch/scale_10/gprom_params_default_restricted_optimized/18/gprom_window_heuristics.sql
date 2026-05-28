@@ -12,8 +12,8 @@ FROM
       F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
       DENSE_RANK () OVER (
         ORDER BY
-          F0_0.O_TOTALPRICE DESC NULLS LAST,
-          F0_0.O_ORDERDATE ASC NULLS LAST,
+          F0_0.O_TOTALPRICE DESC,
+          F0_0.O_ORDERDATE ASC,
           F0_0._RESULT_TID
       ) AS _RESULT_TID
     FROM
@@ -66,22 +66,22 @@ FROM
                         SELECT
                           F0_0.C_CUSTKEY AS C_CUSTKEY,
                           F0_0.C_NAME AS C_NAME,
-                          F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                          F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY,
                           1 AS _SETPROV_DUP_COUNT
                         FROM
-                          CUSTOMER F0_0
-                      ) F0_0
+                          CUSTOMER AS F0_0
+                      ) AS F0_0
                       CROSS JOIN (
                         SELECT
                           F0_0.L_ORDERKEY AS L_ORDERKEY,
                           F0_0.L_QUANTITY AS L_QUANTITY,
-                          F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                          F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                           1 AS _SETPROV_DUP_COUNT
                         FROM
-                          LINEITEM F0_0
-                      ) F1_0
+                          LINEITEM AS F0_0
+                      ) AS F1_0
                     )
-                ) F0_0
+                ) AS F0_0
                 CROSS JOIN (
                   SELECT
                     F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -99,11 +99,11 @@ FROM
                           F0_0.O_CUSTKEY AS O_CUSTKEY,
                           F0_0.O_TOTALPRICE AS O_TOTALPRICE,
                           F0_0.O_ORDERDATE AS O_ORDERDATE,
-                          F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                          F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
                           1 AS _SETPROV_DUP_COUNT
                         FROM
-                          ORDERS F0_0
-                      ) F0_0
+                          ORDERS AS F0_0
+                      ) AS F0_0
                       JOIN (
                         SELECT
                           F0_0."GROUP_0" AS INNER_L_ORDERKEY,
@@ -126,31 +126,31 @@ FROM
                                 SELECT
                                   F0_0.L_ORDERKEY AS L_ORDERKEY,
                                   F0_0.L_QUANTITY AS L_QUANTITY,
-                                  F0_0.L_ORDERKEY AS "PROV_LINEITEM_1_L__ORDERKEY",
+                                  F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY,
                                   SUM(F0_0.L_QUANTITY) OVER (
                                     PARTITION BY
                                       F0_0.L_ORDERKEY
                                   ) AS "AGGR_0"
                                 FROM
-                                  LINEITEM F0_0
-                              ) F0_0
-                          ) F0_0
+                                  LINEITEM AS F0_0
+                              ) AS F0_0
+                          ) AS F0_0
                         WHERE
                           (F0_0."AGGR_0" > 300)
-                      ) F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
+                      ) AS F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
                     )
-                ) F1_0
+                ) AS F1_0
               )
-          ) F0_0
+          ) AS F0_0
         WHERE
           (
             (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
             AND (F0_0.O_ORDERKEY = F0_0.L_ORDERKEY)
           )
         ORDER BY
-          O_TOTALPRICE DESC NULLS LAST,
-          O_ORDERDATE ASC NULLS LAST
-      ) F0_0
-  ) F0_0
+          O_TOTALPRICE DESC,
+          O_ORDERDATE ASC
+      ) AS F0_0
+  ) AS F0_0
 WHERE
-  (F0_0._RESULT_TID <= 100);
+  (F0_0._RESULT_TID <= 100)

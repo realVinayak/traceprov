@@ -1,7 +1,7 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."PS_PARTKEY_1" AS "PS_PARTKEY_1",
       F1_0."PROV_SUPPLIER_1_S__SUPPKEY" AS "PROV_SUPPLIER_1_S__SUPPKEY",
       F1_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
@@ -27,12 +27,12 @@ WITH
             (
               (
                 (
-                  SUPPLIER F0_0
-                  CROSS JOIN PARTSUPP F1_0
+                  SUPPLIER AS F0_0
+                  CROSS JOIN PARTSUPP AS F1_0
                 )
-                CROSS JOIN NATION F2_0
+                CROSS JOIN NATION AS F2_0
               )
-              CROSS JOIN REGION F3_0
+              CROSS JOIN REGION AS F3_0
             )
           WHERE
             (
@@ -47,7 +47,7 @@ WITH
             )
           GROUP BY
             F1_0.PS_PARTKEY
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.PS_PARTKEY AS "_P_SIDE_PS_PARTKEY_1",
@@ -81,7 +81,7 @@ WITH
                 F0_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
                 F0_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
                 F1_0."PROV_REGION_1_R__REGIONKEY" AS "PROV_REGION_1_R__REGIONKEY",
-                hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                 GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
               FROM
                 (
@@ -106,7 +106,7 @@ WITH
                       F0_0."PROV_SUPPLIER_1_S__SUPPKEY" AS "PROV_SUPPLIER_1_S__SUPPKEY",
                       F0_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
                       F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
-                      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                     FROM
                       (
@@ -126,7 +126,7 @@ WITH
                             F1_0.PS_COMMENT AS PS_COMMENT,
                             F0_0."PROV_SUPPLIER_1_S__SUPPKEY" AS "PROV_SUPPLIER_1_S__SUPPKEY",
                             F1_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
-                            hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                            HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                             GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                           FROM
                             (
@@ -139,12 +139,12 @@ WITH
                                   F0_0.S_PHONE AS S_PHONE,
                                   F0_0.S_ACCTBAL AS S_ACCTBAL,
                                   F0_0.S_COMMENT AS S_COMMENT,
-                                  F0_0.S_SUPPKEY AS "PROV_SUPPLIER_1_S__SUPPKEY",
+                                  F0_0.rowid AS PROV_SUPPLIER_1_S__SUPPKEY,
                                   F0_0.rowid AS _RESULT_TID,
                                   1 AS _SETPROV_DUP_COUNT
                                 FROM
-                                  SUPPLIER F0_0
-                              ) F0_0
+                                  SUPPLIER AS F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.PS_PARTKEY AS PS_PARTKEY,
@@ -152,41 +152,41 @@ WITH
                                   F0_0.PS_AVAILQTY AS PS_AVAILQTY,
                                   F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
                                   F0_0.PS_COMMENT AS PS_COMMENT,
-                                  F0_0.PS_PARTKEY AS "PROV_PARTSUPP_1_PS__PARTKEY",
+                                  F0_0.rowid AS PROV_PARTSUPP_1_PS__PARTKEY,
                                   F0_0.rowid AS _RESULT_TID,
                                   1 AS _SETPROV_DUP_COUNT
                                 FROM
-                                  PARTSUPP F0_0
-                              ) F1_0
+                                  PARTSUPP AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.N_NATIONKEY AS N_NATIONKEY,
                             F0_0.N_NAME AS N_NAME,
                             F0_0.N_REGIONKEY AS N_REGIONKEY,
                             F0_0.N_COMMENT AS N_COMMENT,
-                            F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY",
+                            F0_0.rowid AS PROV_NATION_1_N__NATIONKEY,
                             F0_0.rowid AS _RESULT_TID,
                             1 AS _SETPROV_DUP_COUNT
                           FROM
-                            NATION F0_0
-                        ) F1_0
+                            NATION AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.R_REGIONKEY AS R_REGIONKEY,
                       F0_0.R_NAME AS R_NAME,
                       F0_0.R_COMMENT AS R_COMMENT,
-                      F0_0.R_REGIONKEY AS "PROV_REGION_1_R__REGIONKEY",
+                      F0_0.rowid AS PROV_REGION_1_R__REGIONKEY,
                       F0_0.rowid AS _RESULT_TID,
                       1 AS _SETPROV_DUP_COUNT
                     FROM
-                      REGION F0_0
-                  ) F1_0
+                      REGION AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -198,7 +198,7 @@ WITH
               )
               AND (F0_0.R_NAME = 'EUROPE')
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (F0_0."PS_PARTKEY_1" = F1_0."_P_SIDE_PS_PARTKEY_1")
             OR (
@@ -211,7 +211,7 @@ WITH
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0.P_PARTKEY AS P_PARTKEY,
+      F0_0.P_PARTKEY AS P_PARTKEY /* + materialize */,
       F0_0.P_NAME AS P_NAME,
       F0_0.P_MFGR AS P_MFGR,
       F0_0.P_BRAND AS P_BRAND,
@@ -254,7 +254,7 @@ WITH
       F1_0."PROV_REGION_1_R__REGIONKEY" AS "PROV_REGION_1_R__REGIONKEY",
       F1_0._RESULT_TID AS right__RESULT_TID,
       F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
       (
@@ -293,7 +293,7 @@ WITH
             F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
             F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
             F1_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY,
-            hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+            HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
             GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
           FROM
             (
@@ -328,7 +328,7 @@ WITH
                   F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                   F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
                   F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
-                  hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                  HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                   GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                 FROM
                   (
@@ -358,7 +358,7 @@ WITH
                         F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
                         F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                         F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
-                        hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                        HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                         GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                       FROM
                         (
@@ -382,7 +382,7 @@ WITH
                               F1_0.S_COMMENT AS S_COMMENT,
                               F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
                               F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
-                              hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                              HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                               GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                             FROM
                               (
@@ -397,12 +397,12 @@ WITH
                                     F0_0.P_CONTAINER AS P_CONTAINER,
                                     F0_0.P_RETAILPRICE AS P_RETAILPRICE,
                                     F0_0.P_COMMENT AS P_COMMENT,
-                                    F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY,
+                                    F0_0.rowid AS PROV_PART_P__PARTKEY,
                                     F0_0.rowid AS _RESULT_TID,
                                     1 AS _SETPROV_DUP_COUNT
                                   FROM
-                                    PART F0_0
-                                ) F0_0
+                                    PART AS F0_0
+                                ) AS F0_0
                                 CROSS JOIN (
                                   SELECT
                                     F0_0.S_SUPPKEY AS S_SUPPKEY,
@@ -412,14 +412,14 @@ WITH
                                     F0_0.S_PHONE AS S_PHONE,
                                     F0_0.S_ACCTBAL AS S_ACCTBAL,
                                     F0_0.S_COMMENT AS S_COMMENT,
-                                    F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                    F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY,
                                     F0_0.rowid AS _RESULT_TID,
                                     1 AS _SETPROV_DUP_COUNT
                                   FROM
-                                    SUPPLIER F0_0
-                                ) F1_0
+                                    SUPPLIER AS F0_0
+                                ) AS F1_0
                               )
-                          ) F0_0
+                          ) AS F0_0
                           CROSS JOIN (
                             SELECT
                               F0_0.PS_PARTKEY AS PS_PARTKEY,
@@ -427,41 +427,41 @@ WITH
                               F0_0.PS_AVAILQTY AS PS_AVAILQTY,
                               F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
                               F0_0.PS_COMMENT AS PS_COMMENT,
-                              F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                              F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY,
                               F0_0.rowid AS _RESULT_TID,
                               1 AS _SETPROV_DUP_COUNT
                             FROM
-                              PARTSUPP F0_0
-                          ) F1_0
+                              PARTSUPP AS F0_0
+                          ) AS F1_0
                         )
-                    ) F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.N_NATIONKEY AS N_NATIONKEY,
                         F0_0.N_NAME AS N_NAME,
                         F0_0.N_REGIONKEY AS N_REGIONKEY,
                         F0_0.N_COMMENT AS N_COMMENT,
-                        F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY,
+                        F0_0.rowid AS PROV_NATION_N__NATIONKEY,
                         F0_0.rowid AS _RESULT_TID,
                         1 AS _SETPROV_DUP_COUNT
                       FROM
-                        NATION F0_0
-                    ) F1_0
+                        NATION AS F0_0
+                    ) AS F1_0
                   )
-              ) F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   F0_0.R_REGIONKEY AS R_REGIONKEY,
                   F0_0.R_NAME AS R_NAME,
                   F0_0.R_COMMENT AS R_COMMENT,
-                  F0_0.R_REGIONKEY AS PROV_REGION_R__REGIONKEY,
+                  F0_0.rowid AS PROV_REGION_R__REGIONKEY,
                   F0_0.rowid AS _RESULT_TID,
                   1 AS _SETPROV_DUP_COUNT
                 FROM
-                  REGION F0_0
-              ) F1_0
+                  REGION AS F0_0
+              ) AS F1_0
             )
-        ) F0_0
+        ) AS F0_0
         CROSS JOIN (
           SELECT
             F0_0."AGGR_0" AS "MIN(PS_SUPPLYCOST)",
@@ -478,13 +478,13 @@ WITH
                 *
               FROM
                 temp_view_2
-            ) F0_0
-        ) F1_0
+            ) AS F0_0
+        ) AS F1_0
       )
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.S_ACCTBAL AS S_ACCTBAL,
+      F0_0.S_ACCTBAL AS S_ACCTBAL /* + materialize */,
       F0_0.S_NAME AS S_NAME,
       F0_0.N_NAME AS N_NAME,
       F0_0.P_PARTKEY AS P_PARTKEY,
@@ -523,10 +523,10 @@ WITH
           F0_0."PROV_REGION_1_R__REGIONKEY" AS "PROV_REGION_1_R__REGIONKEY",
           DENSE_RANK () OVER (
             ORDER BY
-              F0_0.S_ACCTBAL DESC NULLS LAST,
-              F0_0.N_NAME ASC NULLS LAST,
-              F0_0.S_NAME ASC NULLS LAST,
-              F0_0.P_PARTKEY ASC NULLS LAST,
+              F0_0.S_ACCTBAL DESC,
+              F0_0.N_NAME ASC,
+              F0_0.S_NAME ASC,
+              F0_0.P_PARTKEY ASC,
               F0_0._RESULT_TID
           ) AS _RESULT_TID,
           F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
@@ -602,8 +602,8 @@ WITH
                       *
                     FROM
                       temp_view_1
-                  ) F0_0
-              ) F0_0
+                  ) AS F0_0
+              ) AS F0_0
             WHERE
               (
                 (
@@ -631,12 +631,12 @@ WITH
                 AND (F0_0.P_PARTKEY = F0_0."PS_PARTKEY_1")
               )
             ORDER BY
-              S_ACCTBAL DESC NULLS LAST,
-              N_NAME ASC NULLS LAST,
-              S_NAME ASC NULLS LAST,
-              P_PARTKEY ASC NULLS LAST
-          ) F0_0
-      ) F0_0
+              S_ACCTBAL DESC,
+              N_NAME ASC,
+              S_NAME ASC,
+              P_PARTKEY ASC
+          ) AS F0_0
+      ) AS F0_0
     WHERE
       (F0_0._RESULT_TID <= 100)
   )
@@ -656,4 +656,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

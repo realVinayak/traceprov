@@ -21,11 +21,11 @@ FROM
                 F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
                 F0_0.L_DISCOUNT AS L_DISCOUNT,
                 F0_0.L_SHIPDATE AS L_SHIPDATE,
-                F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                 F0_0.rowid AS _RESULT_TID
               FROM
-                LINEITEM F0_0
-            ) F0_0
+                LINEITEM AS F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -48,10 +48,10 @@ FROM
               -1 AS _RESULT_TID
           )
         )
-      ) F0_0
-  ) F0_0
+      ) AS F0_0
+  ) AS F0_0
 WHERE
   (
     (F0_0.__DUMMY_CNT = 1)
     OR (F0_0._RESULT_TID <> -1)
-  );
+  )

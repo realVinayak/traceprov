@@ -1,7 +1,7 @@
 WITH
   temp_view_4 AS (
     SELECT
-      /*+ materialize */ F0_0."GROUP_0" AS "GROUP_0",
+      F0_0."GROUP_0" AS "GROUP_0" /* + materialize */,
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       DENSE_RANK () OVER (
         ORDER BY
@@ -19,12 +19,12 @@ WITH
           SELECT
             F0_0.L_ORDERKEY AS "GROUP_0"
           FROM
-            LINEITEM F0_0
+            LINEITEM AS F0_0
           WHERE
             (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
           GROUP BY
             F0_0.L_ORDERKEY
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.L_ORDERKEY AS "_P_SIDE_GROUP_0",
@@ -48,15 +48,15 @@ WITH
                 F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                 F0_0.L_SHIPMODE AS L_SHIPMODE,
                 F0_0.L_COMMENT AS L_COMMENT,
-                F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                 F0_0.rowid AS _RESULT_TID,
                 1 AS _SETPROV_DUP_COUNT
               FROM
-                LINEITEM F0_0
-            ) F0_0
+                LINEITEM AS F0_0
+            ) AS F0_0
           WHERE
             (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -69,7 +69,7 @@ WITH
   ),
   temp_view_3 AS (
     SELECT
-      /*+ materialize */ F0_0.O_ORDERKEY AS O_ORDERKEY,
+      F0_0.O_ORDERKEY AS O_ORDERKEY /* + materialize */,
       F0_0.O_CUSTKEY AS O_CUSTKEY,
       F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
       F0_0.O_TOTALPRICE AS O_TOTALPRICE,
@@ -86,7 +86,7 @@ WITH
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F1_0._RESULT_TID AS right__RESULT_TID,
       F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
       (
@@ -101,12 +101,12 @@ WITH
             F0_0.O_CLERK AS O_CLERK,
             F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
             F0_0.O_COMMENT AS O_COMMENT,
-            F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
             F0_0.rowid AS _RESULT_TID,
             1 AS _SETPROV_DUP_COUNT
           FROM
-            ORDERS F0_0
-        ) F0_0
+            ORDERS AS F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             1 AS "1",
@@ -120,13 +120,13 @@ WITH
                 *
               FROM
                 temp_view_4
-            ) F0_0
-        ) F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
+            ) AS F0_0
+        ) AS F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
       )
   ),
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ 1 AS "AGG_GB_ARG0",
+      1 AS "AGG_GB_ARG0" /* + materialize */,
       F0_0.O_ORDERPRIORITY AS "AGG_GB_ARG1",
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -156,8 +156,8 @@ WITH
               *
             FROM
               temp_view_3
-          ) F0_0
-      ) F0_0
+          ) AS F0_0
+      ) AS F0_0
     WHERE
       (
         (F0_0.O_ORDERDATE >= '1993-07-01')
@@ -166,7 +166,7 @@ WITH
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."GROUP_0" AS "GROUP_0",
       F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -188,18 +188,18 @@ WITH
             F0_0.O_ORDERPRIORITY AS "GROUP_0"
           FROM
             (
-              ORDERS F0_0
+              ORDERS AS F0_0
               JOIN (
                 SELECT
                   1 AS "1",
                   F0_0.L_ORDERKEY AS L_ORDERKEY
                 FROM
-                  LINEITEM F0_0
+                  LINEITEM AS F0_0
                 WHERE
                   (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
                 GROUP BY
                   F0_0.L_ORDERKEY
-              ) F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
+              ) AS F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
             )
           WHERE
             (
@@ -208,7 +208,7 @@ WITH
             )
           GROUP BY
             F0_0.O_ORDERPRIORITY
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."AGG_GB_ARG1" AS "_P_SIDE_GROUP_0",
@@ -220,8 +220,8 @@ WITH
                 *
               FROM
                 temp_view_2
-            ) F0_0
-        ) F1_0 ON (
+            ) AS F0_0
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -234,7 +234,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+      F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY /* + materialize */,
       F0_0.ORDER_COUNT AS ORDER_COUNT,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
@@ -253,10 +253,10 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          O_ORDERPRIORITY ASC NULLS LAST
-      ) F0_0
+          O_ORDERPRIORITY ASC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -267,4 +267,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

@@ -45,20 +45,20 @@ FROM
                       F0_0.S_SUPPKEY AS S_SUPPKEY,
                       F0_0.S_NAME AS S_NAME,
                       F0_0.S_NATIONKEY AS S_NATIONKEY,
-                      F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                      F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                     FROM
-                      SUPPLIER F0_0
-                  ) F0_0
+                      SUPPLIER AS F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.N_NATIONKEY AS N_NATIONKEY,
                       F0_0.N_NAME AS N_NAME,
-                      F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                      F0_0.rowid AS PROV_NATION_N__NATIONKEY
                     FROM
-                      NATION F0_0
-                  ) F1_0
+                      NATION AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 F0_0."GROUP_0" AS PS_SUPPKEY,
@@ -79,8 +79,8 @@ FROM
                               F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                               F0_0.PS_AVAILQTY AS PS_AVAILQTY
                             FROM
-                              PARTSUPP F0_0
-                          ) F0_0
+                              PARTSUPP AS F0_0
+                          ) AS F0_0
                           JOIN (
                             SELECT
                               F0_0.P_PARTKEY AS P_PARTKEY
@@ -90,11 +90,11 @@ FROM
                                   F0_0.P_PARTKEY AS P_PARTKEY,
                                   F0_0.P_NAME AS P_NAME
                                 FROM
-                                  PART F0_0
-                              ) F0_0
+                                  PART AS F0_0
+                              ) AS F0_0
                             WHERE
                               (F0_0.P_NAME LIKE 'forest%')
-                          ) F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
+                          ) AS F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
                         )
                         JOIN (
                           SELECT
@@ -109,8 +109,8 @@ FROM
                                 F0_0.L_QUANTITY AS L_QUANTITY,
                                 F0_0.L_SHIPDATE AS L_SHIPDATE
                               FROM
-                                LINEITEM F0_0
-                            ) F0_0
+                                LINEITEM AS F0_0
+                            ) AS F0_0
                           WHERE
                             (
                               (F0_0.L_SHIPDATE >= '1994-01-01')
@@ -119,7 +119,7 @@ FROM
                           GROUP BY
                             F0_0.L_PARTKEY,
                             F0_0.L_SUPPKEY
-                        ) F2_0 ON (
+                        ) AS F2_0 ON (
                           (
                             (
                               (F0_0.PS_PARTKEY = F2_0.L_PARTKEY)
@@ -131,7 +131,7 @@ FROM
                       )
                     GROUP BY
                       F0_0.PS_SUPPKEY
-                  ) F0_0
+                  ) AS F0_0
                   JOIN (
                     SELECT
                       F0_0.PS_SUPPKEY AS "_P_SIDE_GROUP_0",
@@ -154,10 +154,10 @@ FROM
                                   F0_0.PS_PARTKEY AS PS_PARTKEY,
                                   F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                                   F0_0.PS_AVAILQTY AS PS_AVAILQTY,
-                                  F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY
+                                  F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
                                 FROM
-                                  PARTSUPP F0_0
-                              ) F0_0
+                                  PARTSUPP AS F0_0
+                              ) AS F0_0
                               JOIN (
                                 SELECT
                                   F0_0.P_PARTKEY AS P_PARTKEY,
@@ -167,15 +167,15 @@ FROM
                                     SELECT
                                       F0_0.P_PARTKEY AS P_PARTKEY,
                                       F0_0.P_NAME AS P_NAME,
-                                      F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                                      F0_0.rowid AS PROV_PART_P__PARTKEY
                                     FROM
-                                      PART F0_0
-                                  ) F0_0
+                                      PART AS F0_0
+                                  ) AS F0_0
                                 WHERE
                                   (F0_0.P_NAME LIKE 'forest%')
-                              ) F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
+                              ) AS F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
                             )
-                        ) F0_0
+                        ) AS F0_0
                         JOIN (
                           SELECT
                             (0.500000 * F0_0."AGGR_0") AS COMPUTED,
@@ -197,8 +197,8 @@ FROM
                                       F0_0.L_QUANTITY AS L_QUANTITY,
                                       F0_0.L_SHIPDATE AS L_SHIPDATE
                                     FROM
-                                      LINEITEM F0_0
-                                  ) F0_0
+                                      LINEITEM AS F0_0
+                                  ) AS F0_0
                                 WHERE
                                   (
                                     (F0_0.L_SHIPDATE >= '1994-01-01')
@@ -207,7 +207,7 @@ FROM
                                 GROUP BY
                                   F0_0.L_PARTKEY,
                                   F0_0.L_SUPPKEY
-                              ) F0_0
+                              ) AS F0_0
                               JOIN (
                                 SELECT
                                   F0_0.L_PARTKEY AS "_P_SIDE_GROUP_0",
@@ -219,16 +219,16 @@ FROM
                                       F0_0.L_PARTKEY AS L_PARTKEY,
                                       F0_0.L_SUPPKEY AS L_SUPPKEY,
                                       F0_0.L_SHIPDATE AS L_SHIPDATE,
-                                      F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                      F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                                     FROM
-                                      LINEITEM F0_0
-                                  ) F0_0
+                                      LINEITEM AS F0_0
+                                  ) AS F0_0
                                 WHERE
                                   (
                                     (F0_0.L_SHIPDATE >= '1994-01-01')
                                     AND (F0_0.L_SHIPDATE < '1995-01-01')
                                   )
-                              ) F1_0 ON (
+                              ) AS F1_0 ON (
                                 (
                                   (
                                     (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
@@ -247,7 +247,7 @@ FROM
                                 )
                               )
                             )
-                        ) F1_0 ON (
+                        ) AS F1_0 ON (
                           (
                             (
                               (F0_0.PS_PARTKEY = F1_0.L_PARTKEY)
@@ -257,7 +257,7 @@ FROM
                           )
                         )
                       )
-                  ) F1_0 ON (
+                  ) AS F1_0 ON (
                     (
                       (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
                       OR (
@@ -267,9 +267,9 @@ FROM
                     )
                   )
                 )
-            ) F1_0
+            ) AS F1_0
           )
-      ) F0_0
+      ) AS F0_0
     WHERE
       (
         (
@@ -279,5 +279,5 @@ FROM
         AND (F0_0.N_NAME = 'CANADA')
       )
     ORDER BY
-      S_NAME ASC NULLS LAST
-  ) F0_0;
+      S_NAME ASC
+  ) AS F0_0

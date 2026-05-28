@@ -1,7 +1,7 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ 1 AS "AGG_GB_ARG0",
+      1 AS "AGG_GB_ARG0" /* + materialize */,
       F0_0.S_NAME AS "AGG_GB_ARG1",
       F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -223,10 +223,10 @@ WITH
                                     F0_0.S_PHONE AS S_PHONE,
                                     F0_0.S_ACCTBAL AS S_ACCTBAL,
                                     F0_0.S_COMMENT AS S_COMMENT,
-                                    F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                    F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                                   FROM
-                                    SUPPLIER F0_0
-                                ) F0_0
+                                    SUPPLIER AS F0_0
+                                ) AS F0_0
                                 CROSS JOIN (
                                   SELECT
                                     F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -245,12 +245,12 @@ WITH
                                     F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                                     F0_0.L_SHIPMODE AS L_SHIPMODE,
                                     F0_0.L_COMMENT AS L_COMMENT,
-                                    F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                    F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                                   FROM
-                                    LINEITEM F0_0
-                                ) F1_0
+                                    LINEITEM AS F0_0
+                                ) AS F1_0
                               )
-                          ) F0_0
+                          ) AS F0_0
                           CROSS JOIN (
                             SELECT
                               F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -262,24 +262,24 @@ WITH
                               F0_0.O_CLERK AS O_CLERK,
                               F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                               F0_0.O_COMMENT AS O_COMMENT,
-                              F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                              F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                             FROM
-                              ORDERS F0_0
-                          ) F1_0
+                              ORDERS AS F0_0
+                          ) AS F1_0
                         )
-                    ) F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.N_NATIONKEY AS N_NATIONKEY,
                         F0_0.N_NAME AS N_NAME,
                         F0_0.N_REGIONKEY AS N_REGIONKEY,
                         F0_0.N_COMMENT AS N_COMMENT,
-                        F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                        F0_0.rowid AS PROV_NATION_N__NATIONKEY
                       FROM
-                        NATION F0_0
-                    ) F1_0
+                        NATION AS F0_0
+                    ) AS F1_0
                   )
-              ) F0_0,
+              ) AS F0_0,
               LATERAL (
                 SELECT
                   (F0_1."AGGR_0" > 0) AS "NESTING_EVAL_1",
@@ -287,7 +287,7 @@ WITH
                 FROM
                   (
                     SELECT
-                      /*+ materialize */ F0_1."AGGR_0" AS "AGGR_0",
+                      F0_1."AGGR_0" AS "AGGR_0" /* + materialize */,
                       F1_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
                     FROM
                       (
@@ -295,13 +295,13 @@ WITH
                           SELECT
                             COUNT(1) AS "AGGR_0"
                           FROM
-                            LINEITEM F0_1
+                            LINEITEM AS F0_1
                           WHERE
                             (
                               (F0_1.L_ORDERKEY = F0_0.L_ORDERKEY)
                               AND (F0_1.L_SUPPKEY <> F0_0.L_SUPPKEY)
                             )
-                        ) F0_1
+                        ) AS F0_1
                         LEFT OUTER JOIN (
                           SELECT
                             F0_1.L_ORDERKEY AS L_ORDERKEY,
@@ -340,20 +340,20 @@ WITH
                                 F0_1.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                                 F0_1.L_SHIPMODE AS L_SHIPMODE,
                                 F0_1.L_COMMENT AS L_COMMENT,
-                                F0_1.L_ORDERKEY AS "PROV_LINEITEM_1_L__ORDERKEY"
+                                F0_1.rowid AS PROV_LINEITEM_1_L__ORDERKEY
                               FROM
-                                LINEITEM F0_1
-                            ) F0_1
+                                LINEITEM AS F0_1
+                            ) AS F0_1
                           WHERE
                             (
                               (F0_1.L_ORDERKEY = F0_0.L_ORDERKEY)
                               AND (F0_1.L_SUPPKEY <> F0_0.L_SUPPKEY)
                             )
-                        ) F1_1 ON ((1 = 1))
+                        ) AS F1_1 ON ((1 = 1))
                       )
-                  ) F0_1
-              ) F1_0
-          ) F0_0,
+                  ) AS F0_1
+              ) AS F1_0
+          ) AS F0_0,
           LATERAL (
             SELECT
               (F0_1."AGGR_0" > 0) AS "NESTING_EVAL_2",
@@ -361,7 +361,7 @@ WITH
             FROM
               (
                 SELECT
-                  /*+ materialize */ F0_1."AGGR_0" AS "AGGR_0",
+                  F0_1."AGGR_0" AS "AGGR_0" /* + materialize */,
                   F1_1."PROV_LINEITEM_2_L__ORDERKEY" AS "PROV_LINEITEM_2_L__ORDERKEY"
                 FROM
                   (
@@ -369,7 +369,7 @@ WITH
                       SELECT
                         COUNT(1) AS "AGGR_0"
                       FROM
-                        LINEITEM F0_1
+                        LINEITEM AS F0_1
                       WHERE
                         (
                           (
@@ -378,7 +378,7 @@ WITH
                           )
                           AND (F0_1.L_RECEIPTDATE > F0_1.L_COMMITDATE)
                         )
-                    ) F0_1
+                    ) AS F0_1
                     LEFT OUTER JOIN (
                       SELECT
                         F0_1.L_ORDERKEY AS L_ORDERKEY,
@@ -417,10 +417,10 @@ WITH
                             F0_1.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                             F0_1.L_SHIPMODE AS L_SHIPMODE,
                             F0_1.L_COMMENT AS L_COMMENT,
-                            F0_1.L_ORDERKEY AS "PROV_LINEITEM_2_L__ORDERKEY"
+                            F0_1.rowid AS PROV_LINEITEM_2_L__ORDERKEY
                           FROM
-                            LINEITEM F0_1
-                        ) F0_1
+                            LINEITEM AS F0_1
+                        ) AS F0_1
                       WHERE
                         (
                           (
@@ -429,11 +429,11 @@ WITH
                           )
                           AND (F0_1.L_RECEIPTDATE > F0_1.L_COMMITDATE)
                         )
-                    ) F1_1 ON ((1 = 1))
+                    ) AS F1_1 ON ((1 = 1))
                   )
-              ) F0_1
-          ) F1_0
-      ) F0_0
+              ) AS F0_1
+          ) AS F1_0
+      ) AS F0_0
     WHERE
       (
         (
@@ -464,7 +464,7 @@ WITH
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."GROUP_0" AS "GROUP_0",
       F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -482,29 +482,29 @@ WITH
             (
               (
                 (
-                  SUPPLIER F0_0
-                  CROSS JOIN LINEITEM F1_0
+                  SUPPLIER AS F0_0
+                  CROSS JOIN LINEITEM AS F1_0
                 )
-                CROSS JOIN ORDERS F2_0
+                CROSS JOIN ORDERS AS F2_0
               )
-              CROSS JOIN NATION F3_0
+              CROSS JOIN NATION AS F3_0
             ),
             LATERAL (
               SELECT
                 (COUNT(1) > 0) AS "NESTING_EVAL_1"
               FROM
-                LINEITEM F0_1
+                LINEITEM AS F0_1
               WHERE
                 (
                   (F0_1.L_ORDERKEY = F1_0.L_ORDERKEY)
                   AND (F0_1.L_SUPPKEY <> F1_0.L_SUPPKEY)
                 )
-            ) F4_0,
+            ) AS F4_0,
             LATERAL (
               SELECT
                 (COUNT(1) > 0) AS "NESTING_EVAL_2"
               FROM
-                LINEITEM F0_1
+                LINEITEM AS F0_1
               WHERE
                 (
                   (
@@ -513,7 +513,7 @@ WITH
                   )
                   AND (F0_1.L_RECEIPTDATE > F0_1.L_COMMITDATE)
                 )
-            ) F5_0
+            ) AS F5_0
           WHERE
             (
               (
@@ -543,7 +543,7 @@ WITH
             )
           GROUP BY
             F0_0.S_NAME
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."AGG_GB_ARG1" AS "_P_SIDE_GROUP_0",
@@ -559,8 +559,8 @@ WITH
                 *
               FROM
                 temp_view_2
-            ) F0_0
-        ) F1_0 ON (
+            ) AS F0_0
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -573,7 +573,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.S_NAME AS S_NAME,
+      F0_0.S_NAME AS S_NAME /* + materialize */,
       F0_0.NUMWAIT AS NUMWAIT,
       F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -591,29 +591,29 @@ WITH
             (
               (
                 (
-                  SUPPLIER F0_0
-                  CROSS JOIN LINEITEM F1_0
+                  SUPPLIER AS F0_0
+                  CROSS JOIN LINEITEM AS F1_0
                 )
-                CROSS JOIN ORDERS F2_0
+                CROSS JOIN ORDERS AS F2_0
               )
-              CROSS JOIN NATION F3_0
+              CROSS JOIN NATION AS F3_0
             ),
             LATERAL (
               SELECT
                 (COUNT(1) > 0) AS "NESTING_EVAL_1"
               FROM
-                LINEITEM F0_1
+                LINEITEM AS F0_1
               WHERE
                 (
                   (F0_1.L_ORDERKEY = F1_0.L_ORDERKEY)
                   AND (F0_1.L_SUPPKEY <> F1_0.L_SUPPKEY)
                 )
-            ) F4_0,
+            ) AS F4_0,
             LATERAL (
               SELECT
                 (COUNT(1) > 0) AS "NESTING_EVAL_2"
               FROM
-                LINEITEM F0_1
+                LINEITEM AS F0_1
               WHERE
                 (
                   (
@@ -622,7 +622,7 @@ WITH
                   )
                   AND (F0_1.L_RECEIPTDATE > F0_1.L_COMMITDATE)
                 )
-            ) F5_0
+            ) AS F5_0
           WHERE
             (
               (
@@ -653,11 +653,11 @@ WITH
           GROUP BY
             F0_0.S_NAME
           ORDER BY
-            NUMWAIT DESC NULLS LAST,
-            S_NAME ASC NULLS LAST
+            NUMWAIT DESC,
+            S_NAME ASC
           LIMIT
             100
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."GROUP_0" AS S_NAME,
@@ -674,11 +674,11 @@ WITH
                 *
               FROM
                 temp_view_1
-            ) F0_0
+            ) AS F0_0
           ORDER BY
-            NUMWAIT DESC NULLS LAST,
-            S_NAME ASC NULLS LAST
-        ) F1_0 ON (
+            NUMWAIT DESC,
+            S_NAME ASC
+        ) AS F1_0 ON (
           (
             (F0_0.S_NAME = F1_0.S_NAME)
             AND (F0_0.NUMWAIT = F1_0.NUMWAIT)
@@ -698,4 +698,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

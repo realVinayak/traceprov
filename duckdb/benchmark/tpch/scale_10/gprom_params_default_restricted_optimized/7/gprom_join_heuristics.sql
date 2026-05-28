@@ -23,7 +23,7 @@ FROM
           SELECT
             F4_0.N_NAME AS "GROUP_0",
             F5_0.N_NAME AS "GROUP_1",
-            DATE_PART('YEAR', (F1_0.L_SHIPDATE)::DATE) AS "GROUP_2"
+            DATE_PART('YEAR', CAST((F1_0.L_SHIPDATE) AS DATE)) AS "GROUP_2"
           FROM
             (
               (
@@ -35,48 +35,48 @@ FROM
                           F0_0.S_SUPPKEY AS S_SUPPKEY,
                           F0_0.S_NATIONKEY AS S_NATIONKEY
                         FROM
-                          SUPPLIER F0_0
-                      ) F0_0
+                          SUPPLIER AS F0_0
+                      ) AS F0_0
                       CROSS JOIN (
                         SELECT
                           F0_0.L_ORDERKEY AS L_ORDERKEY,
                           F0_0.L_SUPPKEY AS L_SUPPKEY,
                           F0_0.L_SHIPDATE AS L_SHIPDATE
                         FROM
-                          LINEITEM F0_0
-                      ) F1_0
+                          LINEITEM AS F0_0
+                      ) AS F1_0
                     )
                     CROSS JOIN (
                       SELECT
                         F0_0.O_ORDERKEY AS O_ORDERKEY,
                         F0_0.O_CUSTKEY AS O_CUSTKEY
                       FROM
-                        ORDERS F0_0
-                    ) F2_0
+                        ORDERS AS F0_0
+                    ) AS F2_0
                   )
                   CROSS JOIN (
                     SELECT
                       F0_0.C_CUSTKEY AS C_CUSTKEY,
                       F0_0.C_NATIONKEY AS C_NATIONKEY
                     FROM
-                      CUSTOMER F0_0
-                  ) F3_0
+                      CUSTOMER AS F0_0
+                  ) AS F3_0
                 )
                 CROSS JOIN (
                   SELECT
                     F0_0.N_NATIONKEY AS N_NATIONKEY,
                     F0_0.N_NAME AS N_NAME
                   FROM
-                    NATION F0_0
-                ) F4_0
+                    NATION AS F0_0
+                ) AS F4_0
               )
               CROSS JOIN (
                 SELECT
                   F0_0.N_NATIONKEY AS N_NATIONKEY,
                   F0_0.N_NAME AS N_NAME
                 FROM
-                  NATION F0_0
-              ) F5_0
+                  NATION AS F0_0
+              ) AS F5_0
             )
           WHERE
             (
@@ -113,13 +113,13 @@ FROM
           GROUP BY
             F4_0.N_NAME,
             F5_0.N_NAME,
-            DATE_PART('YEAR', (F1_0.L_SHIPDATE)::DATE)
-        ) F0_0
+            DATE_PART('YEAR', CAST((F1_0.L_SHIPDATE) AS DATE))
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.N_NAME AS "_P_SIDE_GROUP_0",
             F0_0."N_NAME1" AS "_P_SIDE_GROUP_1",
-            DATE_PART('YEAR', (F0_0.L_SHIPDATE)::DATE) AS "_P_SIDE_GROUP_2",
+            DATE_PART('YEAR', CAST((F0_0.L_SHIPDATE) AS DATE)) AS "_P_SIDE_GROUP_2",
             F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
             F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
             F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -216,61 +216,61 @@ FROM
                                             SELECT
                                               F0_0.S_SUPPKEY AS S_SUPPKEY,
                                               F0_0.S_NATIONKEY AS S_NATIONKEY,
-                                              F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                              F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                                             FROM
-                                              SUPPLIER F0_0
-                                          ) F0_0
+                                              SUPPLIER AS F0_0
+                                          ) AS F0_0
                                           CROSS JOIN (
                                             SELECT
                                               F0_0.L_ORDERKEY AS L_ORDERKEY,
                                               F0_0.L_SUPPKEY AS L_SUPPKEY,
                                               F0_0.L_SHIPDATE AS L_SHIPDATE,
-                                              F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                              F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                                             FROM
-                                              LINEITEM F0_0
-                                          ) F1_0
+                                              LINEITEM AS F0_0
+                                          ) AS F1_0
                                         )
-                                    ) F0_0
+                                    ) AS F0_0
                                     CROSS JOIN (
                                       SELECT
                                         F0_0.O_ORDERKEY AS O_ORDERKEY,
                                         F0_0.O_CUSTKEY AS O_CUSTKEY,
-                                        F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                                        F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                                       FROM
-                                        ORDERS F0_0
-                                    ) F1_0
+                                        ORDERS AS F0_0
+                                    ) AS F1_0
                                   )
-                              ) F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.C_CUSTKEY AS C_CUSTKEY,
                                   F0_0.C_NATIONKEY AS C_NATIONKEY,
-                                  F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                                  F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
                                 FROM
-                                  CUSTOMER F0_0
-                              ) F1_0
+                                  CUSTOMER AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.N_NATIONKEY AS N_NATIONKEY,
                             F0_0.N_NAME AS N_NAME,
-                            F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                            F0_0.rowid AS PROV_NATION_N__NATIONKEY
                           FROM
-                            NATION F0_0
-                        ) F1_0
+                            NATION AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.N_NATIONKEY AS N_NATIONKEY,
                       F0_0.N_NAME AS N_NAME,
-                      F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY"
+                      F0_0.rowid AS PROV_NATION_1_N__NATIONKEY
                     FROM
-                      NATION F0_0
-                  ) F1_0
+                      NATION AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -303,7 +303,7 @@ FROM
               )
               AND (F0_0.L_SHIPDATE <= '1996-12-31')
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (
               (F0_0."GROUP_2" = F1_0."_P_SIDE_GROUP_2")
@@ -332,7 +332,7 @@ FROM
         )
       )
     ORDER BY
-      SUPP_NATION ASC NULLS LAST,
-      CUST_NATION ASC NULLS LAST,
-      L_YEAR ASC NULLS LAST
-  ) F0_0;
+      SUPP_NATION ASC,
+      CUST_NATION ASC,
+      L_YEAR ASC
+  ) AS F0_0

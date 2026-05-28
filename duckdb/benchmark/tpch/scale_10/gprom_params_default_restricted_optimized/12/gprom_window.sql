@@ -1,7 +1,7 @@
 WITH
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."AGGR_1" AS "AGGR_1",
       F0_0."AGG_GB_ARG2" AS "GROUP_0",
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -100,7 +100,7 @@ WITH
               F1_0.L_COMMENT AS L_COMMENT,
               F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
               F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
-              hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+              HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
               GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
             FROM
               (
@@ -115,12 +115,12 @@ WITH
                     F0_0.O_CLERK AS O_CLERK,
                     F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                     F0_0.O_COMMENT AS O_COMMENT,
-                    F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                    F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
                     F0_0.rowid AS _RESULT_TID,
                     1 AS _SETPROV_DUP_COUNT
                   FROM
-                    ORDERS F0_0
-                ) F0_0
+                    ORDERS AS F0_0
+                ) AS F0_0
                 CROSS JOIN (
                   SELECT
                     F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -139,14 +139,14 @@ WITH
                     F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                     F0_0.L_SHIPMODE AS L_SHIPMODE,
                     F0_0.L_COMMENT AS L_COMMENT,
-                    F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                    F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                     F0_0.rowid AS _RESULT_TID,
                     1 AS _SETPROV_DUP_COUNT
                   FROM
-                    LINEITEM F0_0
-                ) F1_0
+                    LINEITEM AS F0_0
+                ) AS F1_0
               )
-          ) F0_0
+          ) AS F0_0
         WHERE
           (
             (
@@ -164,11 +164,11 @@ WITH
             )
             AND (F0_0.L_RECEIPTDATE < '1995-01-01')
           )
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.L_SHIPMODE AS L_SHIPMODE,
+      F0_0.L_SHIPMODE AS L_SHIPMODE /* + materialize */,
       F0_0.HIGH_LINE_COUNT AS HIGH_LINE_COUNT,
       F0_0.LOW_LINE_COUNT AS LOW_LINE_COUNT,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -189,10 +189,10 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          L_SHIPMODE ASC NULLS LAST
-      ) F0_0
+          L_SHIPMODE ASC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -203,4 +203,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

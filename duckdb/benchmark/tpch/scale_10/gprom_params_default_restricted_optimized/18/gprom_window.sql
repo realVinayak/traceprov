@@ -1,7 +1,7 @@
 WITH
   temp_view_3 AS (
     SELECT
-      /*+ materialize */ F0_0.O_ORDERKEY AS O_ORDERKEY,
+      F0_0.O_ORDERKEY AS O_ORDERKEY /* + materialize */,
       F0_0.O_CUSTKEY AS O_CUSTKEY,
       F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
       F0_0.O_TOTALPRICE AS O_TOTALPRICE,
@@ -17,7 +17,7 @@ WITH
       F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
       F1_0._RESULT_TID AS right__RESULT_TID,
       F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
       (
@@ -32,12 +32,12 @@ WITH
             F0_0.O_CLERK AS O_CLERK,
             F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
             F0_0.O_COMMENT AS O_COMMENT,
-            F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
             F0_0.rowid AS _RESULT_TID,
             1 AS _SETPROV_DUP_COUNT
           FROM
-            ORDERS F0_0
-        ) F0_0
+            ORDERS AS F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."GROUP_0" AS INNER_L_ORDERKEY,
@@ -79,7 +79,7 @@ WITH
                     F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                     F0_0.L_SHIPMODE AS L_SHIPMODE,
                     F0_0.L_COMMENT AS L_COMMENT,
-                    F0_0.L_ORDERKEY AS "PROV_LINEITEM_1_L__ORDERKEY",
+                    F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY,
                     F0_0.rowid AS _RESULT_TID,
                     1 AS _SETPROV_DUP_COUNT,
                     SUM(F0_0.L_QUANTITY) OVER (
@@ -87,17 +87,17 @@ WITH
                         F0_0.L_ORDERKEY
                     ) AS "AGGR_0"
                   FROM
-                    LINEITEM F0_0
-                ) F0_0
-            ) F0_0
+                    LINEITEM AS F0_0
+                ) AS F0_0
+            ) AS F0_0
           WHERE
             (F0_0."AGGR_0" > 300)
-        ) F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
+        ) AS F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
       )
   ),
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0.C_CUSTKEY AS C_CUSTKEY,
+      F0_0.C_CUSTKEY AS C_CUSTKEY /* + materialize */,
       F0_0.C_NAME AS C_NAME,
       F0_0.C_ADDRESS AS C_ADDRESS,
       F0_0.C_NATIONKEY AS C_NATIONKEY,
@@ -139,7 +139,7 @@ WITH
       F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
       F1_0._RESULT_TID AS right__RESULT_TID,
       F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
       (
@@ -171,7 +171,7 @@ WITH
             F1_0.L_COMMENT AS L_COMMENT,
             F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
             F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
-            hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+            HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
             GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
           FROM
             (
@@ -185,12 +185,12 @@ WITH
                   F0_0.C_ACCTBAL AS C_ACCTBAL,
                   F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
                   F0_0.C_COMMENT AS C_COMMENT,
-                  F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                  F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY,
                   F0_0.rowid AS _RESULT_TID,
                   1 AS _SETPROV_DUP_COUNT
                 FROM
-                  CUSTOMER F0_0
-              ) F0_0
+                  CUSTOMER AS F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -209,14 +209,14 @@ WITH
                   F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                   F0_0.L_SHIPMODE AS L_SHIPMODE,
                   F0_0.L_COMMENT AS L_COMMENT,
-                  F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                   F0_0.rowid AS _RESULT_TID,
                   1 AS _SETPROV_DUP_COUNT
                 FROM
-                  LINEITEM F0_0
-              ) F1_0
+                  LINEITEM AS F0_0
+              ) AS F1_0
             )
-        ) F0_0
+        ) AS F0_0
         CROSS JOIN (
           SELECT
             F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -239,13 +239,13 @@ WITH
                 *
               FROM
                 temp_view_3
-            ) F0_0
-        ) F1_0
+            ) AS F0_0
+        ) AS F1_0
       )
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0.C_NAME AS "GROUP_0",
       F0_0.C_CUSTKEY AS "GROUP_1",
       F0_0.O_ORDERKEY AS "GROUP_2",
@@ -384,18 +384,18 @@ WITH
                   *
                 FROM
                   temp_view_2
-              ) F0_0
-          ) F0_0
+              ) AS F0_0
+          ) AS F0_0
         WHERE
           (
             (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
             AND (F0_0.O_ORDERKEY = F0_0.L_ORDERKEY)
           )
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.C_NAME AS C_NAME,
+      F0_0.C_NAME AS C_NAME /* + materialize */,
       F0_0.C_CUSTKEY AS C_CUSTKEY,
       F0_0.O_ORDERKEY AS O_ORDERKEY,
       F0_0.O_ORDERDATE AS O_ORDERDATE,
@@ -420,8 +420,8 @@ WITH
           F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
           DENSE_RANK () OVER (
             ORDER BY
-              F0_0.O_TOTALPRICE DESC NULLS LAST,
-              F0_0.O_ORDERDATE ASC NULLS LAST,
+              F0_0.O_TOTALPRICE DESC,
+              F0_0.O_ORDERDATE ASC,
               F0_0._RESULT_TID
           ) AS _RESULT_TID,
           F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
@@ -446,12 +446,12 @@ WITH
                   *
                 FROM
                   temp_view_1
-              ) F0_0
+              ) AS F0_0
             ORDER BY
-              O_TOTALPRICE DESC NULLS LAST,
-              O_ORDERDATE ASC NULLS LAST
-          ) F0_0
-      ) F0_0
+              O_TOTALPRICE DESC,
+              O_ORDERDATE ASC
+          ) AS F0_0
+      ) AS F0_0
     WHERE
       (F0_0._RESULT_TID <= 100)
   )
@@ -466,4 +466,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

@@ -71,30 +71,30 @@ FROM
                                 F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                                 F0_0.PS_AVAILQTY AS PS_AVAILQTY,
                                 F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
-                                F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY
+                                F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
                               FROM
-                                PARTSUPP F0_0
-                            ) F0_0
+                                PARTSUPP AS F0_0
+                            ) AS F0_0
                             CROSS JOIN (
                               SELECT
                                 F0_0.S_SUPPKEY AS S_SUPPKEY,
                                 F0_0.S_NATIONKEY AS S_NATIONKEY,
-                                F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                               FROM
-                                SUPPLIER F0_0
-                            ) F1_0
+                                SUPPLIER AS F0_0
+                            ) AS F1_0
                           )
-                      ) F0_0
+                      ) AS F0_0
                       CROSS JOIN (
                         SELECT
                           F0_0.N_NATIONKEY AS N_NATIONKEY,
                           F0_0.N_NAME AS N_NAME,
-                          F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                          F0_0.rowid AS PROV_NATION_N__NATIONKEY
                         FROM
-                          NATION F0_0
-                      ) F1_0
+                          NATION AS F0_0
+                      ) AS F1_0
                     )
-                ) F0_0
+                ) AS F0_0
               WHERE
                 (
                   (
@@ -103,7 +103,7 @@ FROM
                   )
                   AND (F0_0.N_NAME = 'GERMANY')
                 )
-            ) F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 (F0_0."AGGR_0" * 0.000010) AS "(SUM((PS_SUPPLYCOST*PS_AVAILQTY))*0000010)",
@@ -142,7 +142,7 @@ FROM
                               F0_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
                               F0_0."PROV_SUPPLIER_1_S__SUPPKEY" AS "PROV_SUPPLIER_1_S__SUPPKEY",
                               F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
-                              hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                              HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                             FROM
                               (
                                 (
@@ -154,7 +154,7 @@ FROM
                                     F1_0.S_NATIONKEY AS S_NATIONKEY,
                                     F0_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
                                     F1_0."PROV_SUPPLIER_1_S__SUPPKEY" AS "PROV_SUPPLIER_1_S__SUPPKEY",
-                                    hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                                    HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                                   FROM
                                     (
                                       (
@@ -162,33 +162,33 @@ FROM
                                           F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                                           F0_0.PS_AVAILQTY AS PS_AVAILQTY,
                                           F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
-                                          F0_0.PS_PARTKEY AS "PROV_PARTSUPP_1_PS__PARTKEY",
+                                          F0_0.rowid AS PROV_PARTSUPP_1_PS__PARTKEY,
                                           F0_0.rowid AS _RESULT_TID
                                         FROM
-                                          PARTSUPP F0_0
-                                      ) F0_0
+                                          PARTSUPP AS F0_0
+                                      ) AS F0_0
                                       CROSS JOIN (
                                         SELECT
                                           F0_0.S_SUPPKEY AS S_SUPPKEY,
                                           F0_0.S_NATIONKEY AS S_NATIONKEY,
-                                          F0_0.S_SUPPKEY AS "PROV_SUPPLIER_1_S__SUPPKEY",
+                                          F0_0.rowid AS PROV_SUPPLIER_1_S__SUPPKEY,
                                           F0_0.rowid AS _RESULT_TID
                                         FROM
-                                          SUPPLIER F0_0
-                                      ) F1_0
+                                          SUPPLIER AS F0_0
+                                      ) AS F1_0
                                     )
-                                ) F0_0
+                                ) AS F0_0
                                 CROSS JOIN (
                                   SELECT
                                     F0_0.N_NATIONKEY AS N_NATIONKEY,
                                     F0_0.N_NAME AS N_NAME,
-                                    F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY",
+                                    F0_0.rowid AS PROV_NATION_1_N__NATIONKEY,
                                     F0_0.rowid AS _RESULT_TID
                                   FROM
-                                    NATION F0_0
-                                ) F1_0
+                                    NATION AS F0_0
+                                ) AS F1_0
                               )
-                          ) F0_0
+                          ) AS F0_0
                         WHERE
                           (
                             (
@@ -207,20 +207,20 @@ FROM
                             -1 AS _RESULT_TID
                         )
                       )
-                    ) F0_0
-                ) F0_0
+                    ) AS F0_0
+                ) AS F0_0
               WHERE
                 (
                   (F0_0.__DUMMY_CNT = 1)
                   OR (F0_0._RESULT_TID <> -1)
                 )
-            ) F1_0
+            ) AS F1_0
           )
-      ) F0_0
+      ) AS F0_0
     WHERE
       (
         F0_0.VALUE > F0_0."(SUM((PS_SUPPLYCOST*PS_AVAILQTY))*0000010)"
       )
     ORDER BY
-      VALUE DESC NULLS LAST
-  ) F0_0;
+      VALUE DESC
+  ) AS F0_0
