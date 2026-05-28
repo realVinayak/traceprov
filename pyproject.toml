@@ -9,6 +9,13 @@ description = "TraceProv Python Interface"
 authors = [{ name="Vinayak Jha", email="vinayakj@uic.edu" }]
 readme = "README.md"
 requires-python = ">=3.7"
+dependencies=[
+    "psycopg2",
+    "duckdb",
+    "matplotlib",
+    "numpy",
+    "sqlglot"
+]
 
 [tool.setuptools]
 packages = ["traceprovpy"]
