@@ -20,8 +20,8 @@ FROM
                   F0_0.O_ORDERDATE AS O_ORDERDATE,
                   F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY
                 FROM
-                  ORDERS F0_0
-              ) F0_0
+                  ORDERS AS F0_0
+              ) AS F0_0
               JOIN (
                 SELECT
                   F0_0.L_ORDERKEY AS L_ORDERKEY
@@ -32,13 +32,13 @@ FROM
                       F0_0.L_COMMITDATE AS L_COMMITDATE,
                       F0_0.L_RECEIPTDATE AS L_RECEIPTDATE
                     FROM
-                      LINEITEM F0_0
-                  ) F0_0
+                      LINEITEM AS F0_0
+                  ) AS F0_0
                 WHERE
                   (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
                 GROUP BY
                   F0_0.L_ORDERKEY
-              ) F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
+              ) AS F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
             )
           WHERE
             (
@@ -47,7 +47,7 @@ FROM
             )
           GROUP BY
             F0_0.O_ORDERPRIORITY
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.O_ORDERPRIORITY AS "_P_SIDE_GROUP_0",
@@ -67,10 +67,10 @@ FROM
                       F0_0.O_ORDERKEY AS O_ORDERKEY,
                       F0_0.O_ORDERDATE AS O_ORDERDATE,
                       F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
-                      F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                      F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                     FROM
-                      ORDERS F0_0
-                  ) F0_0
+                      ORDERS AS F0_0
+                  ) AS F0_0
                   JOIN (
                     SELECT
                       F0_0."GROUP_0" AS L_ORDERKEY,
@@ -87,13 +87,13 @@ FROM
                                 F0_0.L_COMMITDATE AS L_COMMITDATE,
                                 F0_0.L_RECEIPTDATE AS L_RECEIPTDATE
                               FROM
-                                LINEITEM F0_0
-                            ) F0_0
+                                LINEITEM AS F0_0
+                            ) AS F0_0
                           WHERE
                             (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
                           GROUP BY
                             F0_0.L_ORDERKEY
-                        ) F0_0
+                        ) AS F0_0
                         JOIN (
                           SELECT
                             F0_0.L_ORDERKEY AS "_P_SIDE_GROUP_0",
@@ -104,13 +104,13 @@ FROM
                                 F0_0.L_ORDERKEY AS L_ORDERKEY,
                                 F0_0.L_COMMITDATE AS L_COMMITDATE,
                                 F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
-                                F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                               FROM
-                                LINEITEM F0_0
-                            ) F0_0
+                                LINEITEM AS F0_0
+                            ) AS F0_0
                           WHERE
                             (F0_0.L_COMMITDATE < F0_0.L_RECEIPTDATE)
-                        ) F1_0 ON (
+                        ) AS F1_0 ON (
                           (
                             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
                             OR (
@@ -120,15 +120,15 @@ FROM
                           )
                         )
                       )
-                  ) F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
+                  ) AS F1_0 ON ((F0_0.O_ORDERKEY = F1_0.L_ORDERKEY))
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (F0_0.O_ORDERDATE >= '1993-07-01')
               AND (F0_0.O_ORDERDATE < '1993-10-01')
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -139,5 +139,5 @@ FROM
         )
       )
     ORDER BY
-      O_ORDERPRIORITY ASC NULLS LAST
-  ) F0_0;
+      O_ORDERPRIORITY ASC
+  ) AS F0_0

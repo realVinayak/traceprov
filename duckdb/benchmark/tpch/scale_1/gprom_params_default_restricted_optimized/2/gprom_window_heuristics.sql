@@ -22,10 +22,10 @@ FROM
       F0_0."PROV_REGION_1_R__REGIONKEY" AS "PROV_REGION_1_R__REGIONKEY",
       DENSE_RANK () OVER (
         ORDER BY
-          F0_0.S_ACCTBAL DESC NULLS LAST,
-          F0_0.N_NAME ASC NULLS LAST,
-          F0_0.S_NAME ASC NULLS LAST,
-          F0_0.P_PARTKEY ASC NULLS LAST,
+          F0_0.S_ACCTBAL DESC,
+          F0_0.N_NAME ASC,
+          F0_0.S_NAME ASC,
+          F0_0.P_PARTKEY ASC,
           F0_0._RESULT_TID
       ) AS _RESULT_TID
     FROM
@@ -74,7 +74,7 @@ FROM
               F1_0."PROV_PARTSUPP_1_PS__PARTKEY" AS "PROV_PARTSUPP_1_PS__PARTKEY",
               F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
               F1_0."PROV_REGION_1_R__REGIONKEY" AS "PROV_REGION_1_R__REGIONKEY",
-              hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+              HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
             FROM
               (
                 (
@@ -99,7 +99,7 @@ FROM
                     F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
                     F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
                     F1_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY,
-                    hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                    HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                   FROM
                     (
                       (
@@ -121,7 +121,7 @@ FROM
                           F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                           F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
                           F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
-                          hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                          HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                         FROM
                           (
                             (
@@ -139,7 +139,7 @@ FROM
                                 F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
                                 F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                                 F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
-                                hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                                HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                               FROM
                                 (
                                   (
@@ -153,7 +153,7 @@ FROM
                                       F1_0.S_ACCTBAL AS S_ACCTBAL,
                                       F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
                                       F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
-                                      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
+                                      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID
                                     FROM
                                       (
                                         (
@@ -161,59 +161,59 @@ FROM
                                             F0_0.P_PARTKEY AS P_PARTKEY,
                                             F0_0.P_TYPE AS P_TYPE,
                                             F0_0.P_SIZE AS P_SIZE,
-                                            F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY,
+                                            F0_0.rowid AS PROV_PART_P__PARTKEY,
                                             F0_0.rowid AS _RESULT_TID
                                           FROM
-                                            PART F0_0
-                                        ) F0_0
+                                            PART AS F0_0
+                                        ) AS F0_0
                                         CROSS JOIN (
                                           SELECT
                                             F0_0.S_SUPPKEY AS S_SUPPKEY,
                                             F0_0.S_NAME AS S_NAME,
                                             F0_0.S_NATIONKEY AS S_NATIONKEY,
                                             F0_0.S_ACCTBAL AS S_ACCTBAL,
-                                            F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                            F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY,
                                             F0_0.rowid AS _RESULT_TID
                                           FROM
-                                            SUPPLIER F0_0
-                                        ) F1_0
+                                            SUPPLIER AS F0_0
+                                        ) AS F1_0
                                       )
-                                  ) F0_0
+                                  ) AS F0_0
                                   CROSS JOIN (
                                     SELECT
                                       F0_0.PS_PARTKEY AS PS_PARTKEY,
                                       F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                                       F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
-                                      F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                                      F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY,
                                       F0_0.rowid AS _RESULT_TID
                                     FROM
-                                      PARTSUPP F0_0
-                                  ) F1_0
+                                      PARTSUPP AS F0_0
+                                  ) AS F1_0
                                 )
-                            ) F0_0
+                            ) AS F0_0
                             CROSS JOIN (
                               SELECT
                                 F0_0.N_NATIONKEY AS N_NATIONKEY,
                                 F0_0.N_NAME AS N_NAME,
                                 F0_0.N_REGIONKEY AS N_REGIONKEY,
-                                F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY,
+                                F0_0.rowid AS PROV_NATION_N__NATIONKEY,
                                 F0_0.rowid AS _RESULT_TID
                               FROM
-                                NATION F0_0
-                            ) F1_0
+                                NATION AS F0_0
+                            ) AS F1_0
                           )
-                      ) F0_0
+                      ) AS F0_0
                       CROSS JOIN (
                         SELECT
                           F0_0.R_REGIONKEY AS R_REGIONKEY,
                           F0_0.R_NAME AS R_NAME,
-                          F0_0.R_REGIONKEY AS PROV_REGION_R__REGIONKEY,
+                          F0_0.rowid AS PROV_REGION_R__REGIONKEY,
                           F0_0.rowid AS _RESULT_TID
                         FROM
-                          REGION F0_0
-                      ) F1_0
+                          REGION AS F0_0
+                      ) AS F1_0
                     )
-                ) F0_0
+                ) AS F0_0
                 CROSS JOIN (
                   SELECT
                     F0_0."AGGR_0" AS "MIN(PS_SUPPLYCOST)",
@@ -293,41 +293,41 @@ FROM
                                             SELECT
                                               F0_0.S_SUPPKEY AS S_SUPPKEY,
                                               F0_0.S_NATIONKEY AS S_NATIONKEY,
-                                              F0_0.S_SUPPKEY AS "PROV_SUPPLIER_1_S__SUPPKEY"
+                                              F0_0.rowid AS PROV_SUPPLIER_1_S__SUPPKEY
                                             FROM
-                                              SUPPLIER F0_0
-                                          ) F0_0
+                                              SUPPLIER AS F0_0
+                                          ) AS F0_0
                                           CROSS JOIN (
                                             SELECT
                                               F0_0.PS_PARTKEY AS PS_PARTKEY,
                                               F0_0.PS_SUPPKEY AS PS_SUPPKEY,
                                               F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
-                                              F0_0.PS_PARTKEY AS "PROV_PARTSUPP_1_PS__PARTKEY"
+                                              F0_0.rowid AS PROV_PARTSUPP_1_PS__PARTKEY
                                             FROM
-                                              PARTSUPP F0_0
-                                          ) F1_0
+                                              PARTSUPP AS F0_0
+                                          ) AS F1_0
                                         )
-                                    ) F0_0
+                                    ) AS F0_0
                                     CROSS JOIN (
                                       SELECT
                                         F0_0.N_NATIONKEY AS N_NATIONKEY,
                                         F0_0.N_REGIONKEY AS N_REGIONKEY,
-                                        F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY"
+                                        F0_0.rowid AS PROV_NATION_1_N__NATIONKEY
                                       FROM
-                                        NATION F0_0
-                                    ) F1_0
+                                        NATION AS F0_0
+                                    ) AS F1_0
                                   )
-                              ) F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.R_REGIONKEY AS R_REGIONKEY,
                                   F0_0.R_NAME AS R_NAME,
-                                  F0_0.R_REGIONKEY AS "PROV_REGION_1_R__REGIONKEY"
+                                  F0_0.rowid AS PROV_REGION_1_R__REGIONKEY
                                 FROM
-                                  REGION F0_0
-                              ) F1_0
+                                  REGION AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                       WHERE
                         (
                           (
@@ -339,10 +339,10 @@ FROM
                           )
                           AND (F0_0.R_NAME = 'EUROPE')
                         )
-                    ) F0_0
-                ) F1_0
+                    ) AS F0_0
+                ) AS F1_0
               )
-          ) F0_0
+          ) AS F0_0
         WHERE
           (
             (
@@ -370,11 +370,11 @@ FROM
             AND (F0_0.P_PARTKEY = F0_0."PS_PARTKEY_1")
           )
         ORDER BY
-          S_ACCTBAL DESC NULLS LAST,
-          N_NAME ASC NULLS LAST,
-          S_NAME ASC NULLS LAST,
-          P_PARTKEY ASC NULLS LAST
-      ) F0_0
-  ) F0_0
+          S_ACCTBAL DESC,
+          N_NAME ASC,
+          S_NAME ASC,
+          P_PARTKEY ASC
+      ) AS F0_0
+  ) AS F0_0
 WHERE
-  (F0_0._RESULT_TID <= 100);
+  (F0_0._RESULT_TID <= 100)

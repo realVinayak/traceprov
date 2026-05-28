@@ -1,8 +1,8 @@
 WITH
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0.N_NAME AS NATION,
-      DATE_PART('YEAR', (F0_0.O_ORDERDATE)::DATE) AS O_YEAR,
+      F0_0.N_NAME AS NATION /* + materialize */,
+      DATE_PART('YEAR', CAST((F0_0.O_ORDERDATE) AS DATE)) AS O_YEAR,
       (
         (F0_0.L_EXTENDEDPRICE * (1 - F0_0.L_DISCOUNT)) - (F0_0.PS_SUPPLYCOST * F0_0.L_QUANTITY)
       ) AS AMOUNT,
@@ -245,10 +245,10 @@ WITH
                                         F0_0.P_CONTAINER AS P_CONTAINER,
                                         F0_0.P_RETAILPRICE AS P_RETAILPRICE,
                                         F0_0.P_COMMENT AS P_COMMENT,
-                                        F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                                        F0_0.rowid AS PROV_PART_P__PARTKEY
                                       FROM
-                                        PART F0_0
-                                    ) F0_0
+                                        PART AS F0_0
+                                    ) AS F0_0
                                     CROSS JOIN (
                                       SELECT
                                         F0_0.S_SUPPKEY AS S_SUPPKEY,
@@ -258,12 +258,12 @@ WITH
                                         F0_0.S_PHONE AS S_PHONE,
                                         F0_0.S_ACCTBAL AS S_ACCTBAL,
                                         F0_0.S_COMMENT AS S_COMMENT,
-                                        F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                        F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                                       FROM
-                                        SUPPLIER F0_0
-                                    ) F1_0
+                                        SUPPLIER AS F0_0
+                                    ) AS F1_0
                                   )
-                              ) F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -282,12 +282,12 @@ WITH
                                   F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                                   F0_0.L_SHIPMODE AS L_SHIPMODE,
                                   F0_0.L_COMMENT AS L_COMMENT,
-                                  F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                                 FROM
-                                  LINEITEM F0_0
-                              ) F1_0
+                                  LINEITEM AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.PS_PARTKEY AS PS_PARTKEY,
@@ -295,12 +295,12 @@ WITH
                             F0_0.PS_AVAILQTY AS PS_AVAILQTY,
                             F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
                             F0_0.PS_COMMENT AS PS_COMMENT,
-                            F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY
+                            F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
                           FROM
-                            PARTSUPP F0_0
-                        ) F1_0
+                            PARTSUPP AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -312,24 +312,24 @@ WITH
                       F0_0.O_CLERK AS O_CLERK,
                       F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                       F0_0.O_COMMENT AS O_COMMENT,
-                      F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                      F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                     FROM
-                      ORDERS F0_0
-                  ) F1_0
+                      ORDERS AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 F0_0.N_NATIONKEY AS N_NATIONKEY,
                 F0_0.N_NAME AS N_NAME,
                 F0_0.N_REGIONKEY AS N_REGIONKEY,
                 F0_0.N_COMMENT AS N_COMMENT,
-                F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                F0_0.rowid AS PROV_NATION_N__NATIONKEY
               FROM
-                NATION F0_0
-            ) F1_0
+                NATION AS F0_0
+            ) AS F1_0
           )
-      ) F0_0
+      ) AS F0_0
     WHERE
       (
         (
@@ -353,7 +353,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."GROUP_0" AS "GROUP_0",
       F0_0."GROUP_1" AS "GROUP_1",
       F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
@@ -372,23 +372,23 @@ WITH
               )
             ) AS "AGGR_0",
             F5_0.N_NAME AS "GROUP_0",
-            DATE_PART('YEAR', (F4_0.O_ORDERDATE)::DATE) AS "GROUP_1"
+            DATE_PART('YEAR', CAST((F4_0.O_ORDERDATE) AS DATE)) AS "GROUP_1"
           FROM
             (
               (
                 (
                   (
                     (
-                      PART F0_0
-                      CROSS JOIN SUPPLIER F1_0
+                      PART AS F0_0
+                      CROSS JOIN SUPPLIER AS F1_0
                     )
-                    CROSS JOIN LINEITEM F2_0
+                    CROSS JOIN LINEITEM AS F2_0
                   )
-                  CROSS JOIN PARTSUPP F3_0
+                  CROSS JOIN PARTSUPP AS F3_0
                 )
-                CROSS JOIN ORDERS F4_0
+                CROSS JOIN ORDERS AS F4_0
               )
-              CROSS JOIN NATION F5_0
+              CROSS JOIN NATION AS F5_0
             )
           WHERE
             (
@@ -412,8 +412,8 @@ WITH
             )
           GROUP BY
             F5_0.N_NAME,
-            DATE_PART('YEAR', (F4_0.O_ORDERDATE)::DATE)
-        ) F0_0
+            DATE_PART('YEAR', CAST((F4_0.O_ORDERDATE) AS DATE))
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.NATION AS "_P_SIDE_GROUP_0",
@@ -430,8 +430,8 @@ WITH
                 *
               FROM
                 temp_view_1
-            ) F0_0
-        ) F1_0 ON (
+            ) AS F0_0
+        ) AS F1_0 ON (
           (
             (
               (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
@@ -476,8 +476,8 @@ FROM
           *
         FROM
           temp_view_0
-      ) F0_0
+      ) AS F0_0
     ORDER BY
-      NATION ASC NULLS LAST,
-      O_YEAR DESC NULLS LAST
-  ) F0_0;
+      NATION ASC,
+      O_YEAR DESC
+  ) AS F0_0

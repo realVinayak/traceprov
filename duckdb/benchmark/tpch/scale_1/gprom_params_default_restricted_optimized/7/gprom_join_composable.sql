@@ -1,9 +1,9 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0.N_NAME AS SUPP_NATION,
+      F0_0.N_NAME AS SUPP_NATION /* + materialize */,
       F0_0."N_NAME1" AS CUST_NATION,
-      DATE_PART('YEAR', (F0_0.L_SHIPDATE)::DATE) AS L_YEAR,
+      DATE_PART('YEAR', CAST((F0_0.L_SHIPDATE) AS DATE)) AS L_YEAR,
       (F0_0.L_EXTENDEDPRICE * (1 - F0_0.L_DISCOUNT)) AS VOLUME,
       F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -70,7 +70,7 @@ WITH
           F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
           F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
           F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
-          hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+          HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
           GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
         FROM
           (
@@ -125,7 +125,7 @@ WITH
                 F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
                 F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
                 F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
-                hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                 GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
               FROM
                 (
@@ -175,7 +175,7 @@ WITH
                       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
                       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
                       F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-                      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                     FROM
                       (
@@ -216,7 +216,7 @@ WITH
                             F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                             F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
                             F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
-                            hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                            HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                             GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                           FROM
                             (
@@ -247,7 +247,7 @@ WITH
                                   F1_0.L_COMMENT AS L_COMMENT,
                                   F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                                   F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
-                                  hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+                                  HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
                                   GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
                                 FROM
                                   (
@@ -260,12 +260,12 @@ WITH
                                         F0_0.S_PHONE AS S_PHONE,
                                         F0_0.S_ACCTBAL AS S_ACCTBAL,
                                         F0_0.S_COMMENT AS S_COMMENT,
-                                        F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                        F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY,
                                         F0_0.rowid AS _RESULT_TID,
                                         1 AS _SETPROV_DUP_COUNT
                                       FROM
-                                        SUPPLIER F0_0
-                                    ) F0_0
+                                        SUPPLIER AS F0_0
+                                    ) AS F0_0
                                     CROSS JOIN (
                                       SELECT
                                         F0_0.L_ORDERKEY AS L_ORDERKEY,
@@ -284,14 +284,14 @@ WITH
                                         F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                                         F0_0.L_SHIPMODE AS L_SHIPMODE,
                                         F0_0.L_COMMENT AS L_COMMENT,
-                                        F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                                        F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                                         F0_0.rowid AS _RESULT_TID,
                                         1 AS _SETPROV_DUP_COUNT
                                       FROM
-                                        LINEITEM F0_0
-                                    ) F1_0
+                                        LINEITEM AS F0_0
+                                    ) AS F1_0
                                   )
-                              ) F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -303,14 +303,14 @@ WITH
                                   F0_0.O_CLERK AS O_CLERK,
                                   F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                                   F0_0.O_COMMENT AS O_COMMENT,
-                                  F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                                  F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
                                   F0_0.rowid AS _RESULT_TID,
                                   1 AS _SETPROV_DUP_COUNT
                                 FROM
-                                  ORDERS F0_0
-                              ) F1_0
+                                  ORDERS AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.C_CUSTKEY AS C_CUSTKEY,
@@ -321,42 +321,42 @@ WITH
                             F0_0.C_ACCTBAL AS C_ACCTBAL,
                             F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
                             F0_0.C_COMMENT AS C_COMMENT,
-                            F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                            F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY,
                             F0_0.rowid AS _RESULT_TID,
                             1 AS _SETPROV_DUP_COUNT
                           FROM
-                            CUSTOMER F0_0
-                        ) F1_0
+                            CUSTOMER AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.N_NATIONKEY AS N_NATIONKEY,
                       F0_0.N_NAME AS N_NAME,
                       F0_0.N_REGIONKEY AS N_REGIONKEY,
                       F0_0.N_COMMENT AS N_COMMENT,
-                      F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY,
+                      F0_0.rowid AS PROV_NATION_N__NATIONKEY,
                       F0_0.rowid AS _RESULT_TID,
                       1 AS _SETPROV_DUP_COUNT
                     FROM
-                      NATION F0_0
-                  ) F1_0
+                      NATION AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 F0_0.N_NATIONKEY AS N_NATIONKEY,
                 F0_0.N_NAME AS N_NAME,
                 F0_0.N_REGIONKEY AS N_REGIONKEY,
                 F0_0.N_COMMENT AS N_COMMENT,
-                F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY",
+                F0_0.rowid AS PROV_NATION_1_N__NATIONKEY,
                 F0_0.rowid AS _RESULT_TID,
                 1 AS _SETPROV_DUP_COUNT
               FROM
-                NATION F0_0
-            ) F1_0
+                NATION AS F0_0
+            ) AS F1_0
           )
-      ) F0_0
+      ) AS F0_0
     WHERE
       (
         (
@@ -392,7 +392,7 @@ WITH
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."GROUP_0" AS "GROUP_0",
       F0_0."GROUP_1" AS "GROUP_1",
       F0_0."GROUP_2" AS "GROUP_2",
@@ -425,23 +425,23 @@ WITH
             SUM((F1_0.L_EXTENDEDPRICE * (1 - F1_0.L_DISCOUNT))) AS "AGGR_0",
             F4_0.N_NAME AS "GROUP_0",
             F5_0.N_NAME AS "GROUP_1",
-            DATE_PART('YEAR', (F1_0.L_SHIPDATE)::DATE) AS "GROUP_2"
+            DATE_PART('YEAR', CAST((F1_0.L_SHIPDATE) AS DATE)) AS "GROUP_2"
           FROM
             (
               (
                 (
                   (
                     (
-                      SUPPLIER F0_0
-                      CROSS JOIN LINEITEM F1_0
+                      SUPPLIER AS F0_0
+                      CROSS JOIN LINEITEM AS F1_0
                     )
-                    CROSS JOIN ORDERS F2_0
+                    CROSS JOIN ORDERS AS F2_0
                   )
-                  CROSS JOIN CUSTOMER F3_0
+                  CROSS JOIN CUSTOMER AS F3_0
                 )
-                CROSS JOIN NATION F4_0
+                CROSS JOIN NATION AS F4_0
               )
-              CROSS JOIN NATION F5_0
+              CROSS JOIN NATION AS F5_0
             )
           WHERE
             (
@@ -478,8 +478,8 @@ WITH
           GROUP BY
             F4_0.N_NAME,
             F5_0.N_NAME,
-            DATE_PART('YEAR', (F1_0.L_SHIPDATE)::DATE)
-        ) F0_0
+            DATE_PART('YEAR', CAST((F1_0.L_SHIPDATE) AS DATE))
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0.SUPP_NATION AS "_P_SIDE_GROUP_0",
@@ -497,8 +497,8 @@ WITH
                 *
               FROM
                 temp_view_2
-            ) F0_0
-        ) F1_0 ON (
+            ) AS F0_0
+        ) AS F1_0 ON (
           (
             (
               (F0_0."GROUP_2" = F1_0."_P_SIDE_GROUP_2")
@@ -529,7 +529,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.SUPP_NATION AS SUPP_NATION,
+      F0_0.SUPP_NATION AS SUPP_NATION /* + materialize */,
       F0_0.CUST_NATION AS CUST_NATION,
       F0_0.L_YEAR AS L_YEAR,
       F0_0.REVENUE AS REVENUE,
@@ -560,12 +560,12 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          SUPP_NATION ASC NULLS LAST,
-          CUST_NATION ASC NULLS LAST,
-          L_YEAR ASC NULLS LAST
-      ) F0_0
+          SUPP_NATION ASC,
+          CUST_NATION ASC,
+          L_YEAR ASC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
@@ -580,4 +580,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

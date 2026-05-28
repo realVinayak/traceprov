@@ -23,7 +23,7 @@ FROM
       (
         (
           SELECT
-            DATE_PART('YEAR', (F3_0.O_ORDERDATE)::DATE) AS "GROUP_0"
+            DATE_PART('YEAR', CAST((F3_0.O_ORDERDATE) AS DATE)) AS "GROUP_0"
           FROM
             (
               (
@@ -37,15 +37,15 @@ FROM
                               F0_0.P_PARTKEY AS P_PARTKEY,
                               F0_0.P_TYPE AS P_TYPE
                             FROM
-                              PART F0_0
-                          ) F0_0
+                              PART AS F0_0
+                          ) AS F0_0
                           CROSS JOIN (
                             SELECT
                               F0_0.S_SUPPKEY AS S_SUPPKEY,
                               F0_0.S_NATIONKEY AS S_NATIONKEY
                             FROM
-                              SUPPLIER F0_0
-                          ) F1_0
+                              SUPPLIER AS F0_0
+                          ) AS F1_0
                         )
                         CROSS JOIN (
                           SELECT
@@ -53,8 +53,8 @@ FROM
                             F0_0.L_PARTKEY AS L_PARTKEY,
                             F0_0.L_SUPPKEY AS L_SUPPKEY
                           FROM
-                            LINEITEM F0_0
-                        ) F2_0
+                            LINEITEM AS F0_0
+                        ) AS F2_0
                       )
                       CROSS JOIN (
                         SELECT
@@ -62,39 +62,39 @@ FROM
                           F0_0.O_CUSTKEY AS O_CUSTKEY,
                           F0_0.O_ORDERDATE AS O_ORDERDATE
                         FROM
-                          ORDERS F0_0
-                      ) F3_0
+                          ORDERS AS F0_0
+                      ) AS F3_0
                     )
                     CROSS JOIN (
                       SELECT
                         F0_0.C_CUSTKEY AS C_CUSTKEY,
                         F0_0.C_NATIONKEY AS C_NATIONKEY
                       FROM
-                        CUSTOMER F0_0
-                    ) F4_0
+                        CUSTOMER AS F0_0
+                    ) AS F4_0
                   )
                   CROSS JOIN (
                     SELECT
                       F0_0.N_NATIONKEY AS N_NATIONKEY,
                       F0_0.N_REGIONKEY AS N_REGIONKEY
                     FROM
-                      NATION F0_0
-                  ) F5_0
+                      NATION AS F0_0
+                  ) AS F5_0
                 )
                 CROSS JOIN (
                   SELECT
                     F0_0.N_NATIONKEY AS N_NATIONKEY
                   FROM
-                    NATION F0_0
-                ) F6_0
+                    NATION AS F0_0
+                ) AS F6_0
               )
               CROSS JOIN (
                 SELECT
                   F0_0.R_REGIONKEY AS R_REGIONKEY,
                   F0_0.R_NAME AS R_NAME
                 FROM
-                  REGION F0_0
-              ) F7_0
+                  REGION AS F0_0
+              ) AS F7_0
             )
           WHERE
             (
@@ -129,11 +129,11 @@ FROM
               AND (F0_0.P_TYPE = 'ECONOMY ANODIZED STEEL')
             )
           GROUP BY
-            DATE_PART('YEAR', (F3_0.O_ORDERDATE)::DATE)
-        ) F0_0
+            DATE_PART('YEAR', CAST((F3_0.O_ORDERDATE) AS DATE))
+        ) AS F0_0
         JOIN (
           SELECT
-            DATE_PART('YEAR', (F0_0.O_ORDERDATE)::DATE) AS "_P_SIDE_GROUP_0",
+            DATE_PART('YEAR', CAST((F0_0.O_ORDERDATE) AS DATE)) AS "_P_SIDE_GROUP_0",
             F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
             F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
             F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -289,81 +289,81 @@ FROM
                                                         SELECT
                                                           F0_0.P_PARTKEY AS P_PARTKEY,
                                                           F0_0.P_TYPE AS P_TYPE,
-                                                          F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                                                          F0_0.rowid AS PROV_PART_P__PARTKEY
                                                         FROM
-                                                          PART F0_0
-                                                      ) F0_0
+                                                          PART AS F0_0
+                                                      ) AS F0_0
                                                       CROSS JOIN (
                                                         SELECT
                                                           F0_0.S_SUPPKEY AS S_SUPPKEY,
                                                           F0_0.S_NATIONKEY AS S_NATIONKEY,
-                                                          F0_0.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                                          F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
                                                         FROM
-                                                          SUPPLIER F0_0
-                                                      ) F1_0
+                                                          SUPPLIER AS F0_0
+                                                      ) AS F1_0
                                                     )
-                                                ) F0_0
+                                                ) AS F0_0
                                                 CROSS JOIN (
                                                   SELECT
                                                     F0_0.L_ORDERKEY AS L_ORDERKEY,
                                                     F0_0.L_PARTKEY AS L_PARTKEY,
                                                     F0_0.L_SUPPKEY AS L_SUPPKEY,
-                                                    F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                                    F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                                                   FROM
-                                                    LINEITEM F0_0
-                                                ) F1_0
+                                                    LINEITEM AS F0_0
+                                                ) AS F1_0
                                               )
-                                          ) F0_0
+                                          ) AS F0_0
                                           CROSS JOIN (
                                             SELECT
                                               F0_0.O_ORDERKEY AS O_ORDERKEY,
                                               F0_0.O_CUSTKEY AS O_CUSTKEY,
                                               F0_0.O_ORDERDATE AS O_ORDERDATE,
-                                              F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                                              F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                                             FROM
-                                              ORDERS F0_0
-                                          ) F1_0
+                                              ORDERS AS F0_0
+                                          ) AS F1_0
                                         )
-                                    ) F0_0
+                                    ) AS F0_0
                                     CROSS JOIN (
                                       SELECT
                                         F0_0.C_CUSTKEY AS C_CUSTKEY,
                                         F0_0.C_NATIONKEY AS C_NATIONKEY,
-                                        F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                                        F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
                                       FROM
-                                        CUSTOMER F0_0
-                                    ) F1_0
+                                        CUSTOMER AS F0_0
+                                    ) AS F1_0
                                   )
-                              ) F0_0
+                              ) AS F0_0
                               CROSS JOIN (
                                 SELECT
                                   F0_0.N_NATIONKEY AS N_NATIONKEY,
                                   F0_0.N_REGIONKEY AS N_REGIONKEY,
-                                  F0_0.N_NATIONKEY AS PROV_NATION_N__NATIONKEY
+                                  F0_0.rowid AS PROV_NATION_N__NATIONKEY
                                 FROM
-                                  NATION F0_0
-                              ) F1_0
+                                  NATION AS F0_0
+                              ) AS F1_0
                             )
-                        ) F0_0
+                        ) AS F0_0
                         CROSS JOIN (
                           SELECT
                             F0_0.N_NATIONKEY AS N_NATIONKEY,
-                            F0_0.N_NATIONKEY AS "PROV_NATION_1_N__NATIONKEY"
+                            F0_0.rowid AS PROV_NATION_1_N__NATIONKEY
                           FROM
-                            NATION F0_0
-                        ) F1_0
+                            NATION AS F0_0
+                        ) AS F1_0
                       )
-                  ) F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.R_REGIONKEY AS R_REGIONKEY,
                       F0_0.R_NAME AS R_NAME,
-                      F0_0.R_REGIONKEY AS PROV_REGION_R__REGIONKEY
+                      F0_0.rowid AS PROV_REGION_R__REGIONKEY
                     FROM
-                      REGION F0_0
-                  ) F1_0
+                      REGION AS F0_0
+                  ) AS F1_0
                 )
-            ) F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -396,7 +396,7 @@ FROM
               )
               AND (F0_0.P_TYPE = 'ECONOMY ANODIZED STEEL')
             )
-        ) F1_0 ON (
+        ) AS F1_0 ON (
           (
             (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
             OR (
@@ -407,5 +407,5 @@ FROM
         )
       )
     ORDER BY
-      O_YEAR ASC NULLS LAST
-  ) F0_0;
+      O_YEAR ASC
+  ) AS F0_0

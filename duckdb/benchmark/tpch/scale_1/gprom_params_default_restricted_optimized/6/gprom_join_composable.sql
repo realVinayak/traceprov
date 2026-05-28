@@ -1,7 +1,7 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       1 AS _RESULT_TID,
       ROW_NUMBER() OVER () AS _SETPROV_DUP_COUNT
@@ -11,7 +11,7 @@ WITH
           SELECT
             SUM((F0_0.L_EXTENDEDPRICE * F0_0.L_DISCOUNT)) AS "AGGR_0"
           FROM
-            LINEITEM F0_0
+            LINEITEM AS F0_0
           WHERE
             (
               (
@@ -26,7 +26,7 @@ WITH
               )
               AND (F0_0.L_QUANTITY < 24)
             )
-        ) F0_0
+        ) AS F0_0
         LEFT OUTER JOIN (
           SELECT
             (F0_0.L_EXTENDEDPRICE * F0_0.L_DISCOUNT) AS "AGG_GB_ARG0",
@@ -52,12 +52,12 @@ WITH
                 F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                 F0_0.L_SHIPMODE AS L_SHIPMODE,
                 F0_0.L_COMMENT AS L_COMMENT,
-                F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
                 F0_0.rowid AS _RESULT_TID,
                 1 AS _SETPROV_DUP_COUNT
               FROM
-                LINEITEM F0_0
-            ) F0_0
+                LINEITEM AS F0_0
+            ) AS F0_0
           WHERE
             (
               (
@@ -72,12 +72,12 @@ WITH
               )
               AND (F0_0.L_QUANTITY < 24)
             )
-        ) F1_0 ON ((1 = 1))
+        ) AS F1_0 ON ((1 = 1))
       )
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS REVENUE,
+      F0_0."AGGR_0" AS REVENUE /* + materialize */,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F0_0._RESULT_TID AS _RESULT_TID,
       F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
@@ -87,11 +87,11 @@ WITH
           *
         FROM
           temp_view_2
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.REVENUE AS REVENUE,
+      F0_0.REVENUE AS REVENUE /* + materialize */,
       F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
     FROM
       (
@@ -99,7 +99,7 @@ WITH
           *
         FROM
           temp_view_1
-      ) F0_0
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
@@ -109,4 +109,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

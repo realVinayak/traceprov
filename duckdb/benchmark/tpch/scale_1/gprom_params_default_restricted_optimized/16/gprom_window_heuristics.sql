@@ -56,24 +56,24 @@ FROM
                   SELECT
                     F0_0.PS_PARTKEY AS PS_PARTKEY,
                     F0_0.PS_SUPPKEY AS PS_SUPPKEY,
-                    F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                    F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY,
                     1 AS _SETPROV_DUP_COUNT
                   FROM
-                    PARTSUPP F0_0
-                ) F0_0
+                    PARTSUPP AS F0_0
+                ) AS F0_0
                 CROSS JOIN (
                   SELECT
                     F0_0.P_PARTKEY AS P_PARTKEY,
                     F0_0.P_BRAND AS P_BRAND,
                     F0_0.P_TYPE AS P_TYPE,
                     F0_0.P_SIZE AS P_SIZE,
-                    F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY,
+                    F0_0.rowid AS PROV_PART_P__PARTKEY,
                     1 AS _SETPROV_DUP_COUNT
                   FROM
-                    PART F0_0
-                ) F1_0
+                    PART AS F0_0
+                ) AS F1_0
               )
-          ) F0_0,
+          ) AS F0_0,
           LATERAL (
             SELECT
               (
@@ -113,8 +113,8 @@ FROM
                             F0_1.S_COMMENT AS S_COMMENT,
                             F0_1.rowid AS _RESULT_TID
                           FROM
-                            SUPPLIER F0_1
-                        ) F0_1
+                            SUPPLIER AS F0_1
+                        ) AS F0_1
                       WHERE
                         (F0_1.S_COMMENT LIKE '%Customer%Complaints%')
                       UNION ALL
@@ -124,15 +124,15 @@ FROM
                           -1 AS _RESULT_TID
                       )
                     )
-                  ) F0_1
-              ) F0_1
+                  ) AS F0_1
+              ) AS F0_1
             WHERE
               (
                 (F0_1.__DUMMY_CNT = 1)
                 OR (F0_1._RESULT_TID <> -1)
               )
-          ) F1_0
-      ) F0_0
+          ) AS F1_0
+      ) AS F0_0
     WHERE
       (
         (
@@ -152,8 +152,8 @@ FROM
         )
       )
     ORDER BY
-      SUPPLIER_CNT DESC NULLS LAST,
-      P_BRAND ASC NULLS LAST,
-      P_TYPE ASC NULLS LAST,
-      P_SIZE ASC NULLS LAST
-  ) F0_0;
+      SUPPLIER_CNT DESC,
+      P_BRAND ASC,
+      P_TYPE ASC,
+      P_SIZE ASC
+  ) AS F0_0

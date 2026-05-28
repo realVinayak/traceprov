@@ -1,7 +1,7 @@
 WITH
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0.L_QUANTITY AS "AGG_GB_ARG0",
+      F0_0.L_QUANTITY AS "AGG_GB_ARG0" /* + materialize */,
       F0_0.L_EXTENDEDPRICE AS "AGG_GB_ARG1",
       (F0_0.L_EXTENDEDPRICE * (1 - F0_0.L_DISCOUNT)) AS "AGG_GB_ARG2",
       (
@@ -35,18 +35,18 @@ WITH
           F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
           F0_0.L_SHIPMODE AS L_SHIPMODE,
           F0_0.L_COMMENT AS L_COMMENT,
-          F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+          F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
           F0_0.rowid AS _RESULT_TID,
           1 AS _SETPROV_DUP_COUNT
         FROM
-          LINEITEM F0_0
-      ) F0_0
+          LINEITEM AS F0_0
+      ) AS F0_0
     WHERE
       (F0_0.L_SHIPDATE <= '1998-09-02')
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."AGGR_1" AS "AGGR_1",
       F0_0."AGGR_2" AS "AGGR_2",
       F0_0."AGGR_3" AS "AGGR_3",
@@ -89,13 +89,13 @@ WITH
             F0_0.L_RETURNFLAG AS "GROUP_0",
             F0_0.L_LINESTATUS AS "GROUP_1"
           FROM
-            LINEITEM F0_0
+            LINEITEM AS F0_0
           WHERE
             (F0_0.L_SHIPDATE <= '1998-09-02')
           GROUP BY
             F0_0.L_RETURNFLAG,
             F0_0.L_LINESTATUS
-        ) F0_0
+        ) AS F0_0
         JOIN (
           SELECT
             F0_0."AGG_GB_ARG8" AS "_P_SIDE_GROUP_0",
@@ -107,8 +107,8 @@ WITH
                 *
               FROM
                 temp_view_2
-            ) F0_0
-        ) F1_0 ON (
+            ) AS F0_0
+        ) AS F1_0 ON (
           (
             (
               (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
@@ -130,7 +130,7 @@ WITH
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+      F0_0.L_RETURNFLAG AS L_RETURNFLAG /* + materialize */,
       F0_0.L_LINESTATUS AS L_LINESTATUS,
       F0_0.SUM_QTY AS SUM_QTY,
       F0_0.SUM_BASE_PRICE AS SUM_BASE_PRICE,
@@ -163,11 +163,11 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          L_RETURNFLAG ASC NULLS LAST,
-          L_LINESTATUS ASC NULLS LAST
-      ) F0_0
+          L_RETURNFLAG ASC,
+          L_LINESTATUS ASC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
@@ -177,4 +177,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

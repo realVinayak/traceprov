@@ -1,7 +1,7 @@
 WITH
   temp_view_3 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0.C_CUSTKEY AS "GROUP_0",
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -37,7 +37,7 @@ WITH
           F1_0.O_COMMENT AS O_COMMENT,
           F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
           F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
-          hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+          HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
           GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT,
           COUNT(F1_0.O_ORDERKEY) OVER (
             PARTITION BY
@@ -55,12 +55,12 @@ WITH
                 F0_0.C_ACCTBAL AS C_ACCTBAL,
                 F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
                 F0_0.C_COMMENT AS C_COMMENT,
-                F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY,
                 F0_0.rowid AS _RESULT_TID,
                 1 AS _SETPROV_DUP_COUNT
               FROM
-                CUSTOMER F0_0
-            ) F0_0
+                CUSTOMER AS F0_0
+            ) AS F0_0
             LEFT OUTER JOIN (
               SELECT
                 F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -72,23 +72,23 @@ WITH
                 F0_0.O_CLERK AS O_CLERK,
                 F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
                 F0_0.O_COMMENT AS O_COMMENT,
-                F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
                 F0_0.rowid AS _RESULT_TID,
                 1 AS _SETPROV_DUP_COUNT
               FROM
-                ORDERS F0_0
-            ) F1_0 ON (
+                ORDERS AS F0_0
+            ) AS F1_0 ON (
               (
                 (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
                 AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%')))
               )
             )
           )
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0."GROUP_0" AS C_CUSTKEY,
+      F0_0."GROUP_0" AS C_CUSTKEY /* + materialize */,
       F0_0."AGGR_0" AS C_COUNT,
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -100,11 +100,11 @@ WITH
           *
         FROM
           temp_view_3
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0."AGG_GB_ARG1" AS "GROUP_0",
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
@@ -144,12 +144,12 @@ WITH
               *
             FROM
               temp_view_2
-          ) F0_0
-      ) F0_0
+          ) AS F0_0
+      ) AS F0_0
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.C_COUNT AS C_COUNT,
+      F0_0.C_COUNT AS C_COUNT /* + materialize */,
       F0_0.CUSTDIST AS CUSTDIST,
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
@@ -168,11 +168,11 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          CUSTDIST DESC NULLS LAST,
-          C_COUNT DESC NULLS LAST
-      ) F0_0
+          CUSTDIST DESC,
+          C_COUNT DESC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
@@ -183,4 +183,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

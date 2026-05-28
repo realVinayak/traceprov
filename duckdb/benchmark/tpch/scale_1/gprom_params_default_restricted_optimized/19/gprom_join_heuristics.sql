@@ -15,8 +15,8 @@ FROM
               F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
               F0_0.L_SHIPMODE AS L_SHIPMODE
             FROM
-              LINEITEM F0_0
-          ) F0_0
+              LINEITEM AS F0_0
+          ) AS F0_0
           CROSS JOIN (
             SELECT
               F0_0.P_PARTKEY AS P_PARTKEY,
@@ -24,8 +24,8 @@ FROM
               F0_0.P_SIZE AS P_SIZE,
               F0_0.P_CONTAINER AS P_CONTAINER
             FROM
-              PART F0_0
-          ) F1_0
+              PART AS F0_0
+          ) AS F1_0
         )
       WHERE
         (
@@ -107,7 +107,7 @@ FROM
             AND (F0_0.L_SHIPINSTRUCT = 'DELIVER IN PERSON')
           )
         )
-    ) F0_0
+    ) AS F0_0
     LEFT OUTER JOIN (
       SELECT
         F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
@@ -133,22 +133,22 @@ FROM
                   F0_0.L_QUANTITY AS L_QUANTITY,
                   F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                   F0_0.L_SHIPMODE AS L_SHIPMODE,
-                  F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                 FROM
-                  LINEITEM F0_0
-              ) F0_0
+                  LINEITEM AS F0_0
+              ) AS F0_0
               CROSS JOIN (
                 SELECT
                   F0_0.P_PARTKEY AS P_PARTKEY,
                   F0_0.P_BRAND AS P_BRAND,
                   F0_0.P_SIZE AS P_SIZE,
                   F0_0.P_CONTAINER AS P_CONTAINER,
-                  F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY
+                  F0_0.rowid AS PROV_PART_P__PARTKEY
                 FROM
-                  PART F0_0
-              ) F1_0
+                  PART AS F0_0
+              ) AS F1_0
             )
-        ) F0_0
+        ) AS F0_0
       WHERE
         (
           (
@@ -229,5 +229,5 @@ FROM
             AND (F0_0.L_SHIPINSTRUCT = 'DELIVER IN PERSON')
           )
         )
-    ) F1_0 ON ((1 = 1))
-  );
+    ) AS F1_0 ON ((1 = 1))
+  )
