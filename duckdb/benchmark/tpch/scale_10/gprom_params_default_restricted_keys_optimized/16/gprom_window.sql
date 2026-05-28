@@ -1,7 +1,7 @@
 WITH
   temp_view_3 AS (
     SELECT
-      /*+ materialize */ F0_0.PS_PARTKEY AS PS_PARTKEY,
+      F0_0.PS_PARTKEY AS PS_PARTKEY /* + materialize */,
       F0_0.PS_SUPPKEY AS PS_SUPPKEY,
       F0_0.PS_AVAILQTY AS PS_AVAILQTY,
       F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
@@ -17,7 +17,7 @@ WITH
       F1_0.P_COMMENT AS P_COMMENT,
       F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
       F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
-      hash(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
       (
@@ -28,12 +28,12 @@ WITH
             F0_0.PS_AVAILQTY AS PS_AVAILQTY,
             F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
             F0_0.PS_COMMENT AS PS_COMMENT,
-            F0_0.PS_PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+            F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY,
             F0_0.rowid AS _RESULT_TID,
             1 AS _SETPROV_DUP_COUNT
           FROM
-            PARTSUPP F0_0
-        ) F0_0
+            PARTSUPP AS F0_0
+        ) AS F0_0
         CROSS JOIN (
           SELECT
             F0_0.P_PARTKEY AS P_PARTKEY,
@@ -45,17 +45,17 @@ WITH
             F0_0.P_CONTAINER AS P_CONTAINER,
             F0_0.P_RETAILPRICE AS P_RETAILPRICE,
             F0_0.P_COMMENT AS P_COMMENT,
-            F0_0.P_PARTKEY AS PROV_PART_P__PARTKEY,
+            F0_0.rowid AS PROV_PART_P__PARTKEY,
             F0_0.rowid AS _RESULT_TID,
             1 AS _SETPROV_DUP_COUNT
           FROM
-            PART F0_0
-        ) F1_0
+            PART AS F0_0
+        ) AS F1_0
       )
   ),
   temp_view_4 AS (
     SELECT
-      /*+ materialize */ F0_1.S_SUPPKEY AS S_SUPPKEY,
+      F0_1.S_SUPPKEY AS S_SUPPKEY /* + materialize */,
       F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F0_1._RESULT_TID AS _RESULT_TID,
       F0_1._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
@@ -69,18 +69,18 @@ WITH
           F0_1.S_PHONE AS S_PHONE,
           F0_1.S_ACCTBAL AS S_ACCTBAL,
           F0_1.S_COMMENT AS S_COMMENT,
-          F0_1.S_SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+          F0_1.rowid AS PROV_SUPPLIER_S__SUPPKEY,
           F0_1.rowid AS _RESULT_TID,
           1 AS _SETPROV_DUP_COUNT
         FROM
-          SUPPLIER F0_1
-      ) F0_1
+          SUPPLIER AS F0_1
+      ) AS F0_1
     WHERE
       (F0_1.S_COMMENT LIKE '%Customer%Complaints%')
   ),
   temp_view_2 AS (
     SELECT
-      /*+ materialize */ F0_0.PS_PARTKEY AS PS_PARTKEY,
+      F0_0.PS_PARTKEY AS PS_PARTKEY /* + materialize */,
       F0_0.PS_SUPPKEY AS PS_SUPPKEY,
       F0_0.PS_AVAILQTY AS PS_AVAILQTY,
       F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
@@ -102,7 +102,7 @@ WITH
       F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
       F1_0.right__RESULT_TID AS right__RESULT_TID,
       F1_0.right__SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      hash(F0_0.left__RESULT_TID, F1_0.right__RESULT_TID) AS _RESULT_TID,
+      HASH(F0_0.left__RESULT_TID, F1_0.right__RESULT_TID) AS _RESULT_TID,
       GREATEST(
         F0_0.left__SETPROV_DUP_COUNT,
         F1_0.right__SETPROV_DUP_COUNT
@@ -134,8 +134,8 @@ WITH
               *
             FROM
               temp_view_3
-          ) F0_0
-      ) F0_0,
+          ) AS F0_0
+      ) AS F0_0,
       LATERAL (
         SELECT
           F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
@@ -145,20 +145,20 @@ WITH
         FROM
           (
             SELECT
-              /*+ materialize */ (
+              (
                 CASE
                   WHEN ((F0_1."NESTING_EVAL_1") IS NULL) THEN TRUE
                   WHEN (F0_1."NESTING_EVAL_1" = 1) THEN NULL
                   ELSE (F0_1."NESTING_EVAL_1" = 2)
                 END
-              ) AS "NESTING_EVAL_1",
+              ) AS "NESTING_EVAL_1" /* + materialize */,
               F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
               F0_1._RESULT_TID AS _RESULT_TID,
               F0_1._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
             FROM
               (
                 SELECT
-                  /*+ materialize */ F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+                  F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1" /* + materialize */,
                   F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
                   1 AS _RESULT_TID,
                   ROW_NUMBER() OVER () AS _SETPROV_DUP_COUNT
@@ -194,7 +194,7 @@ WITH
                                 *
                               FROM
                                 temp_view_4
-                            ) F0_1
+                            ) AS F0_1
                           UNION ALL
                           (
                             SELECT
@@ -204,20 +204,20 @@ WITH
                               NULL AS _SETPROV_DUP_COUNT
                           )
                         )
-                      ) F0_1
-                  ) F0_1
+                      ) AS F0_1
+                  ) AS F0_1
                 WHERE
                   (
                     (F0_1.__DUMMY_CNT = 1)
                     OR (F0_1._RESULT_TID <> -1)
                   )
-              ) F0_1
-          ) F0_1
-      ) F1_0
+              ) AS F0_1
+          ) AS F0_1
+      ) AS F1_0
   ),
   temp_view_1 AS (
     SELECT
-      /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0",
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
       F0_0.P_BRAND AS "GROUP_0",
       F0_0.P_TYPE AS "GROUP_1",
       F0_0.P_SIZE AS "GROUP_2",
@@ -305,8 +305,8 @@ WITH
                   *
                 FROM
                   temp_view_2
-              ) F0_0
-          ) F0_0
+              ) AS F0_0
+          ) AS F0_0
         WHERE
           (
             (
@@ -325,11 +325,11 @@ WITH
               )
             )
           )
-      ) F0_0
+      ) AS F0_0
   ),
   temp_view_0 AS (
     SELECT
-      /*+ materialize */ F0_0.P_BRAND AS P_BRAND,
+      F0_0.P_BRAND AS P_BRAND /* + materialize */,
       F0_0.P_TYPE AS P_TYPE,
       F0_0.P_SIZE AS P_SIZE,
       F0_0.SUPPLIER_CNT AS SUPPLIER_CNT,
@@ -354,13 +354,13 @@ WITH
               *
             FROM
               temp_view_1
-          ) F0_0
+          ) AS F0_0
         ORDER BY
-          SUPPLIER_CNT DESC NULLS LAST,
-          P_BRAND ASC NULLS LAST,
-          P_TYPE ASC NULLS LAST,
-          P_SIZE ASC NULLS LAST
-      ) F0_0
+          SUPPLIER_CNT DESC,
+          P_BRAND ASC,
+          P_TYPE ASC,
+          P_SIZE ASC
+      ) AS F0_0
   )
 SELECT
   F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
@@ -374,4 +374,4 @@ FROM
       *
     FROM
       temp_view_0
-  ) F0_0;
+  ) AS F0_0

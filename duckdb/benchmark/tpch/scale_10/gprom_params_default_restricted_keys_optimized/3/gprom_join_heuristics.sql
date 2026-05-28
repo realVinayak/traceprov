@@ -21,8 +21,8 @@ FROM
                 F0_0.C_CUSTKEY AS C_CUSTKEY,
                 F0_0.C_MKTSEGMENT AS C_MKTSEGMENT
               FROM
-                CUSTOMER F0_0
-            ) F0_0
+                CUSTOMER AS F0_0
+            ) AS F0_0
             CROSS JOIN (
               SELECT
                 F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -30,8 +30,8 @@ FROM
                 F0_0.O_ORDERDATE AS O_ORDERDATE,
                 F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY
               FROM
-                ORDERS F0_0
-            ) F1_0
+                ORDERS AS F0_0
+            ) AS F1_0
           )
           CROSS JOIN (
             SELECT
@@ -40,8 +40,8 @@ FROM
               F0_0.L_DISCOUNT AS L_DISCOUNT,
               F0_0.L_SHIPDATE AS L_SHIPDATE
             FROM
-              LINEITEM F0_0
-          ) F2_0
+              LINEITEM AS F0_0
+          ) AS F2_0
         )
       WHERE
         (
@@ -62,11 +62,11 @@ FROM
         F1_0.O_ORDERDATE,
         F1_0.O_SHIPPRIORITY
       ORDER BY
-        REVENUE DESC NULLS LAST,
-        O_ORDERDATE ASC NULLS LAST
+        REVENUE DESC,
+        O_ORDERDATE ASC
       LIMIT
         10
-    ) F0_0
+    ) AS F0_0
     JOIN (
       SELECT
         F0_0."GROUP_0" AS L_ORDERKEY,
@@ -92,8 +92,8 @@ FROM
                       F0_0.C_CUSTKEY AS C_CUSTKEY,
                       F0_0.C_MKTSEGMENT AS C_MKTSEGMENT
                     FROM
-                      CUSTOMER F0_0
-                  ) F0_0
+                      CUSTOMER AS F0_0
+                  ) AS F0_0
                   CROSS JOIN (
                     SELECT
                       F0_0.O_ORDERKEY AS O_ORDERKEY,
@@ -101,8 +101,8 @@ FROM
                       F0_0.O_ORDERDATE AS O_ORDERDATE,
                       F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY
                     FROM
-                      ORDERS F0_0
-                  ) F1_0
+                      ORDERS AS F0_0
+                  ) AS F1_0
                 )
                 CROSS JOIN (
                   SELECT
@@ -111,8 +111,8 @@ FROM
                     F0_0.L_DISCOUNT AS L_DISCOUNT,
                     F0_0.L_SHIPDATE AS L_SHIPDATE
                   FROM
-                    LINEITEM F0_0
-                ) F2_0
+                    LINEITEM AS F0_0
+                ) AS F2_0
               )
             WHERE
               (
@@ -132,7 +132,7 @@ FROM
               F2_0.L_ORDERKEY,
               F1_0.O_ORDERDATE,
               F1_0.O_SHIPPRIORITY
-          ) F0_0
+          ) AS F0_0
           JOIN (
             SELECT
               F0_0.L_ORDERKEY AS "_P_SIDE_GROUP_0",
@@ -173,32 +173,32 @@ FROM
                             SELECT
                               F0_0.C_CUSTKEY AS C_CUSTKEY,
                               F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
-                              F0_0.C_CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                              F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
                             FROM
-                              CUSTOMER F0_0
-                          ) F0_0
+                              CUSTOMER AS F0_0
+                          ) AS F0_0
                           CROSS JOIN (
                             SELECT
                               F0_0.O_ORDERKEY AS O_ORDERKEY,
                               F0_0.O_CUSTKEY AS O_CUSTKEY,
                               F0_0.O_ORDERDATE AS O_ORDERDATE,
                               F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
-                              F0_0.O_ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                              F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
                             FROM
-                              ORDERS F0_0
-                          ) F1_0
+                              ORDERS AS F0_0
+                          ) AS F1_0
                         )
-                    ) F0_0
+                    ) AS F0_0
                     CROSS JOIN (
                       SELECT
                         F0_0.L_ORDERKEY AS L_ORDERKEY,
                         F0_0.L_SHIPDATE AS L_SHIPDATE,
-                        F0_0.L_ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                        F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
                       FROM
-                        LINEITEM F0_0
-                    ) F1_0
+                        LINEITEM AS F0_0
+                    ) AS F1_0
                   )
-              ) F0_0
+              ) AS F0_0
             WHERE
               (
                 (
@@ -213,7 +213,7 @@ FROM
                 )
                 AND (F0_0.L_SHIPDATE > '1995-03-15')
               )
-          ) F1_0 ON (
+          ) AS F1_0 ON (
             (
               (
                 (F0_0."GROUP_2" = F1_0."_P_SIDE_GROUP_2")
@@ -242,9 +242,9 @@ FROM
           )
         )
       ORDER BY
-        REVENUE DESC NULLS LAST,
-        O_ORDERDATE ASC NULLS LAST
-    ) F1_0 ON (
+        REVENUE DESC,
+        O_ORDERDATE ASC
+    ) AS F1_0 ON (
       (
         (
           (
@@ -256,4 +256,4 @@ FROM
         AND (F0_0.O_SHIPPRIORITY = F1_0.O_SHIPPRIORITY)
       )
     )
-  );
+  )
