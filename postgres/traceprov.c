@@ -707,7 +707,7 @@ Datum traceprov_agg_key_sfunc(PG_FUNCTION_ARGS){
             // Don't include NULL in stats.
             if (needs_stats && (!PG_ARGISNULL(pk_id))){
                 update_stats(
-                    &current_rows_layer->stats[stat_id - 1],
+                    &current_column_layer->stats[stat_id],
                     value
                 );
             }
@@ -891,7 +891,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         *(uint64 *)(current_rows_layer->current_row) = reference_struct;
         current_rows_layer->current_row += sizeof(uint64);
         if (traceprov_use_table_stats){
-            update_stats(&current_rows_layer->stats[0], reference_struct);
+            update_stats(&current_column_layer->stats[1], reference_struct);
         }
     }
 
@@ -899,7 +899,7 @@ Datum traceprov_agg_key_combine(PG_FUNCTION_ARGS){
         *(uint64 *)(current_rows_layer->current_row) = other;
         current_rows_layer->current_row += sizeof(uint64);
         if (traceprov_use_table_stats){
-            update_stats(&current_rows_layer->stats[0], other);
+            update_stats(&current_column_layer->stats[1], other);
         }
     }
 

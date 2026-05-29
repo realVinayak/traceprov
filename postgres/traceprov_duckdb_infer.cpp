@@ -15,6 +15,10 @@
 #define STANDARD_VECTOR_SIZE 2048
 #endif
 
+#define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
+#define TP_ENABLE_PROFILING_QUERY_TREE "PRAGMA enable_profiling=query_tree"
+#define TP_SET_PROFILE_OUTPUT "PRAGMA profile_output='%s'"
+
 extern "C"
 {
 #include "duckdb.h"
@@ -49,6 +53,8 @@ extern "C"
         bool is_aggregate;
         bool is_combine;
         int64_t offset;
+        uint64_t number_of_records;
+        uint64_t number_of_col_records;
     } TraceProvBindData;
 
     typedef struct TraceProvInitData
@@ -147,6 +153,16 @@ extern "C"
                     elog(ERROR, "Expected the layer number to be filled");
             }
         }
+        bind_data->number_of_records = (uint64_t)get_final_ptr(NULL, current_layer) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        if (current_layer->aggregate_strategy == AGG_SORTED){
+            const void *final_ptr = get_final_ptr(NULL, bind_data->row_layer_info);
+            bind_data->number_of_records = ((uint64)final_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+            const void *final_col_ptr = get_final_ptr(NULL, current_layer);
+            bind_data->number_of_col_records = ((uint64)final_col_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        }else{
+            const void *final_ptr = get_final_ptr(NULL, current_layer);
+            bind_data->number_of_records = ((uint64)final_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        }
         return true;
     }
 
@@ -235,6 +251,7 @@ extern "C"
         initialize_g_tp_duckdb_state();
 
         auto bind_data = allocate_bind_data();
+        uint64_t total_record_count = 0;
 
         const uint32_t end_idx = current_worker_id == 0 ? g_tp_duckdb_state.worker_local_contexts->size() : current_worker_id;
 
@@ -245,6 +262,7 @@ extern "C"
             if (traceprov_populate_bind_data(worker_id + 1, layer_number, child_bind_data, current_worker_id != 0))
             {
                 bind_data->child_bind_data->push_back(child_bind_data);
+                total_record_count += child_bind_data->number_of_records;
             }
             else
             {
@@ -303,8 +321,11 @@ extern "C"
                 elog(ERROR, "Expected only one child in this case, for now.");
             }
             bind_data->child_bind_data->at(0)->offset = offset;
+            bind_data->child_bind_data->at(0)->number_of_records = offset + 1;
             bind_data->offset = offset;
+            total_record_count = 1;
         }
+        duckdb_bind_set_cardinality(info, total_record_count, true);
     }
 
     void traceprov_duckdb_init(duckdb_init_info info)
@@ -355,6 +376,7 @@ extern "C"
             traceprov_populate_init_data(bind_data->child_bind_data->at(self_idx), child_data_inst);
             init_data_inst->child_init_data->push_back(
                 child_data_inst);
+            init_data_inst->idx_in_bind = self_idx;
         }
         init_data_inst->is_dummy = is_dummy;
         duckdb_init_set_init_data(info, init_data_inst, free);
@@ -401,7 +423,7 @@ extern "C"
         void **final_ptr,
         const void *null_bit_vector)
     {
-
+        // elog(LOG, "Getting called with %ld", final_num_records);
         const uint64_t original_pos = current_pos;
         for (uint64_t i = 0; i < STANDARD_VECTOR_SIZE; i++)
         {
@@ -474,8 +496,8 @@ extern "C"
                 output,
                 init_data->col_layer_ptr,
                 init_data->current,
-                init_data->number_of_records,
-                init_data->number_of_col_records,
+                bind_data->number_of_records,
+                bind_data->number_of_col_records,
                 init_data,
                 bind_data);
         }
@@ -486,7 +508,7 @@ extern "C"
                 output,
                 init_data->col_layer_ptr,
                 init_data->current,
-                init_data->number_of_records,
+                bind_data->number_of_records,
                 0,
                 bind_data->column_width,
                 &init_data->col_layer_ptr,
@@ -499,14 +521,14 @@ extern "C"
                 output,
                 init_data->row_layer_ptr,
                 init_data->current,
-                init_data->number_of_records,
+                bind_data->number_of_records,
                 bind_data->column_width,
                 bind_data->row_width,
                 &init_data->row_layer_ptr,
                 init_data->row_null_layer_ptr);
         }
         init_data->current = final_state;
-        if (final_state >= init_data->number_of_records)
+        if (final_state >= bind_data->number_of_records)
         {
             // Switch to the next worker data if we've read through all for this layer.
             init_data_combined->current_child_idx++;
@@ -692,7 +714,7 @@ extern "C"
         merge_stats(old_stats, &stats);
     }
 
-    void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const bool column_index)
+    void bind_data_stats(TraceProvStatistics *stats, TraceProvBindData *bind_data, const bool is_aggregate, const int column_index)
     {
         if (is_aggregate && (column_index == 0))
         {
@@ -733,7 +755,7 @@ extern "C"
         }
         if (stats.is_set)
         {
-            // elog(INFO, "Setting stats for (%d, %d) -- [%lu, %lu]. Distinct: %lu", (uint32_t)tp_bind_data->rel_args.layer_number, column_idx, stats.min_value, stats.max_value, distinct_count);
+            elog(LOG, "Setting stats for (%d, %d) -- [%lu, %lu]. Distinct: %lu", (uint32_t)tp_bind_data->rel_args.layer_number, column_idx, stats.min_value, stats.max_value, distinct_count);
             *min_value = stats.min_value;
             *max_value = stats.max_value;
             if (distinct_count)
@@ -842,6 +864,11 @@ extern "C"
         // Use whatever the default, should be max anyways.
         // TODO: Make this configurable??
         // PG_DUCKDB_RUN_SHORT_QUERY(con, "SET threads=1;", "setting threads");
+        if (traceprov_duckdb_profile_out && (strlen(traceprov_duckdb_profile_out) > 1)){
+            char *profile_out = psprintf(TP_SET_PROFILE_OUTPUT, traceprov_duckdb_profile_out);
+            PG_DUCKDB_RUN_SHORT_QUERY(con, TP_ENABLE_PROFILING, TP_ENABLE_PROFILING);
+            PG_DUCKDB_RUN_SHORT_QUERY(con, profile_out, profile_out);
+        }
         *p_cleanup = traceprov_duckdb_cleanup;
     }
 

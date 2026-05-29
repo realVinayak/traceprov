@@ -36,12 +36,14 @@ from traceprovpy.tools.traceprov_extra_func import (
     TRACEPROV_DERIVE_OFFSET_KEY,
     TRACEPROV_LAYERS_TO_DERIVE_KEY,
     TRACEPROV_MATERIALIZE_LAYER_KEY,
+    TRACEPROV_PROFILE_DUCKDB,
 )
 
 
 def special_query(
     query_name: str,
     is_traceprov: bool,
+    parsed,
     extra_commands: list[str] = [],
     layers_to_derive=[],
     is_validate: bool = False,
@@ -83,6 +85,7 @@ def special_query(
                     TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                     TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
                     TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                    TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
                 }
                 if is_traceprov
                 else None
@@ -111,6 +114,7 @@ def enable_join_choices():
 
 def make_normal_query(
     query_name: str,
+    parsed,
     is_traceprov=False,
     extra_commands: list[str] = None,
     layers_to_derive=[],
@@ -147,6 +151,7 @@ def make_normal_query(
                 TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                 TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
                 TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
             },
         ),
     )
@@ -164,13 +169,14 @@ def get_query(
     offset = 0 if parsed.offset_mode else -1
 
     special_query_maybe = special_query(
-        query_name, is_traceprov=False, extra_commands=extra_commands
+        query_name, is_traceprov=False, parsed=parsed, extra_commands=extra_commands
     )
     if special_query_maybe:
         subdir_queries.append(special_query_maybe)
         special_query_traceprov = special_query(
             query_name,
             is_traceprov=True,
+            parsed=parsed,
             extra_commands=extra_commands,
             layers_to_derive=layers_to_derive,
             is_validate=is_validate,
@@ -181,12 +187,16 @@ def get_query(
     else:
         subdir_queries.append(
             make_normal_query(
-                query_name, is_traceprov=False, extra_commands=extra_commands
+                query_name,
+                parsed=parsed,
+                is_traceprov=False,
+                extra_commands=extra_commands,
             )
         )
         subdir_queries.append(
             make_normal_query(
                 query_name,
+                parsed=parsed,
                 is_traceprov=True,
                 extra_commands=extra_commands,
                 layers_to_derive=layers_to_derive,
@@ -248,6 +258,11 @@ def main():
     parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
     parser.add_argument(
         "--offset_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        f"--collect_duckdb_profile",
+        action=argparse.BooleanOptionalAction,
+        default=False,
     )
     parsed, _ = parser.parse_known_args()
     config = json_read_file(parsed.config)

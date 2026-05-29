@@ -1560,7 +1560,7 @@ extern "C"
         StringInfoData sql_repr;
         initStringInfo(&sql_repr);
         appendStringInfoString(&sql_repr, "SELECT ");
-        appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size(), true));
+        appendStringInfoString(&sql_repr, traceprov_get_column_select(relation->name, relation->data->size(), false));
         if (context.use_table_def)
         {
             if (relation->rel_args == NULL)

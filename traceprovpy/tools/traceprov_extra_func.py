@@ -1,13 +1,16 @@
 # the infer func.
 
+import getpass
 import json
 from pathlib import Path
 from traceprovpy.tools.benchmark import OPTION_GETTER, ExtraQuery, QuerySpec
+from traceprovpy.tools.file_utils import just_read, traceprov_assert_safe_run
 from traceprovpy.tools.run_with_timeout import RunWithTimeoutOptions, run_with_timeout
 
 TRACEPROV_LAYERS_TO_DERIVE_KEY = "TRACEPROV_LAYERS_TO_DERIVE_KEY"
 TRACEPROV_MATERIALIZE_LAYER_KEY = "TRACEPROV_MATERIALIZE_LAYER_KEY"
 TRACEPROV_DERIVE_OFFSET_KEY = "TRACEPROV_DERIVE_OFFSET_KEY"
+TRACEPROV_PROFILE_DUCKDB = "TRACEPROV_PROFILE_DUCKDB"
 
 TRACEPROV_INFER_SPEC_QUERY = (
     "select * from traceprov_get_generic_derivation_spec(false);"
@@ -48,6 +51,10 @@ def get_matching_element(table: str, create_layers: str):
     return filtered[0]
 
 
+def set_profile_path(cursor, path):
+    cursor.execute(f"SET traceprov.duckdb_profile_out='{path}'")
+
+
 def get_traceprov_extra_infer_func(perform_inference: bool = True):
 
     def traceprov_extra_infer_func(
@@ -61,11 +68,15 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         print("Deriving layers: ", layers_to_derive)
         is_validate = query_spec.extra_options[TRACEPROV_MATERIALIZE_LAYER_KEY]
         offset_to_derive = query_spec.extra_options[TRACEPROV_DERIVE_OFFSET_KEY]
+        capture_duckdb_profile = query_spec.extra_options[TRACEPROV_PROFILE_DUCKDB]
         prepare_for_scan = TRACEPROV_PREPARE_FOR_SCAN(
             "" if offset_to_derive == -1 else str(offset_to_derive)
         )
         conn = run_time_options.run_connection_strict()
         cursor = conn.cursor()
+        duckdb_profile_path = Path("/tmp/") / "traceprov_duckdb_profile.json"
+        if capture_duckdb_profile:
+            set_profile_path(cursor, duckdb_profile_path.as_posix())
         prepare_cursor_explain = (
             f"{run_time_options.get_explain(conn)} {prepare_for_scan}"
         )
@@ -89,7 +100,6 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
             # )
             # cursor.execute(create_table_explain_sql)
             # create_table_analyze_results.append(cursor.fetchall()[0][0][0])
-
             if not is_validate:
                 continue
 
@@ -117,13 +127,27 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
                 for _ in range(extra_spec.repeat):
                     rsi_result = run_with_timeout(rt_option)
                     # rsi_timings = _run_simple(cursor, TRACEPROV_INFER_QUERY_STAT(idx, False))
+                    profile = None
+                    if capture_duckdb_profile:
+                        username = getpass.getuser()
+                        traceprov_assert_safe_run(
+                            f"sudo chown {username} {duckdb_profile_path.as_posix()}"
+                        )
+                        profile = just_read(duckdb_profile_path)
+                        traceprov_assert_safe_run(
+                            f"rm -f {duckdb_profile_path.as_posix()}"
+                        )
                     result_elem["raw_results"].append(
-                        dict(result=rsi_result, timings=None)
+                        dict(result=rsi_result, timings=None, profile=profile)
                     )
                 cursor.execute(f"select count(*) from {layer};")
                 result_elem["row_count"] = cursor.fetchall()[0][0]
                 # also compute the row count.
                 results.append(result_elem)
+
+        if capture_duckdb_profile:
+            set_profile_path(cursor, "")
+
         cursor.close()
         final_results = dict(
             prepare_for_scan_init=prepare_for_scan_analyze_result,
