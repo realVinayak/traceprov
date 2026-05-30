@@ -428,6 +428,9 @@ struct Options parse_args(int argc, char **argv){
             // Switch from seconds to microseconds.
             options.warm_up_time = std::atol(argv[++i]) * (1000*1000);
             continue;
+        } else if (IS_OPTION("--traceprov_ignore_direct_join")){
+            traceprov_ignore_direct_join = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;

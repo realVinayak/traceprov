@@ -29,6 +29,7 @@ class DriverDefaultValues(NamedTuple):
     traceprov_force_seq_scan: bool = False
     traceprov_skip_sql_cache: bool = False
     traceprov_use_table_stats: bool = False
+    traceprov_ignore_direct_join: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -81,6 +82,9 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_force_seq_scan: bool = DriverDefaultValues.traceprov_force_seq_scan
     traceprov_skip_sql_cache: bool = DriverDefaultValues.traceprov_skip_sql_cache
     traceprov_use_table_stats: bool = DriverDefaultValues.traceprov_use_table_stats
+    traceprov_ignore_direct_join: bool = (
+        DriverDefaultValues.traceprov_ignore_direct_join
+    )
     warm_up_time: int = 0
 
     @staticmethod
@@ -120,6 +124,7 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_force_seq_scan",
             "traceprov_skip_sql_cache",
             "traceprov_use_table_stats",
+            "traceprov_ignore_direct_join",
         }
         recognized = set(DriverDefaultValuesInstance._fields)
         assert recognized == optimizations

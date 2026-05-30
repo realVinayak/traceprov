@@ -923,7 +923,11 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
         join_exprn->is_left_star = true;
 
         uint64_t rel_flags = 0;
-        if ((worker_combine_layers->size() == 0) || (traceprov_combine_in_memory)){
+        if ((
+            (worker_combine_layers->size() == 0)  // If combine was not used, make the join
+            || (traceprov_combine_in_memory)) // if combine-in-memory, make the join
+            || (!traceprov_ignore_direct_join) // If neither, check the global setting.
+        ){
             current_tree->children->push_back(derive_on_node(
                 (TraceProvNode*)join_exprn, 
                 agg_graph, 

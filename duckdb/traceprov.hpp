@@ -386,13 +386,13 @@ static_assert(sizeof(struct traceprov_agg_context) <= 32, "Expected the size of 
 #define TRACEPROV_SET_BUCKET(X, BUCKET) ((((uint64_t) BUCKET) << 48) | X)
 #define TRACEPROV_GET_BUCKET(X) ((uint8_t) (((uint64_t) X) >> 48))
 
-#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64_t)1) << 47) | X)
-#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64_t)1) << 47) & X) != 0)
-#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64_t)1) << 47)) & X)
+#define TRACEPROV_SET_IS_COMBINED(X) ((((uint64_t)1) << 56) | X)
+#define TRACEPROV_GET_IS_COMBINED(X) (((((uint64_t)1) << 56) & X) != 0)
+#define TRACEPROV_STRIP_COMBINED(X) ((~(((uint64_t)1) << 56)) & X)
 
-#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64_t) W) << 56) | X)
-#define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 56))
-#define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 56)) & X)
+#define TRACEPROV_SET_WORKER_ID(X, W) ((((uint64_t) W) << 32) | X)
+#define TRACEPROV_GET_WORKER_ID(X) ((uint8_t) (((uint64_t) X) >> 32))
+#define TRACEPROV_STRIP_WORKER_ID(X) ((~(((uint64_t)(~((uint8_t)0))) << 32)) & X)
 
 #define TRACEPROV_SET_LAYER(X, BUCKET) ((((uint64_t) BUCKET) << 40) | X)
 #define TRACEPROV_GET_LAYER(X) ((uint8_t) (((uint64_t) X) >> 40))
