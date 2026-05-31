@@ -71,6 +71,17 @@ def create_base_offset(query_dir: Path):
     assert base_offset.exists(), "Expected base offset query to exist!"
 
 
+TRACEPROV_EXTRA_OPTIONS = "_traceprov_parse_extra_options"
+
+
+def set_extra_traceprov_options(parsed, options):
+    setattr(parsed, TRACEPROV_EXTRA_OPTIONS, options)
+
+
+def get_extra_traceprov_options(parsed):
+    return getattr(parsed, TRACEPROV_EXTRA_OPTIONS, "")
+
+
 def run_sample_inference(
     query_num: str,
     samples: Iterable[int],
@@ -137,7 +148,9 @@ def run_sample_inference(
 
     capture_options = capture_options.parse_optimizations(parsed)
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    traceprov_assert_safe_run(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     capture_result_time: list = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
@@ -291,7 +304,9 @@ def run_single_smokedduck(
         warm_up_time=parsed.warm_up_time,
         extra_multiple_count=1,
     )
-    return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
+    return_code = run_cmd(
+        f"{exec_str} {base_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     if return_code != 0:
         print("failed: rc: ", return_code)
         return dict(type="base_failed", rc=return_code)
@@ -369,7 +384,9 @@ def run_single_smokedduck(
     capture_result_code = -1
     if run_sd:
         capture_options = capture_options._replace(extras=extras)
-        capture_result_code = run_cmd(f"{exec_str} {capture_options.serialize()}")
+        capture_result_code = run_cmd(
+            f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+        )
         if capture_result_code == 0:
             capture_result_time = json_read_file(capture_options.time)
             capture_profile_out = json_read_iters(
@@ -585,7 +602,9 @@ def run_sample_inference_smokedduck(
         warm_up_time=parsed.warm_up_time,
     )
 
-    rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
+    rc = run_cmd(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     if rc != 0:
         stats = json_read_iters(capture_options.stats, 1)
         final_result = dict(type="crash_on_capture", return_code=rc, stats=stats)
@@ -823,9 +842,10 @@ def run_single(
         capture_options = capture_options._replace(log_offsets=[0])
         parsed.sample_inference = None
 
-    graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
-    os.makedirs(graph_file_dest, exist_ok=True)
-    traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+    if traceprov_graph_path:
+        graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
+        os.makedirs(graph_file_dest, exist_ok=True)
+        traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
 
     if run_inference:
         capture_options = capture_options._replace(
@@ -833,7 +853,9 @@ def run_single(
             traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation,
         )
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    traceprov_assert_safe_run(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     capture_result_time = json_read_file(capture_options.time)
     capture_profile_out = json_read_iters(
         capture_options.profile, capture_options.repeat
@@ -895,10 +917,12 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
             ),
         )
     else:
-        graph_dir = Path(parsed.graph_dir)
+        graph_path = (
+            Path(parsed.graph_dir / query / "graph.bin") if parsed.graph_dir else None
+        )
         query_result = run_single(
             query_num=query,
-            traceprov_graph_path=graph_dir / query / "graph.bin",
+            traceprov_graph_path=graph_path,
             traceprov_layers_to_derive=(1,),
             parsed=parsed,
             iters=total_iters,

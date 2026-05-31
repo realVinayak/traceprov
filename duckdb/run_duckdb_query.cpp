@@ -116,6 +116,12 @@ const static MiscKeyValue g_init_misc_key_value = {
     .sql_compilation_time = 0
 };
 
+enum CustomGraphType {
+    INVALID = 0,
+    LOG_CHAIN,
+    AGG_LOG
+};
+
 // TODO: Migrate to a better option handling system than this in-house mess.
 struct Options {
     // via --lineage
@@ -201,10 +207,31 @@ struct Options {
     // via --traceprov_force_seq_scan
     bool dump_base_table;
     uint64_t warm_up_time;
+    CustomGraphType custom_graph_type;
+    uint64_t custom_graph_type_log_chain_table_count;
+    bool sd_join_mode;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
 #define IS_SET(X) (X.size() != 0)
+
+std::string *get_disabled_optimizations(const Options *options){
+    std::string disabled = "";
+    std::vector<std::string> disabled_names;
+    if (options->sd_join_mode){
+        disabled_names.push_back("filter_pushdown");
+        disabled_names.push_back("statistics_propagation");
+        // disabled_names.push_back("join_filter_pushdown");
+    }
+    if (options->disable_column_optimizer){
+        disabled_names.push_back("unused_columns");
+    }
+    for (int idx = 0; idx < disabled_names.size(); idx++){
+       if (idx > 0) disabled += ",";
+       disabled += disabled_names[idx];
+    }
+    return new std::string("SET disabled_optimizers='" + disabled + "';");
+}
 
 struct Options parse_args(int argc, char **argv){
     struct Options options {
@@ -247,7 +274,10 @@ struct Options parse_args(int argc, char **argv){
         .get_log_size = false,
         .misc_store = g_init_misc_key_value,
         .dump_base_table = false,
-        .warm_up_time = 0
+        .warm_up_time = 0,
+        .custom_graph_type = CustomGraphType::INVALID,
+        .custom_graph_type_log_chain_table_count = 0,
+        .sd_join_mode = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -431,6 +461,15 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_ignore_direct_join")){
             traceprov_ignore_direct_join = true;
             continue;
+        } else if (IS_OPTION("--custom_graph_type")){
+            options.custom_graph_type = (CustomGraphType)std::atol(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--log_chain_table_count")){
+            options.custom_graph_type_log_chain_table_count = std::atol(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--sd_join_mode")){
+            options.sd_join_mode = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -449,6 +488,9 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
     traceprov_thread_count = options.num_threads;
+    if (options.custom_graph_type == CustomGraphType::LOG_CHAIN || options.custom_graph_type == CustomGraphType::AGG_LOG){
+        traceprov_create_join_chain_dependency(options.custom_graph_type_log_chain_table_count, options.custom_graph_type == CustomGraphType::AGG_LOG);
+    }
     return options;
 };
 
@@ -533,13 +575,14 @@ PerformQueryResult *perform_query(
         reset_global_context();
         // traceprov_write_max_used_layer(options->min_layer_number);
     }
+    DUCKDB_RUN_SHORT_QUERY(con, get_disabled_optimizations(options)->c_str(), get_disabled_optimizations(options)->c_str());
 
-    if (options->disable_column_optimizer){
-        // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
-    }else{
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
-    }
+    // if (options->disable_column_optimizer){
+    //     // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
+    //     DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+    // }else{
+    //     DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
+    // }
     if (options->min_layer_number){
         traceprov_current.maximum_local_layer_used = options->min_layer_number;
     }
@@ -901,6 +944,7 @@ int main(int argc, char **argv){
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
         traceprov_create_debug_table_funcs(con);
+        traceprov_create_chunk_table_func(con);
     }
         
     //if (options.disable_column_optimizer){

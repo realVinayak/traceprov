@@ -72,3 +72,9 @@ def traceprov_assert_safe_run(cmd: str):
 
 def null_safe(in_list: list):
     return [0 if i is None else i for i in in_list]
+
+
+def get_total_iters(config: dict):
+    run_time_options = config["runTimeOptions"]
+    total_iters = run_time_options["repeat"] + run_time_options["throwaway"]
+    return total_iters

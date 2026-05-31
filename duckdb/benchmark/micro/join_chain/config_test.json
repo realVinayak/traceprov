@@ -1,0 +1,12 @@
+{
+    "query_dir": [
+        {
+            "table_count": 4,
+            "fan_out": 4
+        }
+    ],
+    "runTimeOptions": {
+        "repeat": 2,
+        "throwaway": 0
+    }
+}

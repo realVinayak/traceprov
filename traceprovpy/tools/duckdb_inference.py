@@ -86,6 +86,8 @@ class DuckDBDriverOptions(NamedTuple):
         DriverDefaultValues.traceprov_ignore_direct_join
     )
     warm_up_time: int = 0
+    load_micro_benchmarks: bool = False
+    sd_join_mode: bool = False
 
     @staticmethod
     def get_suffix(parsed):
@@ -143,6 +145,8 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_materialize_derivation",
             "traceprov_dry_run_derivation",
             "get_log_size",
+            "load_micro_benchmarks",
+            "sd_join_mode",
         }
         assert (
             len(optimizations.intersection(base_options)) == 0
