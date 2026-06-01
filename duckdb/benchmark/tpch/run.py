@@ -24,6 +24,7 @@ from traceprovpy.tools.run_duckdb_generic import (
     run_sample_inference_smokedduck,
     run_single,
     run_single_smokedduck,
+    set_extra_traceprov_options,
 )
 
 NEEDS_DISABLE = {str(2), str(11), str(15), str(17), str(18), str(20), str(22)}
@@ -52,11 +53,14 @@ def run():
     config_queries = config["queries"]
     if isinstance(config_queries, str):
         config_queries = eval(config_queries)
+    needs_join_mode = list(map(str, config.get("queries_sd_join_mode", [])))
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
         sample_inference_result = None
         if parsed.sd_mode:
+            if query in needs_join_mode:
+                set_extra_traceprov_options(parsed, "--sd_join_mode")
             query_result = dict(
                 sd_type=parsed.sd_mode,
                 sd=run_single_smokedduck(
@@ -66,6 +70,7 @@ def run():
                     pre_base=pre_base_path,
                 ),
             )
+            set_extra_traceprov_options(parsed, "")
         else:
             disable_col_opt = query in NEEDS_DISABLE
             graph_dir = extract_graph_dir(parsed)
@@ -94,6 +99,8 @@ def run():
                 out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
+                if query in needs_join_mode:
+                    set_extra_traceprov_options(parsed, "--sd_join_mode")
                 query_id = infer_detailed_option_setting(parsed.exe)
                 sample_inference_result = run_sample_inference_smokedduck(
                     query_num=query,
@@ -103,6 +110,7 @@ def run():
                     iters=total_iters,
                     pre_base=pre_base_path,
                 )
+                set_extra_traceprov_options(parsed, "")
             else:
                 sample_inference_result = run_sample_inference(
                     query_num=query,
