@@ -105,6 +105,7 @@ void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 typedef struct MiscKeyValue {
     TraceProvLogSize total_log_size;
     uint64_t sql_compilation_time;
+    std::string layer_stats;
 } MiscKeyValue;
 
 const static MiscKeyValue g_init_misc_key_value = {
@@ -113,7 +114,8 @@ const static MiscKeyValue g_init_misc_key_value = {
         .page_used_size = 0,
         .bytes_used_size = 0
     },
-    .sql_compilation_time = 0
+    .sql_compilation_time = 0,
+    .layer_stats = ""
 };
 
 enum CustomGraphType {
@@ -679,6 +681,7 @@ PerformQueryResult *perform_query(
         result = make_result(duration.count(), traceprov_data, options);
         if (options->get_log_size){
             result->option.misc_store.total_log_size = traceprov_get_total_layer_size();
+            result->option.misc_store.layer_stats = traceprov_get_layer_stats();
         }
         agg_result->push_back(result);
     }
@@ -1350,6 +1353,8 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
     option_serialized += "]";
     option_serialized += ",";
     option_serialized += "\"misc_key_value_sql_compilation_time\": " + std::to_string(option->misc_store.sql_compilation_time);
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_layer_stats\": " +(option->misc_store.layer_stats == "" ? "null" : option->misc_store.layer_stats);
     option_serialized += "}";
     return option_serialized;
 }

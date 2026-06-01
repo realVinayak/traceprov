@@ -379,6 +379,7 @@ TraceProvBindData *setup_layers(
     {
         *record_count = found_record_count;
     }
+    my_bind_data->is_memory_mapping = (my_bind_data->col_layer->page_mapping != NULL);
 
     return my_bind_data;
 }
@@ -525,7 +526,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
                 continue;
             bind_data->worker_bind_data->push_back(child_bind_data);
             bind_data->is_strict_rows |= child_bind_data->is_strict_rows;
-            bind_data->is_memory_mapping |= (child_bind_data->col_layer->page_mapping != NULL);
+            bind_data->is_memory_mapping |= (child_bind_data->is_memory_mapping);
             if (bind_data->column_width != 0 && (bind_data->column_width != child_bind_data->column_width))
             {
                 bp();
@@ -1599,4 +1600,81 @@ TraceProvLogSize traceprov_get_total_layer_size()
     log_size.page_used_size = page_used;
     log_size.bytes_used_size = bytes_used;
     return log_size;
+}
+
+
+typedef struct LogStats {
+    int64_t min_value;
+    uint64_t max_value;
+    uint64_t avg_value;
+} LogStats;
+
+typedef std::vector<idx_t> LogSizeVector;
+
+LogStats tp_compute_stats(const LogSizeVector *log_size_vector){
+    uint64_t max_value = 0;
+    uint64_t min_value = -1;
+    uint64_t sum = 0;
+    for (idx_t index = 0; index < log_size_vector->size(); index++){
+        auto value = log_size_vector->at(index);
+        max_value = MaxValue(max_value, value);
+        min_value = MinValue(min_value, value);
+        sum += value;
+    }
+    return LogStats {
+        .min_value = (int64_t)min_value,
+        .max_value = max_value,
+        .avg_value = sum / log_size_vector->size()
+    };
+}
+
+std::string traceprov_get_layer_stats()
+{
+    initialize_global_context();
+    std::unordered_map<TraceProvLayerNumber, std::vector<uint64_t> *> layer_size_mapping;
+    for (auto entry: *g_tp_duckdb_state.worker_local_contexts){
+        for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
+            if (layer->layer_number == 0 || layer->rows_layer_number == 0) continue;
+            int64_t record_count = 0;
+            TraceProvBindData *bind_data = setup_layers(
+                entry->worker_id,
+                layer->layer_number,
+                -1,
+                &record_count,
+                true,
+                0
+            );
+            const uint32_t layer_key = layer->combined_aggregate_layer_number ? layer->combined_aggregate_layer_number : layer->layer_number;
+            if (layer_size_mapping.count(layer_key) == 0){
+                layer_size_mapping[layer_key] = new std::vector<uint64_t>;
+            }
+            const auto _traceprov_grow_row_count_page_mapping = bind_data->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
+            auto local_init_data = traceprov_make_init_data(bind_data);
+            for (uint64_t idx = 0; idx < bind_data->num_rows; idx++){
+                _traceprov_grow_row_count_page_mapping(local_init_data, bind_data);
+                const uint64_t num_rows = *((uint64_t *)local_init_data->row_count_layer_ptr);
+                local_init_data->row_count_layer_ptr = INCR_BY_BYTES(local_init_data->row_count_layer_ptr, sizeof(uint64_t));
+                layer_size_mapping[layer_key]->push_back(num_rows);
+            }
+        }
+    }
+    std::string stat_str;
+    stat_str += "{";
+    int counter = 0;
+    for (auto entry: layer_size_mapping){
+        if (counter++) stat_str += ",";
+        const auto layer_key = entry.first;
+        const auto stats = tp_compute_stats(entry.second);
+        stat_str += "\"" + std::to_string(layer_key) + "\": ";
+        stat_str += "{";
+        stat_str += "\"min\": " + std::to_string(stats.min_value);
+        stat_str += ",";
+        stat_str += "\"max\": " + std::to_string(stats.max_value);
+        stat_str += ",";
+        stat_str += "\"avg\": " + std::to_string(stats.avg_value);
+        stat_str += "}";
+    }
+    stat_str += "}";
+    return stat_str;
 }
