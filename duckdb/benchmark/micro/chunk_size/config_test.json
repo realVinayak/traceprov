@@ -1,0 +1,22 @@
+{
+    "query_dir": [
+        {
+            "table_counts": [
+                "1024 * 8",
+		"2**21"
+            ],
+            "selectivity": [
+                "100",
+                "16"
+            ],
+            "chunk_size": [
+                "2048",
+                "2048"
+            ]
+        }
+    ],
+    "runTimeOptions": {
+        "repeat": 5,
+        "throwaway": 0
+    }
+}
