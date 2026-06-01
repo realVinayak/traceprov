@@ -5,8 +5,8 @@ select
 	s_name,
 	s_address
 from
-	supplier,
-	nation
+	(select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 24)) supplier,
+	(select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 25)) nation
 where
 	s_suppkey in (
 		select
@@ -35,7 +35,5 @@ where
 			)
 	)
 	and s_nationkey = n_nationkey
-	and supplier.rowid in (select iid from LAYER_1_SD where "table" = 24)
-	and nation.rowid in (select iid from LAYER_1_SD where "table" = 25)
 order by
 	s_name;
