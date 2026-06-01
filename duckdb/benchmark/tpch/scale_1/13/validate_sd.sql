@@ -11,10 +11,10 @@ from (
                 select * from LAYER_1_SD_%OUT_ID%
                 where "table" = 2 and (customer.rowid is not distinct from iid)
         )
-        and EXISTS (
+        and ( EXISTS (
                 select * from LAYER_1_SD_%OUT_ID%
                 where "table" = 0 and (orders.rowid is not distinct from iid)
-        )
+        ) OR (select count(*) from LAYER_1_SD_%OUT_ID% where "table" = 0 ) = 0)
         group by c_custkey
     ) as c_orders (c_custkey, c_count)
 group by c_count

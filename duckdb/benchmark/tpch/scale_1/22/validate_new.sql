@@ -10,16 +10,17 @@ from (
             c_acctbal
         from customer
         where customer.rowid in (
-                select column_1
-                from traceprov_lineage_3
+                select iid from LAYER_1_SD_%OUT_ID% where "table" = 7
             )
             and c_acctbal > (
-                select avg(c_acctbal)
-                from customer
-                where (customer.rowid) in (
-                        select column_1
-                        from traceprov_lineage_1
-                    )
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+					c_acctbal > 0.00
+					and substring(c_phone from 1 for 2) in
+						('13', '31', '23', '29', '30', '18', '17')
             )
             and not exists (
                 select *

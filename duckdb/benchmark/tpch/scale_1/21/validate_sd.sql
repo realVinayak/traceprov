@@ -1,10 +1,10 @@
 -- using default substitutions
 select s_name,
     count(*) as numwait
-from supplier,
-    lineitem l1,
-    orders,
-    nation
+from (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 18)) supplier,
+    (select * from lineitem where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 16)) l1,
+    (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 15)) orders,
+    (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 19)) nation
 where exists (
 		select
 			*
@@ -21,12 +21,9 @@ where exists (
             and l3.l_suppkey <> l1.l_suppkey
             and l3.l_receiptdate > l3.l_commitdate
     )
-    and supplier.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 18)
-    and l1.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 16)
-    and orders.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 15)
-    and nation.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 19)
     and s_suppkey = l1.l_suppkey
     and o_orderkey = l1.l_orderkey
+    and s_nationkey = n_nationkey
 group by s_name
 order by numwait desc,
     s_name

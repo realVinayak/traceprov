@@ -5,8 +5,8 @@ select
 	s_name,
 	s_address
 from
-	supplier,
-	nation
+	(select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 24)) supplier,
+	(select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 25)) nation
 where
 	s_suppkey in (
 		select
@@ -20,7 +20,7 @@ where
 				from
 					part
 				where
-					part.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 12)
+					p_name like 'forest%'
 			)
 			and ps_availqty > (
 				select
@@ -30,12 +30,10 @@ where
 				where
 					l_partkey = ps_partkey
 					and l_suppkey = ps_suppkey
-					and lineitem.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 0)
+					and l_shipdate >= date '1994-01-01'
+					and l_shipdate < date '1994-01-01' + interval '1' year
 			)
-			and partsupp.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 11)
 	)
 	and s_nationkey = n_nationkey
-	and supplier.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 24)
-	and nation.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 25)
 order by
 	s_name;
