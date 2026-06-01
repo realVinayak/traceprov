@@ -918,7 +918,7 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
         )
     else:
         graph_path = (
-            Path(parsed.graph_dir / query / "graph.bin") if parsed.graph_dir else None
+            Path(parsed.graph_dir) / query / "graph.bin" if parsed.graph_dir else None
         )
         query_result = run_single(
             query_num=query,

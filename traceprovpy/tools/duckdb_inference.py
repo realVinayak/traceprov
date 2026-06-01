@@ -215,9 +215,12 @@ class DuckDBDriverOptions(NamedTuple):
                 ],
             ]
         if self.log_offsets:
+            log_offset_file = just_write(
+                "/tmp/log_offsets.text", "\n".join(list(map(str, self.log_offsets)))
+            )
             key_value_options = [
                 *key_value_options,
-                *[f"--log_offset {log_offset}" for log_offset in self.log_offsets],
+                f"--log_offset_file {log_offset_file}",
             ]
         if self.pre_query:
             pre_query_file = "/tmp/traceprov_pre_query.txt"

@@ -427,6 +427,15 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--log_offset")){
             options.log_offsets->push_back(std::atol(argv[++i]));
             continue;
+        } else if (IS_OPTION("--log_offset_file")){
+            auto log_offset_file = std::string(argv[++i]);
+            std::ifstream pre_main_sql_path_stream(log_offset_file.c_str());
+            for (std::string log_offset; std::getline(pre_main_sql_path_stream, log_offset);){
+                if (log_offset.size() > 0){
+                    options.log_offsets->push_back(std::atol(log_offset.c_str()));
+                }
+            }
+            continue;
         } else if (IS_OPTION("--pre_main_sql")){
             auto pre_main_sql_path = std::string(argv[++i]);
             std::ifstream pre_main_sql_path_stream(pre_main_sql_path.c_str());
