@@ -23,5 +23,4 @@ from lineage_view(QID, 18) t_18
     join lineage_view(QID, 6) t_6 on t_10.lhs_index = t_6.out_index
     join lineage_view(QID, 9) t_9 on t_10.rhs_index = t_9.out_index
     join lineage_view(QID, 7) t_7 on t_9.lhs_index = t_7.out_index
-    join lineage_view(QID, 9) t_9 on t_10.rhs_index = t_9.out_index
     join lineage_view(QID, 8) t_8 on t_9.rhs_index = t_8.out_index;
