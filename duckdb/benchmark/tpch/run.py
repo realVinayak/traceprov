@@ -99,8 +99,11 @@ def run():
                 out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
+                extra_options = ["disable_chunk_cache"]
                 if query in needs_join_mode:
-                    set_extra_traceprov_options(parsed, "--sd_join_mode")
+                    extra_options.append("sd_join_mode")
+                extra_options = " ".join([f"--{key}" for key in extra_options])
+                set_extra_traceprov_options(parsed, extra_options)
                 query_id = infer_detailed_option_setting(parsed.exe)
                 sample_inference_result = run_sample_inference_smokedduck(
                     query_num=query,

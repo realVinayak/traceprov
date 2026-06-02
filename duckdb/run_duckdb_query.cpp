@@ -58,6 +58,8 @@ extern "C" {
 
 #define TP_LAYER_STATS_OUTPUT(QUERY, OUT) ("copy (select * from (" + QUERY + ")) to '" + OUT + "'")
 
+#define TP_SD_DISABLE_CHUNK_CACHE "PRAGMA disable_cache;"
+#define TP_SD_ENABLE_CHUNK_CACHE "PRAGMA enable_cache;"
 
 void wrapped_enable_lineage();
 void wrapped_disable_lineage();
@@ -212,6 +214,7 @@ struct Options {
     CustomGraphType custom_graph_type;
     uint64_t custom_graph_type_log_chain_table_count;
     bool sd_join_mode;
+    bool disable_chunk_cache;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -279,7 +282,8 @@ struct Options parse_args(int argc, char **argv){
         .warm_up_time = 0,
         .custom_graph_type = CustomGraphType::INVALID,
         .custom_graph_type_log_chain_table_count = 0,
-        .sd_join_mode = false
+        .sd_join_mode = false,
+        .disable_chunk_cache = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -481,6 +485,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--sd_join_mode")){
             options.sd_join_mode = true;
             continue;
+        } else if (IS_OPTION("--disable_chunk_cache")){
+            options.disable_chunk_cache = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -587,7 +594,13 @@ PerformQueryResult *perform_query(
         // traceprov_write_max_used_layer(options->min_layer_number);
     }
     DUCKDB_RUN_SHORT_QUERY(con, get_disabled_optimizations(options)->c_str(), get_disabled_optimizations(options)->c_str());
-
+    #if TRACEPROV_SD_MODE==1
+    if (options->disable_chunk_cache){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_DISABLE_CHUNK_CACHE, TP_SD_DISABLE_CHUNK_CACHE);
+    }else{
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
+    }
+    #endif
     // if (options->disable_column_optimizer){
     //     // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
     //     DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
@@ -717,6 +730,10 @@ PerformQueryResult *perform_query(
         _layer_stats_query = (TP_LAYER_STATS_OUTPUT(_layer_stats_query, layer_stats_out));
         DUCKDB_RUN_SHORT_QUERY(con, _layer_stats_query.c_str(), "layer stats out");
     }
+
+    #if TRACEPROV_SD_MODE==1
+    DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
+    #endif
 
     return result;
 }

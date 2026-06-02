@@ -342,7 +342,7 @@ def run_single_smokedduck(
         ]
 
     def run_old_sd():
-        thread_combined_sql = base_dir / f"sd_thread_{parsed.threads}_combined.sql"
+        thread_combined_sql = base_dir / f"sd_thread_{1}_combined.sql"
         backtrace_queries = parse_backtrace_queries(thread_combined_sql)
         query_id = infer_detailed_option_setting(exe)
         backtrace_queries_sub = {
@@ -614,7 +614,7 @@ def run_sample_inference_smokedduck(
         final_result = parse_sd_result_multiple(
             capture_options, sql_spec_map, extra_sqls
         )
-    if validate:
+    if validate and rc == 0:
         for map_idx, map_entry in enumerate(sql_spec_map):
             if map_idx == 0:
                 continue
