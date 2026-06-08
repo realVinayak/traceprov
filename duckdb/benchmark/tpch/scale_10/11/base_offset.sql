@@ -27,5 +27,5 @@ group by
 				and n_name = 'GERMANY'
 		)
 order by
-	value desc
+	value desc, ps_partkey
 ) F LIMIT 1 OFFSET __TP_OFFSET__;

@@ -21,4 +21,4 @@ having sum(ps_supplycost * ps_availqty) > (
             and (supplier.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 10))
             and (nation.rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 11))
     )
-order by value desc;
+order by value desc, ps_partkey;

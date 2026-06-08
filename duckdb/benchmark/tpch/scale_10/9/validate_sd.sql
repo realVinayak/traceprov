@@ -9,12 +9,12 @@ from (
                 from o_orderdate
             ) as o_year,
             l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount
-        from (select * from part where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 3)) part,
-            (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 6)) supplier,
+        from (select * from part where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 1)) part,
+            (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 4)) supplier,
             (select * from lineitem where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 0)) lineitem,
             (select * from partsupp where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 10)) partsupp,
-            (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 1)) orders,
-            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 7)) nation
+            (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 8)) orders,
+            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 5)) nation
         where s_suppkey = l_suppkey
             and ps_suppkey = l_suppkey
             and ps_partkey = l_partkey

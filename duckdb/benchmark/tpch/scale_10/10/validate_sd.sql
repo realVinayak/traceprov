@@ -32,7 +32,7 @@ where c_custkey = o_custkey
     and nation.rowid in (
         select iid
         from LAYER_1_SD_%OUT_ID%
-        where "table" = 3
+        where "table" = 4
     )
 group by c_custkey,
     c_name,
