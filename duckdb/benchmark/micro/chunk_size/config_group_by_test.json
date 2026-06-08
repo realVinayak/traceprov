@@ -1,0 +1,11 @@
+{
+  "query_dir": {
+    "table_counts": ["10_000_000"],
+    "num_groups": ["100"],
+    "chunk_size": [ 32, 64, 128, 256, 512, 1024, 2048]
+  },
+  "runTimeOptions": {
+    "repeat": 5,
+    "throwaway": 0
+  }
+}

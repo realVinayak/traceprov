@@ -3,7 +3,10 @@ import os
 from pathlib import Path
 import duckdb
 
-from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
+from traceprovpy.tools.benchmark_utils import (
+    evaluate_if_str,
+    traceprov_dump_safe_results,
+)
 from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,
@@ -19,12 +22,6 @@ from traceprovpy.tools.run_duckdb_generic import (
     run_single_query_dry,
     set_extra_traceprov_options,
 )
-
-
-def evaluate_if_str(value: str | int):
-    if isinstance(value, str):
-        return eval(value)
-    return value
 
 
 def _make_table(previous, current):
@@ -105,7 +102,7 @@ def make_query(parsed, table_prefix, table_count):
     return normal_query, traceprov_query
 
 
-def set_extra(parsed, table_count):
+def set_extra(parsed, table_count, extra_options: list):
     extra_options = {
         "custom_graph_type": 2,
         "log_chain_table_count": table_count,
