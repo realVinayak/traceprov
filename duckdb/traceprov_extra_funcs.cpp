@@ -5,6 +5,9 @@
 #include "traceprov_extra_funcs.hpp"
 #include "traceprov.hpp"
 
+#include <algorithm> // For std::shuffle
+#include <random>    // For std::mt19937
+
 extern "C" {
     #include <mem_alloc.h>
 }
@@ -24,6 +27,8 @@ typedef struct TraceProvChunkBind {
     // How many columns to emit?
     uint64_t column_count;
 } TraceProvChunkBind;
+
+#define TP_SHUFFLE_SEED 21
 
 void traceprov_chunk_bind(duckdb_bind_info info){
     if (duckdb_bind_get_parameter_count(info) != 3){
@@ -162,15 +167,13 @@ typedef struct TraceProvChunkedReadBind {
     int64_t layer_number;
     int64_t chunk_size;
     int64_t row_count;
-    int64_t base_row_count;
-    int64_t selectivity;
+    int64_t group_count;
+    // int64_t selectivity;
 } TraceProvChunkedReadBind;
 
 typedef struct TraceProvChunkedReadInit {
-    int64_t rows_to_emit;
-    int64_t extra_rows;
-    int64_t index_in_build;
-    int64_t total_rows_emitted;
+    std::vector<uint64_t> *buffer;
+    int64_t cursor;
 } TraceProvChunkedReadInit;
 
 void traceprov_chunked_read_bind(duckdb_bind_info info){
@@ -186,20 +189,24 @@ void traceprov_chunked_read_bind(duckdb_bind_info info){
     const int64_t row_count = duckdb_get_int64(param_row_count);
     duckdb_destroy_value(&param_row_count);
 
-    auto param_base_row_count = duckdb_bind_get_parameter(info, 3);
-    const int64_t base_row_count = duckdb_get_int64(param_base_row_count);
-    duckdb_destroy_value(&param_base_row_count);
+    int64_t group_count = 0;
 
-    auto param_selectivity = duckdb_bind_get_parameter(info, 4);
-    const int64_t selectivity = duckdb_get_int64(param_selectivity);
-    duckdb_destroy_value(&param_selectivity);
+    if (duckdb_bind_get_parameter_count(info) == 4){
+        auto param_group_count = duckdb_bind_get_parameter(info, 3);
+        group_count = duckdb_get_int64(param_group_count);
+        duckdb_destroy_value(&param_group_count);
+    }
+
+    // auto param_selectivity = duckdb_bind_get_parameter(info, 4);
+    // const int64_t selectivity = duckdb_get_int64(param_selectivity);
+    // duckdb_destroy_value(&param_selectivity);
 
     auto bind_data = tp_alloc0_object(TraceProvChunkedReadBind);
     bind_data->layer_number = layer_number;
     bind_data->chunk_size = chunk_size;
     bind_data->row_count = row_count;
-    bind_data->base_row_count = base_row_count;
-    bind_data->selectivity = selectivity;
+    bind_data->group_count = group_count;
+    // bind_data->selectivity = selectivity;
 
     duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
     duckdb_bind_add_result_column(info, "column_0", type);
@@ -213,53 +220,67 @@ void traceprov_chunked_read_bind(duckdb_bind_info info){
 void traceprov_chunked_read_init(duckdb_init_info info){
     auto init_data = tp_alloc0_object(TraceProvChunkedReadInit);
     auto bind_data = (TraceProvChunkedReadBind *)duckdb_init_get_bind_data(info);
-    const uint64_t rows_to_emit = (bind_data->selectivity * bind_data->row_count) / 100;
-    if (rows_to_emit == 0){
-        elog(ERROR, "Expected to have some rows to emit!");
+    init_data->buffer = new std::vector<uint64_t>(bind_data->row_count);
+    for (uint64_t idx = 0; idx < bind_data->row_count; idx++){
+        init_data->buffer->at(idx) = (idx % bind_data->group_count);
     }
-    const uint64_t total_chunk_count = ((rows_to_emit - 1) / bind_data->chunk_size) + 1;
-    const uint64_t extra_rows = (bind_data->row_count - rows_to_emit);
-    const uint64_t extra_row_per_chunk = (extra_rows / total_chunk_count);
-    init_data->rows_to_emit = rows_to_emit;
-    init_data->extra_rows = extra_rows;
-    init_data->index_in_build = 0;
+    std::mt19937 engine(TP_SHUFFLE_SEED);
+    std::shuffle(init_data->buffer->begin(), init_data->buffer->end(), engine);
+
     duckdb_init_set_init_data(info, init_data, free);
 }
 
 void traceprov_chunked_read(duckdb_function_info info, duckdb_data_chunk output){
     const auto bind_data = (TraceProvChunkedReadBind *)duckdb_function_get_bind_data(info);
-    auto init_data = (TraceProvChunkedReadInit *)duckdb_function_get_init_data(info);
-    int64_t rows_to_emit = 0;
-    int64_t extra_rows_to_emit = 0;
-    // terminal case.
-    if (init_data->total_rows_emitted > bind_data->row_count){
+    auto init_data = (TraceProvChunkedReadInit *)duckdb_function_get_init_data(info);    
+    if (init_data->cursor >= bind_data->row_count){
         return;
     }
-    rows_to_emit = MIN(init_data->rows_to_emit, bind_data->chunk_size);
-    extra_rows_to_emit = MIN(init_data->extra_rows, (STANDARD_VECTOR_SIZE - rows_to_emit));
-    const int64_t total_rows_emitted = rows_to_emit + extra_rows_to_emit;
-    int64_t *dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 1));
+    const int64_t rows_to_emit = MIN(bind_data->row_count - init_data->cursor, bind_data->chunk_size);
     int64_t *series_dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0));
-    int64_t row_value = init_data->index_in_build++;
-    if (init_data->index_in_build > bind_data->base_row_count){
-        elog(ERROR, "Got invalid state for index building!");
+    int64_t *dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 1));
+    for (int64_t idx = 0; idx < rows_to_emit; idx++){
+        series_dest_ptr[idx] = init_data->cursor + idx;
+        dest_ptr[idx] = init_data->buffer->at(init_data->cursor + idx);
     }
-    init_data->index_in_build = init_data->index_in_build % bind_data->base_row_count;
-    for (int64_t idx = 0; idx < total_rows_emitted; idx++){
-        if (idx >= rows_to_emit){
-            row_value = TRACEPROV_SET_WORKER_ID((init_data->total_rows_emitted + idx), bind_data->layer_number);
-        }
-        dest_ptr[idx] = row_value;
-        series_dest_ptr[idx] = init_data->total_rows_emitted + idx;
-    }
-    init_data->total_rows_emitted += total_rows_emitted;
-    init_data->rows_to_emit -= rows_to_emit;
-    init_data->extra_rows -= extra_rows_to_emit;
-    if (init_data->rows_to_emit < 0 || init_data->extra_rows < 0){
-        elog(ERROR, "Underflow is impossible!");
-    }
-    duckdb_data_chunk_set_size(output, total_rows_emitted);
+    init_data->cursor += rows_to_emit;
+    duckdb_data_chunk_set_size(output, rows_to_emit);
 }
+
+// void traceprov_chunked_read(duckdb_function_info info, duckdb_data_chunk output){
+//     const auto bind_data = (TraceProvChunkedReadBind *)duckdb_function_get_bind_data(info);
+//     auto init_data = (TraceProvChunkedReadInit *)duckdb_function_get_init_data(info);
+//     int64_t rows_to_emit = 0;
+//     int64_t extra_rows_to_emit = 0;
+//     // terminal case.
+//     if (init_data->total_rows_emitted > bind_data->row_count){
+//         return;
+//     }
+//     rows_to_emit = MIN(init_data->rows_to_emit, bind_data->chunk_size);
+//     extra_rows_to_emit = MIN(init_data->extra_rows, (STANDARD_VECTOR_SIZE - rows_to_emit));
+//     const int64_t total_rows_emitted = rows_to_emit + extra_rows_to_emit;
+//     int64_t *dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 1));
+//     int64_t *series_dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0));
+//     int64_t row_value = init_data->index_in_build++;
+//     if (init_data->index_in_build > bind_data->base_row_count){
+//         elog(ERROR, "Got invalid state for index building!");
+//     }
+//     init_data->index_in_build = init_data->index_in_build % bind_data->base_row_count;
+//     for (int64_t idx = 0; idx < total_rows_emitted; idx++){
+//         if (idx >= rows_to_emit){
+//             row_value = TRACEPROV_SET_WORKER_ID((init_data->total_rows_emitted + idx), bind_data->layer_number);
+//         }
+//         dest_ptr[idx] = row_value;
+//         series_dest_ptr[idx] = init_data->total_rows_emitted + idx;
+//     }
+//     init_data->total_rows_emitted += total_rows_emitted;
+//     init_data->rows_to_emit -= rows_to_emit;
+//     init_data->extra_rows -= extra_rows_to_emit;
+//     if (init_data->rows_to_emit < 0 || init_data->extra_rows < 0){
+//         elog(ERROR, "Underflow is impossible!");
+//     }
+//     duckdb_data_chunk_set_size(output, total_rows_emitted);
+// }
 
 
 void traceprov_create_chunk_table_func(duckdb_connection con){
@@ -269,13 +290,55 @@ void traceprov_create_chunk_table_func(duckdb_connection con){
     duckdb_table_function_add_parameter(function, type); // layer number
     duckdb_table_function_add_parameter(function, type); // chunk size
     duckdb_table_function_add_parameter(function, type); // row count
-    duckdb_table_function_add_parameter(function, type); // base row count
-    duckdb_table_function_add_parameter(function, type); // selectivity
+    duckdb_table_function_add_parameter(function, type); // group count
+    // duckdb_table_function_add_parameter(function, type); // selectivity
     duckdb_destroy_logical_type(&type);
 
     duckdb_table_function_set_bind(function, traceprov_chunked_read_bind);
     duckdb_table_function_set_init(function, traceprov_chunked_read_init);
     duckdb_table_function_set_function(function, traceprov_chunked_read);
+
+    DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
+}
+
+typedef struct TraceProvChunkedReadAdaptedInit {
+    int64_t cursor;
+} TraceProvChunkedReadAdaptedInit;
+
+void traceprov_chunked_read_adapted_init(duckdb_init_info info){
+    auto init_data = tp_alloc0_object(TraceProvChunkedReadAdaptedInit);
+    duckdb_init_set_init_data(info, init_data, free);
+}
+
+// TODO: Unify this with traceprov_chunked_read?
+void traceprov_chunked_adapted_read(duckdb_function_info info, duckdb_data_chunk output){
+    const auto bind_data = (TraceProvChunkedReadBind *)duckdb_function_get_bind_data(info);
+    auto init_data = (TraceProvChunkedReadInit *)duckdb_function_get_init_data(info);    
+    if (init_data->cursor >= bind_data->row_count){
+        return;
+    }
+    const int64_t rows_to_emit = MIN(bind_data->row_count - init_data->cursor, bind_data->chunk_size);
+    int64_t *series_dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0));
+    int64_t *dest_ptr = (int64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 1));
+    for (int64_t idx = 0; idx < rows_to_emit; idx++){
+        series_dest_ptr[idx] = init_data->cursor + idx;
+        dest_ptr[idx] =  init_data->cursor + idx;
+    }
+    init_data->cursor += rows_to_emit;
+    duckdb_data_chunk_set_size(output, rows_to_emit);
+}
+void traceprov_create_chunk_table_adapted_func(duckdb_connection con){
+    auto function = duckdb_create_table_function();
+    duckdb_table_function_set_name(function, "traceprov_chunked_read_adapted");
+    duckdb_logical_type type = duckdb_create_logical_type(DUCKDB_TYPE_BIGINT);
+    duckdb_table_function_add_parameter(function, type); // layer number
+    duckdb_table_function_add_parameter(function, type); // chunk size
+    duckdb_table_function_add_parameter(function, type); // row count
+    duckdb_destroy_logical_type(&type);
+
+    duckdb_table_function_set_bind(function, traceprov_chunked_read_bind);
+    duckdb_table_function_set_init(function, traceprov_chunked_read_adapted_init);
+    duckdb_table_function_set_function(function, traceprov_chunked_adapted_read);
 
     DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, function));
 }

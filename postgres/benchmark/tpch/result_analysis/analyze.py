@@ -285,6 +285,7 @@ def plot_data(
     x_axis = np.arange(len(x_axis_values))
     slowdown_fig, slowdown_axis = plt.subplots(1, 1, figsize=(14, 3))
     total_time_fig, total_time_axis = plt.subplots(1, 1, figsize=(14, 3))
+    capture_backtrace_fig, capture_backtrace_axis = plt.subplots(2, 1, figsize=(14, 3))
     data = [item for item in data if item[0] in categories]
     result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
     q11_idx = x_axis_values.index("11")
@@ -319,6 +320,12 @@ def plot_data(
             y_values_end_to_end_error, y_timeout_values
         )
         phase_all_slowdown = slice_filter(phase_all_slowdown, y_timeout_values)
+        phase_1_sliced = slice_filter(
+            _get_key_in_dict("phase_1_slowdown"), y_timeout_values
+        )
+        phase_2_sliced = slice_filter(
+            _get_key_in_dict("phase_2_time_median"), y_timeout_values
+        )
         slowdown_max = max(slowdown_max, *phase_all_slowdown)
         total_time_max = max(total_time_max, *y_values_end_to_end_filtered)
         if category_idx > 0:
@@ -328,6 +335,20 @@ def plot_data(
             slowdown_axis.bar(
                 x_axis_adjusted_slowdown,
                 phase_all_slowdown,
+                width=width,
+                label=(category_label_mapping or dict()).get(category, category),
+                color=BenchmarkPlot.colors[category_idx],
+            )
+            capture_backtrace_axis[0].bar(
+                x_axis_adjusted_slowdown,
+                phase_1_sliced,
+                width=width,
+                label=(category_label_mapping or dict()).get(category, category),
+                color=BenchmarkPlot.colors[category_idx],
+            )
+            capture_backtrace_axis[1].bar(
+                x_axis_adjusted_slowdown,
+                phase_2_sliced,
                 width=width,
                 label=(category_label_mapping or dict()).get(category, category),
                 color=BenchmarkPlot.colors[category_idx],
@@ -356,7 +377,7 @@ def plot_data(
         slowdown_axis.bar(**{**bar, "height": 2 * slowdown_max})
         total_time_axis.bar(**{**bar, "height": 2 * total_time_max})
 
-    shared_axis = [slowdown_axis, total_time_axis]
+    shared_axis = [slowdown_axis, total_time_axis, *capture_backtrace_axis]
     for shared_axes in shared_axis:
         labels_all, handles_all = get_unique_handles_labels(shared_axes)
         print("Labels ", labels_all)
@@ -396,6 +417,34 @@ def plot_data(
     total_time_axis.set_ylabel("Total end-to-end time (s)")
     total_time_fig.suptitle(f"End-to-end Time for Postgres (SF={sf})")
     total_time_fig.savefig(out_dir / f"{label}_end_to_end.pdf", bbox_inches="tight")
+
+    capture_backtrace_axis[0].set_yscale("log")
+    capture_backtrace_axis[1].set_yscale("log")
+    capture_backtrace_axis[0].axhline(y=1, color="r", linestyle="--")
+    capture_backtrace_axis[0].axhline(y=2, color="r", linestyle="--")
+    capture_backtrace_axis[0].set_ylabel("Capture slowdown")
+    capture_backtrace_axis[1].set_ylabel("Backtrace time (s)")
+
+    capture_backtrace_fig.suptitle(f"Capture and Backtrace time for (SF={sf})")
+    capture_backtrace_fig.savefig(
+        out_dir / f"{label}_capture_backtrace.pdf", bbox_inches="tight"
+    )
+
+
+def plot_restricted(
+    data: list[Tuple[str, dict]], categories: list[str], sf: str, out_dir: Path
+):
+    x_axis_values = list(map(str, range(1, 23)))
+    x_axis = np.arange(len(x_axis_values))
+    capture_backtrace_fig, capture_backtrace_axis = plt.subplots(2, 1, figsize=(14, 3))
+    data = [item for item in data if item[0] in categories]
+    result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
+    width = 0.1
+    group_gap = 0
+    for category_idx, (category, category_data) in enumerate(result_sorted):
+        x_axis_adjusted = (
+            x_axis * (len(categories) * width + group_gap) + width * category_idx
+        )
 
 
 def gen_plots(database_file: Path, out_dir: Path, sf):
@@ -443,6 +492,17 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
         result_mapped,
         interesting_categories,
         "postgres_interesting",
+        sf,
+        out_dir,
+        0.7,
+        0.8,
+        mapping,
+    )
+    muller_traceprov = ["base", "muller", "traceprov_stats"]
+    plot_data(
+        result_mapped,
+        muller_traceprov,
+        "postgres_muller_traceprov",
         sf,
         out_dir,
         0.7,

@@ -207,7 +207,7 @@ static_assert(sizeof(struct trace_file_partial_row) == 24, "Invalid size!");
 #define TRACEPROV_PARTIAL_ROW_SIZE 32
 
 // Bucket count (for hashing.)
-#define TRACEPROV_BUCKET_COUNT 4
+#define TRACEPROV_BUCKET_COUNT 8
 
 typedef struct TraceProvWorkerIdx {
     uint32_t page;

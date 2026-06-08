@@ -1,0 +1,1159 @@
+From ecef647bdde9f25e70fb7c7702582482f662812e Mon Sep 17 00:00:00 2001
+From: realVinayak <realvinayak123@gmail.com>
+Date: Wed, 13 May 2026 14:57:57 -0500
+Subject: [PATCH] feat: misc QoL updates
+
+feat: more QoL changes
+
+feat: get rid of inefficient logs
+---
+ src/execution/join_hashtable.cpp              |  68 +++---
+ src/execution/lineage/lineage_manager.cpp     |  39 ++-
+ src/execution/lineage/lineage_query.cpp       |  17 +-
+ src/execution/lineage/operator_lineage.cpp    | 230 ++++++++++++++++--
+ src/execution/lineage/stats.cpp               |  31 ++-
+ src/execution/physical_operator.cpp           |   8 +-
+ src/function/pragma/pragma_functions.cpp      |  34 ++-
+ .../table/system/duckdb_queries_list.cpp      |  86 ++++---
+ src/function/table/system/lineage_query.cpp   |   4 +-
+ src/function/table/system/lineage_view.cpp    |  15 +-
+ .../execution/lineage/lineage_manager.hpp     |   6 +
+ .../execution/lineage/operator_lineage.hpp    |   8 +-
+ src/main/capi/table_function-c.cpp            |  16 ++
+ src/parallel/pipeline_executor.cpp            |  14 +-
+ 14 files changed, 459 insertions(+), 117 deletions(-)
+
+diff --git a/src/execution/join_hashtable.cpp b/src/execution/join_hashtable.cpp
+index ae097d38b4..afcb2f2acc 100644
+--- a/src/execution/join_hashtable.cpp
++++ b/src/execution/join_hashtable.cpp
+@@ -541,22 +541,22 @@ void ScanStructure::NextInnerJoin(DataChunk &keys, DataChunk &left, DataChunk &r
+ 				D_ASSERT(vector.GetType() == ht.layout.GetTypes()[output_col_idx]);
+ 				GatherResult(vector, result_vector, result_count, output_col_idx);
+ 			}
+-#ifdef LINEAGE
+-    if (lineage_manager->capture && active_log && result_count > 0) {
+-      auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+-      data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*result_count);
+-      //memcpy(rhs_ptrs, ptrs, count*sizeof(data_ptr_t));
+-      for (idx_t i = 0; i < result_count; i++) {
+-        // auto idx = result_vector.get_index(i);
+-        rhs_ptrs[i] = ptrs[ result_vector[i] ];
+-      }
+-      sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
+-      memcpy(sel_copy, result_vector.data(), result_count*sizeof(sel_t));
+-      // std::cout << active_lop->operator_id << " not perfect " << count << " " << active_lop->in_start << std::endl;
+-      active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
+-      active_log->latest.first = active_log->join_gather_log.size();
+-    }
+-#endif
++			#ifdef LINEAGE
++				if (lineage_manager->capture && active_log && result_count > 0) {
++				auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
++				data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*result_count);
++				//memcpy(rhs_ptrs, ptrs, count*sizeof(data_ptr_t));
++				for (idx_t i = 0; i < result_count; i++) {
++					// auto idx = result_vector.get_index(i);
++					rhs_ptrs[i] = ptrs[ result_vector[i] ];
++				}
++				sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
++				memcpy(sel_copy, result_vector.data(), result_count*sizeof(sel_t));
++				// std::cout << active_lop->operator_id << " not perfect " << count << " " << active_lop->in_start << std::endl;
++				active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
++				active_log->latest.first = active_log->join_gather_log.size();
++				}
++			#endif
+ 		}
+ 		AdvancePointers();
+ 	}
+@@ -606,7 +606,7 @@ void ScanStructure::NextSemiOrAntiJoin(DataChunk &keys, DataChunk &left, DataChu
+ 			sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t)*result_count);
+ 			std::copy(sel.data(), sel.data() + result_count, sel_copy);
+ 			active_log->join_gather_log.emplace_back(nullptr, sel_copy, result_count, active_log->in_start);
+-      active_log->latest.first = active_log->join_gather_log.size();
++			active_log->latest.first = active_log->join_gather_log.size();
+ 		}
+ #endif
+ 	} else {
+@@ -692,7 +692,7 @@ void ScanStructure::NextMarkJoin(DataChunk &keys, DataChunk &input, DataChunk &r
+ 		ConstructMarkJoinResult(keys, input, result);
+ 	} else {
+ 		auto &info = ht.correlated_mark_join_info;
+-    std::cout << "TODO: capture correlated mark join" << std::endl;
++    	std::cout << "TODO: capture correlated mark join" << std::endl;
+ 		lock_guard<mutex> mj_lock(info.mj_lock);
+ 
+ 		// there are correlated columns
+@@ -779,12 +779,12 @@ void ScanStructure::NextLeftJoin(DataChunk &keys, DataChunk &left, DataChunk &re
+ #ifdef LINEAGE
+ 			if (lineage_manager->capture && active_log) {
+ 				sel_t* sel_copy = nullptr;
+-        if (remaining_count < STANDARD_VECTOR_SIZE) {
+-          sel_copy = (sel_t*)malloc(sizeof(sel_t)*remaining_count);
+-				  std::copy(sel.data(), sel.data() + remaining_count, sel_copy);
+-        }
++				if (remaining_count < STANDARD_VECTOR_SIZE) {
++					sel_copy = (sel_t*)malloc(sizeof(sel_t)*remaining_count);
++							std::copy(sel.data(), sel.data() + remaining_count, sel_copy);
++				}
+ 				active_log->join_gather_log.emplace_back(nullptr, sel_copy, remaining_count, active_log->in_start);
+-        active_log->latest.first = active_log->join_gather_log.size();
++        		active_log->latest.first = active_log->join_gather_log.size();
+ 			}
+ #endif
+ 
+@@ -844,12 +844,12 @@ void ScanStructure::NextSingleJoin(DataChunk &keys, DataChunk &input, DataChunk
+ #ifdef LINEAGE
+ 	if (lineage_manager->capture && active_log) {
+ 		auto ptrs = FlatVector::GetData<data_ptr_t>(pointers);
+-    data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t) * result_count);
++    	data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t) * result_count);
+ 		std::copy(ptrs, ptrs + result_count , rhs_ptrs);
+ 		sel_t* sel_copy = (sel_t*)malloc(sizeof(sel_t) * result_count);
+ 		std::copy(result_sel.data(), result_sel.data() + result_count, sel_copy);
+ 		active_log->join_gather_log.emplace_back(rhs_ptrs, sel_copy, result_count, active_log->in_start);
+-    active_log->latest.first = active_log->join_gather_log.size();
++    	active_log->latest.first = active_log->join_gather_log.size();
+ 	}
+ #endif
+ 
+@@ -919,15 +919,15 @@ void JoinHashTable::ScanFullOuter(JoinHTScanState &state, Vector &addresses, Dat
+ 		D_ASSERT(vector.GetType() == layout.GetTypes()[output_col_idx]);
+ 		data_collection->Gather(addresses, sel_vector, found_entries, output_col_idx, vector, sel_vector, nullptr);
+ 	}
+-#ifdef LINEAGE
+-	if (lineage_manager->capture && active_log) {
+-    data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*found_entries);
+-		std::copy(key_locations, key_locations + found_entries, rhs_ptrs);
+-		active_log->join_gather_log.emplace_back(rhs_ptrs, nullptr, found_entries, 0);
+-    active_log->latest.first = active_log->join_gather_log.size();
+-    active_log->execute_internal.push_back(active_log->LatestLSN());
+-	}
+-#endif
++	#ifdef LINEAGE
++		if (lineage_manager->capture && active_log) {
++			data_ptr_t* rhs_ptrs = (data_ptr_t*)malloc(sizeof(data_ptr_t)*found_entries);
++			std::copy(key_locations, key_locations + found_entries, rhs_ptrs);
++			active_log->join_gather_log.emplace_back(rhs_ptrs, nullptr, found_entries, 0);
++			active_log->latest.first = active_log->join_gather_log.size();
++			active_log->execute_internal.push_back(active_log->LatestLSN());
++		}
++	#endif
+ }
+ 
+ idx_t JoinHashTable::FillWithHTOffsets(JoinHTScanState &state, Vector &addresses) {
+diff --git a/src/execution/lineage/lineage_manager.cpp b/src/execution/lineage/lineage_manager.cpp
+index 83c27a7ed0..e3e0b884e9 100644
+--- a/src/execution/lineage/lineage_manager.cpp
++++ b/src/execution/lineage/lineage_manager.cpp
+@@ -7,14 +7,19 @@
+ #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
+ #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
+ #include "duckdb/execution/operator/join/physical_delim_join.hpp"
+-
++#include <thread>
+ namespace duckdb {
+ 
+ unique_ptr<LineageManager> lineage_manager;
+ thread_local Log* active_log;
++bool debug_verbose_mode = false;
++bool global_sd_disable_cache = false;
+ 
+-Log* LineageManager::InitLog(shared_ptr<OperatorLineage> lop, void* thread_id, Log* child_log) {
++Log* LineageManager::InitLog(shared_ptr<OperatorLineage> lop, void* other_thread_id, Log* child_log) {
+   if (!capture || !lop) return nullptr;
++  auto tid = std::this_thread::get_id();
++
++  void * thread_id = (void *)(std::hash<std::thread::id>{}(tid));
+ 
+   std::lock_guard<std::mutex> lock(lop->glock);
+   if (lop->log.count(thread_id) == 0) {
+@@ -40,6 +45,11 @@ shared_ptr<OperatorLineage> LineageManager::CreateOperatorLineage(ClientContext
+ 	global_logger[(void*)op] = make_shared_ptr<OperatorLineage>(op, operators_ids[(void*)op], op->type, op->GetName());
+ 	op->lop = global_logger[(void*)op];
+ 	InitLog(op->lop, (void*)&context);
++  // Truying to be as fair as possible to the original implementation here.
++  if (true || (op->IsSource() && !op->IsSink())){
++    op->lop->extra = op->ParamsToString();
++  }
++
+   
+   if (op->type == PhysicalOperatorType::RESULT_COLLECTOR) {
+ 		PhysicalOperator* plan = &dynamic_cast<PhysicalResultCollector*>(op)->plan;
+@@ -148,8 +158,11 @@ std::vector<int64_t> LineageManager::GetStats(shared_ptr<OperatorLineage> lop) {
+   return {lineage_size_mb, count, nchunks};
+ }
+   
+-void LineageManager::SetP(OperatorLineage* lop, void* thread_id) {
++void LineageManager::SetP(OperatorLineage* lop, void* g_thread_id) {
+ 		if (!capture || !lop) return;
++    auto tid = std::this_thread::get_id();
++
++    void * thread_id = (void *)(std::hash<std::thread::id>{}(tid));
+     if (!lop->children.empty()) SetChild(lop->children[0].get(), thread_id);
+ 		std::lock_guard<std::mutex> lock(lop->glock);
+ 		active_log = lop->log[thread_id].get();
+@@ -167,5 +180,25 @@ void LineageManager::SetChild(OperatorLineage* lop, void* thread_id) {
+     return;
+ }
+ 
++void gEnableLineage(){
++  if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
++	lineage_manager->capture = true;
++	std::cout << "\nEnable Lineage Capture" << std::endl;
++}
++
++void gDisableLineage(){
++  if (lineage_manager) {
++    lineage_manager->capture = false;
++  }
++	std::cout << "\nDisable Lineage Capture" << std::endl;
++}
++
++void gClearLineage(){
++  if (lineage_manager) {
++    lineage_manager->Clear();
++  }
++	std::cout << "\nClear Lineage" << std::endl;
++}
++
+ } // namespace duckdb
+ #endif
+diff --git a/src/execution/lineage/lineage_query.cpp b/src/execution/lineage/lineage_query.cpp
+index ccf0546305..570fdec472 100644
+--- a/src/execution/lineage/lineage_query.cpp
++++ b/src/execution/lineage/lineage_query.cpp
+@@ -1,7 +1,7 @@
+ #ifdef LINEAGE
+ 
+ #include "duckdb/execution/lineage/operator_lineage.hpp"
+-
++#include <stdlib.h>
+ namespace duckdb {
+ 
+ shared_ptr<OperatorLineage> GetNextChild(shared_ptr<OperatorLineage>& lop) {
+@@ -299,6 +299,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+       }
+       break;
+     } case PhysicalOperatorType::TABLE_SCAN: { // 1:1 in place update
++      // TODO: [Vinny] Seems useless to do this if not all?
+       for (auto& e : log_context) {
+         pair<idx_t, idx_t> tid_lsn = decode_pk(e.first, max_threads);
+         idx_t lsn = tid_lsn.second;
+@@ -488,7 +489,6 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+       idx_t child_max_threads = child->thread_vec.size();
+       unordered_map<idx_t, vector<idx_t>> right_oids_per_lsn;
+       unordered_map<void*, idx_t> thread_vec_map_local = get_threads_map(child->thread_vec);
+-
+       for (auto& e : log_context) {
+         pair<idx_t, idx_t> tid_lsn = decode_pk(e.first, max_threads);
+         vector<idx_t>& oids = e.second;
+@@ -514,7 +514,9 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+           vector<sel_t> in_right(oids.size());
+           if (!right && !left) { // mark join
+             idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+-            oids_per_lsn[in_pk] = std::move(oids);
++            // It is possible that the same source gets reused multiple times in the join.
++            // So, need to append.
++            oids_per_lsn[in_pk].insert(oids_per_lsn[in_pk].end(), oids.begin(), oids.end());
+           }
+           if (right) {
+             for (idx_t o=0; o < oids.size(); ++o) {
+@@ -532,7 +534,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+               oids[o] = left[oid];
+             }
+             idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+-            oids_per_lsn[in_pk] = std::move(oids);
++            oids_per_lsn[in_pk].insert(oids_per_lsn[in_pk].end(), oids.begin(), oids.end());
+           }
+         } else if (!tlog->join_gather_log.empty()) {
+           idx_t count = tlog->join_gather_log[blsn].count;
+@@ -541,7 +543,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+           vector<data_ptr_t> in_right(oids.size());
+           if (!payload && !lhs) { // mark join
+             idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+-            oids_per_lsn[in_pk] = std::move(oids);
++            oids_per_lsn[in_pk].insert(oids_per_lsn[in_pk].end(), oids.begin(), oids.end());
+           }
+           if (payload) {
+             for (idx_t o=0; o < oids.size(); ++o) {
+@@ -557,7 +559,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+               oids[o] = lhs[oid];
+             }
+             idx_t in_pk = encode(in_lsn, child_tid, child_max_threads);
+-            oids_per_lsn[in_pk] = std::move(oids);
++            oids_per_lsn[in_pk].insert(oids_per_lsn[in_pk].end(), oids.begin(), oids.end());
+           }
+         }
+       }
+@@ -671,7 +673,7 @@ void OperatorLineage::LQ(unordered_map<idx_t, vector<idx_t>>& log_context,
+             idx_t oid = oids[o];
+             oids[o] = left_ptr[oid];
+           }
+-          oids_per_lsn[in_pk] = std::move(oids);
++          oids_per_lsn[in_pk].insert(oids_per_lsn[in_pk].end(), oids.begin(), oids.end());
+         } 
+       }
+       child->LQ( oids_per_lsn, sources );
+@@ -754,6 +756,7 @@ vector<idx_t> OperatorLineage::ResolveGlobal(idx_t oid) {
+           idx_t pk = encode(lsn, i, max_threads);
+           return {pk, oid - offset};
+         }
++        offset += count;
+       }
+     }
+     break;
+diff --git a/src/execution/lineage/operator_lineage.cpp b/src/execution/lineage/operator_lineage.cpp
+index d0bbb7255f..64edf98b97 100644
+--- a/src/execution/lineage/operator_lineage.cpp
++++ b/src/execution/lineage/operator_lineage.cpp
+@@ -1,7 +1,8 @@
++// #define LINEAGE
+ #ifdef LINEAGE
+ 
+ #include "duckdb/execution/lineage/operator_lineage.hpp"
+-
++#include <chrono>
+ namespace duckdb {
+ 
+ shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
+@@ -16,13 +17,170 @@ shared_ptr<OperatorLineage> GetLop(shared_ptr<OperatorLineage> lop, int opid) {
+   return nullptr;
+ }
+ 
++typedef std::vector<idx_t> LogSizeVector;
++
++enum LogType {
++    COMBINE = 0,
++    FILTER,
++    ROW_GROUP,
++    FINALIZE_STATES,
++    REORDER,
++    SCATTER_LOG,
++    INT_SCATTER_LOG,
++    SCATTER_SEL_LOG,
++    PERFECT_FULL_SCAN_HT_LOG,
++    PERFECT_PROBE_HT_LOG,
++    JOIN_GATHER_LOG,
++    NLJ_LOG,
++
++    TOTAL_COUNT
++};
++
++std::string log_type_to_string(const LogType log_type) {
++    switch (log_type) {
++        case COMBINE:
++            return "COMBINE";
++        case FILTER:
++            return "FILTER";
++        case ROW_GROUP:
++            return "ROW_GROUP";
++        case FINALIZE_STATES:
++            return "FINALIZE_STATES";
++        case REORDER:
++            return "REORDER";
++        case SCATTER_LOG:
++            return "SCATTER_LOG";
++        case INT_SCATTER_LOG:
++            return "INT_SCATTER_LOG";
++        case SCATTER_SEL_LOG:
++            return "SCATTER_SEL_LOG";
++        case PERFECT_FULL_SCAN_HT_LOG:
++            return "PERFECT_FULL_SCAN_HT_LOG";
++        case PERFECT_PROBE_HT_LOG:
++            return "PERFECT_PROBE_HT_LOG";
++        case JOIN_GATHER_LOG:
++            return "JOIN_GATHER_LOG";
++        case NLJ_LOG:
++            return "NLJ_LOG";
++        default:
++            return "UNKNOWN";
++    }
++}
++
++typedef struct LogStats {
++    int64_t min_value;
++    uint64_t max_value;
++    uint64_t avg_value;
++    uint64_t sum_value;
++} LogStats;
++
++LogStats compute_stats(const LogSizeVector *log_size_vector){
++    uint64_t max_value = 0;
++    uint64_t min_value = -1;
++    uint64_t sum = 0;
++    for (idx_t index = 0; index < log_size_vector->size(); index++){
++        auto value = log_size_vector->at(index);
++        max_value = MaxValue(max_value, value);
++        min_value = MinValue(min_value, value);
++        sum += value;
++    }
++    return LogStats {
++        .min_value = (int64_t)min_value,
++        .max_value = max_value,
++        .avg_value = log_size_vector->size() == 0 ? 0 : sum / log_size_vector->size(),
++        .sum_value = sum
++    };
++}
++
++typedef std::unordered_map<void *, std::vector<LogSizeVector *>> ThreadLogSizeMapping;
++
++void OperatorLineage::GatherAppendLogStats(){
++    for (idx_t i = 0; i < children.size(); i++) {
++        children[i]->GatherAppendLogStats();
++    }
++
++    ThreadLogSizeMapping mapping;
++    for (int i = 0; i < thread_vec.size(); i++){
++        void *tkey = thread_vec[i];
++        for (int j=0; j < LogType::TOTAL_COUNT; j++){
++            mapping[tkey].push_back(new LogSizeVector);
++        }
++
++    }
++
++    std::string log_stats = "{";
++    int counter = 0;
++    for (auto entry: mapping){
++        if (counter++ > 0) log_stats += ",";
++        auto tkey = entry.first;
++        for (int k=0; k < log[tkey]->filter_log.size(); ++k){
++            entry.second[LogType::FILTER]->push_back(log[tkey]->filter_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->row_group_log.size(); ++k) {
++            entry.second[LogType::ROW_GROUP]->push_back(log[tkey]->row_group_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
++            entry.second[LogType::FINALIZE_STATES]->push_back(log[tkey]->finalize_states_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->combine_log.size(); ++k) {
++            entry.second[LogType::COMBINE]->push_back(log[tkey]->combine_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->scatter_log.size(); ++k) {
++            entry.second[LogType::SCATTER_LOG]->push_back(log[tkey]->scatter_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->int_scatter_log.size(); ++k) {
++            entry.second[LogType::INT_SCATTER_LOG]->push_back(log[tkey]->int_scatter_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->reorder_log.size(); ++k) {
++            entry.second[LogType::REORDER]->push_back(log[tkey]->reorder_log[k].size());
++        }
++        for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
++            entry.second[LogType::SCATTER_SEL_LOG]->push_back(log[tkey]->scatter_sel_log[k].count);
++        }
++        for (int k = 0; k < log[tkey]->perfect_full_scan_ht_log.size(); k++) {
++            entry.second[LogType::PERFECT_FULL_SCAN_HT_LOG]->push_back(log[tkey]->perfect_full_scan_ht_log[k].ht_count);
++        }
++        for (int k = 0; k < log[tkey]->perfect_probe_ht_log.size(); k++) {
++            entry.second[LogType::PERFECT_PROBE_HT_LOG]->push_back(log[tkey]->perfect_probe_ht_log[k].count);
++        }
++        for (int k = 0; k < log[tkey]->join_gather_log.size(); k++) {
++            entry.second[LogType::JOIN_GATHER_LOG]->push_back(log[tkey]->join_gather_log[k].count);
++        }
++        for (int k=0; k < log[tkey]->nlj_log.size(); ++k) {
++            entry.second[LogType::NLJ_LOG]->push_back(log[tkey]->nlj_log[k].count);
++        }
++        auto log_size_vector = entry.second;
++        std::string local_stats;
++        for (int i = 0; i < LogType::TOTAL_COUNT; i++){
++            if (i > 0) local_stats += ",";
++            const auto stats = compute_stats(log_size_vector.at(i));
++            local_stats += "\"" + log_type_to_string((LogType)i) + "\":";
++            local_stats += "{";
++            local_stats += "\"min\": " + std::to_string(stats.min_value);
++            local_stats += ",";
++            local_stats += "\"max\": " + std::to_string(stats.max_value);
++            local_stats += ",";
++            local_stats += "\"avg\": " + std::to_string(stats.avg_value);
++            local_stats += ",";
++            local_stats += "\"chunk_count\": " + std::to_string(log_size_vector.at(i)->size());
++            local_stats += ",";
++            local_stats += "\"total\": " + std::to_string(stats.sum_value);
++            local_stats += "}";
++        }
++        log_stats += "\"" + std::to_string((uint64_t)tkey) + "\": " + local_stats;
++    }
++    log_stats += "}";
++    extra = std::string("{") + "\"old_extra\": " + "\"" + extra + "\""  + "," + "\"stats\": " + log_stats + "}";
++}
++
+ // add BuildIndexes() 
+ // zone map for ResultCollector
+ // {oid} -> {lsn}
+-void OperatorLineage::BuildIndexes() {
++// Also collects the timing, because that matters :))
++void OperatorLineage::BuildIndexes(std::unordered_map<int, std::unordered_map<std::string, std::string> *> *time_spec) {
+ //  return;
+ 	for (idx_t i = 0; i < children.size(); i++) {
+-    children[i]->BuildIndexes();
++    children[i]->BuildIndexes(time_spec);
+ 	}
+ 	switch (type) {
+   case PhysicalOperatorType::ORDER_BY:
+@@ -38,6 +196,7 @@ void OperatorLineage::BuildIndexes() {
+ 	}
+ 	case PhysicalOperatorType::HASH_GROUP_BY:
+ 	case PhysicalOperatorType::PERFECT_HASH_GROUP_BY: {
++    const auto start = std::chrono::steady_clock::now();
+     // oid -> (lsn, thread_id, local_oid) accee scatter directly
+     unordered_map<void*, idx_t> thread_vec_map_local;
+     auto child = GetNextChild(children[0]);
+@@ -50,7 +209,7 @@ void OperatorLineage::BuildIndexes() {
+       shared_ptr<Log>& tlog = log[tkey];
+       auto tid_it = thread_vec_map_local.find(tkey);
+       idx_t child_tid = 0;
+-      if (tid_it == thread_vec_map_local.end()) {
++      if (tid_it != thread_vec_map_local.end()) {
+         child_tid = tid_it->second;
+       }
+       for (int k=tlog->combine_log.size()-1; k >= 0; --k) {
+@@ -89,16 +248,22 @@ void OperatorLineage::BuildIndexes() {
+           }
+         }
+       }
+-    }     
+-
++    }
++    const auto end = std::chrono::steady_clock::now();
++    if (time_spec->find(operator_id) == time_spec->end()){
++      time_spec->insert({operator_id, new std::unordered_map<std::string, std::string>});
++    }
++    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
++    time_spec->at(operator_id)->insert({"scatter_log_index_full_time", std::to_string(duration)});
++    time_spec->at(operator_id)->insert({"scatter_log_index_full_size", std::to_string(scatter_log_index_full.size())});
+     break;
+   } case PhysicalOperatorType::HASH_JOIN: {
+     // execute() -> zonemap ? it is pipelined
+     // sink() -> build index
++    const auto start_scatter = std::chrono::steady_clock::now();
+     for (int i=0; i < thread_vec.size(); i++) {
+       void* tkey = thread_vec[i];
+       if (log.count(tkey) == 0 || log[tkey]->scatter_sel_log.empty()) continue;
+-     //  std::cout << " scatter_sel: " << log[tkey]->scatter_sel_log.size() << std::endl;
+       for (int k = 0; k < log[tkey]->scatter_sel_log.size(); k++) {
+         idx_t res_count = log[tkey]->scatter_sel_log[k].count;
+         auto payload = log[tkey]->scatter_sel_log[k].addresses;
+@@ -117,6 +282,7 @@ void OperatorLineage::BuildIndexes() {
+         }
+       }
+     }
++    const auto end_scatter = std::chrono::steady_clock::now();
+     for (int i=0; i < thread_vec.size(); i++) {
+       void* tkey = thread_vec[i];
+       if (log.count(tkey) == 0 || log[tkey]->perfect_full_scan_ht_log.empty()) continue;
+@@ -131,7 +297,17 @@ void OperatorLineage::BuildIndexes() {
+         }
+       }
+     }
+-   // std::cout << "-> " << perfect_full_scan_ht_index.size() << " " << scatter_sel_log_index.size() << std::endl;
++    const auto end_perfect = std::chrono::steady_clock::now();
++    if (time_spec->find(operator_id) == time_spec->end()){
++      time_spec->insert({operator_id, new std::unordered_map<std::string, std::string>});
++    }
++    const auto duration_perfect = std::chrono::duration_cast<std::chrono::microseconds>(end_perfect - end_scatter).count();
++    time_spec->at(operator_id)->insert({"perfect_full_scan_ht_index_time", std::to_string(duration_perfect)});
++    time_spec->at(operator_id)->insert({"perfect_full_scan_ht_index_size", std::to_string(perfect_full_scan_ht_index.size())});
++
++    const auto duration_scatter = std::chrono::duration_cast<std::chrono::microseconds>(end_scatter - start_scatter).count();
++    time_spec->at(operator_id)->insert({"scatter_sel_log_index_time", std::to_string(duration_scatter)});
++    time_spec->at(operator_id)->insert({"scatter_sel_log_index_size", std::to_string(scatter_sel_log_index.size())});
+     break;
+   }
+ 	default: {
+@@ -155,7 +331,9 @@ void OperatorLineage::PostProcess() {
+     // gather
+     for (int i=0; i < thread_vec.size(); i++) {
+       void* tkey = thread_vec[i];
+-      if (log.count(tkey) == 0 || log[tkey]->finalize_states_log.empty()) continue;
++      if (log.count(tkey) == 0) continue;
++      if (log[tkey].get() == nullptr) continue;
++      if (log[tkey]->finalize_states_log.empty()) continue;
+       idx_t count_so_far = 0;
+       for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
+         idx_t res_count = log[tkey]->finalize_states_log[k].count;
+@@ -165,7 +343,7 @@ void OperatorLineage::PostProcess() {
+           if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+             log_index->codes[payload[j]] = j + count_so_far;
+           } else {
+-            std::cout << "dublicate error gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
++            // std::cout << "dublicate error gather: " << k << " " << log_index->codes[payload[j]] << " " << j << " " << (void*)payload[j] << std::endl;
+           }
+         }
+         count_so_far += res_count;
+@@ -175,7 +353,9 @@ void OperatorLineage::PostProcess() {
+     }      
+     for (int i=0; i < thread_vec.size(); i++) {
+       void* tkey = thread_vec[i];
+-      if (log.count(tkey) == 0 || log[tkey]->combine_log.empty()) continue;
++      if (log.count(tkey) == 0) continue;
++      if (log[tkey].get() == nullptr) continue;
++      if (log[tkey]->finalize_states_log.empty()) continue;
+       for (int k=log[tkey]->combine_log.size()-1; k >= 0; --k) {
+         idx_t res_count = log[tkey]->combine_log[k].count;
+         auto src = log[tkey]->combine_log[k].src;
+@@ -541,7 +721,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
+     for (idx_t j=0; j < count; ++j) {
+         data_ptr_t key = (data_ptr_t)(fixed + payload[j] * tuple_size);
+         if (log_index->codes.find(key) == log_index->codes.end()) {
+-          std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
++          // std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
+         }
+         out_index_ptr[j] = (int)log_index->codes[ key ];
+     }
+@@ -560,7 +740,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
+     for (idx_t j=0; j < count; ++j) {
+         data_ptr_t key = payload[j];
+         if (log_index->codes.find(key) == log_index->codes.end()) {
+-          std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
++          // std::cout << "gb probe: " <<  count <<  " " << (void*)payload[j] << std::endl;
+         }
+         out_index_ptr[j] = (int)log_index->codes[ key ];
+     }
+@@ -605,12 +785,16 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
+ 
+       if (left == nullptr) {
+         for (idx_t j=0; j < count; ++j) {
+-          rhs_col_data[j] = log_index->perfect_codes[ right[j] ];
++          if (right){
++            rhs_col_data[j] = log_index->perfect_codes[ right[j] ];
++          }
+           lhs_col_data[j] = j + in_start;
+         }
+       } else {
+         for (idx_t j=0; j < count; ++j) {
+-          rhs_col_data[j] = log_index->perfect_codes[ right[j] ];
++          if (right){
++            rhs_col_data[j] = log_index->perfect_codes[ right[j] ];
++          }
+           lhs_col_data[j] = left[j] + in_start;
+         }
+       }
+@@ -634,18 +818,22 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
+         chunk.data[lhs_col].Initialize(false, count);
+         int64_t* lhs_col_data = (int64_t*)chunk.data[lhs_col].GetData();
+         for (idx_t j=0; j < count; ++j) {
+-          if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+-             std::cout << "probe: " << j<< " " << lhs[j] << " " << count <<  " " << (void*)payload[j] << std::endl;
++          if (payload != NULL && (log_index->codes.find(payload[j]) == log_index->codes.end())) {
++            //  std::cout << "probe: " << j<< " " << lhs[j] << " " << count <<  " " << (void*)payload[j] << std::endl;
++          }
++          if (payload){
++            rhs_col_data[j] = log_index->codes[ payload[j] ];
+           }
+-          rhs_col_data[j] = log_index->codes[ payload[j] ];
+           lhs_col_data[j] = lhs[j] + in_start;
+         }
+       } else {
+         for (idx_t j=0; j < count; ++j) {
+-          if (log_index->codes.find(payload[j]) == log_index->codes.end()) {
+-            std::cout << "probe: " << " null " << count <<  " " << (void*)payload[j] << std::endl;
++          if (payload != NULL && log_index->codes.find(payload[j]) == log_index->codes.end()) {
++            // std::cout << "probe: " << " null " << count <<  " " << (void*)payload[j] << std::endl;
++          }
++          if (payload){
++            rhs_col_data[j] = log_index->codes[ payload[j] ];
+           }
+-          rhs_col_data[j] = log_index->codes[ payload[j] ];
+         }
+         Vector lhs_payload(LogicalType::BIGINT);
+         lhs_payload.SetVectorType(VectorType::CONSTANT_VECTOR);
+diff --git a/src/execution/lineage/stats.cpp b/src/execution/lineage/stats.cpp
+index f44bb18459..ffdb9d56de 100644
+--- a/src/execution/lineage/stats.cpp
++++ b/src/execution/lineage/stats.cpp
+@@ -4,6 +4,12 @@
+ 
+ namespace duckdb {
+ 
++
++static inline void log_debug_count(const char *log_type, uint64_t count){
++  if (!debug_verbose_mode) return;
++  std::cout << "LOG [" << log_type << "] : " << count << std::endl;
++}
++
+ std::vector<int64_t> OperatorLineage::GatherStats() {
+   // stats
+   int64_t lineage_size_mb = 0;
+@@ -43,6 +49,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+       idx_t res_count = log[tkey]->row_group_log[k].count;
+       if (log[tkey]->row_group_log[k].sel) // only add if mem is alloc
+         local_lineage_size_mb += res_count * sizeof(sel_t);
++      log_debug_count("row_group_log", res_count);
+       local_tuples_count += res_count;
+     }
+     
+@@ -50,12 +57,14 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+     for (int k=0; k < log[tkey]->finalize_states_log.size(); ++k) {
+       idx_t res_count = log[tkey]->finalize_states_log[k].count;
+       local_lineage_size_mb += sizeof(address_artifact) + res_count * sizeof(data_ptr_t);
++      local_tuples_count += res_count;
+     }
+       
+     // combine_log
+     for (int k=0; k < log[tkey]->combine_log.size(); ++k) {
+       idx_t res_count = log[tkey]->combine_log[k].count;
+       local_lineage_size_mb += sizeof(combine_artifact) + 2 * (res_count * sizeof(data_ptr_t));
++      local_tuples_count += 2*res_count;
+     }
+       
+     // scatter_log
+@@ -63,6 +72,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+     for (int k=0; k < log[tkey]->scatter_log.size(); ++k) {
+       idx_t res_count = log[tkey]->scatter_log[k].count;
+       local_lineage_size_mb += sizeof(address_artifact) +  (res_count * sizeof(data_ptr_t));
++      log_debug_count("scatter_log", res_count);
+       local_tuples_count += res_count;
+     }
+ 
+@@ -71,6 +81,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+     for (int k = 0; k < log[tkey]->reorder_log.size(); k++) {
+       idx_t res_count = log[tkey]->reorder_log[k].size();
+       local_lineage_size_mb += res_count * sizeof(idx_t);
++      log_debug_count("reorder_log", res_count);
+       local_tuples_count += res_count;
+     }
+ 
+@@ -80,6 +91,7 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+       idx_t res_count = log[tkey]->scatter_sel_log[k].count;
+       local_lineage_size_mb += sizeof(address_sel_artifact) 
+                    +  (res_count * (sizeof(data_ptr_t) + sizeof(sel_t)));
++      log_debug_count("scatter_sel_log", res_count);
+       local_tuples_count += res_count;
+     }
+     
+@@ -99,16 +111,25 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+       idx_t count = log[tkey]->perfect_probe_ht_log[k].count;
+       auto left = log[tkey]->perfect_probe_ht_log[k].left;
+       local_lineage_size_mb += count * sizeof(sel_t);
++      idx_t total_count = count;
+       if (left != nullptr) {
+         local_lineage_size_mb += sizeof(perfect_join_artifact) + count * sizeof(sel_t);
++        total_count += count;
+       }
++      log_debug_count("perfect_probe_ht_log", total_count);
++      local_tuples_count += total_count;
+     }
+ 
+     // join gather log
+     chunk_count += log[tkey]->join_gather_log.size();
+     for (int k = 0; k < log[tkey]->join_gather_log.size(); k++) {
+-      idx_t res_count = log[tkey]->join_gather_log[k].count;
+-      local_lineage_size_mb += res_count * sizeof(sel_t);
++      auto log_entry = log[tkey]->join_gather_log[k];
++      idx_t res_count = log_entry.count;
++      local_lineage_size_mb += res_count * ((log_entry.lhs != nullptr ? sizeof(sel_t) : 0) +  (log_entry.rhs != nullptr ? sizeof(data_ptr_t) : 0) );
++      const int32_t multiplier = (log_entry.lhs != nullptr ? 1 : 0) +  (log_entry.rhs != nullptr ? 1 : 0);
++      idx_t total_count = res_count*multiplier;
++      log_debug_count("join_gather_log", total_count);
++      local_tuples_count += total_count;
+     }
+     
+     // nlj log
+@@ -117,17 +138,19 @@ std::vector<int64_t> OperatorLineage::GatherStats() {
+       idx_t count = log[tkey]->nlj_log[k].count;
+       local_lineage_size_mb += sizeof(nlj_artifact_uniq) 
+                    +  (count * (sizeof(sel_t) + sizeof(sel_t)));
+-      local_tuples_count += count;
++      log_debug_count("nlj_log", count);
+       if (log[tkey]->nlj_log[k].left != nullptr) {
+         local_lineage_size_mb += count * sizeof(sel_t);
++        local_tuples_count += count;
+       }
+       
+       if (log[tkey]->nlj_log[k].right != nullptr) {
+         local_lineage_size_mb += count * sizeof(sel_t);
++        local_tuples_count += count;
+       }
+     }
+     
+-    lineage_size_mb += local_lineage_size_mb / (1024 * 1024);
++    lineage_size_mb += local_lineage_size_mb;
+     tuples_count += local_tuples_count;
+   }
+   
+diff --git a/src/execution/physical_operator.cpp b/src/execution/physical_operator.cpp
+index b60669815b..bf1e2538a6 100644
+--- a/src/execution/physical_operator.cpp
++++ b/src/execution/physical_operator.cpp
+@@ -268,8 +268,12 @@ OperatorResultType CachingPhysicalOperator::Execute(ExecutionContext &context, D
+ 		state.initialized = true;
+ 		state.can_cache_chunk = caching_supported && PhysicalOperator::OperatorCachingAllowed(context);
+ 	}
+-	//if (true || !state.can_cache_chunk) {
+-	if (!state.can_cache_chunk) {
++	#ifdef LINEAGE
++	const bool disable_cache = global_sd_disable_cache;
++	#else
++	const bool disable_cache = false;
++	#endif
++	if (disable_cache || !state.can_cache_chunk) {
+ #ifdef LINEAGE
+     if (lineage_manager->capture && active_log && chunk.size() > 0) {
+       active_log->execute_internal.emplace_back(active_log->latest);
+diff --git a/src/function/pragma/pragma_functions.cpp b/src/function/pragma/pragma_functions.cpp
+index 86aa0b0eaa..067ce25dd5 100644
+--- a/src/function/pragma/pragma_functions.cpp
++++ b/src/function/pragma/pragma_functions.cpp
+@@ -142,23 +142,15 @@ static void PragmaDisableSmoke(ClientContext &context, const FunctionParameters
+ }
+ 
+ static void PragmaEnableLineage(ClientContext &context, const FunctionParameters &parameters) {
+-  if (!lineage_manager) lineage_manager = make_uniq<LineageManager>();
+-	lineage_manager->capture = true;
+-	std::cout << "\nEnable Lineage Capture" << std::endl;
++	gEnableLineage();
+ }
+ 
+ static void PragmaDisableLineage(ClientContext &context, const FunctionParameters &parameters) {
+-  if (lineage_manager) {
+-    lineage_manager->capture = false;
+-  }
+-	std::cout << "\nDisable Lineage Capture" << std::endl;
++	gDisableLineage();
+ }
+ 
+ static void PragmaClearLineage(ClientContext &context, const FunctionParameters &parameters) {
+-  if (lineage_manager) {
+-    lineage_manager->Clear();
+-  }
+-	std::cout << "\nClear Lineage" << std::endl;
++	gClearLineage();
+ }
+ 
+ static void PragmaDisableFilterPushDown(ClientContext &context, const FunctionParameters &parameters) {
+@@ -178,6 +170,22 @@ static void PragmaEnableShort(ClientContext &context, const FunctionParameters &
+   if (lineage_manager) lineage_manager->enable_short = true;
+ 	std::cout << "Enable Short Circuiting" << std::endl;
+ }
++static void PragmaEnableDebugVerbose(ClientContext &context, const FunctionParameters &parameters) {
++	debug_verbose_mode = true;
++	std::cout << "Enable debug verbose mode" << std::endl;
++}
++static void PragmaDisableDebugVerbose(ClientContext &context, const FunctionParameters &parameters) {
++	debug_verbose_mode = false;
++	std::cout << "Disable debug verbose mode" << std::endl;
++}
++static void PragmaDisableCache(ClientContext &context, const FunctionParameters &parameters) {
++	global_sd_disable_cache = true;
++	std::cout << "Disabling cache" << std::endl;
++}
++static void PragmaEnableCache(ClientContext &context, const FunctionParameters &parameters) {
++	global_sd_disable_cache = false;
++	std::cout << "Enabling cache" << std::endl;
++}
+ static void PragmaSetJoin(ClientContext &context, const FunctionParameters &parameters) {
+ 	string join_type = parameters.values[0].ToString();
+ 	D_ASSERT(join_type == "hash" || join_type == "merge" || join_type == "nl" || join_type == "index" || join_type == "block" || join_type == "clear");
+@@ -253,6 +261,10 @@ void PragmaFunctions::RegisterFunction(BuiltinFunctions &set) {
+ 	set.AddFunction(PragmaFunction::PragmaStatement("disable_short", PragmaDisableShort));
+ 	set.AddFunction(PragmaFunction::PragmaCall("set_join", PragmaSetJoin, {LogicalType::VARCHAR}));
+ 	set.AddFunction(PragmaFunction::PragmaCall("set_agg", PragmaSetAgg, {LogicalType::VARCHAR}));
++	set.AddFunction(PragmaFunction::PragmaStatement("enable_debug_verbose", PragmaEnableDebugVerbose));
++	set.AddFunction(PragmaFunction::PragmaStatement("disable_debug_verbose", PragmaDisableDebugVerbose));
++	set.AddFunction(PragmaFunction::PragmaStatement("enable_cache", PragmaEnableCache));
++	set.AddFunction(PragmaFunction::PragmaStatement("disable_cache", PragmaDisableCache));
+ #endif
+ }
+ 
+diff --git a/src/function/table/system/duckdb_queries_list.cpp b/src/function/table/system/duckdb_queries_list.cpp
+index da36f2e40f..9b0055f7ba 100644
+--- a/src/function/table/system/duckdb_queries_list.cpp
++++ b/src/function/table/system/duckdb_queries_list.cpp
+@@ -1,3 +1,4 @@
++// #define LINEAGE
+ #ifdef LINEAGE
+ 
+ #include "duckdb/execution/lineage/lineage_manager.hpp"
+@@ -37,12 +38,14 @@ static unique_ptr<FunctionData> DuckDBQueriesListBind(ClientContext &context, Ta
+ 	names.emplace_back("postprocess_time");
+ 	return_types.emplace_back(LogicalType::FLOAT);
+ 	
+-  names.emplace_back("build_time");
++	names.emplace_back("build_time");
+ 	return_types.emplace_back(LogicalType::FLOAT);
+ 
+-  names.emplace_back("plan");
++	names.emplace_back("plan");
+ 	return_types.emplace_back(LogicalType::VARCHAR);
+ 
++	names.emplace_back("build_spec");
++	return_types.emplace_back(LogicalType::VARCHAR);
+ 
+ 	return nullptr;
+ }
+@@ -100,6 +103,28 @@ string PlanToString(shared_ptr<OperatorLineage> lop) {
+ 	return "{\"name\": \"" + lop->name + "\", \"opid\": \"" + std::to_string(lop->operator_id) + "\", \"children\": [" + child_str + "],\"extra\": \"" + JSONSanitize(lop->extra)+ "\"}";
+ }
+ 
++string time_spec_to_str(std::unordered_map<int, std::unordered_map<std::string, std::string> *> *time_spec){
++	string spec_str = "";
++	spec_str += "{";
++	int outer_idx = 0;
++	for (auto time_spec_entry : *time_spec){
++		if (outer_idx++){
++			spec_str += ",";
++		}
++		spec_str += "\"" + std::to_string(time_spec_entry.first) + "\": ";
++		spec_str += "{";
++		int inner_idx = 0;
++		for (auto info_entry : *time_spec_entry.second){
++			if (inner_idx++) spec_str += ",";
++			spec_str += "\"" + info_entry.first + "\": ";
++			spec_str += "\"" + info_entry.second + "\"";
++		}
++		spec_str += "}";
++	}
++	spec_str += "}";
++	return spec_str;
++}
++
+ //! Create table to store executed queries with their IDs
+ //! Table name: queries_list
+ //! Schema: (INT query_id, varchar query)
+@@ -117,40 +142,45 @@ void DuckDBQueriesListFunction(ClientContext &context, TableFunctionInput &data_
+ 	while (data.offset < query_to_id.size() && count < STANDARD_VECTOR_SIZE) {
+     shared_ptr<OperatorLineage> lop = lineage_manager->queryid_to_plan[data.offset];
+     std::vector<int64_t> stats = lineage_manager->GetStats(lop);
+-		string query = query_to_id[data.offset];
+-		idx_t col = 0;
+-		// query_id, INT
+-		output.SetValue(col++, count,Value::INTEGER(data.offset));
+-		// query, VARCHAR
+-		output.SetValue(col++, count, query);
+-
+-    // size_mb
+-		output.SetValue(col++, count,Value::BIGINT(stats[0]));
+-
+-    // count_mb
+-		output.SetValue(col++, count,Value::BIGINT(stats[1]));
+-
+-    // nchunks
+-		output.SetValue(col++, count,Value::BIGINT(stats[2]));
+-
+-    // postprocess_time
+-		clock_t start = clock();
+-		lineage_manager->PostProcess(lop);
+-		clock_t end = clock();
++	string query = query_to_id[data.offset];
++	idx_t col = 0;
++	// query_id, INT
++	output.SetValue(col++, count,Value::INTEGER(data.offset));
++	// query, VARCHAR
++	output.SetValue(col++, count, query);
++
++	// size_mb
++	output.SetValue(col++, count,Value::BIGINT(stats[0]));
++
++	// count_mb
++	output.SetValue(col++, count,Value::BIGINT(stats[1]));
++
++	// nchunks
++	output.SetValue(col++, count,Value::BIGINT(stats[2]));
++
++	// postprocess_time
++	clock_t start = clock();
++	lineage_manager->PostProcess(lop);
++	clock_t end = clock();
+     float postprocess_time = ((float) end - start) / CLOCKS_PER_SEC;
+-		output.SetValue(col++, count,Value::FLOAT(postprocess_time));
++	output.SetValue(col++, count,Value::FLOAT(postprocess_time));
+ 
+     start = clock();
+-    if (lop) lop->BuildIndexes();
++	std::unordered_map<int, std::unordered_map<std::string, std::string> *> time_spec;
++    if (lop) lop->BuildIndexes(&time_spec);
+     end = clock();
+     float build_time = ((float) end - start) / CLOCKS_PER_SEC;
+-		output.SetValue(col++, count,Value::FLOAT(build_time));
++	output.SetValue(col++, count,Value::FLOAT(build_time));
++
++	if (lop) lop->GatherAppendLogStats();
+ 
+     // plan, VARCHAR
+-		output.SetValue(col++, count, PlanToString(lop));
++	output.SetValue(col++, count, PlanToString(lop));
++
++	output.SetValue(col++, count, time_spec_to_str(&time_spec));
+ 
+-		count++;
+-		data.offset++;
++	count++;
++	data.offset++;
+ 	}
+ 	output.SetCardinality(count);
+ }
+diff --git a/src/function/table/system/lineage_query.cpp b/src/function/table/system/lineage_query.cpp
+index ee9dd92f19..7a4a0840ae 100644
+--- a/src/function/table/system/lineage_query.cpp
++++ b/src/function/table/system/lineage_query.cpp
+@@ -97,7 +97,9 @@ static unique_ptr<FunctionData> LineageQueryBind(ClientContext &context, TableFu
+   float lq_time = ((float) end - start) / CLOCKS_PER_SEC;
+   //std::cout << "out_per_source: " << result->out_per_source.size() <<
+   // " resolve " << resolve_time << " lq: " << lq_time << std::endl;
+-  if (result->out_per_source.empty()) return std::move(result);
++  if (result->out_per_source.empty()){
++      throw BinderException("Try different value!");
++  }
+ 
+   if (debug) std::cout << "|source| = " << result->out_per_source.size() << std::endl;
+ 
+diff --git a/src/function/table/system/lineage_view.cpp b/src/function/table/system/lineage_view.cpp
+index 4d637c21f5..3b37e40b58 100644
+--- a/src/function/table/system/lineage_view.cpp
++++ b/src/function/table/system/lineage_view.cpp
+@@ -47,13 +47,22 @@ static unique_ptr<FunctionData> LineageViewBind(ClientContext &context, TableFun
+ 
+   // read and initalize idx_t qid; idx_t opid;
+   auto lop = lineage_manager->queryid_to_plan[result->qid];
+-  result->lop = GetLop(lop, result->opid);
+-  if (result->lop == nullptr) return std::move(result);
+-  std::cout << "lineage view "<< result->opid << " " << result->qid << std::endl;
++  if (result->opid < 100)
++    result->lop = GetLop(lop, result->opid);
++  else
++    result->lop = GetNextChild(lop);
++  if (result->lop == nullptr) {
++    throw BinderException("Try different value!");
++  }
++  // std::cout << "lineage view "<< result->opid << " " << result->qid << std::endl;
+ 
+   // TODO: find the lop for opid
+   result->lop->PostProcess();
+   result->lop->GetTableColumnTypes(return_types, names);
++  result->lop->log_index->offset = 0;
++  if (return_types.size() == 0){
++    throw BinderException("Try different value!");
++  }
+ 	return std::move(result);
+ }
+ 
+diff --git a/src/include/duckdb/execution/lineage/lineage_manager.hpp b/src/include/duckdb/execution/lineage/lineage_manager.hpp
+index f9ba7bf8ad..ac3aadc394 100644
+--- a/src/include/duckdb/execution/lineage/lineage_manager.hpp
++++ b/src/include/duckdb/execution/lineage/lineage_manager.hpp
+@@ -20,6 +20,8 @@ class LineageManager;
+ // Declaration of the global and thread_local variables
+ extern unique_ptr<LineageManager> lineage_manager;
+ extern thread_local Log* active_log;
++extern bool debug_verbose_mode;
++extern bool global_sd_disable_cache;
+ 
+ //! LineageManager
+ /*!
+@@ -71,5 +73,9 @@ public:
+   unique_ptr<string> explicit_agg_type = nullptr;
+ };
+ 
++void gEnableLineage();
++void gDisableLineage();
++void gClearLineage();
++
+ } // namespace duckdb
+ #endif
+diff --git a/src/include/duckdb/execution/lineage/operator_lineage.hpp b/src/include/duckdb/execution/lineage/operator_lineage.hpp
+index 6eee945e71..c8d9656016 100644
+--- a/src/include/duckdb/execution/lineage/operator_lineage.hpp
++++ b/src/include/duckdb/execution/lineage/operator_lineage.hpp
+@@ -50,7 +50,9 @@ public:
+   vector<vector<idx_t>> Backward(idx_t local_oid, idx_t data_idx,  shared_ptr<Log> log);
+ 
+ 	void PostProcess();
+-  void BuildIndexes();
++  void BuildIndexes(std::unordered_map<int, std::unordered_map<std::string, std::string> *> *time_spec);
++  // Gather more-fine tuned stats and append them to the extra str.
++  void GatherAppendLogStats();
+   std::vector<int64_t> GatherStats();
+   void get_right_match(vector<data_ptr_t>& in_key, unordered_map<idx_t, vector<idx_t>>& out_log_context);
+   
+@@ -70,9 +72,13 @@ public:
+   
+   shared_ptr<LogIndex> log_index;
+   
++  // Used in the right side
+   unordered_map<data_ptr_t, std::pair<idx_t, idx_t>> scatter_sel_log_index;
++  // Used in getting the address given an offset
+   unordered_map<sel_t, data_ptr_t> perfect_full_scan_ht_index;
++  // Used in combine
+   unordered_map<data_ptr_t, vector<std::pair<idx_t, data_ptr_t>>> partition_addr_index;
++  // Used in mapping chunk to state address
+   unordered_map<data_ptr_t, unordered_map<idx_t, vector<idx_t>>> scatter_log_index_full;
+ 
+   idx_t out_start;
+diff --git a/src/main/capi/table_function-c.cpp b/src/main/capi/table_function-c.cpp
+index a6916e8e20..30a800be9e 100644
+--- a/src/main/capi/table_function-c.cpp
++++ b/src/main/capi/table_function-c.cpp
+@@ -5,6 +5,10 @@
+ #include "duckdb/main/client_context.hpp"
+ #include "duckdb/storage/statistics/node_statistics.hpp"
+ 
++#ifdef LINEAGE
++#include "duckdb/execution/lineage/lineage_manager.hpp"
++#endif
++
+ namespace duckdb {
+ 
+ struct CTableFunctionInfo : public TableFunctionInfo {
+@@ -166,6 +170,18 @@ void CTableFunction(ClientContext &context, TableFunctionInput &data_p, DataChun
+ 	auto &local_data = (CTableLocalInitData &)*data_p.local_state;
+ 	CTableInternalFunctionInfo function_info(bind_data, global_data.init_data, local_data.init_data);
+ 	bind_data.info.function(&function_info, reinterpret_cast<duckdb_data_chunk>(&output));
++	#ifdef LINEAGE
++	const auto output_size = output.size();
++	// Yes, I know this isn't the most correct place to do this, but doing it here makes things simplier.
++	// In a perfect world this would be somewhere deeper in the function scan, but I ain't changing TraceProv code for this.
++	// This doesn't really impact performance much (and this route only gets called for the microbenchmarks, so no actually
++	// important table scan gets impacted )
++	if (output_size){
++		if (lineage_manager->capture && active_log) {
++			active_log->row_group_log.emplace_back(nullptr, output_size, active_log->row_group_log.size()*output_size, 0);
++		}
++	}
++	#endif
+ 	if (!function_info.success) {
+ 		throw InvalidInputException(function_info.error);
+ 	}
+diff --git a/src/parallel/pipeline_executor.cpp b/src/parallel/pipeline_executor.cpp
+index 45c0e23388..f49b4a58be 100644
+--- a/src/parallel/pipeline_executor.cpp
++++ b/src/parallel/pipeline_executor.cpp
+@@ -11,8 +11,18 @@
+ #include <chrono>
+ #endif
+ 
++#include <thread>
++
+ namespace duckdb {
+ 
++void *get_thread_id_local(){
++auto tid = std::this_thread::get_id();
++
++void * thread_id = (void *)(std::hash<std::thread::id>{}(tid));
++return thread_id;
++}
++
++
+ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
+     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
+ 	D_ASSERT(pipeline.source_state);
+@@ -361,7 +371,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
+ 
+ #ifdef LINEAGE
+ 	//lineage_manager->Set(pipeline.sink->lop, (void*)&context.thread);
+-	lineage_manager->SetP(pipeline.sink->lop.get(), (void*)&context.thread);
++	lineage_manager->SetP(pipeline.sink->lop.get(), get_thread_id_local());
+ 	//lineage_manager->Set((void*)(pipeline.sink.get()), (void*)&context.thread);
+ #endif
+ 	auto result = pipeline.sink->Combine(context, combine_input);
+@@ -542,7 +552,7 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
+ 	}
+ #ifdef LINEAGE
+   if (lineage_manager && lineage_manager->capture && op.type != PhysicalOperatorType::PROJECTION) {
+-	  lineage_manager->SetP(op.lop.get(), (void*)&context.thread);
++	  lineage_manager->SetP(op.lop.get(), get_thread_id_local());
+   }
+ #endif
+ 	context.thread.profiler.StartOperator(&op);
+-- 
+2.43.0
+

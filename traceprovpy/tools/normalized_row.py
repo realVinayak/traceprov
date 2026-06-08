@@ -56,6 +56,8 @@ class Normalizable(object):
             and not isinstance(getattr(self, key), Extendable)
             and getattr(self, key) is not None
         }
+        if len(extended) == 0:
+            return [simple_keys]
         rows = [
             merge([simple_keys, extended_cell, dict(iter=_idx)])
             for _idx, extended_cell in enumerate(extended, start=1)
@@ -215,9 +217,23 @@ class NormalizedSampleInferRow(NormalizedRow):
     average_time: float
     max_stdev_ratio: float
     max_stdev: float
+    mean_stdev: float
+    min_backtrace_time: float
+    max_backtrace_time: float
+    std_backtrace_time: float
+    sum_backtrace_time: float
 
     def keys(self):
-        return super().keys() | {"average_time", "max_stdev_ratio", "max_stdev"}
+        return super().keys() | {
+            "average_time",
+            "max_stdev_ratio",
+            "max_stdev",
+            "min_backtrace_time",
+            "max_backtrace_time",
+            "std_backtrace_time",
+            "sum_backtrace_time",
+            "mean_stdev",
+        }
 
 
 class NormalizedInferRow(NormalizedRow):
@@ -369,3 +385,112 @@ def plot_partition_result(
     fig.savefig((out_dir / f"{prefix}_relative_ovh.png").as_posix())
     capture_infer.savefig((out_dir / f"{prefix}_time.png").as_posix())
     fig_std_dev.savefig((out_dir / f"{prefix}_stddev.png").as_posix())
+
+
+# basically flattens keys into individual values.
+def _reduce_keys(prev: dict, curr: dict):
+    return {
+        **prev,
+        **{key: [*prev.get(key, []), value] for (key, value) in curr.items()},
+    }
+
+
+def remove_throwaway(in_values: list):
+    assert len(in_values) == 15
+    return in_values[5:]
+
+
+def aggregate_result(results: list[dict]):
+    flattened = reduce(_reduce_keys, results, dict())
+    median_values = {
+        f"{key}_median": statistics.median(remove_throwaway(values))
+        for (key, values) in flattened.items()
+    }
+    stdev_ratio_values = {
+        f"{key}_std_ratio": statistics.stdev(remove_throwaway(values))
+        / statistics.mean(remove_throwaway(values))
+        for (key, values) in flattened.items()
+    }
+    std_values = {
+        f"{key}_std": statistics.stdev(remove_throwaway(values))
+        for (key, values) in flattened.items()
+    }
+    agg = {**median_values, **stdev_ratio_values, **std_values}
+    return agg
+
+
+def aggregate_over_samples(results: list[dict]):
+    return dict(
+        average_time=statistics.mean(result["latency_median"] for result in results),
+        min_backtrace_time=min(result["latency_median"] for result in results),
+        max_backtrace_time=max(result["latency_median"] for result in results),
+        std_backtrace_time=(
+            None
+            if len(results) == 1
+            else statistics.stdev(result["latency_median"] for result in results)
+        ),
+        max_stdev_ratio=max(result["latency_std_ratio"] for result in results),
+        max_stdev=max(result["latency_std"] for result in results),
+        mean_stdev=math.sqrt(
+            sum(result["latency_std"] ** 2 for result in results) / len(results)
+        ),
+        sum_backtrace_time=sum(result["latency_median"] for result in results),
+    )
+
+
+def parse_sample_results(sample_infer_result, capture_indexes, is_traceprov):
+    sql_spec_map = sample_infer_result["sql_spec_map"]
+    sample_result = dict()
+    for profile_entry_idx, profile_entry in enumerate(sample_infer_result["profile"]):
+        if profile_entry_idx in capture_indexes:
+            last_capture_result = sample_infer_result["result_time"][profile_entry_idx]
+            continue
+        first_key, iter_id = sql_spec_map[profile_entry_idx]
+        assert len(first_key) in (2, 3)
+        if len(first_key) == 2:
+            part_key = first_key
+        else:
+            part_key = first_key[1:]
+
+        # print("using keys: ", part_key, first_key)
+        part_key = tuple(part_key)
+        post_process_time = 0
+        if part_key not in sample_result:
+            sample_result[part_key] = [list() for _ in range(len(capture_indexes))]
+            if is_traceprov:
+                extra_item = sample_infer_result["result_time"][profile_entry_idx][
+                    "option"
+                ]["extra"][0]
+                extra_item = extra_item.replace("[", "").replace("]", "")
+                extra_item_split = extra_item.split(",")[-1]
+                if "partition_time" in extra_item_split:
+                    part_time = int(extra_item_split.split("-")[-1])
+                else:
+                    part_time = 0
+                print(last_capture_result["option"])
+                sql_time = last_capture_result["option"].get(
+                    "misc_key_value_sql_compilation_time", 0
+                )
+                # Need to include the post-process time just once per offset.
+                # This is very very unfair to our system
+                # Since we let SmokedDuck get away with doing post process per query, but we're still faster ;)
+                print("SQL time: ", sql_time)
+                post_process_time = (part_time + sql_time) / (10 ** (-6))
+        sample_result[part_key][iter_id].append(
+            sum_simple_result(
+                tap_profile_result(profile_entry), dict(latency=post_process_time)
+            )
+        )
+    # need to reduce the result up a bit
+    sample_result_reduced = aggregate_over_samples(
+        [
+            aggregate_result(
+                [
+                    reduce(sum_simple_result, iter_result)
+                    for iter_result in sample_results
+                ]
+            )
+            for sample_results in (sample_result.values())
+        ]
+    )
+    return sample_result, sample_result_reduced

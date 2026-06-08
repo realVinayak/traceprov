@@ -35,6 +35,7 @@ from traceprovpy.tools.plot_utils import (
 )
 from traceprovpy.tools.run_duckdb_generic import add_query_options
 import duckdb
+import re
 
 
 class NormalizedDuckTPCHRow(Normalizable):
@@ -463,12 +464,12 @@ def gen_time_plots(
     for axis_idx, (data_key, data_values) in enumerate(data_spec.items()):
         data = []
         for item in data_values:
+            print("TRYING TO FIND", item)
+            for x in original_data:
+                print("VALUE", x[0])
             if isinstance(item, str):
                 filtered = [x for x in original_data if x[0][0] == item][0]
             else:
-                print(item)
-                for x in original_data:
-                    print(x[0])
                 # print(original_data)
                 filtered = [x for x in original_data if x[0] == item][0]
             data.append(filtered)
@@ -539,6 +540,13 @@ DATA_SPEC_THREADS = lambda threads_count: [
     f"gprom_window_heuristics_optimized-n__threads-{threads_count}",
     f"traceprov_optimized-y__threads-{threads_count}__compact-y__merge_chunks-y__table_stats-y",
 ]
+
+
+def replace_thread(in_str: str):
+    reg = r"__threads-\d+"
+    result = re.sub(reg, "", in_str)
+    print("Mapping", in_str, result)
+    return result
 
 
 def filter_data(original_data, item):
@@ -679,6 +687,76 @@ def gen_generate_shared_plots(
     )
 
 
+def plot_scalability_plot(
+    raw_scalability: dict[int, dict[str, dict]],
+    out_dir: Path,
+    categories: list[str],
+    labels: str,
+):
+
+    scalability = {
+        key: {
+            category: category_data
+            for category, category_data in value.items()
+            if category in categories
+        }
+        for (key, value) in raw_scalability.items()
+    }
+    print(scalability)
+    scalability_figure, scalability_axis = plt.subplots(1, 1, figsize=(14, 3))
+    x_axis_values = list(map(str, range(1, 23)))
+    group_gap = 5.2
+    x_axis = np.arange(len(x_axis_values)) * (1 + group_gap)
+    width = 1.3
+    markers = ["o", "^", "s"]
+    y_line_axis = []
+    threads = []
+    for thread_idx, (thread, thread_data) in enumerate(
+        sorted(scalability.items(), key=lambda x: x[0])
+    ):
+        threads.append(thread)
+        for cat_idx, (category, category_data) in enumerate(
+            sorted(thread_data.items(), key=lambda x: categories.index(x[0]))
+        ):
+            return_value = scalability_axis.scatter(
+                x_axis + width * thread_idx,
+                [(category_data.get(x, None)) for x in x_axis_values],
+                label=labels[categories.index(category)],
+                marker=markers[categories.index(category)],
+                c=BenchmarkPlot.colors[thread_idx],
+                s=80 if cat_idx < 2 else 70,
+            )
+            if cat_idx == 0:
+                for offsets in return_value.get_offsets():
+                    vline = scalability_axis.axvline(
+                        offsets[0], linewidth=0.05, color="black"
+                    )
+                print(vline.get_xydata())
+                y_line_axis.append(
+                    (return_value.get_offsets()[0][0], vline.get_ydata(False)[0])
+                )
+    scalability_axis.axhline(y=1, color="r", linestyle="--", linewidth=0.3)
+    scalability_axis.axhline(y=2, color="r", linestyle="--", linewidth=0.3)
+    scalability_axis.axhline(y=10, color="r", linestyle="--", linewidth=0.3)
+    scalability_axis.axhline(y=100, color="r", linestyle="--", linewidth=0.3)
+    scalability_axis.set_xticks(x_axis + width * (len(scalability) / 2), x_axis_values)
+    scalability_axis.set_yscale("log")
+    legend_labels_all, handles_all = get_unique_handles_labels(scalability_axis)
+    for _idx, points in enumerate(y_line_axis):
+        print(points)
+        scalability_axis.annotate(
+            f"{threads[_idx]}", (points[0] - 0.75, 1100), rotation=0, fontsize=8
+        )
+    scalability_axis.legend(
+        handles=handles_all,
+        labels=legend_labels_all,
+        # bbox_to_anchor=(1.10, 0.95),
+        prop=dict(size=8),
+    )
+    scalability_axis.margins(x=0.01)
+    scalability_figure.savefig(out_dir / "duckdb_scalability.pdf", bbox_inches="tight")
+
+
 def gen_plots(database_file: Path, out_dir: Path, sf):
     con = duckdb.connect(database_file)
     cursor = con.cursor()
@@ -801,6 +879,41 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
             value_median_key=None,
             needs_extra=True,
         )
+
+    scalability_cats = list(map(replace_thread, DATA_SPEC_THREADS(0)[1:]))
+    scalability = compute_scalability_ratio(result_mapped)
+    plot_scalability_plot(scalability, out_dir, scalability_cats, interesting_labels)
+
+
+def compute_scalability_ratio(all_results: list[tuple[tuple, dict]]):
+    mapping = {
+        (replace_thread(key[0]), key[1]): {
+            query: query_data["phase_all_slowdown"]
+            for query, query_data in value.items()
+        }
+        for (key, value) in all_results
+        if key[1] not in (4, 10)
+    }
+    print(mapping.keys())
+    scalability = dict()
+    for (category, thread), query_data in mapping.items():
+        if category == "base":
+            continue
+        # no point in adding this.
+        # if thread == 1:
+        #     continue
+        old_thread = scalability.get(thread, {})
+        new_category_key = replace_thread(category)
+        assert new_category_key not in old_thread
+        scalability[thread] = {
+            **old_thread,
+            new_category_key: {
+                query: query_data[query]
+                # query: query_data[query] / mapping[(new_category_key, 1)][query]
+                for query in query_data
+            },
+        }
+    return scalability
 
 
 def main():

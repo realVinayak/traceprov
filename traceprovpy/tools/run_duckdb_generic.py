@@ -46,6 +46,7 @@ def infer_sample_id(base_row_count: int, parsed):
 
 
 def _infer_sample_id(out_ids: Sequence[int], row_count: int, sample_num: int):
+    random.seed(10)
     out_ids = random.sample(
         out_ids,
         min(sample_num, row_count),
@@ -72,6 +73,7 @@ def create_base_offset(query_dir: Path):
 
 
 TRACEPROV_EXTRA_OPTIONS = "_traceprov_parse_extra_options"
+TRACEPROV_BASE_OPTIONS = "_traceprov_parse_base_extra_options"
 
 
 def set_extra_traceprov_options(parsed, options):
@@ -80,6 +82,14 @@ def set_extra_traceprov_options(parsed, options):
 
 def get_extra_traceprov_options(parsed):
     return getattr(parsed, TRACEPROV_EXTRA_OPTIONS, "")
+
+
+def get_extra_base_options(parsed):
+    return getattr(parsed, TRACEPROV_BASE_OPTIONS, "")
+
+
+def set_extra_base_options(parsed, options):
+    setattr(parsed, TRACEPROV_BASE_OPTIONS, options)
 
 
 def run_sample_inference(
@@ -114,7 +124,9 @@ def run_sample_inference(
         pre_base_options = DuckDBDriverOptions(
             db=db.as_posix(), repeat=1, threads=1, i=(query_dir / pre_base).as_posix()
         )
-        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+        traceprov_assert_safe_run(
+            f"{exec_str} {pre_base_options.serialize()} {get_extra_base_options(parsed)}"
+        )
 
     sql_spec_map = []
 
@@ -290,7 +302,9 @@ def run_single_smokedduck(
             threads=1,
             i=(root / query_num / pre_base).as_posix(),
         )
-        run_cmd(f"{exec_str} {pre_base_options.serialize()}")
+        run_cmd(
+            f"{exec_str} {pre_base_options.serialize()} {get_extra_base_options(parsed)}"
+        )
 
     base_options = DuckDBDriverOptions(
         db=db.as_posix(),
@@ -557,7 +571,9 @@ def run_sample_inference_smokedduck(
             threads=1,
             i=(root / query_num / pre_base).as_posix(),
         )
-        rc = run_cmd(f"{exec_str} {pre_base_options.serialize()}")
+        rc = run_cmd(
+            f"{exec_str} {pre_base_options.serialize()} {get_extra_base_options(parsed)}"
+        )
         if rc != 0:
             return dict(type="capture_on_pre_base", return_code=rc)
 
@@ -804,7 +820,9 @@ def run_single(
         pre_base_options = DuckDBDriverOptions(
             db=db.as_posix(), repeat=1, threads=1, i=(query_dir / pre_base).as_posix()
         )
-        traceprov_assert_safe_run(f"{exec_str} {pre_base_options.serialize()}")
+        traceprov_assert_safe_run(
+            f"{exec_str} {pre_base_options.serialize()} {get_extra_base_options(parsed)}"
+        )
 
     threads = parsed.threads
     base_options = DuckDBDriverOptions(
@@ -820,7 +838,9 @@ def run_single(
         warm_up_time=parsed.warm_up_time,
     )
 
-    traceprov_assert_safe_run(f"{exec_str} {base_options.serialize()}")
+    traceprov_assert_safe_run(
+        f"{exec_str} {base_options.serialize()} {get_extra_base_options(parsed)}"
+    )
     base_result_time = json_read_file(base_options.time)
     base_profile_out = json_read_iters(base_options.profile, base_options.repeat)
     base_settings = json_read_file(base_options.settings)
