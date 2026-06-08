@@ -1,23 +1,21 @@
 import argparse
 import os
 from pathlib import Path
+from traceprovpy.tools.parser_defs import make_duckdb_selectivity_parser
 from traceprovpy.utils import get_filter_group
 from utils import make_replacer
-from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
+from traceprovpy.tools.benchmark_utils import (
+    traceprov_dump_safe_results,
+)
 from traceprovpy.tools.duckdb_parse_options import (
-    make_duckdb_parse,
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.run_duckdb_generic import (
-    infer_sample_id,
     json_read_file,
     just_read,
     just_write,
     run_combined,
-    run_sample_inference,
-    run_sample_inference_smokedduck,
-    run_single,
-    run_single_smokedduck,
+    set_extra_traceprov_options,
 )
 
 import random
@@ -27,17 +25,7 @@ random.seed(10)
 
 
 def run():
-    base_parser = make_duckdb_parse()
-    base_parser.add_argument("--num_groups", required=True, type=int)
-    base_parser.add_argument("--config", required=True)
-    base_parser.add_argument(
-        "--random", action=argparse.BooleanOptionalAction, default=True
-    )
-    base_parser.add_argument(
-        "--top_k_mode", action=argparse.BooleanOptionalAction, default=False
-    )
-    base_parser.add_argument("--mode", choices=["pre", "post"], default="post")
-    parsed = base_parser.parse_args()
+    parsed = make_duckdb_selectivity_parser().parse_args()
     traceprov_handle_suffix(parsed)
 
     result = []
@@ -99,7 +87,8 @@ def run():
                 tmp / query / "validate_new_sd.sql", replacer(validate_sd_new_sql)
             )
             just_write(tmp / query / "validate_new.sql", replacer(validate_new_sql))
-
+            if parsed.sd_mode:
+                set_extra_traceprov_options(parsed, "--disable_chunk_cache")
             query_result = run_combined(parsed, total_iters, query, [])
             result.append(
                 dict(
@@ -109,6 +98,8 @@ def run():
                     optimized=parsed.optimized,
                 )
             )
+            if parsed.sd_mode:
+                set_extra_traceprov_options(parsed, "")
 
         for sel in query_dir["sel"]:
             run(sel)
