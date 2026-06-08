@@ -211,19 +211,17 @@ def make_drop_table(tables, query, extra_commands: list[str] = None):
 def add_gprom_candidates(parser):
     parser.add_argument(
         "--mode",
-        choices=["join", "window", "join_heu", "window_heu", "all"],
+        choices=["join", "window", "join_heu", "window_heu", "all", "join_composable"],
         default="all",
     )
 
 
 def get_gprom_candidates(gprom_mode: str):
     if gprom_mode == "all":
-        all_options = product(["join", "window"], [True, False])
+        all_options = product(["join", "window", "join_composable"], [True, False])
         return [GpromOptions(*opt) for opt in all_options]
 
-    option = GpromOptions("join") if "join" in gprom_mode else GpromOptions("window")
-    if "heu" in gprom_mode:
-        option = option._replace(heuristics=True)
+    option = GpromOptions.from_str(gprom_mode)
     return [option]
 
 
@@ -239,3 +237,9 @@ def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
         if config_spec["passed"]:
             valid_specs.append(cand)
     return valid_specs
+
+
+def parse_queries(query_repr):
+    if isinstance(query_repr, str):
+        query_repr = eval(query_repr)
+    return query_repr

@@ -691,3 +691,35 @@ std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext con
     }
     return gen_sql;
 }
+
+void traceprov_create_join_chain_dependency(const uint64_t table_count, const bool add_agg){
+    TraceProvDependency *dependency = tp_alloc0_object(TraceProvDependency);
+    dependency->graph_type = TP_LOG;
+    dependency->headNumber = 1;
+    TraceProvParseContext *parse_context = tp_alloc0_object(TraceProvParseContext);
+    tp_parse_initialize_context(parse_context);
+    parse_context->root_context = parse_context;
+    parse_context->global_layer_number = 2;
+    for (uint64_t idx = 0; idx < table_count; idx++){
+        TraceProvEntry *tp_entry = tp_alloc0_object(TraceProvEntry);
+        tp_entry->is_nullable = false;
+        tp_entry->kind = TP_ENTRY_KIND_BASE_RELATION;
+        tp_entry->relId = idx;
+        tp_entry->attrNumber = 0;
+        dependency->entries = lappend(dependency->entries, tp_entry);
+        dependency->children = lappend(dependency->children, NULL);
+    }
+    if (add_agg){
+        parse_context->global_layer_number++;
+        TraceProvDependency *wrapped = tp_alloc0_object(TraceProvDependency);
+        TraceProvEntry *tp_entry = tp_alloc0_object(TraceProvEntry);
+        tp_entry->kind = TP_ENTRY_KIND_POINTER;
+        wrapped->entries = list_make1(tp_entry);
+        wrapped->children = list_make1(dependency);
+        dependency->graph_type = TP_AGGREGATE;
+        wrapped->graph_type = TP_LOG;
+        wrapped->headNumber = 2;
+        dependency = wrapped;
+    }
+    traceprov_mock_set_dependency(parse_context, dependency);
+}

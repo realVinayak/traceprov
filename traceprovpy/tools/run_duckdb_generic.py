@@ -17,6 +17,8 @@ from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
+import re
+
 random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
@@ -67,6 +69,17 @@ def create_base_offset(query_dir: Path):
             just_write(base_offset, base_query_content)
 
     assert base_offset.exists(), "Expected base offset query to exist!"
+
+
+TRACEPROV_EXTRA_OPTIONS = "_traceprov_parse_extra_options"
+
+
+def set_extra_traceprov_options(parsed, options):
+    setattr(parsed, TRACEPROV_EXTRA_OPTIONS, options)
+
+
+def get_extra_traceprov_options(parsed):
+    return getattr(parsed, TRACEPROV_EXTRA_OPTIONS, "")
 
 
 def run_sample_inference(
@@ -135,7 +148,9 @@ def run_sample_inference(
 
     capture_options = capture_options.parse_optimizations(parsed)
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    traceprov_assert_safe_run(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     capture_result_time: list = json_read_file(capture_options.time)
     if capture_options.profile:
         capture_profile_out = json_read_two_iters(
@@ -204,6 +219,43 @@ def get_is_new_sd(parsed):
     return parsed.sd_mode == "new"
 
 
+TICKER_REGEX = r"traceprov_lineage_\d+"
+
+
+def sub_view(in_query: str, query_id: int):
+    return in_query.replace("QID", str(query_id))
+
+
+def is_ticker_end(line_content: str):
+    match = re.search(TICKER_REGEX, line_content)
+    if match:
+        return match.group(0)
+    return None
+
+
+DEFAULT_TICKER = "traceprov_lineage_1"
+
+
+def parse_backtrace_queries(in_path: Path):
+    queries = []
+    pending_query = ""
+    last_ticker = None
+    contents = just_read(in_path).splitlines(keepends=True)
+    for content in contents:
+        ticker_end = is_ticker_end(content)
+        if ticker_end:
+            if pending_query:
+                queries.append((last_ticker or DEFAULT_TICKER, pending_query))
+                pending_query = ""
+            last_ticker = ticker_end
+            continue
+        pending_query += content
+    if pending_query:
+        queries.append((last_ticker or DEFAULT_TICKER, pending_query))
+    print(queries)
+    return {val[0]: val[1] for val in queries}
+
+
 def run_single_smokedduck(
     query_num: str,
     parsed,
@@ -217,9 +269,7 @@ def run_single_smokedduck(
     root = Path(parsed.root)
     validate = parsed.validate
     materialize_infer = parsed.mat_infer
-    run_inference = (
-        parsed.infer and parsed.sample_inference is None and parsed.sd_mode != "old"
-    )
+    run_inference = parsed.infer and parsed.sample_inference is None
     is_new_sd = get_is_new_sd(parsed)
     run_sd = parsed.sample_inference is None
 
@@ -228,7 +278,7 @@ def run_single_smokedduck(
     )
     crash_on_error = parsed.crash_on_error
 
-    run_cmd = traceprov_assert_safe_run if crash_on_error else os.system
+    run_cmd = traceprov_assert_safe_run if crash_on_error else run_nice
 
     base_dir = base_root / query_num
     base_sql = base_dir / "base.sql"
@@ -252,8 +302,11 @@ def run_single_smokedduck(
         settings="./tmp/base_settings.json",
         pre_query=pre_query,
         warm_up_time=parsed.warm_up_time,
+        extra_multiple_count=1,
     )
-    return_code = run_cmd(f"{exec_str} {base_options.serialize()}")
+    return_code = run_cmd(
+        f"{exec_str} {base_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     if return_code != 0:
         print("failed: rc: ", return_code)
         return dict(type="base_failed", rc=return_code)
@@ -272,23 +325,56 @@ def run_single_smokedduck(
     )
 
     extras = []
+
+    def run_new_sd():
+        infer_sql = "select * from read_block(0)"
+        if materialize_infer or validate:
+            if materialize_infer:
+                # so that it's easier to differniate them :)
+                table = f"LAYER_1_{query_num}_new_sd"
+            else:
+                table = f"LAYER_1"
+            infer_sql = f"create or replace table {table} AS ({infer_sql})"
+
+        return [
+            just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
+            just_write("./tmp/run_infer.sql", infer_sql),
+        ]
+
+    def run_old_sd():
+        thread_combined_sql = base_dir / f"sd_thread_{1}_combined.sql"
+        backtrace_queries = parse_backtrace_queries(thread_combined_sql)
+        query_id = infer_detailed_option_setting(exe)
+        backtrace_queries_sub = {
+            key: sub_view(q, query_id) for (key, q) in backtrace_queries.items()
+        }
+        _extras = []
+        for idx, (lineage_table_name, lineage_query) in enumerate(
+            backtrace_queries_sub.items()
+        ):
+            if materialize_infer or validate:
+                backtrace_sql = [
+                    f"create or replace table {lineage_table_name} AS (",
+                    lineage_query.replace(";", ""),
+                    ");",
+                ]
+            else:
+                backtrace_sql = [lineage_query]
+            backtrace_joined = "\n".join(backtrace_sql)
+            _extras.append(
+                just_write(
+                    Path("./tmp/") / f"sd_capture_{idx}_{lineage_table_name}.sql",
+                    backtrace_joined,
+                )
+            )
+        return _extras
+
     if run_inference:
         if is_new_sd:
-            infer_sql = "select * from read_block(0)"
-            if materialize_infer or validate:
-                if materialize_infer:
-                    # so that it's easier to differniate them :)
-                    table = f"LAYER_1_{query_num}_new_sd"
-                else:
-                    table = f"LAYER_1"
-                infer_sql = f"create or replace table {table} AS ({infer_sql})"
-
-            extras = [
-                just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
-                just_write("./tmp/run_infer.sql", infer_sql),
-            ]
+            extras = run_new_sd()
         else:
-            assert 0, "not supported yet, use sample inference branch"
+            # vooho.
+            extras = run_old_sd()
 
     capture_result_time = None
     capture_profile_out = None
@@ -298,7 +384,9 @@ def run_single_smokedduck(
     capture_result_code = -1
     if run_sd:
         capture_options = capture_options._replace(extras=extras)
-        capture_result_code = run_cmd(f"{exec_str} {capture_options.serialize()}")
+        capture_result_code = run_cmd(
+            f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+        )
         if capture_result_code == 0:
             capture_result_time = json_read_file(capture_options.time)
             capture_profile_out = json_read_iters(
@@ -311,20 +399,19 @@ def run_single_smokedduck(
 
             if validate:
                 if is_new_sd:
-                    validate_query(
-                        root / query_num,
-                        "validate_new_sd.sql",
-                        capture_options.db,
-                        exec_str,
-                    )
+                    validate_query_name = "validate_new_sd.sql"
                 else:
-                    assert (
-                        0
-                    ), "no validaton support in this call path for old smokedduck"
+                    validate_query_name = "validate_new.sql"
+                validate_query(
+                    root / query_num, validate_query_name, capture_options.db, exec_str
+                )
 
             if run_inference:
                 capture_result_time, infer_results = extract_extras(
-                    capture_result_time, capture_profile_out, capture_options
+                    capture_result_time,
+                    capture_profile_out,
+                    capture_options,
+                    len(extras),
                 )
             else:
                 infer_results = None
@@ -389,6 +476,57 @@ def run_nice(cmd: str):
     return rc
 
 
+def parse_sd_result_multiple(
+    capture_options: DuckDBDriverOptions, sql_spec_map, extra_sqls
+):
+    capture_result_time = json_read_file(capture_options.time)
+    if capture_options.profile:
+        capture_profile_out = json_read_two_iters(
+            capture_options.profile,
+            range(0, len(extra_sqls) + 1),
+            range(capture_options.repeat),
+        )
+    else:
+        capture_profile_out = None
+    if capture_options.settings:
+        capture_settings = json_read_file(capture_options.settings)
+    else:
+        capture_settings = None
+
+    assert len(capture_result_time) == len(sql_spec_map)
+    stats = json_read_iters(capture_options.stats, 1)
+    return dict(
+        result_time=capture_result_time,
+        profile=capture_profile_out,
+        settings=capture_settings,
+        sql_spec_map=sql_spec_map,
+        stats=stats,
+    )
+
+
+def parse_sd_result_single(capture_options: DuckDBDriverOptions):
+
+    capture_result_time = json_read_file(capture_options.time)
+    capture_profile_out = json_read_iters(
+        capture_options.profile, capture_options.repeat
+    )
+    capture_settings = json_read_file(capture_options.settings)
+
+    collection_size = int(len(capture_result_time) / (capture_options.repeat)) - 1
+    # print(capture_options)
+    capture_result_time, infer_results = extract_extras(
+        capture_result_time, capture_profile_out, capture_options, collection_size
+    )
+    stats = json_read_iters(capture_options.stats, capture_options.repeat)
+    return dict(
+        capture_time=capture_result_time,
+        capture_profile=capture_profile_out,
+        capture_settings=capture_settings,
+        infer_results=infer_results,
+        stats=stats,
+    )
+
+
 def run_sample_inference_smokedduck(
     query_num: str,
     samples: list[int],
@@ -444,42 +582,39 @@ def run_sample_inference_smokedduck(
     sql_spec_map = list(product(sql_spec_map, range(iters)))
     just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
 
+    if parsed.single_row_mode:
+        profile_path = "./tmp/infer_profile_%d.json"
+    else:
+        profile_path = "./tmp/infer_profile_%d_%d.json"
+
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
         threads=parsed.threads,
         i=base_sql.as_posix(),
         time="./tmp/infer_time.json",
-        profile=("./tmp/infer_profile_%d_%d.json"),
-        settings=("./tmp/capture_settings.json"),
+        profile=profile_path,
+        settings="./tmp/capture_settings.json",
         extra_file="./tmp/extra_file.txt",
         stats="./tmp/capture_sd_stats_%d.json",
         lineage=True,
-        main_once_extra_all=True,
+        main_once_extra_all=not parsed.single_row_mode,
         warm_up_time=parsed.warm_up_time,
     )
 
-    rc = run_cmd(f"{exec_str} {capture_options.serialize()}")
+    rc = run_cmd(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     if rc != 0:
         stats = json_read_iters(capture_options.stats, 1)
-        return dict(type="crash_on_capture", return_code=rc, stats=stats)
-    capture_result_time = json_read_file(capture_options.time)
-    if capture_options.profile:
-        capture_profile_out = json_read_two_iters(
-            capture_options.profile,
-            range(0, len(extra_sqls) + 1),
-            range(capture_options.repeat),
+        final_result = dict(type="crash_on_capture", return_code=rc, stats=stats)
+    elif parsed.single_row_mode:
+        final_result = parse_sd_result_single(capture_options)
+    else:
+        final_result = parse_sd_result_multiple(
+            capture_options, sql_spec_map, extra_sqls
         )
-    else:
-        capture_profile_out = None
-    if capture_options.settings:
-        capture_settings = json_read_file(capture_options.settings)
-    else:
-        capture_settings = None
-
-    assert len(capture_result_time) == len(sql_spec_map)
-
-    if validate:
+    if validate and rc == 0:
         for map_idx, map_entry in enumerate(sql_spec_map):
             if map_idx == 0:
                 continue
@@ -507,14 +642,7 @@ def run_sample_inference_smokedduck(
                 base_out.parts[-1],
             )
 
-    stats = json_read_iters(capture_options.stats, 1)
-    return dict(
-        result_time=capture_result_time,
-        profile=capture_profile_out,
-        settings=capture_settings,
-        sql_spec_map=sql_spec_map,
-        stats=stats,
-    )
+    return final_result
 
 
 def extract_extras(
@@ -525,7 +653,7 @@ def extract_extras(
 ):
     # first will be the base.
     # rest will be the extras.
-    assert driver_options.extra_file is None
+    # assert driver_options.extra_file is None
     assert driver_options.extra is None
     collection_size = extra_count + 1
     assert len(time_results) == (collection_size * driver_options.repeat)
@@ -647,7 +775,9 @@ def run_single(
     root = Path(parsed.root)
     validate = parsed.validate
     materialize_infer = parsed.mat_infer
-    run_inference = parsed.infer and parsed.sample_inference is None
+    run_inference = parsed.infer and (
+        parsed.sample_inference is None or parsed.single_row_mode
+    )
     pending = parsed.pending
     use_optimized = parsed.optimized
     use_aggresive_optimized = parsed.agg_optimized
@@ -708,9 +838,14 @@ def run_single(
         get_log_size=True,
     ).parse_optimizations(parsed)
 
-    graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
-    os.makedirs(graph_file_dest, exist_ok=True)
-    traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+    if parsed.single_row_mode:
+        capture_options = capture_options._replace(log_offsets=[0])
+        parsed.sample_inference = None
+
+    if traceprov_graph_path:
+        graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
+        os.makedirs(graph_file_dest, exist_ok=True)
+        traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
 
     if run_inference:
         capture_options = capture_options._replace(
@@ -718,7 +853,9 @@ def run_single(
             traceprov_dry_run_derivation=parsed.traceprov_dry_run_derivation,
         )
 
-    traceprov_assert_safe_run(f"{exec_str} {capture_options.serialize()}")
+    traceprov_assert_safe_run(
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+    )
     capture_result_time = json_read_file(capture_options.time)
     capture_profile_out = json_read_iters(
         capture_options.profile, capture_options.repeat
@@ -780,10 +917,12 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
             ),
         )
     else:
-        graph_dir = Path(parsed.graph_dir)
+        graph_path = (
+            Path(parsed.graph_dir) / query / "graph.bin" if parsed.graph_dir else None
+        )
         query_result = run_single(
             query_num=query,
-            traceprov_graph_path=graph_dir / query / "graph.bin",
+            traceprov_graph_path=graph_path,
             traceprov_layers_to_derive=(1,),
             parsed=parsed,
             iters=total_iters,
@@ -837,9 +976,9 @@ def infer_detailed_option_setting(executable_path: str):
     assert header_file.exists(), f"Expected {executable_path} to exist!"
     header_contents = just_read(header_file)
     if "#define TRACEPROV_DEBUG_PERF 0" in header_contents:
-        return 3
+        return 0
     if "#define TRACEPROV_DEBUG_PERF 1" in header_contents:
-        return 4
+        return 1
     assert False, "didn't expect to reach here!"
 
 

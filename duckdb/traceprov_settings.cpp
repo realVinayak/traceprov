@@ -47,3 +47,5 @@ bool traceprov_skip_sql_cache = false;
 
 // Use table stats?
 bool traceprov_use_table_stats = false;
+
+bool traceprov_ignore_direct_join = false;

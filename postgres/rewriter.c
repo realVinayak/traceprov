@@ -172,6 +172,18 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomStringVariable(
+        "traceprov.duckdb_profile_out",
+        "DuckDB profile out",
+        "",
+        &traceprov_duckdb_profile_out,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     planner_hook = traceprov_rewriter_driver;
 }
 

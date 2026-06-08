@@ -1,0 +1,31 @@
+-- using default substitutions
+select supp_nation,
+    cust_nation,
+    l_year,
+    sum(volume) as revenue
+from (
+        select n1.n_name as supp_nation,
+            n2.n_name as cust_nation,
+            extract(
+                year
+                from l_shipdate
+            ) as l_year,
+            l_extendedprice * (1 - l_discount) as volume
+        from (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 8)) supplier,
+            (select * from lineitem where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 0)) lineitem,
+            (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 2)) orders,
+            (select * from customer where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 3)) customer,
+            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 9)) n1,
+            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 4)) n2
+        where s_suppkey = l_suppkey
+            and o_orderkey = l_orderkey
+            and c_custkey = o_custkey
+            and s_nationkey = n1.n_nationkey
+            and c_nationkey = n2.n_nationkey
+    ) as shipping
+group by supp_nation,
+    cust_nation,
+    l_year
+order by supp_nation,
+    cust_nation,
+    l_year;

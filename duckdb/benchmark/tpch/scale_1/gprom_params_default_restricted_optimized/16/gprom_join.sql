@@ -1,0 +1,356 @@
+WITH
+  temp_view_1 AS (
+    SELECT
+      F0_1.S_SUPPKEY AS S_SUPPKEY /* + materialize */
+    FROM
+      SUPPLIER AS F0_1
+    WHERE
+      (F0_1.S_COMMENT LIKE '%Customer%Complaints%')
+  ),
+  temp_view_2 AS (
+    SELECT
+      F0_1.S_SUPPKEY AS S_SUPPKEY /* + materialize */
+    FROM
+      SUPPLIER AS F0_1
+    WHERE
+      (F0_1.S_COMMENT LIKE '%Customer%Complaints%')
+  ),
+  temp_view_3 AS (
+    SELECT
+      F0_1.S_SUPPKEY AS S_SUPPKEY /* + materialize */,
+      F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+    FROM
+      (
+        SELECT
+          F0_1.S_SUPPKEY AS S_SUPPKEY,
+          F0_1.S_NAME AS S_NAME,
+          F0_1.S_ADDRESS AS S_ADDRESS,
+          F0_1.S_NATIONKEY AS S_NATIONKEY,
+          F0_1.S_PHONE AS S_PHONE,
+          F0_1.S_ACCTBAL AS S_ACCTBAL,
+          F0_1.S_COMMENT AS S_COMMENT,
+          F0_1.rowid AS PROV_SUPPLIER_S__SUPPKEY
+        FROM
+          SUPPLIER AS F0_1
+      ) AS F0_1
+    WHERE
+      (F0_1.S_COMMENT LIKE '%Customer%Complaints%')
+  ),
+  temp_view_0 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0."GROUP_0" AS "GROUP_0",
+      F0_0."GROUP_1" AS "GROUP_1",
+      F0_0."GROUP_2" AS "GROUP_2",
+      F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+      F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+    FROM
+      (
+        (
+          SELECT
+            COUNT(DISTINCT F0_0.PS_SUPPKEY) AS "AGGR_0",
+            F1_0.P_BRAND AS "GROUP_0",
+            F1_0.P_TYPE AS "GROUP_1",
+            F1_0.P_SIZE AS "GROUP_2"
+          FROM
+            (
+              PARTSUPP AS F0_0
+              CROSS JOIN PART AS F1_0
+            ),
+            LATERAL (
+              SELECT
+                (
+                  CASE
+                    WHEN (
+                      (
+                        MIN(
+                          (
+                            CASE
+                              WHEN (F0_0.PS_SUPPKEY <> F0_1.S_SUPPKEY) THEN 2
+                              WHEN (
+                                ((F0_0.PS_SUPPKEY) IS NULL)
+                                OR ((F0_1.S_SUPPKEY) IS NULL)
+                              ) THEN 1
+                              ELSE 0
+                            END
+                          )
+                        )
+                      ) IS NULL
+                    ) THEN TRUE
+                    WHEN (
+                      MIN(
+                        (
+                          CASE
+                            WHEN (F0_0.PS_SUPPKEY <> F0_1.S_SUPPKEY) THEN 2
+                            WHEN (
+                              ((F0_0.PS_SUPPKEY) IS NULL)
+                              OR ((F0_1.S_SUPPKEY) IS NULL)
+                            ) THEN 1
+                            ELSE 0
+                          END
+                        )
+                      ) = 1
+                    ) THEN NULL
+                    ELSE (
+                      MIN(
+                        (
+                          CASE
+                            WHEN (F0_0.PS_SUPPKEY <> F0_1.S_SUPPKEY) THEN 2
+                            WHEN (
+                              ((F0_0.PS_SUPPKEY) IS NULL)
+                              OR ((F0_1.S_SUPPKEY) IS NULL)
+                            ) THEN 1
+                            ELSE 0
+                          END
+                        )
+                      ) = 2
+                    )
+                  END
+                ) AS "NESTING_EVAL_1"
+              FROM
+                (
+                  SELECT
+                    *
+                  FROM
+                    temp_view_1
+                ) AS F0_1
+            ) AS F2_0
+          WHERE
+            (
+              (
+                (F1_0.P_PARTKEY = F0_0.PS_PARTKEY)
+                AND (F1_0.P_BRAND <> 'Brand#45')
+              )
+              AND (
+                NOT (
+                  (
+                    (
+                      (F1_0.P_TYPE LIKE 'MEDIUM POLISHED%')
+                      AND F1_0.P_SIZE IN (49, 14, 23, 45, 19, 3, 36, 9)
+                    )
+                    AND F2_0."NESTING_EVAL_1"
+                  )
+                )
+              )
+            )
+          GROUP BY
+            F1_0.P_BRAND,
+            F1_0.P_TYPE,
+            F1_0.P_SIZE
+        ) AS F0_0
+        JOIN (
+          SELECT
+            F0_0.P_BRAND AS "_P_SIDE_GROUP_0",
+            F0_0.P_TYPE AS "_P_SIDE_GROUP_1",
+            F0_0.P_SIZE AS "_P_SIDE_GROUP_2",
+            F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+            F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+            F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+          FROM
+            (
+              SELECT
+                F0_0.PS_PARTKEY AS PS_PARTKEY,
+                F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+                F0_0.PS_AVAILQTY AS PS_AVAILQTY,
+                F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                F0_0.PS_COMMENT AS PS_COMMENT,
+                F0_0.P_PARTKEY AS P_PARTKEY,
+                F0_0.P_NAME AS P_NAME,
+                F0_0.P_MFGR AS P_MFGR,
+                F0_0.P_BRAND AS P_BRAND,
+                F0_0.P_TYPE AS P_TYPE,
+                F0_0.P_SIZE AS P_SIZE,
+                F0_0.P_CONTAINER AS P_CONTAINER,
+                F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+                F0_0.P_COMMENT AS P_COMMENT,
+                F1_0."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+                F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+              FROM
+                (
+                  SELECT
+                    F0_0.PS_PARTKEY AS PS_PARTKEY,
+                    F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+                    F0_0.PS_AVAILQTY AS PS_AVAILQTY,
+                    F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                    F0_0.PS_COMMENT AS PS_COMMENT,
+                    F1_0.P_PARTKEY AS P_PARTKEY,
+                    F1_0.P_NAME AS P_NAME,
+                    F1_0.P_MFGR AS P_MFGR,
+                    F1_0.P_BRAND AS P_BRAND,
+                    F1_0.P_TYPE AS P_TYPE,
+                    F1_0.P_SIZE AS P_SIZE,
+                    F1_0.P_CONTAINER AS P_CONTAINER,
+                    F1_0.P_RETAILPRICE AS P_RETAILPRICE,
+                    F1_0.P_COMMENT AS P_COMMENT,
+                    F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                    F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
+                  FROM
+                    (
+                      (
+                        SELECT
+                          F0_0.PS_PARTKEY AS PS_PARTKEY,
+                          F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+                          F0_0.PS_AVAILQTY AS PS_AVAILQTY,
+                          F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                          F0_0.PS_COMMENT AS PS_COMMENT,
+                          F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
+                        FROM
+                          PARTSUPP AS F0_0
+                      ) AS F0_0
+                      CROSS JOIN (
+                        SELECT
+                          F0_0.P_PARTKEY AS P_PARTKEY,
+                          F0_0.P_NAME AS P_NAME,
+                          F0_0.P_MFGR AS P_MFGR,
+                          F0_0.P_BRAND AS P_BRAND,
+                          F0_0.P_TYPE AS P_TYPE,
+                          F0_0.P_SIZE AS P_SIZE,
+                          F0_0.P_CONTAINER AS P_CONTAINER,
+                          F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+                          F0_0.P_COMMENT AS P_COMMENT,
+                          F0_0.rowid AS PROV_PART_P__PARTKEY
+                        FROM
+                          PART AS F0_0
+                      ) AS F1_0
+                    )
+                ) AS F0_0,
+                LATERAL (
+                  SELECT
+                    (
+                      CASE
+                        WHEN ((F0_1."NESTING_EVAL_1") IS NULL) THEN TRUE
+                        WHEN (F0_1."NESTING_EVAL_1" = 1) THEN NULL
+                        ELSE (F0_1."NESTING_EVAL_1" = 2)
+                      END
+                    ) AS "NESTING_EVAL_1",
+                    F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                  FROM
+                    (
+                      SELECT
+                        F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1" /* + materialize */,
+                        F1_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                      FROM
+                        (
+                          (
+                            SELECT
+                              MIN(
+                                (
+                                  CASE
+                                    WHEN (F0_0.PS_SUPPKEY <> F0_1.S_SUPPKEY) THEN 2
+                                    WHEN (
+                                      ((F0_0.PS_SUPPKEY) IS NULL)
+                                      OR ((F0_1.S_SUPPKEY) IS NULL)
+                                    ) THEN 1
+                                    ELSE 0
+                                  END
+                                )
+                              ) AS "NESTING_EVAL_1"
+                            FROM
+                              (
+                                SELECT
+                                  *
+                                FROM
+                                  temp_view_2
+                              ) AS F0_1
+                          ) AS F0_1
+                          LEFT OUTER JOIN (
+                            SELECT
+                              (
+                                CASE
+                                  WHEN (F0_0.PS_SUPPKEY <> F0_1.S_SUPPKEY) THEN 2
+                                  WHEN (
+                                    ((F0_0.PS_SUPPKEY) IS NULL)
+                                    OR ((F0_1.S_SUPPKEY) IS NULL)
+                                  ) THEN 1
+                                  ELSE 0
+                                END
+                              ) AS NESTING_EVAL_HELP,
+                              F0_1.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                            FROM
+                              (
+                                SELECT
+                                  *
+                                FROM
+                                  temp_view_3
+                              ) AS F0_1
+                          ) AS F1_1 ON ((1 = 1))
+                        )
+                    ) AS F0_1
+                ) AS F1_0
+            ) AS F0_0
+          WHERE
+            (
+              (
+                (F0_0.P_PARTKEY = F0_0.PS_PARTKEY)
+                AND (F0_0.P_BRAND <> 'Brand#45')
+              )
+              AND (
+                NOT (
+                  (
+                    (
+                      (F0_0.P_TYPE LIKE 'MEDIUM POLISHED%')
+                      AND F0_0.P_SIZE IN (49, 14, 23, 45, 19, 3, 36, 9)
+                    )
+                    AND F0_0."NESTING_EVAL_1"
+                  )
+                )
+              )
+            )
+        ) AS F1_0 ON (
+          (
+            (
+              (F0_0."GROUP_2" = F1_0."_P_SIDE_GROUP_2")
+              OR (
+                (F0_0."GROUP_2" IS NULL)
+                AND (F1_0."_P_SIDE_GROUP_2" IS NULL)
+              )
+            )
+            AND (
+              (
+                (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
+                OR (
+                  (F0_0."GROUP_1" IS NULL)
+                  AND (F1_0."_P_SIDE_GROUP_1" IS NULL)
+                )
+              )
+              AND (
+                (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
+                OR (
+                  (F0_0."GROUP_0" IS NULL)
+                  AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
+                )
+              )
+            )
+          )
+        )
+      )
+  )
+SELECT
+  F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
+FROM
+  (
+    SELECT
+      F0_0."GROUP_0" AS P_BRAND,
+      F0_0."GROUP_1" AS P_TYPE,
+      F0_0."GROUP_2" AS P_SIZE,
+      F0_0."AGGR_0" AS SUPPLIER_CNT,
+      F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_0
+      ) AS F0_0
+    ORDER BY
+      SUPPLIER_CNT DESC,
+      P_BRAND ASC,
+      P_TYPE ASC,
+      P_SIZE ASC
+  ) AS F0_0

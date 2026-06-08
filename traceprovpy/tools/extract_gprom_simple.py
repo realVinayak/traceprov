@@ -16,7 +16,7 @@ UNNEST_OPTIONS = ["-unnest_rewrite TRUE"]
 
 
 class GpromOptions(NamedTuple):
-    mode: Literal["join", "window"]
+    mode: Literal["join", "window", "join_composable"]
     heuristics: bool = False
     is_lateral: bool = False
     is_unnest: bool = False
@@ -41,8 +41,13 @@ class GpromOptions(NamedTuple):
 
     @staticmethod
     def from_str(self_str: str):
-        mode = "join" if "join" in self_str else "window"
-        heu = "True" in self_str
+        mode = "window"
+        if "join" in self_str:
+            if "composable" in self_str:
+                mode = "join_composable"
+            else:
+                mode = "join"
+        heu = "True" in self_str or "heu" in self_str
         return GpromOptions(mode=mode, heuristics=heu)
 
     def safe_key(self):
@@ -57,11 +62,14 @@ GPROM_OPTIONS_MAPPING = dict(
     window=GpromOptions(mode="window"),
     join_heuristics=GpromOptions(mode="join", heuristics=True),
     window_heuristics=GpromOptions(mode="window", heuristics=True),
+    join_composable=GpromOptions(mode="join_composable", heuristics=False),
+    join_composable_heuristics=GpromOptions(mode="join_composable", heuristics=True),
 )
 
 gprom_modes = {
     "join": [],
     "window": ["-prov_instrument_agg_window", "-prov_use_composable"],
+    "join_composable": ["-prov_instrument_agg_window FALSE", "-prov_use_composable"],
 }
 
 

@@ -1,0 +1,61 @@
+{
+    "name": "UNGROUPED_AGGREGATE",
+    "opid": "8",
+    "children": [
+        {
+            "name": "PROJECTION",
+            "opid": "7",
+            "children": [
+                {
+                    "name": "PROJECTION",
+                    "opid": "6",
+                    "children": [
+                        {
+                            "name": "PROJECTION",
+                            "opid": "5",
+                            "children": [
+                                {
+                                    "name": "FILTER",
+                                    "opid": "4",
+                                    "children": [
+                                        {
+                                            "name": "HASH_JOIN",
+                                            "opid": "3",
+                                            "children": [
+                                                {
+                                                    "name": "FILTER",
+                                                    "opid": "1",
+                                                    "children": [
+                                                        {
+                                                            "name": "SEQ_SCAN ",
+                                                            "opid": "0",
+                                                            "children": [],
+                                                            "extra": ""
+                                                        }
+                                                    ],
+                                                    "extra": ""
+                                                },
+                                                {
+                                                    "name": "SEQ_SCAN ",
+                                                    "opid": "2",
+                                                    "children": [],
+                                                    "extra": ""
+                                                }
+                                            ],
+                                            "extra": ""
+                                        }
+                                    ],
+                                    "extra": ""
+                                }
+                            ],
+                            "extra": ""
+                        }
+                    ],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}

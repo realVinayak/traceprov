@@ -1,0 +1,15 @@
+{
+    "gprom": {
+        "file": [
+            "macos_gprom_optimized-n__threads-12_2026_05_10_18_40_16"
+        ],
+        "handler": "gprom"
+    },
+    "traceprov": {
+        "file": [
+            "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y_2026_05_10_00_34_41",
+            "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_21_51"
+        ],
+        "handler": "traceprov"
+    }
+}

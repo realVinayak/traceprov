@@ -1,0 +1,47 @@
+{
+    "name": "ORDER_BY",
+    "opid": "11",
+    "children": [
+        {
+            "name": "HASH_GROUP_BY",
+            "opid": "10",
+            "children": [
+                {
+                    "name": "HASH_GROUP_BY",
+                    "opid": "6",
+                    "children": [
+                        {
+                            "name": "HASH_JOIN",
+                            "opid": "3",
+                            "children": [
+                                {
+                                    "name": "FILTER",
+                                    "opid": "1",
+                                    "children": [
+                                        {
+                                            "name": "SEQ_SCAN ",
+                                            "opid": "0",
+                                            "children": [],
+                                            "extra": ""
+                                        }
+                                    ],
+                                    "extra": ""
+                                },
+                                {
+                                    "name": "SEQ_SCAN ",
+                                    "opid": "2",
+                                    "children": [],
+                                    "extra": ""
+                                }
+                            ],
+                            "extra": ""
+                        }
+                    ],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}

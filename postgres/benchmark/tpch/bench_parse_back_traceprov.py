@@ -18,6 +18,7 @@ from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_INFER_SPEC,
     TRACEPROV_PERFORM_DERIVATION,
     TRACEPROV_SYNC_TIME,
+    parse_queries,
     traceprov_make_create_view,
     traceprov_make_drop_view,
 )
@@ -32,17 +33,21 @@ import json
 import argparse
 
 from traceprovpy.tools.traceprov_extra_func import (
+    TRACEPROV_DERIVE_OFFSET_KEY,
     TRACEPROV_LAYERS_TO_DERIVE_KEY,
     TRACEPROV_MATERIALIZE_LAYER_KEY,
+    TRACEPROV_PROFILE_DUCKDB,
 )
 
 
 def special_query(
     query_name: str,
     is_traceprov: bool,
+    parsed,
     extra_commands: list[str] = [],
     layers_to_derive=[],
     is_validate: bool = False,
+    offset: int = -1,
 ):
     if query_name != "15":
         return None
@@ -79,6 +84,8 @@ def special_query(
                 {
                     TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                     TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
+                    TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                    TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
                 }
                 if is_traceprov
                 else None
@@ -107,11 +114,13 @@ def enable_join_choices():
 
 def make_normal_query(
     query_name: str,
+    parsed,
     is_traceprov=False,
     extra_commands: list[str] = None,
     layers_to_derive=[],
     is_validate=False,
     toggle_join_choices=True,
+    offset=-1,
 ):
     if not is_traceprov:
         return Query(
@@ -141,6 +150,8 @@ def make_normal_query(
             extra_options={
                 TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                 TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
+                TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
             },
         ),
     )
@@ -155,34 +166,42 @@ def get_query(
     is_validate = parsed.validate
     is_dump_graph_mode = parsed.dump_graph_mode
     subdir_queries: List[Query] = []
+    offset = 0 if parsed.offset_mode else -1
 
     special_query_maybe = special_query(
-        query_name, is_traceprov=False, extra_commands=extra_commands
+        query_name, is_traceprov=False, parsed=parsed, extra_commands=extra_commands
     )
     if special_query_maybe:
         subdir_queries.append(special_query_maybe)
         special_query_traceprov = special_query(
             query_name,
             is_traceprov=True,
+            parsed=parsed,
             extra_commands=extra_commands,
             layers_to_derive=layers_to_derive,
             is_validate=is_validate,
+            offset=offset,
         )
         assert special_query_traceprov is not None
         subdir_queries.append(special_query_traceprov)
     else:
         subdir_queries.append(
             make_normal_query(
-                query_name, is_traceprov=False, extra_commands=extra_commands
+                query_name,
+                parsed=parsed,
+                is_traceprov=False,
+                extra_commands=extra_commands,
             )
         )
         subdir_queries.append(
             make_normal_query(
                 query_name,
+                parsed=parsed,
                 is_traceprov=True,
                 extra_commands=extra_commands,
                 layers_to_derive=layers_to_derive,
                 is_validate=is_validate,
+                offset=offset,
             )
         )
 
@@ -237,6 +256,14 @@ def main():
         "--toggle_join_choices", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
+    parser.add_argument(
+        "--offset_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        f"--collect_duckdb_profile",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parsed, _ = parser.parse_known_args()
     config = json_read_file(parsed.config)
     derive_config = json_read_file(parsed.derive_config)
@@ -245,11 +272,11 @@ def main():
     extra_commands = []
     if parsed.use_optimized_query:
         extra_commands = ["set traceprov.use_rowid_duckdb=on;"]
+    queries = config["queries"]
+    queries = parse_queries(queries)
     for subdir in config["subdirs"]:
         subdir_queries = []
-        queries = config["queries"]
-        if isinstance(queries, str):
-            queries = eval(queries)
+
         for query_name in queries:
             query_name = str(query_name)
             subdir_queries = [

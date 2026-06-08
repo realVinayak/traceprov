@@ -1,0 +1,15 @@
+{
+    "gprom": {
+        "file": [
+            "../../scale_10/results/macos_gprom_2026_05_06_12_10_23"
+        ],
+        "handler": "gprom"
+    },
+    "traceprov": {
+        "file": [
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y_2026_05_06_06_04_34",
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_56_49"
+        ],
+        "handler": "traceprov"
+    }
+}

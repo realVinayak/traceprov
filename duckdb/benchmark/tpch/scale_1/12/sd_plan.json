@@ -1,0 +1,61 @@
+{
+    "name": "PROJECTION",
+    "opid": "10",
+    "children": [
+        {
+            "name": "ORDER_BY",
+            "opid": "9",
+            "children": [
+                {
+                    "name": "PROJECTION",
+                    "opid": "8",
+                    "children": [
+                        {
+                            "name": "PROJECTION",
+                            "opid": "7",
+                            "children": [
+                                {
+                                    "name": "HASH_GROUP_BY",
+                                    "opid": "6",
+                                    "children": [
+                                        {
+                                            "name": "HASH_JOIN",
+                                            "opid": "3",
+                                            "children": [
+                                                {
+                                                    "name": "SEQ_SCAN ",
+                                                    "opid": "0",
+                                                    "children": [],
+                                                    "extra": ""
+                                                },
+                                                {
+                                                    "name": "FILTER",
+                                                    "opid": "2",
+                                                    "children": [
+                                                        {
+                                                            "name": "SEQ_SCAN ",
+                                                            "opid": "1",
+                                                            "children": [],
+                                                            "extra": ""
+                                                        }
+                                                    ],
+                                                    "extra": ""
+                                                }
+                                            ],
+                                            "extra": ""
+                                        }
+                                    ],
+                                    "extra": ""
+                                }
+                            ],
+                            "extra": ""
+                        }
+                    ],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}

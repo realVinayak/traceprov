@@ -1,0 +1,30 @@
+{
+  "gprom": {
+    "file": [
+      "macos_gprom_2026_05_06_12_10_23",
+      "macos_gprom_optimized-n__threads-10_2026_05_10_17_21_57",
+      "macos_gprom_optimized-n__threads-12_2026_05_10_18_40_16",
+      "macos_gprom_optimized-n__threads-2_2026_05_10_12_50_14",
+      "macos_gprom_optimized-n__threads-4_2026_05_10_14_38_52",
+      "macos_gprom_optimized-n__threads-8_2026_05_10_16_01_40"
+    ],
+    "handler": "gprom"
+  },
+  "traceprov": {
+    "file": [
+      "macos_end_to_end_optimized-y__threads-10__compact-y__merge_chunks-y_2026_05_10_00_32_47",
+      "macos_end_to_end_optimized-y__threads-10__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_20_09",
+      "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y_2026_05_10_00_34_41",
+      "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_21_51",
+      "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y_2026_05_10_00_19_02",
+      "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_07_57",
+      "macos_end_to_end_optimized-y__threads-2__compact-y__merge_chunks-y_2026_05_10_00_25_15",
+      "macos_end_to_end_optimized-y__threads-2__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_13_27",
+      "macos_end_to_end_optimized-y__threads-4__compact-y__merge_chunks-y_2026_05_10_00_28_43",
+      "macos_end_to_end_optimized-y__threads-4__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_16_32",
+      "macos_end_to_end_optimized-y__threads-8__compact-y__merge_chunks-y_2026_05_10_00_30_48",
+      "macos_end_to_end_optimized-y__threads-8__compact-y__merge_chunks-y__table_stats-y_2026_05_10_01_18_23"
+    ],
+    "handler": "traceprov"
+  }
+}

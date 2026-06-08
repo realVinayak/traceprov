@@ -1,6 +1,7 @@
 create OR REPLACE table normalized_stats AS (
         SELECT category,
             query_num,
+            threads,
             -- phase_1_explain_time
             mean(phase_1_profile_latency) AS phase_1_explain_time_mean,
             median(phase_1_profile_latency) AS phase_1_explain_time_median,
@@ -36,7 +37,9 @@ create OR REPLACE table normalized_stats AS (
             )
         where iter >= 6
         GROUP BY category,
-            query_num
+            query_num,
+            threads
         ORDER BY category,
-            query_num
+            query_num,
+            threads
     );

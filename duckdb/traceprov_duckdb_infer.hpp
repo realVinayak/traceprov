@@ -33,3 +33,4 @@ void traceprov_attempt_prefaults();
 void initialize_global_context();
 
 TraceProvLogSize traceprov_get_total_layer_size();
+std::string traceprov_get_layer_stats();

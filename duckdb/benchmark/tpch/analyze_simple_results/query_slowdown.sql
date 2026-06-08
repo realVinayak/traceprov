@@ -5,4 +5,5 @@ create or replace table normalized_slowdown as (
         from normalized_stats a
             join normalized_stats b on a.query_num = b.query_num
             and b.category = 'base'
+            and a.threads = b.threads
     );

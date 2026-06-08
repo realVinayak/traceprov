@@ -57,9 +57,15 @@ class TpchRow(NormalizedSampleInferRow):
     # dict because there are multiple types of this.
     log_sizes: Extendable
     mean_stdev: float
+    index_build_time: float
 
     def keys(self):
-        return super().keys() | {"query_num", "log_sizes", "mean_stdev"}
+        return super().keys() | {
+            "query_num",
+            "log_sizes",
+            "mean_stdev",
+            "index_build_time",
+        }
 
 
 # basically flattens keys into individual values.
@@ -71,8 +77,8 @@ def _reduce_keys(prev: dict, curr: dict):
 
 
 def remove_throwaway(in_values: list):
-    assert len(in_values) == 15
-    return in_values[5:]
+    assert len(in_values) == 10
+    return in_values[2:]
 
 
 def aggregate_result(results: list[dict]):
@@ -188,11 +194,16 @@ def analyze_result_item(result_item: dict, base_getter: Callable[[Dict], Dict] =
             )
             for capture_stat in base_result_item["capture_stats"]
         ]
+        try:
+            index_building_time = sample_infer_result["stats"][0]["build_time"]
+        except KeyError:
+            index_building_time = 0
     else:
         log_sizes = [
             capture_time["option"]["misc_key_value_total_log_size"][0]
             for capture_time in capture_time_items
         ]
+        index_building_time = 0
 
     base_and_capture = dict(
         base=Extendable(map(tap_simple_result, base_result_item["base_time"])),
@@ -211,6 +222,7 @@ def analyze_result_item(result_item: dict, base_getter: Callable[[Dict], Dict] =
             else Extendable(map(tap_profile_result, capture_profile_items))
         ),
         log_sizes=Extendable(log_sizes) if log_sizes is not None else None,
+        index_build_time=index_building_time,
     )
 
     return {**base_and_capture, **sample_result_reduced}

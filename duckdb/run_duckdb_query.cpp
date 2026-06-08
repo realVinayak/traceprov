@@ -51,12 +51,39 @@ extern "C" {
 #define TP_DISABLE_LINEAGE_NEW "PRAGMA set_lineage(False)"
 #define TP_CLEAR_LINEAGE_NEW TP_CLEAR_LINEAGE
 
-#define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list() where query = ? order by query_id desc limit 1) TO '%s'"
+#define TP_SET_STATS_OUTPUT "COPY (select * from duckdb_queries_list()) TO '%s'"
 #define TP_DUMP_SETTINGS "copy (select json_group_object(name, value) as settings from duckdb_settings()) TO '%s';"
 
 #define TP_SET_STATS_OUTPUT_NEW "copy (select * from lineage_meta()) to '%s'"
 
 #define TP_LAYER_STATS_OUTPUT(QUERY, OUT) ("copy (select * from (" + QUERY + ")) to '" + OUT + "'")
+
+#define TP_SD_DISABLE_CHUNK_CACHE "PRAGMA disable_cache;"
+#define TP_SD_ENABLE_CHUNK_CACHE "PRAGMA enable_cache;"
+
+void wrapped_enable_lineage();
+void wrapped_disable_lineage();
+void wrapped_clear_lineage();
+
+// Add dummy definitions.
+#if TRACEPROV_SD_MODE==0
+void wrapped_enable_lineage(){}
+void wrapped_disable_lineage(){};
+void wrapped_clear_lineage(){};
+#else
+//  Ugh.
+#define LINEAGE
+#include "duckdb/execution/lineage/lineage_manager.hpp"
+void wrapped_enable_lineage(){
+    duckdb::gEnableLineage();
+}
+void wrapped_disable_lineage(){
+    duckdb::gDisableLineage();
+};
+void wrapped_clear_lineage(){
+    duckdb::gClearLineage();
+};
+#endif
 
 typedef struct TraceProvLogExtra {
     // what is the log offset?
@@ -80,6 +107,7 @@ void register_func(duckdb::ScalarFunction *func, duckdb_connection con);
 typedef struct MiscKeyValue {
     TraceProvLogSize total_log_size;
     uint64_t sql_compilation_time;
+    std::string layer_stats;
 } MiscKeyValue;
 
 const static MiscKeyValue g_init_misc_key_value = {
@@ -88,7 +116,14 @@ const static MiscKeyValue g_init_misc_key_value = {
         .page_used_size = 0,
         .bytes_used_size = 0
     },
-    .sql_compilation_time = 0
+    .sql_compilation_time = 0,
+    .layer_stats = ""
+};
+
+enum CustomGraphType {
+    INVALID = 0,
+    LOG_CHAIN,
+    AGG_LOG
 };
 
 // TODO: Migrate to a better option handling system than this in-house mess.
@@ -176,10 +211,32 @@ struct Options {
     // via --traceprov_force_seq_scan
     bool dump_base_table;
     uint64_t warm_up_time;
+    CustomGraphType custom_graph_type;
+    uint64_t custom_graph_type_log_chain_table_count;
+    bool sd_join_mode;
+    bool disable_chunk_cache;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
 #define IS_SET(X) (X.size() != 0)
+
+std::string *get_disabled_optimizations(const Options *options){
+    std::string disabled = "";
+    std::vector<std::string> disabled_names;
+    if (options->sd_join_mode){
+        disabled_names.push_back("filter_pushdown");
+        disabled_names.push_back("statistics_propagation");
+        // disabled_names.push_back("join_filter_pushdown");
+    }
+    if (options->disable_column_optimizer){
+        disabled_names.push_back("unused_columns");
+    }
+    for (int idx = 0; idx < disabled_names.size(); idx++){
+       if (idx > 0) disabled += ",";
+       disabled += disabled_names[idx];
+    }
+    return new std::string("SET disabled_optimizers='" + disabled + "';");
+}
 
 struct Options parse_args(int argc, char **argv){
     struct Options options {
@@ -222,7 +279,11 @@ struct Options parse_args(int argc, char **argv){
         .get_log_size = false,
         .misc_store = g_init_misc_key_value,
         .dump_base_table = false,
-        .warm_up_time = 0
+        .warm_up_time = 0,
+        .custom_graph_type = CustomGraphType::INVALID,
+        .custom_graph_type_log_chain_table_count = 0,
+        .sd_join_mode = false,
+        .disable_chunk_cache = false
     };
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
@@ -372,6 +433,15 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--log_offset")){
             options.log_offsets->push_back(std::atol(argv[++i]));
             continue;
+        } else if (IS_OPTION("--log_offset_file")){
+            auto log_offset_file = std::string(argv[++i]);
+            std::ifstream pre_main_sql_path_stream(log_offset_file.c_str());
+            for (std::string log_offset; std::getline(pre_main_sql_path_stream, log_offset);){
+                if (log_offset.size() > 0){
+                    options.log_offsets->push_back(std::atol(log_offset.c_str()));
+                }
+            }
+            continue;
         } else if (IS_OPTION("--pre_main_sql")){
             auto pre_main_sql_path = std::string(argv[++i]);
             std::ifstream pre_main_sql_path_stream(pre_main_sql_path.c_str());
@@ -403,6 +473,21 @@ struct Options parse_args(int argc, char **argv){
             // Switch from seconds to microseconds.
             options.warm_up_time = std::atol(argv[++i]) * (1000*1000);
             continue;
+        } else if (IS_OPTION("--traceprov_ignore_direct_join")){
+            traceprov_ignore_direct_join = true;
+            continue;
+        } else if (IS_OPTION("--custom_graph_type")){
+            options.custom_graph_type = (CustomGraphType)std::atol(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--log_chain_table_count")){
+            options.custom_graph_type_log_chain_table_count = std::atol(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--sd_join_mode")){
+            options.sd_join_mode = true;
+            continue;
+        } else if (IS_OPTION("--disable_chunk_cache")){
+            options.disable_chunk_cache = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -421,6 +506,9 @@ struct Options parse_args(int argc, char **argv){
     std::cout << "\ttime_out_path: " << options.time_out_path << std::endl;
     std::cout << "]" << std::endl;
     traceprov_thread_count = options.num_threads;
+    if (options.custom_graph_type == CustomGraphType::LOG_CHAIN || options.custom_graph_type == CustomGraphType::AGG_LOG){
+        traceprov_create_join_chain_dependency(options.custom_graph_type_log_chain_table_count, options.custom_graph_type == CustomGraphType::AGG_LOG);
+    }
     return options;
 };
 
@@ -505,22 +593,24 @@ PerformQueryResult *perform_query(
         reset_global_context();
         // traceprov_write_max_used_layer(options->min_layer_number);
     }
-
-    if (options->disable_column_optimizer){
-        // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+    DUCKDB_RUN_SHORT_QUERY(con, get_disabled_optimizations(options)->c_str(), get_disabled_optimizations(options)->c_str());
+    #if TRACEPROV_SD_MODE==1
+    if (options->disable_chunk_cache){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_DISABLE_CHUNK_CACHE, TP_SD_DISABLE_CHUNK_CACHE);
     }else{
-        DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
     }
+    #endif
+    // if (options->disable_column_optimizer){
+    //     // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'join_order,materialized_cte,common_subplan';", "run disable optimizer..;");
+    //     DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = 'unused_columns';", "run disable optimizer..;");
+    // }else{
+    //     DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run disable optimizer..;");
+    // }
     if (options->min_layer_number){
         traceprov_current.maximum_local_layer_used = options->min_layer_number;
     }
 
-
-    if (options->capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
-    }
 
     if (IS_SET(options->profile_out_path) && final_profile_out != NULL){
         DUCKDB_RUN_SHORT_QUERY(con, (options->query_tree ? TP_ENABLE_PROFILING_QUERY_TREE : TP_ENABLE_PROFILING), "enable profiling");
@@ -530,6 +620,12 @@ PerformQueryResult *perform_query(
         DUCKDB_RUN_SHORT_QUERY(con, final_profile_out, "set json out");
     }
 
+    if (options->capture_lineage){
+        wrapped_clear_lineage();
+        wrapped_enable_lineage();
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_CLEAR_LINEAGE_NEW : TP_CLEAR_LINEAGE), "clear lineage");
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_ENABLE_LINEAGE_NEW : TP_ENABLE_LINEAGE), "enable lineage");
+    }
 
     // Need to use both, the pending and the streaming API.
     duckdb_prepared_statement stmt = NULL;
@@ -598,16 +694,18 @@ PerformQueryResult *perform_query(
         result = make_result(duration.count(), traceprov_data, options);
         if (options->get_log_size){
             result->option.misc_store.total_log_size = traceprov_get_total_layer_size();
+            result->option.misc_store.layer_stats = traceprov_get_layer_stats();
         }
         agg_result->push_back(result);
     }
 
+    if (options->capture_lineage){
+        // DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
+        wrapped_disable_lineage();
+    }
+
     // This needs to run before anything else bc of overwrites.
     DUCKDB_RUN_SHORT_QUERY(con, TP_DISABLE_PROFILING, "disable profiling");
-
-    if (options->capture_lineage){
-        DUCKDB_RUN_SHORT_QUERY(con, (options->is_new_sd ? TP_DISABLE_LINEAGE_NEW : TP_DISABLE_LINEAGE), "disable lineage");
-    }
 
     std::cout << "Chunks: " << chunk_count;
 
@@ -620,7 +718,7 @@ PerformQueryResult *perform_query(
             if((duckdb_prepare(con, final_stats_query, &stmt)) == DuckDBError){
                 std::cout << duckdb_prepare_error(stmt) << std::endl;
             }
-            DUCKDB_EXIT_ON_ERROR(duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
+            (duckdb_bind_varchar(stmt, 1, in_sql.c_str()));
             DUCKDB_EXIT_ON_ERROR(duckdb_execute_prepared(stmt, &final_result));
             duckdb_destroy_result(&final_result);
             duckdb_destroy_prepare(&stmt);
@@ -632,6 +730,10 @@ PerformQueryResult *perform_query(
         _layer_stats_query = (TP_LAYER_STATS_OUTPUT(_layer_stats_query, layer_stats_out));
         DUCKDB_RUN_SHORT_QUERY(con, _layer_stats_query.c_str(), "layer stats out");
     }
+
+    #if TRACEPROV_SD_MODE==1
+    DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
+    #endif
 
     return result;
 }
@@ -871,6 +973,7 @@ int main(int argc, char **argv){
     if (options.load_micro_benchmarks){
         traceprov_create_vary_chunk_funcs(con);
         traceprov_create_debug_table_funcs(con);
+        traceprov_create_chunk_table_func(con);
     }
         
     //if (options.disable_column_optimizer){
@@ -958,7 +1061,7 @@ int main(int argc, char **argv){
             auto extra_sqls_clone = (extra_sqls);
             std::vector<TraceProvTableExtra *> table_func_extra;
 
-            const auto spec_result =  augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+            const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
             if (spec_result){
                 curr_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
             }
@@ -1267,6 +1370,8 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
     option_serialized += "]";
     option_serialized += ",";
     option_serialized += "\"misc_key_value_sql_compilation_time\": " + std::to_string(option->misc_store.sql_compilation_time);
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_layer_stats\": " +(option->misc_store.layer_stats == "" ? "null" : option->misc_store.layer_stats);
     option_serialized += "}";
     return option_serialized;
 }

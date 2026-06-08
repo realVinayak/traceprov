@@ -15,6 +15,8 @@ static TraceProvParseContext *_deserializeTraceProvParseContext(FILE *file, Trac
 static TraceProvDependency *_deserializeTraceProvDependency(FILE *file);
 static TraceProvEntry *_deserializeTraceProvEntry(FILE *input_file);
 
+static TraceProvParseContext *mock_context = NULL;
+static TraceProvDependency *mock_dependency = NULL;
 
 // Returns list of deserialized graphs.
 List* deserializeTraceProvDependency(
@@ -23,6 +25,10 @@ List* deserializeTraceProvDependency(
     const char *traceprov_graph_file,
     const bool expect_present
 ){
+    if (mock_context || mock_dependency){
+        *parsed_context = mock_context;
+        return list_make1(mock_dependency);
+    }
     FILE *fptr = fopen(traceprov_graph_file, "rb"); 
     if (fptr == NULL) {
         if (!expect_present){
@@ -190,4 +196,9 @@ TraceProvDependency *tp_get_sublink_graph(const TraceProvParseContext *parsed_co
     return NULL;
 }
 
+}
+// In some cases, we'd want to construct these dependencies progammatically.
+void traceprov_mock_set_dependency(TraceProvParseContext *context, TraceProvDependency *dependency){
+    mock_context = context;
+    mock_dependency = dependency;
 }

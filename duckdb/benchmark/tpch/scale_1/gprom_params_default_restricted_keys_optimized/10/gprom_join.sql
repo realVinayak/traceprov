@@ -1,0 +1,492 @@
+WITH
+  temp_view_2 AS (
+    SELECT
+      (F0_0.L_EXTENDEDPRICE * (1 - F0_0.L_DISCOUNT)) AS "AGG_GB_ARG0" /* + materialize */,
+      F0_0.C_CUSTKEY AS "AGG_GB_ARG1",
+      F0_0.C_NAME AS "AGG_GB_ARG2",
+      F0_0.C_ACCTBAL AS "AGG_GB_ARG3",
+      F0_0.C_PHONE AS "AGG_GB_ARG4",
+      F0_0.N_NAME AS "AGG_GB_ARG5",
+      F0_0.C_ADDRESS AS "AGG_GB_ARG6",
+      F0_0.C_COMMENT AS "AGG_GB_ARG7",
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+    FROM
+      (
+        SELECT
+          F0_0.C_CUSTKEY AS C_CUSTKEY,
+          F0_0.C_NAME AS C_NAME,
+          F0_0.C_ADDRESS AS C_ADDRESS,
+          F0_0.C_NATIONKEY AS C_NATIONKEY,
+          F0_0.C_PHONE AS C_PHONE,
+          F0_0.C_ACCTBAL AS C_ACCTBAL,
+          F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+          F0_0.C_COMMENT AS C_COMMENT,
+          F0_0.O_ORDERKEY AS O_ORDERKEY,
+          F0_0.O_CUSTKEY AS O_CUSTKEY,
+          F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+          F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+          F0_0.O_ORDERDATE AS O_ORDERDATE,
+          F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+          F0_0.O_CLERK AS O_CLERK,
+          F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+          F0_0.O_COMMENT AS O_COMMENT,
+          F0_0.L_ORDERKEY AS L_ORDERKEY,
+          F0_0.L_PARTKEY AS L_PARTKEY,
+          F0_0.L_SUPPKEY AS L_SUPPKEY,
+          F0_0.L_LINENUMBER AS L_LINENUMBER,
+          F0_0.L_QUANTITY AS L_QUANTITY,
+          F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+          F0_0.L_DISCOUNT AS L_DISCOUNT,
+          F0_0.L_TAX AS L_TAX,
+          F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+          F0_0.L_LINESTATUS AS L_LINESTATUS,
+          F0_0.L_SHIPDATE AS L_SHIPDATE,
+          F0_0.L_COMMITDATE AS L_COMMITDATE,
+          F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+          F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+          F0_0.L_SHIPMODE AS L_SHIPMODE,
+          F0_0.L_COMMENT AS L_COMMENT,
+          F1_0.N_NATIONKEY AS N_NATIONKEY,
+          F1_0.N_NAME AS N_NAME,
+          F1_0.N_REGIONKEY AS N_REGIONKEY,
+          F1_0.N_COMMENT AS N_COMMENT,
+          F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+          F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+          F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+        FROM
+          (
+            (
+              SELECT
+                F0_0.C_CUSTKEY AS C_CUSTKEY,
+                F0_0.C_NAME AS C_NAME,
+                F0_0.C_ADDRESS AS C_ADDRESS,
+                F0_0.C_NATIONKEY AS C_NATIONKEY,
+                F0_0.C_PHONE AS C_PHONE,
+                F0_0.C_ACCTBAL AS C_ACCTBAL,
+                F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+                F0_0.C_COMMENT AS C_COMMENT,
+                F0_0.O_ORDERKEY AS O_ORDERKEY,
+                F0_0.O_CUSTKEY AS O_CUSTKEY,
+                F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+                F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+                F0_0.O_ORDERDATE AS O_ORDERDATE,
+                F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+                F0_0.O_CLERK AS O_CLERK,
+                F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+                F0_0.O_COMMENT AS O_COMMENT,
+                F1_0.L_ORDERKEY AS L_ORDERKEY,
+                F1_0.L_PARTKEY AS L_PARTKEY,
+                F1_0.L_SUPPKEY AS L_SUPPKEY,
+                F1_0.L_LINENUMBER AS L_LINENUMBER,
+                F1_0.L_QUANTITY AS L_QUANTITY,
+                F1_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                F1_0.L_DISCOUNT AS L_DISCOUNT,
+                F1_0.L_TAX AS L_TAX,
+                F1_0.L_RETURNFLAG AS L_RETURNFLAG,
+                F1_0.L_LINESTATUS AS L_LINESTATUS,
+                F1_0.L_SHIPDATE AS L_SHIPDATE,
+                F1_0.L_COMMITDATE AS L_COMMITDATE,
+                F1_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+                F1_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+                F1_0.L_SHIPMODE AS L_SHIPMODE,
+                F1_0.L_COMMENT AS L_COMMENT,
+                F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+              FROM
+                (
+                  (
+                    SELECT
+                      F0_0.C_CUSTKEY AS C_CUSTKEY,
+                      F0_0.C_NAME AS C_NAME,
+                      F0_0.C_ADDRESS AS C_ADDRESS,
+                      F0_0.C_NATIONKEY AS C_NATIONKEY,
+                      F0_0.C_PHONE AS C_PHONE,
+                      F0_0.C_ACCTBAL AS C_ACCTBAL,
+                      F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+                      F0_0.C_COMMENT AS C_COMMENT,
+                      F1_0.O_ORDERKEY AS O_ORDERKEY,
+                      F1_0.O_CUSTKEY AS O_CUSTKEY,
+                      F1_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+                      F1_0.O_TOTALPRICE AS O_TOTALPRICE,
+                      F1_0.O_ORDERDATE AS O_ORDERDATE,
+                      F1_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+                      F1_0.O_CLERK AS O_CLERK,
+                      F1_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+                      F1_0.O_COMMENT AS O_COMMENT,
+                      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                    FROM
+                      (
+                        (
+                          SELECT
+                            F0_0.C_CUSTKEY AS C_CUSTKEY,
+                            F0_0.C_NAME AS C_NAME,
+                            F0_0.C_ADDRESS AS C_ADDRESS,
+                            F0_0.C_NATIONKEY AS C_NATIONKEY,
+                            F0_0.C_PHONE AS C_PHONE,
+                            F0_0.C_ACCTBAL AS C_ACCTBAL,
+                            F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+                            F0_0.C_COMMENT AS C_COMMENT,
+                            F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
+                          FROM
+                            CUSTOMER AS F0_0
+                        ) AS F0_0
+                        CROSS JOIN (
+                          SELECT
+                            F0_0.O_ORDERKEY AS O_ORDERKEY,
+                            F0_0.O_CUSTKEY AS O_CUSTKEY,
+                            F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+                            F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+                            F0_0.O_ORDERDATE AS O_ORDERDATE,
+                            F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+                            F0_0.O_CLERK AS O_CLERK,
+                            F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+                            F0_0.O_COMMENT AS O_COMMENT,
+                            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
+                          FROM
+                            ORDERS AS F0_0
+                        ) AS F1_0
+                      )
+                  ) AS F0_0
+                  CROSS JOIN (
+                    SELECT
+                      F0_0.L_ORDERKEY AS L_ORDERKEY,
+                      F0_0.L_PARTKEY AS L_PARTKEY,
+                      F0_0.L_SUPPKEY AS L_SUPPKEY,
+                      F0_0.L_LINENUMBER AS L_LINENUMBER,
+                      F0_0.L_QUANTITY AS L_QUANTITY,
+                      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                      F0_0.L_DISCOUNT AS L_DISCOUNT,
+                      F0_0.L_TAX AS L_TAX,
+                      F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+                      F0_0.L_LINESTATUS AS L_LINESTATUS,
+                      F0_0.L_SHIPDATE AS L_SHIPDATE,
+                      F0_0.L_COMMITDATE AS L_COMMITDATE,
+                      F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+                      F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+                      F0_0.L_SHIPMODE AS L_SHIPMODE,
+                      F0_0.L_COMMENT AS L_COMMENT,
+                      F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
+                    FROM
+                      LINEITEM AS F0_0
+                  ) AS F1_0
+                )
+            ) AS F0_0
+            CROSS JOIN (
+              SELECT
+                F0_0.N_NATIONKEY AS N_NATIONKEY,
+                F0_0.N_NAME AS N_NAME,
+                F0_0.N_REGIONKEY AS N_REGIONKEY,
+                F0_0.N_COMMENT AS N_COMMENT,
+                F0_0.rowid AS PROV_NATION_N__NATIONKEY
+              FROM
+                NATION AS F0_0
+            ) AS F1_0
+          )
+      ) AS F0_0
+    WHERE
+      (
+        (
+          (
+            (
+              (
+                (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
+                AND (F0_0.L_ORDERKEY = F0_0.O_ORDERKEY)
+              )
+              AND (F0_0.O_ORDERDATE >= '1993-10-01')
+            )
+            AND (F0_0.O_ORDERDATE < '1994-01-01')
+          )
+          AND (F0_0.L_RETURNFLAG = 'R')
+        )
+        AND (F0_0.C_NATIONKEY = F0_0.N_NATIONKEY)
+      )
+  ),
+  temp_view_1 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0."GROUP_0" AS "GROUP_0",
+      F0_0."GROUP_1" AS "GROUP_1",
+      F0_0."GROUP_2" AS "GROUP_2",
+      F0_0."GROUP_3" AS "GROUP_3",
+      F0_0."GROUP_4" AS "GROUP_4",
+      F0_0."GROUP_5" AS "GROUP_5",
+      F0_0."GROUP_6" AS "GROUP_6",
+      F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+    FROM
+      (
+        (
+          SELECT
+            SUM((F2_0.L_EXTENDEDPRICE * (1 - F2_0.L_DISCOUNT))) AS "AGGR_0",
+            F0_0.C_CUSTKEY AS "GROUP_0",
+            F0_0.C_NAME AS "GROUP_1",
+            F0_0.C_ACCTBAL AS "GROUP_2",
+            F0_0.C_PHONE AS "GROUP_3",
+            F3_0.N_NAME AS "GROUP_4",
+            F0_0.C_ADDRESS AS "GROUP_5",
+            F0_0.C_COMMENT AS "GROUP_6"
+          FROM
+            (
+              (
+                (
+                  CUSTOMER AS F0_0
+                  CROSS JOIN ORDERS AS F1_0
+                )
+                CROSS JOIN LINEITEM AS F2_0
+              )
+              CROSS JOIN NATION AS F3_0
+            )
+          WHERE
+            (
+              (
+                (
+                  (
+                    (
+                      (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+                      AND (F2_0.L_ORDERKEY = F1_0.O_ORDERKEY)
+                    )
+                    AND (F1_0.O_ORDERDATE >= '1993-10-01')
+                  )
+                  AND (F1_0.O_ORDERDATE < '1994-01-01')
+                )
+                AND (F2_0.L_RETURNFLAG = 'R')
+              )
+              AND (F0_0.C_NATIONKEY = F3_0.N_NATIONKEY)
+            )
+          GROUP BY
+            F0_0.C_CUSTKEY,
+            F0_0.C_NAME,
+            F0_0.C_ACCTBAL,
+            F0_0.C_PHONE,
+            F3_0.N_NAME,
+            F0_0.C_ADDRESS,
+            F0_0.C_COMMENT
+        ) AS F0_0
+        JOIN (
+          SELECT
+            F0_0."AGG_GB_ARG1" AS "_P_SIDE_GROUP_0",
+            F0_0."AGG_GB_ARG2" AS "_P_SIDE_GROUP_1",
+            F0_0."AGG_GB_ARG3" AS "_P_SIDE_GROUP_2",
+            F0_0."AGG_GB_ARG4" AS "_P_SIDE_GROUP_3",
+            F0_0."AGG_GB_ARG5" AS "_P_SIDE_GROUP_4",
+            F0_0."AGG_GB_ARG6" AS "_P_SIDE_GROUP_5",
+            F0_0."AGG_GB_ARG7" AS "_P_SIDE_GROUP_6",
+            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+            F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_2
+            ) AS F0_0
+        ) AS F1_0 ON (
+          (
+            (
+              (F0_0."GROUP_6" = F1_0."_P_SIDE_GROUP_6")
+              OR (
+                (F0_0."GROUP_6" IS NULL)
+                AND (F1_0."_P_SIDE_GROUP_6" IS NULL)
+              )
+            )
+            AND (
+              (
+                (F0_0."GROUP_5" = F1_0."_P_SIDE_GROUP_5")
+                OR (
+                  (F0_0."GROUP_5" IS NULL)
+                  AND (F1_0."_P_SIDE_GROUP_5" IS NULL)
+                )
+              )
+              AND (
+                (
+                  (F0_0."GROUP_4" = F1_0."_P_SIDE_GROUP_4")
+                  OR (
+                    (F0_0."GROUP_4" IS NULL)
+                    AND (F1_0."_P_SIDE_GROUP_4" IS NULL)
+                  )
+                )
+                AND (
+                  (
+                    (F0_0."GROUP_3" = F1_0."_P_SIDE_GROUP_3")
+                    OR (
+                      (F0_0."GROUP_3" IS NULL)
+                      AND (F1_0."_P_SIDE_GROUP_3" IS NULL)
+                    )
+                  )
+                  AND (
+                    (
+                      (F0_0."GROUP_2" = F1_0."_P_SIDE_GROUP_2")
+                      OR (
+                        (F0_0."GROUP_2" IS NULL)
+                        AND (F1_0."_P_SIDE_GROUP_2" IS NULL)
+                      )
+                    )
+                    AND (
+                      (
+                        (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
+                        OR (
+                          (F0_0."GROUP_1" IS NULL)
+                          AND (F1_0."_P_SIDE_GROUP_1" IS NULL)
+                        )
+                      )
+                      AND (
+                        (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
+                        OR (
+                          (F0_0."GROUP_0" IS NULL)
+                          AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+  ),
+  temp_view_0 AS (
+    SELECT
+      F0_0.C_CUSTKEY AS C_CUSTKEY /* + materialize */,
+      F0_0.C_NAME AS C_NAME,
+      F0_0.REVENUE AS REVENUE,
+      F0_0.C_ACCTBAL AS C_ACCTBAL,
+      F0_0.N_NAME AS N_NAME,
+      F0_0.C_ADDRESS AS C_ADDRESS,
+      F0_0.C_PHONE AS C_PHONE,
+      F0_0.C_COMMENT AS C_COMMENT,
+      F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+    FROM
+      (
+        (
+          SELECT
+            F0_0.C_CUSTKEY AS C_CUSTKEY,
+            F0_0.C_NAME AS C_NAME,
+            SUM((F2_0.L_EXTENDEDPRICE * (1 - F2_0.L_DISCOUNT))) AS REVENUE,
+            F0_0.C_ACCTBAL AS C_ACCTBAL,
+            F3_0.N_NAME AS N_NAME,
+            F0_0.C_ADDRESS AS C_ADDRESS,
+            F0_0.C_PHONE AS C_PHONE,
+            F0_0.C_COMMENT AS C_COMMENT
+          FROM
+            (
+              (
+                (
+                  CUSTOMER AS F0_0
+                  CROSS JOIN ORDERS AS F1_0
+                )
+                CROSS JOIN LINEITEM AS F2_0
+              )
+              CROSS JOIN NATION AS F3_0
+            )
+          WHERE
+            (
+              (
+                (
+                  (
+                    (
+                      (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+                      AND (F2_0.L_ORDERKEY = F1_0.O_ORDERKEY)
+                    )
+                    AND (F1_0.O_ORDERDATE >= '1993-10-01')
+                  )
+                  AND (F1_0.O_ORDERDATE < '1994-01-01')
+                )
+                AND (F2_0.L_RETURNFLAG = 'R')
+              )
+              AND (F0_0.C_NATIONKEY = F3_0.N_NATIONKEY)
+            )
+          GROUP BY
+            F0_0.C_CUSTKEY,
+            F0_0.C_NAME,
+            F0_0.C_ACCTBAL,
+            F0_0.C_PHONE,
+            F3_0.N_NAME,
+            F0_0.C_ADDRESS,
+            F0_0.C_COMMENT
+          ORDER BY
+            REVENUE DESC
+          LIMIT
+            20
+        ) AS F0_0
+        JOIN (
+          SELECT
+            F0_0."GROUP_0" AS C_CUSTKEY,
+            F0_0."GROUP_1" AS C_NAME,
+            F0_0."AGGR_0" AS REVENUE,
+            F0_0."GROUP_2" AS C_ACCTBAL,
+            F0_0."GROUP_4" AS N_NAME,
+            F0_0."GROUP_5" AS C_ADDRESS,
+            F0_0."GROUP_3" AS C_PHONE,
+            F0_0."GROUP_6" AS C_COMMENT,
+            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+            F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_1
+            ) AS F0_0
+          ORDER BY
+            REVENUE DESC
+        ) AS F1_0 ON (
+          (
+            (
+              (
+                (
+                  (
+                    (
+                      (
+                        (F0_0.C_CUSTKEY = F1_0.C_CUSTKEY)
+                        AND (F0_0.C_NAME = F1_0.C_NAME)
+                      )
+                      AND (F0_0.REVENUE = F1_0.REVENUE)
+                    )
+                    AND (F0_0.C_ACCTBAL = F1_0.C_ACCTBAL)
+                  )
+                  AND (F0_0.N_NAME = F1_0.N_NAME)
+                )
+                AND (F0_0.C_ADDRESS = F1_0.C_ADDRESS)
+              )
+              AND (F0_0.C_PHONE = F1_0.C_PHONE)
+            )
+            AND (F0_0.C_COMMENT = F1_0.C_COMMENT)
+          )
+        )
+      )
+  )
+SELECT
+  F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+  F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+  F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+  F0_0.C_CUSTKEY AS C_CUSTKEY,
+  F0_0.C_NAME AS C_NAME,
+  F0_0.C_ACCTBAL AS C_ACCTBAL,
+  F0_0.N_NAME AS N_NAME,
+  F0_0.C_ADDRESS AS C_ADDRESS,
+  F0_0.C_PHONE AS C_PHONE,
+  F0_0.C_COMMENT AS C_COMMENT
+FROM
+  (
+    SELECT
+      *
+    FROM
+      temp_view_0
+  ) AS F0_0

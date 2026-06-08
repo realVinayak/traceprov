@@ -5,6 +5,7 @@
 # This is done to improve reliability.
 import argparse
 import glob
+import os
 from pathlib import Path
 from typing import Any, Dict, NamedTuple, Tuple
 import statistics
@@ -232,3 +233,64 @@ def is_infer(x):
 
 def compute_slowdown(first, second):
     return [((f / s) - 1) * 100 for f, s in zip(first, second)]
+
+
+def get_unique_handles_labels(plot_axis):
+    handles_all = []
+
+    handles, legend_labels = plot_axis.get_legend_handles_labels()
+    print(handles, legend_labels)
+
+    legend_labels_set = set(legend_labels)
+    legend_label_ordered = sorted(
+        list(legend_labels_set), key=lambda x: legend_labels.index(x)
+    )
+    handles_all.extend(
+        handles[legend_labels.index(label)] for label in legend_label_ordered
+    )
+    return (legend_label_ordered, handles_all)
+
+
+def setup_tpch_analyzer_parser(mpl):
+    parser = argparse.ArgumentParser("tpch_analyzer")
+    parser.add_argument("--dir", required=True)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--sf", required=True)
+    parser.add_argument(
+        "--poster_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--use_cache", action=argparse.BooleanOptionalAction, default=False
+    )
+
+    parsed = parser.parse_args()
+    if parsed.poster_mode:
+        mpl.rcParams.update(
+            {
+                # fonts
+                "font.family": "serif",
+                "font.size": 16,
+                "axes.labelsize": 18,
+                "xtick.labelsize": 16,
+                "ytick.labelsize": 16,
+                "legend.fontsize": 15,
+                "axes.titlesize": 18,
+                # cleaner look
+                "axes.spines.top": False,
+                "axes.spines.right": False,
+                # lines
+                "lines.linewidth": 2,
+                "patch.linewidth": 1.5,
+            }
+        )
+    out_dir = Path(parsed.out_dir) / parsed.sf
+    os.makedirs(out_dir, exist_ok=True)
+    return parsed, out_dir
+
+
+def slice_filter(raw_values, invalid_values):
+    return [
+        (0 if _idx in invalid_values else raw_value)
+        for (_idx, raw_value) in enumerate(raw_values)
+    ]

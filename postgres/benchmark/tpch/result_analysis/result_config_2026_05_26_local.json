@@ -1,0 +1,14 @@
+{
+  "gprom": {
+    "file": "local_test_SMART_gprom_params_default_keys_2026_05_25_23_22_02",
+    "handler": "gprom"
+  },
+  "gprom_latest": {
+    "file": "local_test_SMART_gprom_params_default_keys_2026_05_27_15_38_02",
+    "handler": "gprom"
+  },
+  "traceprov_stats": {
+    "file": "local_test_2026_05_26_14_23_50",
+    "handler": "traceprov"
+  }
+}

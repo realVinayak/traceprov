@@ -1,0 +1,205 @@
+SELECT
+  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+  F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+  F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+  F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+  F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+FROM
+  (
+    SELECT
+      F0_0.N_NAME AS NATION,
+      DATE_PART('YEAR', CAST((F0_0.O_ORDERDATE) AS DATE)) AS O_YEAR,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+    FROM
+      (
+        SELECT
+          F0_0.P_PARTKEY AS P_PARTKEY,
+          F0_0.P_NAME AS P_NAME,
+          F0_0.S_SUPPKEY AS S_SUPPKEY,
+          F0_0.S_NATIONKEY AS S_NATIONKEY,
+          F0_0.L_ORDERKEY AS L_ORDERKEY,
+          F0_0.L_PARTKEY AS L_PARTKEY,
+          F0_0.L_SUPPKEY AS L_SUPPKEY,
+          F0_0.L_QUANTITY AS L_QUANTITY,
+          F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+          F0_0.L_DISCOUNT AS L_DISCOUNT,
+          F0_0.PS_PARTKEY AS PS_PARTKEY,
+          F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+          F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+          F0_0.O_ORDERKEY AS O_ORDERKEY,
+          F0_0.O_ORDERDATE AS O_ORDERDATE,
+          F1_0.N_NATIONKEY AS N_NATIONKEY,
+          F1_0.N_NAME AS N_NAME,
+          F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+          F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+          F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+          F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+          F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+        FROM
+          (
+            (
+              SELECT
+                F0_0.P_PARTKEY AS P_PARTKEY,
+                F0_0.P_NAME AS P_NAME,
+                F0_0.S_SUPPKEY AS S_SUPPKEY,
+                F0_0.S_NATIONKEY AS S_NATIONKEY,
+                F0_0.L_ORDERKEY AS L_ORDERKEY,
+                F0_0.L_PARTKEY AS L_PARTKEY,
+                F0_0.L_SUPPKEY AS L_SUPPKEY,
+                F0_0.L_QUANTITY AS L_QUANTITY,
+                F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                F0_0.L_DISCOUNT AS L_DISCOUNT,
+                F0_0.PS_PARTKEY AS PS_PARTKEY,
+                F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+                F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                F1_0.O_ORDERKEY AS O_ORDERKEY,
+                F1_0.O_ORDERDATE AS O_ORDERDATE,
+                F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+              FROM
+                (
+                  (
+                    SELECT
+                      F0_0.P_PARTKEY AS P_PARTKEY,
+                      F0_0.P_NAME AS P_NAME,
+                      F0_0.S_SUPPKEY AS S_SUPPKEY,
+                      F0_0.S_NATIONKEY AS S_NATIONKEY,
+                      F0_0.L_ORDERKEY AS L_ORDERKEY,
+                      F0_0.L_PARTKEY AS L_PARTKEY,
+                      F0_0.L_SUPPKEY AS L_SUPPKEY,
+                      F0_0.L_QUANTITY AS L_QUANTITY,
+                      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                      F0_0.L_DISCOUNT AS L_DISCOUNT,
+                      F1_0.PS_PARTKEY AS PS_PARTKEY,
+                      F1_0.PS_SUPPKEY AS PS_SUPPKEY,
+                      F1_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                      F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                      F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY
+                    FROM
+                      (
+                        (
+                          SELECT
+                            F0_0.P_PARTKEY AS P_PARTKEY,
+                            F0_0.P_NAME AS P_NAME,
+                            F0_0.S_SUPPKEY AS S_SUPPKEY,
+                            F0_0.S_NATIONKEY AS S_NATIONKEY,
+                            F1_0.L_ORDERKEY AS L_ORDERKEY,
+                            F1_0.L_PARTKEY AS L_PARTKEY,
+                            F1_0.L_SUPPKEY AS L_SUPPKEY,
+                            F1_0.L_QUANTITY AS L_QUANTITY,
+                            F1_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                            F1_0.L_DISCOUNT AS L_DISCOUNT,
+                            F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                            F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                            F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                          FROM
+                            (
+                              (
+                                SELECT
+                                  F0_0.P_PARTKEY AS P_PARTKEY,
+                                  F0_0.P_NAME AS P_NAME,
+                                  F1_0.S_SUPPKEY AS S_SUPPKEY,
+                                  F1_0.S_NATIONKEY AS S_NATIONKEY,
+                                  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                                  F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                FROM
+                                  (
+                                    (
+                                      SELECT
+                                        F0_0.P_PARTKEY AS P_PARTKEY,
+                                        F0_0.P_NAME AS P_NAME,
+                                        F0_0.rowid AS PROV_PART_P__PARTKEY
+                                      FROM
+                                        PART AS F0_0
+                                    ) AS F0_0
+                                    CROSS JOIN (
+                                      SELECT
+                                        F0_0.S_SUPPKEY AS S_SUPPKEY,
+                                        F0_0.S_NATIONKEY AS S_NATIONKEY,
+                                        F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
+                                      FROM
+                                        SUPPLIER AS F0_0
+                                    ) AS F1_0
+                                  )
+                              ) AS F0_0
+                              CROSS JOIN (
+                                SELECT
+                                  F0_0.L_ORDERKEY AS L_ORDERKEY,
+                                  F0_0.L_PARTKEY AS L_PARTKEY,
+                                  F0_0.L_SUPPKEY AS L_SUPPKEY,
+                                  F0_0.L_QUANTITY AS L_QUANTITY,
+                                  F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                                  F0_0.L_DISCOUNT AS L_DISCOUNT,
+                                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
+                                FROM
+                                  LINEITEM AS F0_0
+                              ) AS F1_0
+                            )
+                        ) AS F0_0
+                        CROSS JOIN (
+                          SELECT
+                            F0_0.PS_PARTKEY AS PS_PARTKEY,
+                            F0_0.PS_SUPPKEY AS PS_SUPPKEY,
+                            F0_0.PS_SUPPLYCOST AS PS_SUPPLYCOST,
+                            F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
+                          FROM
+                            PARTSUPP AS F0_0
+                        ) AS F1_0
+                      )
+                  ) AS F0_0
+                  CROSS JOIN (
+                    SELECT
+                      F0_0.O_ORDERKEY AS O_ORDERKEY,
+                      F0_0.O_ORDERDATE AS O_ORDERDATE,
+                      F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
+                    FROM
+                      ORDERS AS F0_0
+                  ) AS F1_0
+                )
+            ) AS F0_0
+            CROSS JOIN (
+              SELECT
+                F0_0.N_NATIONKEY AS N_NATIONKEY,
+                F0_0.N_NAME AS N_NAME,
+                F0_0.rowid AS PROV_NATION_N__NATIONKEY
+              FROM
+                NATION AS F0_0
+            ) AS F1_0
+          )
+      ) AS F0_0
+    WHERE
+      (
+        (
+          (
+            (
+              (
+                (
+                  (F0_0.S_SUPPKEY = F0_0.L_SUPPKEY)
+                  AND (F0_0.PS_SUPPKEY = F0_0.L_SUPPKEY)
+                )
+                AND (F0_0.PS_PARTKEY = F0_0.L_PARTKEY)
+              )
+              AND (F0_0.P_PARTKEY = F0_0.L_PARTKEY)
+            )
+            AND (F0_0.O_ORDERKEY = F0_0.L_ORDERKEY)
+          )
+          AND (F0_0.S_NATIONKEY = F0_0.N_NATIONKEY)
+        )
+        AND (F0_0.P_NAME LIKE '%green%')
+      )
+    ORDER BY
+      NATION ASC,
+      O_YEAR DESC
+  ) AS F0_0

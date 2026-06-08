@@ -24,6 +24,7 @@ from traceprovpy.tools.run_duckdb_generic import (
     run_sample_inference_smokedduck,
     run_single,
     run_single_smokedduck,
+    set_extra_traceprov_options,
 )
 
 NEEDS_DISABLE = {str(2), str(11), str(15), str(17), str(18), str(20), str(22)}
@@ -36,7 +37,6 @@ def run():
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--query_layer_cfg", required=True)
-
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     print("USING SUFFIX --> ", parsed.suff)
@@ -53,11 +53,14 @@ def run():
     config_queries = config["queries"]
     if isinstance(config_queries, str):
         config_queries = eval(config_queries)
+    needs_join_mode = list(map(str, config.get("queries_sd_join_mode", [])))
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
         sample_inference_result = None
         if parsed.sd_mode:
+            if query in needs_join_mode:
+                set_extra_traceprov_options(parsed, "--sd_join_mode")
             query_result = dict(
                 sd_type=parsed.sd_mode,
                 sd=run_single_smokedduck(
@@ -67,6 +70,7 @@ def run():
                     pre_base=pre_base_path,
                 ),
             )
+            set_extra_traceprov_options(parsed, "")
         else:
             disable_col_opt = query in NEEDS_DISABLE
             graph_dir = extract_graph_dir(parsed)
@@ -89,9 +93,17 @@ def run():
             else:
                 base_result = query_result["base_time"][0]
             base_row_count: int = base_result["row_count"]
-            out_ids = infer_sample_id(base_row_count, parsed)
+            if parsed.single_row_mode:
+                out_ids = [0]
+            else:
+                out_ids = infer_sample_id(base_row_count, parsed)
 
             if parsed.sd_mode:
+                extra_options = ["disable_chunk_cache"]
+                if query in needs_join_mode:
+                    extra_options.append("sd_join_mode")
+                extra_options = " ".join([f"--{key}" for key in extra_options])
+                set_extra_traceprov_options(parsed, extra_options)
                 query_id = infer_detailed_option_setting(parsed.exe)
                 sample_inference_result = run_sample_inference_smokedduck(
                     query_num=query,
@@ -101,6 +113,7 @@ def run():
                     iters=total_iters,
                     pre_base=pre_base_path,
                 )
+                set_extra_traceprov_options(parsed, "")
             else:
                 sample_inference_result = run_sample_inference(
                     query_num=query,

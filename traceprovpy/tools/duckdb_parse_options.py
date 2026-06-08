@@ -33,6 +33,15 @@ def make_duckdb_parse():
     parser.add_argument("--infer", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sample_num", type=int, default=100)
     parser.add_argument("--graph_dir", type=str, required=False)
+    # Backtrace all for SD?
+    parser.add_argument(
+        "--backtrace_all_sd", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--single_row_mode",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+    )
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
 

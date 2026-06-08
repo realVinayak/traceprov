@@ -1,0 +1,20 @@
+{
+    "name": "UNGROUPED_AGGREGATE",
+    "opid": "2",
+    "children": [
+        {
+            "name": "PROJECTION",
+            "opid": "1",
+            "children": [
+                {
+                    "name": "SEQ_SCAN ",
+                    "opid": "0",
+                    "children": [],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}

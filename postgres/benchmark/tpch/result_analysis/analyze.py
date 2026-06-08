@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 from typing import Tuple
 
 from matplotlib import pyplot as plt
@@ -18,25 +19,11 @@ from traceprovpy.tools.file_utils import (
 from traceprovpy.tools.normalized_row import Extendable, Normalizable
 
 import duckdb
-from traceprovpy.tools.plot_utils import BenchmarkPlot
-
-mpl.rcParams.update(
-    {
-        # fonts
-        "font.family": "serif",
-        "font.size": 16,
-        "axes.labelsize": 18,
-        "xtick.labelsize": 16,
-        "ytick.labelsize": 16,
-        "legend.fontsize": 15,
-        "axes.titlesize": 18,
-        # cleaner look
-        "axes.spines.top": False,
-        "axes.spines.right": False,
-        # lines
-        "lines.linewidth": 2,
-        "patch.linewidth": 1.5,
-    }
+from traceprovpy.tools.plot_utils import (
+    BenchmarkPlot,
+    get_unique_handles_labels,
+    setup_tpch_analyzer_parser,
+    slice_filter,
 )
 
 
@@ -117,7 +104,10 @@ def handle_traceprov(query_num: str, query_data: dict) -> dict:
 def handle_q15_base(query_num: str, query_data: dict) -> dict:
     base_data = query_data["base_15_skippable"]
     phase_1 = [
-        dict(explain_time=item["base"][0]["explain_time"])
+        dict(
+            explain_time=item["base"][0]["explain_time"],
+            row_count=item["base"][0]["complete_plan"],
+        )
         for item in base_data["extras"]
     ]
     return dict(
@@ -125,18 +115,31 @@ def handle_q15_base(query_num: str, query_data: dict) -> dict:
     )
 
 
+def parse_row_count(complete_plan):
+    plan = json.loads(complete_plan)
+    return plan["Plan"]["Actual Rows"]
+
+
 def handle_base(query_num: str, query_data: dict, handle_special=True) -> dict:
     if query_num == "15" and handle_special:
         return handle_q15_base(query_num, query_data)
     base_data = query_data["base"]
-    contains_timeout = any("timeout" in item for item in base_data["base"])
+    contains_timeout = (
+        any("timeout" in item for item in base_data["base"])
+        if "base" in base_data
+        else "timeout" in base_data
+    )
     if len(base_data) == 0:
         raise Exception("expected base to be set")
     if contains_timeout:
         phase_1 = [dict(explain_time=-1)]
     else:
         phase_1 = [
-            dict(explain_time=item["explain_time"]) for item in base_data["base"]
+            dict(
+                explain_time=item["explain_time"],
+                row_count=parse_row_count(item["complete_plan"]),
+            )
+            for item in base_data["base"]
         ]
     return dict(
         query_num=query_num,
@@ -208,6 +211,11 @@ def handle_muller(query_num: str, query_data: dict) -> dict:
     return args
 
 
+def get_first(result):
+    assert len(result) == 1
+    return list(result.values())[0]
+
+
 class ResultAnalyzer:
 
     def __init__(self):
@@ -216,14 +224,15 @@ class ResultAnalyzer:
     def gprom(self, key: str, path: Path) -> list[NormalizedPgTPCHRow]:
         print("Handling GProM!", key)
         result = json_read_file(path, True)
-        query_results = result["result"]["params_default"]
+        query_results = get_first(result["result"])
         rows: list[NormalizedPgTPCHRow] = []
         for query_num, query_data in query_results.items():
             for category, category_data in query_data.items():
                 base_row_args = handle_base(
                     query_num, dict(base=category_data), handle_special=False
                 )
-                base_args = {**base_row_args, "category": category}
+                category_key = f"{key}_{category}"
+                base_args = {**base_row_args, "category": category_key}
                 rows.append(NormalizedPgTPCHRow(**base_args))
         return rows
 
@@ -245,7 +254,7 @@ class ResultAnalyzer:
     ) -> list[NormalizedPgTPCHRow]:
         print("Handling TraceProv!", key)
         result = json_read_file(path, True)
-        query_results = result["result"]["params_default"]
+        query_results = get_first(result["result"])
         base_rows: list[NormalizedPgTPCHRow] = []
         traceprov_rows: list[NormalizedPgTPCHRow] = []
         for query_num, query_data in query_results.items():
@@ -275,10 +284,14 @@ def plot_data(
     x_axis_values = list(map(str, range(1, 23)))
     x_axis = np.arange(len(x_axis_values))
     slowdown_fig, slowdown_axis = plt.subplots(1, 1, figsize=(14, 3))
+    total_time_fig, total_time_axis = plt.subplots(1, 1, figsize=(14, 3))
     data = [item for item in data if item[0] in categories]
     result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
     q11_idx = x_axis_values.index("11")
     pending_bars = []
+
+    total_time_max = 0
+    slowdown_max = 0
     for category_idx, (category, catagory_data) in enumerate(result_sorted):
         x_axis_adjusted = (
             x_axis * (len(categories) * width + group_gap) + width * category_idx
@@ -293,20 +306,39 @@ def plot_data(
             )
 
         y_values = _get_key_in_dict("phase_1_explain_time_mean")
+        y_values_end_to_end = _get_key_in_dict("phase_total_time_median")
+        y_values_end_to_end_error = _get_key_in_dict("phase_total_time_stdev")
         y_timeout_values = [
             y_idx for y_idx, y in enumerate(y_values) if -1.5 < y and y < -0.5
         ]
         phase_all_slowdown = _get_key_in_dict("phase_all_slowdown")
-        phase_all_slowdown = [
-            0 if (idx in [*y_timeout_values]) else val
-            for (idx, val) in enumerate(phase_all_slowdown)
-        ]
-        slowdown_axis.bar(
+        y_values_end_to_end_filtered = slice_filter(
+            y_values_end_to_end, y_timeout_values
+        )
+        y_values_end_to_end_error = slice_filter(
+            y_values_end_to_end_error, y_timeout_values
+        )
+        phase_all_slowdown = slice_filter(phase_all_slowdown, y_timeout_values)
+        slowdown_max = max(slowdown_max, *phase_all_slowdown)
+        total_time_max = max(total_time_max, *y_values_end_to_end_filtered)
+        if category_idx > 0:
+            x_axis_adjusted_slowdown = x_axis * (
+                len(categories) * width + group_gap
+            ) + width * (category_idx - 1)
+            slowdown_axis.bar(
+                x_axis_adjusted_slowdown,
+                phase_all_slowdown,
+                width=width,
+                label=(category_label_mapping or dict()).get(category, category),
+                color=BenchmarkPlot.colors[category_idx],
+            )
+        total_time_axis.bar(
             x_axis_adjusted,
-            phase_all_slowdown,
+            y_values_end_to_end_filtered,
             width=width,
             label=(category_label_mapping or dict()).get(category, category),
             color=BenchmarkPlot.colors[category_idx],
+            yerr=y_values_end_to_end_error,
         )
         if y_timeout_values:
             pending_bars.append(
@@ -321,8 +353,26 @@ def plot_data(
                 )
             )
     for bar in pending_bars:
-        slowdown_axis.bar(**bar)
-    slowdown_axis.legend(loc="upper right", bbox_to_anchor=(1.1, 1.2))
+        slowdown_axis.bar(**{**bar, "height": 2 * slowdown_max})
+        total_time_axis.bar(**{**bar, "height": 2 * total_time_max})
+
+    shared_axis = [slowdown_axis, total_time_axis]
+    for shared_axes in shared_axis:
+        labels_all, handles_all = get_unique_handles_labels(shared_axes)
+        print("Labels ", labels_all)
+        shared_axes.legend(
+            handles=handles_all,
+            labels=labels_all,
+            loc="upper right",
+            bbox_to_anchor=(1.1, 1.2),
+            prop=dict(size=8),
+        )
+        shared_axes.set_xticks(
+            x_axis * (len(categories) * width + group_gap)
+            + width * (len(categories) / 3),
+            x_axis_values,
+        )
+        shared_axes.set_xlabel("Query")
 
     slowdown_axis.set_ylim(bottom=0.5, top=100)
     slowdown_axis.annotate(
@@ -337,14 +387,15 @@ def plot_data(
     slowdown_axis.axhline(y=1, color="r", linestyle="--")
     slowdown_axis.axhline(y=2, color="r", linestyle="--")
     slowdown_axis.set_ylabel("Slowdown")
-    slowdown_axis.set_xlabel("Query")
+
     slowdown_axis.set_yscale("log")
-    slowdown_axis.set_xticks(
-        x_axis * (len(categories) * width + group_gap) + width * (len(categories) / 3),
-        x_axis_values,
-    )
     slowdown_fig.suptitle(f"PostgreSQL Slowdown for SF={sf}")
     slowdown_fig.savefig(out_dir / f"{label}_slowdown.pdf", bbox_inches="tight")
+
+    total_time_axis.set_yscale("log")
+    total_time_axis.set_ylabel("Total end-to-end time (s)")
+    total_time_fig.suptitle(f"End-to-end Time for Postgres (SF={sf})")
+    total_time_fig.savefig(out_dir / f"{label}_end_to_end.pdf", bbox_inches="tight")
 
 
 def gen_plots(database_file: Path, out_dir: Path, sf):
@@ -364,6 +415,7 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
         for (key, data) in results
     ]
     all_categories = [
+        "base",
         "gprom_join",
         "gprom_window",
         "gprom_join_heuristics",
@@ -372,9 +424,17 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
         "traceprov_no_stats",
         "traceprov_stats",
     ]
-    interesting_categories = ["gprom_window_heuristics", "muller", "traceprov_stats"]
+    interesting_categories = [
+        "base",
+        # "gprom_join_heuristics",
+        "gprom_window_heuristics",
+        "muller",
+        "traceprov_stats",
+    ]
     plot_data(result_mapped, all_categories, "all", sf, out_dir, 0.1, 0.0)
     mapping = {
+        "base": "Baseline",
+        # "gprom_join_heuristics": "GProM Join. Heu.",
         "gprom_window_heuristics": "GProM Win. Heu.",
         "muller": "Muller",
         "traceprov_stats": "TraceProv",
@@ -392,15 +452,8 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
 
 
 def main():
-    parser = argparse.ArgumentParser("tpch_analyzer")
-    parser.add_argument("--dir", required=True)
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--out_dir", required=True)
-    parser.add_argument("--sf", required=True)
-    parsed = parser.parse_args()
+    parsed, out_dir = setup_tpch_analyzer_parser(mpl)
     config = json_read_file(parsed.config, True)
-    out_dir = Path(parsed.out_dir) / parsed.sf
-    os.makedirs(out_dir, exist_ok=True)
     assert config is not None
     in_dir = Path(parsed.dir)
     normalized_rows: list[NormalizedPgTPCHRow] = []
@@ -427,6 +480,8 @@ def main():
     cursor.execute(slowdown_sql)
     cursor.close()
     conn.close()
+    call_options = " ".join(sys.argv)
+    just_write(out_dir / "call_options.txt", call_options)
     gen_plots(db_file, out_dir, parsed.sf)
 
 
