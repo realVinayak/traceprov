@@ -1,0 +1,14 @@
+{
+    "gprom": {
+        "file": [
+            "local_test_single_row_2026_05_27_21_32_27"
+        ],
+        "handler": "gprom"
+    },
+    "traceprov": {
+        "file": [
+            "local_test_single_row_2026_05_27_21_37_50"
+        ],
+        "handler": "traceprov"
+    }
+}
