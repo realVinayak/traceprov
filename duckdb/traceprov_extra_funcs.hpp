@@ -5,4 +5,5 @@
 void traceprov_create_vary_chunk_funcs(duckdb_connection con);
 void traceprov_create_debug_table_funcs(duckdb_connection con);
 void traceprov_create_chunk_table_func(duckdb_connection con);
+void traceprov_create_chunk_table_adapted_func(duckdb_connection con);
 #endif

@@ -929,6 +929,8 @@ int main(int argc, char **argv){
     #endif
     DUCKDB_RUN_SHORT_QUERY(con, "SET preserve_insertion_order=false;", "set insertion order preserve");
 
+
+
     if (options.is_new_sd){
         if (!IS_SET(options.sd_extension_path))
             elog(ERROR, "Expected extenstion path to be set!");
@@ -974,6 +976,7 @@ int main(int argc, char **argv){
         traceprov_create_vary_chunk_funcs(con);
         traceprov_create_debug_table_funcs(con);
         traceprov_create_chunk_table_func(con);
+        traceprov_create_chunk_table_adapted_func(con);
     }
         
     //if (options.disable_column_optimizer){
