@@ -301,6 +301,7 @@ class RunWithTimeoutOptions(NamedTuple):
     # extra commands that need to be run, when opening the connection.
     extra_commands: list[str] | None = None
     use_dict_cursor: bool = False
+    use_inclusive_explain: bool = False
 
     def close_all(self):
         if self.extras is None:
@@ -313,10 +314,11 @@ class RunWithTimeoutOptions(NamedTuple):
             cached_connection.close()
 
     def get_explain(self, connection):
+        method = "on" if self.use_inclusive_explain else "off"
         if connection.server_version >= 180000:
-            return "EXPLAIN (analyze, timing off, buffers off, memory off, format JSON)"
+            return f"EXPLAIN (analyze, timing {method}, buffers {method}, memory {method}, format JSON)"
         else:
-            return "EXPLAIN (analyze, timing off, buffers off, format JSON)"
+            return f"EXPLAIN (analyze, timing {method}, buffers {method}, format JSON)"
 
     def run_connection_strict(self):
         assert self.extras is not None

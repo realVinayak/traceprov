@@ -243,3 +243,13 @@ def parse_queries(query_repr):
     if isinstance(query_repr, str):
         query_repr = eval(query_repr)
     return query_repr
+
+
+def evaluate_if_str(value: str | int):
+    if isinstance(value, str):
+        return eval(value)
+    return value
+
+
+def evaluate_list_if_str(in_list: list[str | int]):
+    return list(map(evaluate_if_str, in_list))
