@@ -48,7 +48,7 @@ where p_partkey = ps_partkey
         nation.rowid,
         region.rowid
     ) in (
-        SELECT (column_0, column_1, column_2, column_3, column_4)
+        SELECT (eval(column_0, column_1), eval(column_1, column_2), eval(column_2, column_3), eval(column_3, column_4), eval(column_4, column_5))
         from LAYER_3_%OUT_ID%
     )
 order by s_acctbal desc,

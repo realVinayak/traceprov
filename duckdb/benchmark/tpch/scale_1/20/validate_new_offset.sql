@@ -42,7 +42,7 @@ where
 	)
 	and s_nationkey = n_nationkey
     and (supplier.rowid, nation.rowid) in (
-        select (column_0, column_2)
+        select (eval(column_0, column_1), eval(column_2, column_3))
         from
             LAYER_5_%OUT_ID%
     )

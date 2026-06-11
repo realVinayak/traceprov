@@ -17,7 +17,7 @@ from
         where
             customer.rowid in (
                 select
-                    column_1
+                    eval(column_1, column_1_1)
                 from
                     LAYER_3_%OUT_ID%
             )

@@ -7,7 +7,7 @@ from partsupp,
     part
 where p_partkey = ps_partkey
     and (partsupp.rowid, part.rowid) in (
-        select (column_1, column_2)
+        select (eval(column_1, column_1_1), column_2)
         from LAYER_1_%OUT_ID%
     )
 group by p_brand,

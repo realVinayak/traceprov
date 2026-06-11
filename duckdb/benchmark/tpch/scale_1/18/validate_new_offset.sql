@@ -26,7 +26,7 @@ where
     )
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
         select
-            (column_1,
+            (eval(column_1, column_1_1),
             column_2,
             column_4)
         FROM

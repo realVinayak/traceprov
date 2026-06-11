@@ -13,7 +13,7 @@ where
 	and s_nationkey = n_nationkey
     and (partsupp.rowid, supplier.rowid, nation.rowid) in (
         select
-            (column_1,
+            (eval(column_1, column_1_1),
             column_2,
             column_3)
         FROM

@@ -11,7 +11,7 @@ select l_returnflag,
     count(*) as count_order
 from lineitem
 where rowid in (
-        select column_1
+        select eval(column_1, column_1_1)
         from LAYER_1_%OUT_ID%
     )
 group by l_returnflag,

@@ -16,7 +16,7 @@ from
                 from LAYER_1_%OUT_ID%
                 where column_1_1 is not distinct
                 from customer.rowid
-                    and column_2 is not distinct
+                    and eval(column_2, column_2_1) is not distinct
                 from orders.rowid
             )
         group by

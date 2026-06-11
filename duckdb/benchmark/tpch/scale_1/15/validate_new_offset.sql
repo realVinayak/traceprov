@@ -49,11 +49,9 @@ WHERE
 								FROM
 									lineitem
 								WHERE
-									(
-										(lineitem.l_shipdate >= '1996-01-01'::date)
-										AND (
-											lineitem.l_shipdate < ('1996-01-01'::date + '3 mons'::interval month)
-										)
+									lineitem.rowid in (
+										select column_1_1
+										from LAYER_2_%OUT_ID%
 									)
 								GROUP BY
 									lineitem.l_suppkey
@@ -65,7 +63,7 @@ WHERE
 	and (
 		supplier.rowid in (
 			select
-				"column_0"
+				"column_1"
 			FROM
 				LAYER_5_%OUT_ID%
 		)

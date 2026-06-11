@@ -13,7 +13,7 @@ where
     and l_orderkey = o_orderkey
     and (customer.rowid, orders.rowid, lineitem.rowid) in (
         select
-            (column_1,
+            (eval(column_1, column_1_1),
             column_2,
             column_3)
         from

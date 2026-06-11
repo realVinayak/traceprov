@@ -9,6 +9,6 @@ from lineitem,
     part
 where l_partkey = p_partkey
     and (lineitem.rowid, part.rowid) in (
-        select (column_1, column_2)
+        select (eval(column_1, column_1_1), column_2)
         from LAYER_1_%OUT_ID%
     )
