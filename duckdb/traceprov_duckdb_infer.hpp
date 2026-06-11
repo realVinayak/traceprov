@@ -3,9 +3,17 @@
 duckdb_table_function traceprov_create_table_func();
 duckdb_table_function traceprov_create_table_offset_func();
 duckdb_table_function traceprov_create_table_offset_partition_func();
+typedef struct TraceProvIndexContext {
+    uint64_t *vector_data;
+    uint64_t vector_size;
+    std::mutex *index_context_mutex;
+    TraceProvLayerNumber root_layer_number;
+    List *directly_derivable;
+} TraceProvIndexContext;
 typedef struct TraceProvDuckDbGlobalState {
     bool did_initialize;
     std::vector<struct local_context *> *worker_local_contexts;
+    TraceProvIndexContext *index_context;
 } TraceProvDuckDbGlobalState;
 extern TraceProvDuckDbGlobalState g_tp_duckdb_state;
 void reset_global_context();

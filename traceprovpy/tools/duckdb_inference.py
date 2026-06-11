@@ -30,6 +30,7 @@ class DriverDefaultValues(NamedTuple):
     traceprov_skip_sql_cache: bool = False
     traceprov_use_table_stats: bool = False
     traceprov_ignore_direct_join: bool = False
+    traceprov_use_index: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -85,6 +86,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_ignore_direct_join: bool = (
         DriverDefaultValues.traceprov_ignore_direct_join
     )
+    traceprov_use_index: bool = DriverDefaultValues.traceprov_use_index
     warm_up_time: int = 0
     load_micro_benchmarks: bool = False
     sd_join_mode: bool = False
@@ -127,6 +129,7 @@ class DuckDBDriverOptions(NamedTuple):
             "traceprov_skip_sql_cache",
             "traceprov_use_table_stats",
             "traceprov_ignore_direct_join",
+            "traceprov_use_index",
         }
         recognized = set(DriverDefaultValuesInstance._fields)
         assert recognized == optimizations

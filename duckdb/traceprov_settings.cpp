@@ -49,3 +49,5 @@ bool traceprov_skip_sql_cache = false;
 bool traceprov_use_table_stats = false;
 
 bool traceprov_ignore_direct_join = false;
+
+bool traceprov_use_index = false;

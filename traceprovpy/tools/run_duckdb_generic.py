@@ -92,6 +92,16 @@ def set_extra_base_options(parsed, options):
     setattr(parsed, TRACEPROV_BASE_OPTIONS, options)
 
 
+def replace_evaluate(in_sql: str, using_index: bool):
+    reg = r"(eval\((column_\d*_*\d*\s*),\s*(column_\d*_*\d*\s*)\))"
+    return_sql = in_sql
+    for match in re.finditer(reg, in_sql):
+        groups = match.groups()
+        true_column = groups[2 if using_index else 1]
+        return_sql = return_sql.replace(groups[0], true_column)
+    return return_sql
+
+
 def run_sample_inference(
     query_num: str,
     samples: Iterable[int],
@@ -182,11 +192,17 @@ def run_sample_inference(
         sql_spec_map
     ), f"Len: {capture_result_time}, {len(sql_spec_map)}"
 
+    using_index = parsed.traceprov_use_index
+    created = set()
     if validate:
         for map_idx, map_entry in enumerate(sql_spec_map):
             if map_entry[0] == TRACEPROV_CAPTURE_ENTRY:
                 continue
             (_, sample_id, out_id), iter_id = map_entry
+            key = (sample_id, out_id)
+            if key in created:
+                continue
+            created.add(key)
             # don't do any validation in this case.
             if iter_id > 0:
                 continue
@@ -202,7 +218,7 @@ def run_sample_inference(
             query_str = just_read(validate_query_offset)
             query_str = query_str.replace(TP_OUT_ID_TICKER, str(out_id))
             query_str = query_str.replace("LAYER", "traceprov_lineage")
-
+            query_str = replace_evaluate(query_str, using_index)
             just_write(validate_out, query_str)
 
             base_offset = query_dir / "base_offset.sql"

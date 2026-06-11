@@ -55,6 +55,8 @@ typedef struct TraceProvBindData
     // Needs mask?
     bool first_mask;
     bool is_aggregate;
+    uint64_t *write_vector;
+    bool needs_rowid;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData
@@ -81,6 +83,7 @@ typedef struct TraceProvInitData
     // Done this way so that we don't have to go back an entire page just to check what chunk idx we need to stop at.
     uint64_t next_null_idx;
     uint64_t next_null_col_count;
+    uint64_t running_count;
 } TraceProvInitData;
 
 static TraceProvBindData *setup_layers(
@@ -246,6 +249,8 @@ void reset_global_context()
 {
     g_tp_duckdb_state.did_initialize = false;
     g_tp_duckdb_state.worker_local_contexts = nullptr;
+    // TODO: Free here?
+    g_tp_duckdb_state.index_context = nullptr;
 }
 
 static TraceProvBindData *allocate_bind_data()
@@ -609,10 +614,24 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
         }
     }
     bind_data->sizes = sizes;
-    for (uint64_t col_count = 0; col_count < bind_data->column_width; col_count++)
+    uint64_t total_column_count = bind_data->column_width;
+    if (table_flags & TRACEPROV_TABLE_ROW_ID){
+        total_column_count++;
+        bind_data->needs_rowid = true;
+    }
+    for (uint64_t col_count = 0; col_count < total_column_count; col_count++)
     {
         const std::string param = std::string("column_") + std::to_string(col_count);
-        const uint8_t column_size = bind_data->sizes->at(col_count);
+        uint64_t column_size = 0;
+        uint64_t col_idx = col_count;
+        if (bind_data->needs_rowid){
+            if (col_count == 0){
+                column_size = sizeof(uint64_t);
+            }else{
+                col_idx--;
+            }
+        }
+        if (column_size==0) column_size = bind_data->sizes->at(col_idx);
         // elog(INFO, "[Infer] Layer: %d, Col: %ld, Size: %d", layer_number, col_count, column_size);
         // elog(INFO,)
         duckdb_logical_type type = column_size == sizeof(uint64_t) ? duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT) : duckdb_create_logical_type(DUCKDB_TYPE_UINTEGER);
@@ -624,6 +643,22 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
     if (total_record_count != -1)
     {
         duckdb_bind_set_cardinality(info, total_record_count, true);
+    }
+
+    if (g_tp_duckdb_state.index_context){
+        auto index_context = g_tp_duckdb_state.index_context;
+        if (layer_number == index_context->root_layer_number){
+            index_context->index_context_mutex->lock();
+            if (index_context->vector_size == 0){
+                if (total_record_count == -1){
+                    elog(ERROR, "Expected total record to be set!");
+                }
+                index_context->vector_data = (uint64_t*)calloc(sizeof(uint64_t), total_record_count);
+                index_context->vector_size = total_record_count;
+            }
+            index_context->index_context_mutex->unlock();
+            bind_data->write_vector = index_context->vector_data;
+        }
     }
 
     duckdb_bind_set_bind_data(info, bind_data, free);
@@ -765,7 +800,7 @@ uint64_t fillup_pointer_huge(
     return final_pos;
 }
 
-void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output)
+uint64_t traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_data_chunk output)
 {
     auto bind_data_combined = (TraceProvBindData *)duckdb_function_get_bind_data(info);
     auto init_data_combined = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
@@ -773,7 +808,8 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
     // This is the only case that signifies table scan end now.
     if (init_data_combined->worker_bind_idx >= init_data_combined->worker_init_data->size())
     {
-        return duckdb_data_chunk_set_size(output, 0);
+        duckdb_data_chunk_set_size(output, 0);
+        return 0;
     }
 
     TraceProvBindData *bind_data = bind_data_combined;
@@ -791,6 +827,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
     }
 
     auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
+    const uint64_t column_start_offset = bind_data_combined->needs_rowid ? 1 : 0;
 
     if (bind_data->rel_args.offset != -1)
     {
@@ -809,12 +846,12 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
             const uint8_t col_size = bind_data_combined->sizes->at(col_idx);
             if (col_size == sizeof(uint32_t))
             {
-                uint32_t *dest_ptr = (uint32_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                uint32_t *dest_ptr = (uint32_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx+column_start_offset)));
                 dest_ptr[0] = values[col_idx];
             }
             else
             {
-                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx+column_start_offset)));
                 dest_ptr[0] = values[col_idx];
             }
         }
@@ -823,7 +860,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
             free(values);
         init_data->is_dummy = true;
         init_data_combined->is_dummy = true;
-        return;
+        return 1;
     }
 
     uint64_t chunk_size = 0;
@@ -851,7 +888,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                     _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
                     for (idx_t col_idx = 0; col_idx < bind_data->column_width; col_idx++)
                     {
-                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        uint64_t *dest_ptr = (uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx+column_start_offset)));
                         memcpy(&dest_ptr[chunk_size], init_data->col_layer_ptr, col_log_size);
                         init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, col_log_size);
                     }
@@ -869,7 +906,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                         start_idx++;
                         const uint64_t extra_size = sizeof(uint32_t) * num_rows;
                         _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                        uint64_t *dest_ptr = &((uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0))))[chunk_size];
+                        uint64_t *dest_ptr = &((uint64_t *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0+column_start_offset))))[chunk_size];
                         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++)
                         {
                             dest_ptr[row_idx] = ((bind_data->col_layer->mask << 32) | (uint64_t)(((uint32_t *)(init_data->col_layer_ptr))[row_idx]));
@@ -881,7 +918,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                         const uint8_t unit_size = bind_data_combined->sizes->at(col_idx);
                         const uint64_t extra_size = unit_size * num_rows;
                         _traceprov_grow_col_page_mapping(extra_size, init_data, bind_data);
-                        void *dest_ptr = (void *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx)));
+                        void *dest_ptr = (void *)(duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, col_idx+column_start_offset)));
                         memcpy(INCR_BY_BYTES(dest_ptr, chunk_size * unit_size), init_data->col_layer_ptr, extra_size);
                         init_data->col_layer_ptr = INCR_BY_BYTES(init_data->col_layer_ptr, extra_size);
                     }
@@ -903,7 +940,7 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
                                     null_bind_data);
                                 const idx_t written_col_idx = ((uint64_t *)null_init_data->col_layer_ptr)[0];
                                 null_init_data->col_layer_ptr = INCR_BY_BYTES(null_init_data->col_layer_ptr, sizeof(uint64_t));
-                                duckdb_vector col_vector = duckdb_data_chunk_get_vector(output, written_col_idx);
+                                duckdb_vector col_vector = duckdb_data_chunk_get_vector(output, written_col_idx+column_start_offset);
                                 uint64_t *written_validity = (uint64_t *)null_init_data->col_layer_ptr;
                                 if (is_first_write)
                                 {
@@ -959,10 +996,11 @@ void traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckdb_da
         }
         // elog(INFO, "Chunk Sizes: %ld", chunk_size);
         duckdb_data_chunk_set_size(output, chunk_size);
-        return;
+        return chunk_size;
     }
     // Previously, combine was handled here.
     elog(ERROR, "Didn't expect to get here now!");
+    return 0;
 }
 
 void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
@@ -976,7 +1014,16 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
         return;
     }
 
-    traceprov_duckdb_func_huge_incremental(info, output);
+    const uint64_t out_chunk_size = traceprov_duckdb_func_huge_incremental(info, output);
+    if (traceprov_use_index && bind_data->needs_rowid && (out_chunk_size > 0)){
+        // Need to set the out chunk id based off the size.
+        auto rowid_vector = (uint64_t *) duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0));
+        for (uint64_t idx = 0; idx < out_chunk_size; idx++){
+            rowid_vector[idx] = init_data->running_count + idx; 
+        }
+    }
+    init_data->running_count += out_chunk_size;
+
 }
 
 struct TraceProvCTableFunctionInfo : public TableFunctionInfo
@@ -1070,6 +1117,20 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
 #endif
     uint64_t distinct_count = 0;
     TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
+    if (tp_bind_data->needs_rowid){
+        if (column_index == 0){
+            auto result = NumericStats::CreateEmpty(LogicalType::UBIGINT);
+            NumericStats::SetMin(result, Value::UBIGINT(0));
+            NumericStats::SetMax(result, Value::UBIGINT((uint64_t)-1));
+            return result.ToUnique();
+        }
+        else{
+            // Pretend that the row id does not exist.
+            // Otherwise, stats will be off :/
+            column_index--;
+        }
+    }
+
     TraceProvStatistics stats = {
         .is_set = false,
         .min_value = 0,

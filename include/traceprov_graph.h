@@ -33,7 +33,9 @@ typedef enum TraceProvEntryKind {
     // But, this approach makes things tidier.
     TP_ENTRY_CORRELATION_ATTR = 6,
     // If we made an entry that corresponds to a IN, need to remember that.
-    TP_ENTRY_IN_CORRELATION_ATTR = 7
+    TP_ENTRY_IN_CORRELATION_ATTR = 7,
+    // rowid attribute
+    TP_ENTRY_ROWID = 8
 } TraceProvEntryKind;
 
 // Specifies what kind of graph is this
@@ -193,7 +195,10 @@ typedef struct TraceProvLogSize {
     uint64_t bytes_used_size;
 } TraceProvLogSize;
 
+// Is combine
 #define TRACEPROV_TABLE_COMBINE (((uint64_t)1) << 0)
+// Treat as sequential scan
 #define TRACEPROV_TABLE_SEQ_SCAN (((uint64_t)1) << 1)
-
+// Add first column as the row id.
+#define TRACEPROV_TABLE_ROW_ID (((uint64_t)1) << 2)
 #endif

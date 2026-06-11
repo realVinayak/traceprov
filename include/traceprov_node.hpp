@@ -162,6 +162,8 @@ extern "C" {
         TraceProvResultMap *result_map;
         TraceProvPointerContext *p_context;
         uint64_t sql_compilation_time;
+        List *directly_derivable; // store the sublinks derivable.
+        TraceProvLayerNumber root_layer_number;
     } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;

@@ -132,7 +132,7 @@ std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
         if (candidate_layer->layer_number != log_layer_number)
             elog(ERROR, "Got invalid log state!");
 
-        if (expected_layer_width > 0 && (candidate_layer->num_pk_records != expected_layer_width))
+        if (expected_layer_width > 0 && (candidate_layer->num_pk_records != expected_layer_width) && (!traceprov_use_index))
             elog(ERROR, "Expeced the width to be consistent!");
 
         found_worker_layers->emplace_back(TraceProvWorkerLayer(worker_local_context->worker_id, candidate_layer));
@@ -208,7 +208,7 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
     const uint8_t worker_count,
     TraceProvParseContext *parsed_back_context,
     const std::vector<struct local_context *> *worker_local_contexts,
-    const bool is_top_level,
+    const bool is_main_log,
     TraceProvRecursePack recurse_pack
 ){
     const TraceProvLayerNumber log_layer_number = log_dependency->headNumber;
@@ -231,6 +231,10 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
             nullptr
         );
         TraceProvRelation *top_level_log_relation = make_traceprov_relation(current_layer_data, tp_psprintf("top_level_%s", tp_parse_get_unique_alias(parsed_back_context)));
+        uint64_t row_id_flags = (traceprov_use_index && is_main_log) ? TRACEPROV_TABLE_ROW_ID : 0;
+        if (row_id_flags){
+            top_level_log_relation->data->push_back(new TraceProvColumnData);
+        }
         current_tree->children->push_back(
             derive_on_node(
                 (TraceProvNode *)top_level_log_relation,
@@ -247,13 +251,106 @@ static TraceProvInferAbstractTree *perform_derive_from_log_generic(
             // If doing implicit union, value of 0 implicitly implies that all workers need to be read.
             // Since we couldn't have 0 as the worker id before, this doesn't break anything from before :)
             top_level_log_relation->rel_args = make_relation_args(0, agg_layer->layer_number);
+            top_level_log_relation->rel_args->table_flags |= row_id_flags;
             break;          
         }else{
             top_level_log_relation->rel_args = make_relation_args(worker_id, agg_layer->layer_number);
+            top_level_log_relation->rel_args->table_flags |= row_id_flags;
         }
+
 
     }
     return current_tree;
+}
+
+static List *get_directly_derivable(const TraceProvDependency *graph, const TraceProvParseContext *parse_context)
+{
+    // All the entries that are directly derivable.
+    List *derivable = NIL;
+    derivable = lappend_int(derivable, graph->headNumber);
+    ListCell *cursor;
+    foreach (cursor, graph->entries)
+    {
+        TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+        // TODO: Handle set operations here too.
+        if (entry->kind == TP_ENTRY_KIND_POINTER)
+        {
+            const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(cursor));
+            derivable = list_concat(derivable, get_directly_derivable(child_graph, parse_context));
+        }
+        ListCell *sublink_cursor;
+        foreach (sublink_cursor, entry->sublinks)
+        {
+            TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+            TraceProvDependency *sublink_graph = tp_get_sublink_graph(parse_context, item->layer_number);
+            derivable = list_concat(derivable, get_directly_derivable(sublink_graph, parse_context));
+        }
+    }
+    return derivable;
+}
+
+static List *get_referring_sublinks(const TraceProvDependency *graph, const TraceProvParseContext *parse_context, const TraceProvLayerNumber root){
+    List *referring = NIL;
+    ListCell *cursor;
+    foreach(cursor, graph->entries){
+        TraceProvEntry *entry = (TraceProvEntry *)lfirst(cursor);
+        // TODO: Handle set operations here too.
+        if (entry->kind == TP_ENTRY_KIND_POINTER)
+        {
+            const TraceProvDependency *child_graph = (TraceProvDependency *)list_nth(graph->children, foreach_current_index(cursor));
+            referring = list_concat(referring, get_referring_sublinks(child_graph, parse_context, root));
+        }
+        ListCell *sublink_cursor;
+        foreach (sublink_cursor, entry->sublinks)
+        {
+            TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(sublink_cursor);
+            if (item->layer_number == root){
+                referring = lappend(referring, item);
+            }
+        }
+    }
+    return referring;
+}
+
+
+// 1. adds fake colummn
+// 2. increases pk_id for all referring sublinks
+static void single_augment_graph(TraceProvDependency *graph, TraceProvParseContext *parse_context){
+    TraceProvEntry *te = (TraceProvEntry*)calloc(1, sizeof(TraceProvEntry));
+    te->attrNumber = 1;
+    te->kind = TraceProvEntryKind::TP_ENTRY_ROWID;
+    te->relId = 1;
+    graph->entries = list_insert_nth(graph->entries, 0, te);
+    graph->children = list_insert_nth(graph->children, 0, NULL);
+    ListCell *graph_cursor;
+    foreach(graph_cursor, parse_context->properties->sublink_map){
+        List *referring = get_referring_sublinks((TraceProvDependency*)lfirst(graph_cursor), parse_context, graph->headNumber);
+        ListCell *ref_cursor;
+        foreach(ref_cursor, referring){
+            TraceProvTargetSublinkItem *item = (TraceProvTargetSublinkItem *)lfirst(ref_cursor);
+            item->offset_in_key++;
+        }
+    }
+}
+
+static void augment_graph(TraceProvDependency *graph, TraceProvParseContext *parse_context){
+    // When using index, need to massage the graph a bit.
+    // Specifically;
+    // 1. Add a fake column to the top-level graph
+    // 2. increase the pk_id counter for all referring sublinks by 1
+    // 3. do it recursivelly for anything that's in the UNION (because they can also have referring sublinks)
+    single_augment_graph(graph, parse_context);
+    ListCell *entry_cursor;
+    foreach(entry_cursor, graph->entries){
+        TraceProvEntry *te = (TraceProvEntry*)lfirst(entry_cursor);
+        if (te->kind == TraceProvEntryKind::TP_ENTRY_SET_POINTER){
+            const List *possible_candidates = tp_get_set_pointer_property(parse_context, te->setNumber);
+            ListCell *cand_cursor;
+            foreach(cand_cursor, possible_candidates){
+                single_augment_graph(tp_get_set_graph(parse_context, lfirst_int(cand_cursor)), parse_context);
+            }
+        }
+    }
 }
 
 TraceProvDerivationSpec *get_generic_derivation_spec(
@@ -269,6 +366,14 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
     if (map_traceprov_shared_context(&shared_context)){
         elog(ERROR, "Error mmaping shared context");
     }
+    if (traceprov_use_index){
+        ListCell *graph_cursor;
+        foreach(graph_cursor, graphs){
+            TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
+            augment_graph(graph, parsed_back_context);
+        }
+    }
+
     const uint8_t worker_count = shared_context.worker_count;
     ListCell *graph_cursor;
 
@@ -288,6 +393,7 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
         *p_extra = setup_extra;
 
     auto p_context = traceprov_make_pointer_context();
+    List *derivable_sublinks = NIL;
     foreach(graph_cursor, graphs){
         TraceProvDependency *graph = (TraceProvDependency *)lfirst(graph_cursor);
         // The top level graph should always be the simple log.
@@ -319,7 +425,7 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
             graph,
             p_context
         );
-
+        derivable_sublinks = list_concat(derivable_sublinks, get_directly_derivable(graph, parsed_back_context));
     }
     ListCell *sublink_cursor;
     foreach(sublink_cursor, parsed_back_context->properties->sublink_map){
@@ -345,7 +451,7 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
                 worker_count,
                 parsed_back_context,
                 worker_local_contexts,
-                true,
+                false,
                 TraceProvRecursePack {
                     .depth_map = (TraceProvDepthMap *)list_nth(sublink_used_sublink_map, foreach_current_index(sublink_cursor)),
                     .level = 0,
@@ -362,6 +468,8 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
     TraceProvDerivationSpec *spec = new TraceProvDerivationSpec;
     spec->p_context = p_context;
     spec->result_map = result_map;
+    spec->directly_derivable = derivable_sublinks;
+    spec->root_layer_number = ((TraceProvDependency *)list_nth(graphs, 0))->headNumber;
     return spec;
 }
 
@@ -588,7 +696,7 @@ void traceprov_infer_sizes(
                 pointer_context
             );
         }
-
+        if (te->kind == TP_ENTRY_ROWID) continue;
         // Bascially, assume that if it is not base relation, then it is uint64_t.
         // TODO: Fine tune this (cleaner implementation will infer pointers from the graph, rather than this heuristic.)
         if ((te->kind == TP_ENTRY_KIND_BASE_RELATION || te->kind == TP_ENTRY_CORRELATION_ATTR || te->kind == TP_ENTRY_IN_CORRELATION_ATTR) && traceprov_use_compact){
@@ -941,7 +1049,7 @@ static TraceProvInferAbstractTree *derive_aggregate_on_single_context_duckdb(
 
         if (traceprov_use_implicit_union){
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(0, layer_number_to_search);
-            traceprov_get_relation_from_join(join_exprn)->rel_args->table_flags = rel_flags;
+            traceprov_get_relation_from_join(join_exprn)->rel_args->table_flags |= rel_flags;
             break;
         }else{
             traceprov_get_relation_from_join(join_exprn)->rel_args = make_relation_args(worker_layer_pair.first, layer_number_to_search);

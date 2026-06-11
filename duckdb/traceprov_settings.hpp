@@ -18,4 +18,5 @@ extern bool traceprov_force_seq_scan;
 extern bool traceprov_skip_sql_cache;
 extern bool traceprov_use_table_stats;
 extern bool traceprov_ignore_direct_join;
+extern bool traceprov_use_index;
 #endif

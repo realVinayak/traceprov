@@ -32,6 +32,7 @@
 
 extern "C" {
     #include <mem_alloc.h>
+    #include "utils.h"
 }
 
 #define TP_ENABLE_PROFILING "PRAGMA enable_profiling=json"
@@ -60,6 +61,9 @@ extern "C" {
 
 #define TP_SD_DISABLE_CHUNK_CACHE "PRAGMA disable_cache;"
 #define TP_SD_ENABLE_CHUNK_CACHE "PRAGMA enable_cache;"
+
+#define DUCKDB_DEFAULT_SELECTIVITY 0.001
+#define DUCKDB_DEFAULT_SCAN_MAX_COUNT 2048
 
 void wrapped_enable_lineage();
 void wrapped_disable_lineage();
@@ -108,6 +112,8 @@ typedef struct MiscKeyValue {
     TraceProvLogSize total_log_size;
     uint64_t sql_compilation_time;
     std::string layer_stats;
+    uint64_t index_time;
+    std::string layers_with_index;
 } MiscKeyValue;
 
 const static MiscKeyValue g_init_misc_key_value = {
@@ -117,7 +123,9 @@ const static MiscKeyValue g_init_misc_key_value = {
         .bytes_used_size = 0
     },
     .sql_compilation_time = 0,
-    .layer_stats = ""
+    .layer_stats = "",
+    .index_time = 0,
+    .layers_with_index = ""
 };
 
 enum CustomGraphType {
@@ -220,6 +228,19 @@ struct Options {
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
 #define IS_SET(X) (X.size() != 0)
 
+typedef struct Funcs {
+    duckdb_table_function tp_read_func;
+    duckdb_table_function tp_read_offset_func;
+} Funcs;
+
+std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
+    Options *options,
+    TraceProvDerivationSpec **derivation_spec,
+    std::vector<std::string> &ddls,
+    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls
+);
+MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Funcs table_funcs);
+
 std::string *get_disabled_optimizations(const Options *options){
     std::string disabled = "";
     std::vector<std::string> disabled_names;
@@ -238,7 +259,7 @@ std::string *get_disabled_optimizations(const Options *options){
     return new std::string("SET disabled_optimizers='" + disabled + "';");
 }
 
-struct Options parse_args(int argc, char **argv){
+struct Options get_base_option(){
     struct Options options {
         .capture_lineage = false,
         .db_path = "",
@@ -285,6 +306,11 @@ struct Options parse_args(int argc, char **argv){
         .sd_join_mode = false,
         .disable_chunk_cache = false
     };
+    return options;
+}
+
+struct Options parse_args(int argc, char **argv){
+    auto options = get_base_option();
     for (int i = 1; i < argc; i++){
         if (IS_OPTION("--lineage")){
             options.capture_lineage = true;
@@ -487,6 +513,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--disable_chunk_cache")){
             options.disable_chunk_cache = true;
+            continue;
+        } else if (IS_OPTION("--traceprov_use_index")){
+            traceprov_use_index = true;
             continue;
         }
 
@@ -765,12 +794,6 @@ std::string read_file(std::string file){
     contents = buffer.str();
     return contents;
 }
-
-
-typedef struct Funcs {
-    duckdb_table_function tp_read_func;
-    duckdb_table_function tp_read_offset_func;
-} Funcs;
 
 #if TRACEPROV_SD_MODE==0
 struct TraceProvCreateScalarFunctionInfo : public CreateFunctionInfo {
@@ -1139,11 +1162,16 @@ int main(int argc, char **argv){
                     sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, profile_out);
                 }
                 main_result = perform_query(&run_option, con, in_sql, &agg_result, final_profile_out, final_stats_query, "");
+            }   
+        }
+        if (traceprov_use_index){
+            const auto index_misc_key_value = setup_traceprov_indexes(con, &options, table_funcs);
+            if (main_result){
+                main_result->option.misc_store.index_time = index_misc_key_value.index_time;
+                main_result->option.misc_store.layers_with_index = index_misc_key_value.layers_with_index;
             }
         }
         int extra_sql_idx = 0;
-
-
         auto extra_sqls_clone = (extra_sqls);
         std::vector<TraceProvTableExtra *> table_func_extra;
         const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
@@ -1375,30 +1403,108 @@ static std::string serialize_option(Options *option, const TraceProvNullMap *nul
     option_serialized += "\"misc_key_value_sql_compilation_time\": " + std::to_string(option->misc_store.sql_compilation_time);
     option_serialized += ",";
     option_serialized += "\"misc_key_value_layer_stats\": " +(option->misc_store.layer_stats == "" ? "null" : option->misc_store.layer_stats);
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_index_time\": " + std::to_string(option->misc_store.index_time);
+    option_serialized += ",";
+    option_serialized += "\"misc_key_value_layers_with_index\": " + (option->misc_store.layers_with_index == "" ? "null" : option->misc_store.layers_with_index);
     option_serialized += "}";
     return option_serialized;
 }
 
-static int global_counter = 0;
+std::string get_traceprov_table_view(const TraceProvLayerNumber layer_number){
+    return "traceprov_lineage_view_" + std::to_string(layer_number);
+}
 
-TraceProvDerivationSpec* augment_extra_sql(
-    std::vector<ExtraQuery> &extra_sqls,
+TraceProvIndexContext *make_tp_index_context(const TraceProvLayerNumber layer_number){
+    auto index_context = tp_alloc0_object(TraceProvIndexContext);
+    index_context->index_context_mutex = new std::mutex;
+    index_context->root_layer_number = layer_number;
+    return index_context;
+}
+
+
+bool should_make_index(duckdb_connection con, std::string table_name){
+    duckdb_result count_result;
+    std::string query = "select count(*)::bigint from " + table_name;
+    DUCKDB_EXIT_ON_ERROR_MSG(duckdb_query(con, query.c_str(), &count_result), duckdb_result_error(&count_result));
+    duckdb_data_chunk data_chunk = duckdb_result_get_chunk(count_result, 0);
+    duckdb_vector count_column_0 = duckdb_data_chunk_get_vector(data_chunk, 0);
+    const uint64_t table_count = ((uint64_t *) duckdb_vector_get_data(count_column_0))[0];
+    duckdb_destroy_data_chunk(&data_chunk);
+    duckdb_destroy_result(&count_result);
+    const uint64_t base_result_count = g_tp_duckdb_state.index_context->vector_size;
+    const uint64_t average_per_out = table_count / base_result_count;
+    return average_per_out <= MAX(DUCKDB_DEFAULT_SCAN_MAX_COUNT, DUCKDB_DEFAULT_SELECTIVITY*((double)(average_per_out)));
+}
+
+
+MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Funcs table_funcs){
+    const auto start_time = std::chrono::steady_clock::now();
+    TraceProvDerivationSpec *result_spec = NULL;
+    std::vector<std::string> ddls;
+    std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+    auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls);
+    auto table_extra = make_table_extra();
+    table_extra->pointer_spec = result_spec->p_context;
+    table_extra->partition_spec = NULL;
+
+    duckdb_table_function_set_extra_info(table_funcs.tp_read_func, table_extra, free); // whatever
+    duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, table_extra, free);
+
+    Options new_options = get_base_option();
+    new_options.no_reinit_state = true;
+    g_tp_duckdb_state.index_context = make_tp_index_context(result_spec->root_layer_number);
+    // std::vector<PerformQueryResult *> agg_result;
+    std::string layers_with_index = "";
+    layers_with_index += "[";
+    bool needs_sep = false;
+    for (auto layer_string_pair : *layer_string_map){
+        std::string layer_sql = get_traceprov_table_view(layer_string_pair.first);
+        auto table_name = get_traceprov_table_view(layer_string_pair.first);
+        std::string wrapped = "create or replace table " + table_name + " as (" + layer_string_pair.second + ");";
+        elog(INFO, "Index query: %s", wrapped.c_str())
+        perform_query(&new_options, con, wrapped, NULL, NULL, NULL, "", NULL);
+        if (list_member_int(result_spec->directly_derivable, layer_string_pair.first) && should_make_index(con, table_name)){
+            // Need to create index.
+            std::string index_name = table_name + "_column_0_idx";
+            DUCKDB_RUN_SHORT_QUERY(con, ("drop index if exists "+ index_name).c_str(), ("drop index "+index_name));
+            char *index_command = tp_psprintf("create index %s on %s (column_0)", index_name.c_str(), table_name.c_str());
+            DUCKDB_RUN_SHORT_QUERY(con, index_command, index_command);
+            if (needs_sep){
+                layers_with_index += ",";
+            }
+            layers_with_index += std::to_string(layer_string_pair.first);
+            needs_sep = true;
+        }
+    }
+    layers_with_index += "]";
+    g_tp_duckdb_state.index_context->root_layer_number = 0;
+    g_tp_duckdb_state.index_context->directly_derivable = result_spec->directly_derivable;
+
+    duckdb_table_function_set_extra_info(table_funcs.tp_read_func, nullptr, nullptr);
+    duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, nullptr, nullptr);
+    const auto end_time = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+    MiscKeyValue key_value;
+    key_value.index_time = duration.count();
+    key_value.layers_with_index = layers_with_index;
+    return key_value;
+}
+
+std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
     Options *options,
-    std::vector<TraceProvTableExtra *> *table_func_extra,
-    std::vector<uint64_t> *log_offsets,
-    TraceProvPartitionLayers *partition_layers
+    TraceProvDerivationSpec **derivation_spec,
+    std::vector<std::string> &ddls,
+    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls
 ){
-    if (!options->traceprov_perform_derivation) return NULL;
-
     TraceProvParseContext *parsed_back_context;
     char *parsed_sql = NULL;
     const auto start_time = std::chrono::steady_clock::now();
     auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
     const auto end_time = std::chrono::steady_clock::now();
     result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
-    std::unordered_map<TraceProvLayerNumber, std::string> layer_string_map;
-    std::vector<std::string> ddls;
-    std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+    auto layer_string_map = new std::unordered_map<TraceProvLayerNumber, std::string>;
+
     std::unordered_map<uint64_t, std::string> sql_cache;
     for (auto result_map_pair: *result_spec->result_map){
         if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
@@ -1426,27 +1532,60 @@ TraceProvDerivationSpec* augment_extra_sql(
                 .ddls = &ddls,
                 .added_ddls = &added_ddls,
                 .pointer_context = NULL,
-                .cache = traceprov_skip_page_cache ? NULL : &sql_cache
+                .cache = traceprov_skip_sql_cache ? NULL : &sql_cache
             }
         );
         const auto end_sql_time = std::chrono::steady_clock::now();
         result_spec->sql_compilation_time += std::chrono::duration_cast<std::chrono::microseconds>(end_sql_time - start_sql_time).count();
-        layer_string_map.insert({result_map_pair.first, node_sql});
+        layer_string_map->insert({result_map_pair.first, node_sql});
     }
+    *derivation_spec = result_spec;
+    return layer_string_map;
+}
+
+std::string get_index_query(const TraceProvLayerNumber layer, const uint64_t offset){
+    std::string query = std::string("select * from ") + get_traceprov_table_view(layer);
+    if (g_tp_duckdb_state.index_context){
+        if (list_member_int(g_tp_duckdb_state.index_context->directly_derivable, layer)){
+            // Need to check the offset vector.
+            // const uint64_t column_0 = g_tp_duckdb_state.index_context->vector_data[offset];
+            query += std::string(" where column_0=") + std::to_string(offset);
+        }
+    }
+    return query;
+}
+
+static int global_counter = 0;
+
+TraceProvDerivationSpec* augment_extra_sql(
+    std::vector<ExtraQuery> &extra_sqls,
+    Options *options,
+    std::vector<TraceProvTableExtra *> *table_func_extra,
+    std::vector<uint64_t> *log_offsets,
+    TraceProvPartitionLayers *partition_layers
+){
+    if (!options->traceprov_perform_derivation) return NULL;
+    TraceProvDerivationSpec *result_spec = NULL;
+    std::vector<std::string> ddls;
+    std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
+    auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls);
     for (auto log_offset: *log_offsets){
         TraceProvPartitionInfo *info = NULL;
-        if (log_offset != -1){
+        if (log_offset != -1 && !traceprov_use_index){
             info = new TraceProvPartitionInfo;
             info->cached_data = NULL;
             info->partition_data = NULL;
             info->layer_log_map = NULL;
             populate_log_offset(log_offset, result_spec->p_context, partition_layers, info);
         }
-        for (auto layer_string_pair: layer_string_map){
+        for (auto layer_string_pair: *layer_string_map){
             auto table_extra = make_table_extra();
             uint64_t extra_added = 0;
             //elog(INFO, "SQL Query: %s", node_sql.c_str());
             auto node_sql = layer_string_pair.second;
+            if (traceprov_use_index && log_offset != -1){
+                node_sql = get_index_query(layer_string_pair.first, log_offset);
+            }
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(layer_string_pair.first);
                 if (log_offset != -1){
