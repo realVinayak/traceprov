@@ -11,11 +11,11 @@ from (
                 from l_shipdate
             ) as l_year,
             l_extendedprice * (1 - l_discount) as volume
-        from (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 8)) supplier,
-            (select * from lineitem where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 0)) lineitem,
-            (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 2)) orders,
+        from (select * from supplier where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 7)) supplier,
+            (select * from lineitem where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 1)) lineitem,
+            (select * from orders where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 0)) orders,
             (select * from customer where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 3)) customer,
-            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 9)) n1,
+            (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 8)) n1,
             (select * from nation where rowid in (select iid from LAYER_1_SD_%OUT_ID% where "table" = 4)) n2
         where s_suppkey = l_suppkey
             and o_orderkey = l_orderkey
