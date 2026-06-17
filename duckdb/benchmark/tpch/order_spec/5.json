@@ -1,0 +1,32 @@
+[
+    {
+        "original": "customer",
+        "updated": "q5_customer_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "orders",
+        "updated": "q5_orders_ordered",
+        "order_by": [1, "column_2"]
+    },
+    {
+        "original": "lineitem",
+        "updated": "q5_lineitem_ordered",
+        "order_by": [1, "column_3"]
+    },
+    {
+        "original": "supplier",
+        "updated": "q5_supplier_ordered",
+        "order_by": [1, "column_4"]
+    },
+    {
+        "original": "nation",
+        "updated": "q5_nation_ordered",
+        "order_by": [1, "column_5"]
+    },
+    {
+        "original": "region",
+        "updated": "q5_region_ordered",
+        "order_by": [1, "column_6"]
+    }
+]

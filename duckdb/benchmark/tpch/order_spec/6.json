@@ -1,0 +1,7 @@
+[
+    {
+        "original": "lineitem",
+        "updated": "q6_lineitem_ordered",
+        "order_by": [1, "column_1"]
+    }
+]

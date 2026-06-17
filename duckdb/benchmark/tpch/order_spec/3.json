@@ -1,0 +1,17 @@
+[
+    {
+        "original": "customer",
+        "updated": "q3_customer_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "orders",
+        "updated": "q3_orders_ordered",
+        "order_by": [1, "column_2"]
+    },
+    {
+        "original": "lineitem",
+        "updated": "q3_lineitem_ordered",
+        "order_by": [1, "column_3"]
+    }
+]

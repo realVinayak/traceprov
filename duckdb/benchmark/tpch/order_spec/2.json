@@ -1,0 +1,50 @@
+[
+    {
+        "original": "part",
+        "updated": "q2_3_part_ordered",
+        "order_by": [3, "column_0"]
+    },
+    {
+        "original": "supplier",
+        "updated": "q2_3_supplier_ordered",
+        "order_by": [3, "column_1"]
+    },
+    {
+        "original": "partsupp",
+        "updated": "q2_3_partsupp_ordered",
+        "order_by": [3, "column_2"]
+    },
+    {
+        "original": "nation",
+        "updated": "q2_3_nation_ordered",
+        "order_by": [3, "column_3"]
+    },
+    {
+        "original": "region",
+        "updated": "q2_3_region_ordered",
+        "order_by": [3, "column_4"]
+    },
+
+
+
+    {
+        "original": "partsupp",
+        "updated": "q2_1_partsupp_ordered",
+        "order_by": [1, "column_1_1"]
+    },
+    {
+        "original": "supplier",
+        "updated": "q2_1_supplier_ordered",
+        "order_by": [1, "column_2_1"]
+    },
+    {
+        "original": "nation",
+        "updated": "q2_1_nation_ordered",
+        "order_by": [1, "column_3_1"]
+    },
+    {
+        "original": "region",
+        "updated": "q2_1_region_ordered",
+        "order_by": [1, "column_4_1"]
+    }
+]

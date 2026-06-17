@@ -1,0 +1,12 @@
+[
+    {
+        "original": "partsupp",
+        "updated": "q16_partsupp_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "part",
+        "updated": "q16_part_ordered",
+        "order_by": [1, "column_2"]
+    }
+]

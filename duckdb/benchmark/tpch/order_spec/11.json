@@ -1,0 +1,32 @@
+[
+    {
+        "original": "partsupp",
+        "updated": "q11_1_partsupp_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "supplier",
+        "updated": "q11_1_supplier_ordered",
+        "order_by": [1, "column_2"]
+    },
+    {
+        "original": "nation",
+        "updated": "q11_1_nation_ordered",
+        "order_by": [1, "column_3"]
+    },
+    {
+        "original": "partsupp",
+        "updated": "q11_2_partsupp_ordered",
+        "order_by": [2, "column_1"]
+    },
+    {
+        "original": "supplier",
+        "updated": "q11_2_supplier_ordered",
+        "order_by": [2, "column_2"]
+    },
+    {
+        "original": "nation",
+        "updated": "q11_2_nation_ordered",
+        "order_by": [2, "column_3"]
+    }
+]

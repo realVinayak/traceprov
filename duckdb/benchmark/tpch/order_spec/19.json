@@ -1,0 +1,12 @@
+[
+    {
+        "original": "lineitem",
+        "updated": "q19_1_lineitem_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "part",
+        "updated": "q19_1_part_ordered",
+        "order_by": [1, "column_2"]
+    }
+]

@@ -1,0 +1,12 @@
+[
+    {
+        "original": "orders",
+        "updated": "q4_2_orders_ordered",
+        "order_by": [2, "column_1"]
+    },
+    {
+        "original": "lineitem",
+        "updated": "q4_1_lineitem_ordered",
+        "order_by": [1, "column_1_1"]
+    }
+]

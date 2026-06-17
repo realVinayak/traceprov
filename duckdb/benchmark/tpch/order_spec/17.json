@@ -1,0 +1,17 @@
+[
+    {
+        "original": "lineitem",
+        "updated": "q17_3_lineitem_ordered",
+        "order_by": [3, "column_1"]
+    },
+    {
+        "original": "part",
+        "updated": "q17_3_part_ordered",
+        "order_by": [3, "column_2"]
+    },
+    {
+        "original": "lineitem",
+        "updated": "q17_1_part_ordered",
+        "order_by": [1, "column_1_1"]
+    }
+]

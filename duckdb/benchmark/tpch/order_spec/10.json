@@ -1,0 +1,22 @@
+[
+    {
+        "original": "customer",
+        "updated": "q10_customer_ordered",
+        "order_by": [1, "column_1"]
+    },
+    {
+        "original": "orders",
+        "updated": "q10_orders_ordered",
+        "order_by": [1, "column_2"]
+    },
+    {
+        "original": "lineitem",
+        "updated": "q10_lineitem_ordered",
+        "order_by": [1, "column_3"]
+    },
+    {
+        "original": "nation",
+        "updated": "q10_nation_ordered",
+        "order_by": [1, "column_4"]
+    }
+]
