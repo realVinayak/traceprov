@@ -32,16 +32,23 @@ NEEDS_DISABLE = {str(2), str(11), str(15), str(17), str(18), str(20), str(22)}
 MAX_SAMPLE_COUNT = 100
 
 
-def run():
+def run(force_materialize=False, execution_hook=None):
     base_parser = make_duckdb_parse()
     add_query_options(base_parser)
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--query_layer_cfg", required=True)
+    base_parser.add_argument("--order_spec", required=False)
+    base_parser.add_argument(
+        "--use_order", action=argparse.BooleanOptionalAction, required=False
+    )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     print("USING SUFFIX --> ", parsed.suff)
     config: dict = json_read_file(parsed.config)
     query_layer_config: dict = json_read_file(parsed.query_layer_cfg)
+
+    if force_materialize:
+        parsed.mat_infer = True
 
     # for now...
     assert config["subdirs"] == ["params_default"]
@@ -53,7 +60,9 @@ def run():
     config_queries = config["queries"]
     if isinstance(config_queries, str):
         config_queries = eval(config_queries)
-    needs_join_mode = list(map(str, config.get("queries_sd_join_mode", [])))
+    sd_join_mode = [7, 8, 9]
+    sd_join_mode = [8]
+    needs_join_mode = list(map(str, config.get("queries_sd_join_mode", sd_join_mode)))
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
@@ -126,6 +135,9 @@ def run():
                         query_layer_config[query]["layers_used"]
                     ),
                 )
+
+        if execution_hook:
+            execution_hook((parsed, query, query_result))
 
         assert query not in results
         results = {

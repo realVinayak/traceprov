@@ -309,7 +309,7 @@ def run_single_smokedduck(
     run_cmd = traceprov_assert_safe_run if crash_on_error else run_nice
 
     base_dir = base_root / query_num
-    base_sql = base_dir / "base.sql"
+    base_sql = base_dir / get_base(parsed)
     exec_str = exe.as_posix()
     if pre_base:
         pre_base_options = DuckDBDriverOptions(
@@ -507,7 +507,7 @@ def run_nice(cmd: str):
 
 
 def parse_sd_result_multiple(
-    capture_options: DuckDBDriverOptions, sql_spec_map, extra_sqls
+    capture_options: DuckDBDriverOptions, sql_spec_map, extra_sqls, stat_files
 ):
     capture_result_time = json_read_file(capture_options.time)
     if capture_options.profile:
@@ -531,6 +531,12 @@ def parse_sd_result_multiple(
         settings=capture_settings,
         sql_spec_map=sql_spec_map,
         stats=stats,
+        query_stats=list(
+            map(
+                lambda file: list(map(json.loads, just_read(file).splitlines())),
+                stat_files,
+            )
+        ),
     )
 
 
@@ -557,6 +563,13 @@ def parse_sd_result_single(capture_options: DuckDBDriverOptions):
     )
 
 
+def get_base(parsed):
+    use_order = getattr(parsed, "use_order", False)
+    if use_order:
+        return "base_ordered.sql"
+    return "base.sql"
+
+
 def run_sample_inference_smokedduck(
     query_num: str,
     samples: list[int],
@@ -575,7 +588,7 @@ def run_sample_inference_smokedduck(
 
     base_dir = base_root / query_num
     query_dir = root / query_num
-    base_sql = base_dir / "base.sql"
+    base_sql = base_dir / get_base(parsed)
     exec_str = exe.as_posix()
     run_cmd = traceprov_assert_safe_run if parsed.crash_on_error else run_nice
     if validate:
@@ -597,17 +610,26 @@ def run_sample_inference_smokedduck(
     os.makedirs(sample_q_dir, exist_ok=True)
     extra_sqls = []
     sql_spec_map = []
+    stats_files = []
     for sample_id, out_id in enumerate(samples):
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
+        final_q_stats_path = sample_q_dir / f"infer_{sample_id}_stats.sql"
+        stats_path = sample_q_dir / f"stats_{sample_id}_{out_id}.json"
         infer_with_offset = (
             f"select * from lineage_query({query_id}, 100, {out_id}::UINTEGER)"
         )
+        stats_files.append(stats_path)
+        infer_with_offset_stats = f"copy (select * from lineage_query_stats({query_id}, 100, {out_id}::UINTEGER)) to '{stats_path.as_posix()}'"
         if validate or materialize_infer:
             infer_with_offset = (
                 f"create or replace table LAYER_1_SD_{out_id} AS ({infer_with_offset})"
             )
         just_write(final_q_path, infer_with_offset)
+        just_write(final_q_stats_path, infer_with_offset_stats)
         extra_sqls.append(final_q_path.as_posix())
+        extra_sqls.append(final_q_stats_path.as_posix())
+        # need to append twice, because we'll have stats too
+        sql_spec_map.append((sample_id, out_id))
         sql_spec_map.append((sample_id, out_id))
 
     sql_spec_map = [TRACEPROV_CAPTURE_ENTRY_SD, *sql_spec_map]
@@ -644,7 +666,7 @@ def run_sample_inference_smokedduck(
         final_result = parse_sd_result_single(capture_options)
     else:
         final_result = parse_sd_result_multiple(
-            capture_options, sql_spec_map, extra_sqls
+            capture_options, sql_spec_map, extra_sqls, stats_files
         )
     if validate and rc == 0:
         for map_idx, map_entry in enumerate(sql_spec_map):
@@ -822,7 +844,7 @@ def run_single(
     # assert not validate or not use_optimized
 
     # bc those are postgres queries....
-    base_sql = base_root / query_num / "base.sql"
+    base_sql = base_root / query_num / get_base(parsed)
 
     query_dir = root / query_num
 

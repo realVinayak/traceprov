@@ -42,6 +42,9 @@ def make_duckdb_parse():
         default=False,
         action=argparse.BooleanOptionalAction,
     )
+    parser.add_argument(
+        "--traceprov_fast", action=argparse.BooleanOptionalAction, default=False
+    )
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
 
@@ -51,6 +54,11 @@ SMART_TOKEN = "SMART"
 
 # Try to be smart and automatically try to compose a suff string out of the options.
 def traceprov_handle_suffix(parsed):
+    if parsed.traceprov_fast:
+        parsed.traceprov_use_merge_chunks = True
+        parsed.traceprov_use_compact = True
+        parsed.traceprov_use_table_stats = True
+        parsed.optimized = True
     if SMART_TOKEN not in parsed.suff:
         return
     suff = DuckDBDriverOptions.get_suffix(parsed)
