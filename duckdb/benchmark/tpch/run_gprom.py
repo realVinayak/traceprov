@@ -17,7 +17,12 @@ from traceprovpy.tools.duckdb_parse_options import (
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
-from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
+from traceprovpy.tools.file_utils import (
+    json_read_file,
+    just_read,
+    just_write,
+    traceprov_assert_safe_run,
+)
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
     infer_option_results,
@@ -75,6 +80,7 @@ def run_possible_queries(
         assert query.exists(), f"Expected {query} to exist!"
         queries[safe_key] = query
     for key, query_str in queries.items():
+        traceprov_assert_safe_run(f"rm -rf {parsed.db}/.tmp/")
         # first, run it just once with a timeout, to check if it'll finish in timeout or not.
         original_query_str = query_str
         if parsed.single_row_mode:
