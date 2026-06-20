@@ -63,7 +63,7 @@ WHERE
 	and (
 		supplier.rowid in (
 			select
-				"column_1"
+				eval(column_0, column_1)
 			FROM
 				LAYER_5_%OUT_ID%
 		)
