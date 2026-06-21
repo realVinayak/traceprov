@@ -57,6 +57,7 @@ typedef struct TraceProvBindData
     bool is_aggregate;
     uint64_t *write_vector;
     bool needs_rowid;
+    std::vector<uint64_t> *partition_spec;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData
@@ -86,13 +87,13 @@ typedef struct TraceProvInitData
     uint64_t running_count;
 } TraceProvInitData;
 
-static TraceProvBindData *setup_layers(
+std::vector<TraceProvBindData *> *setup_layers(
     const uint64_t worker_id,
     uint64_t layer_number,
     const int64_t log_offset,
     int64_t *record_count,
     const bool expect_present = true,
-    const uint64_t partition_idx = 0);
+    const int64_t partition_idx = 0);
 
 // We don't need a file version of this, since that cannot happen.
 // That is, since we always increment by 8 bytes, we'll never jump pages.
@@ -153,11 +154,16 @@ TraceProvInitData *traceprov_make_init_data(TraceProvBindData *bind_data)
         {
             elog(ERROR, "Expected the worker id to be always set here!");
         }
-        auto null_bind_data_inst = setup_layers(
+        auto null_bind_data_inst_vec = setup_layers(
             bind_data->rel_args.worker_id,
             bind_data->col_layer->null_layer_number,
             -1,
             NULL);
+        
+        if (null_bind_data_inst_vec->size() != 1){
+            elog(ERROR, "Got invalid null inst size: %ld", null_bind_data_inst_vec->size());
+        }
+        auto null_bind_data_inst = null_bind_data_inst_vec->at(0);
         // Need to also make yet another init data.
         // The recursive call automatically sets up most things correctly.
         // Also, it is guaranteed to end too.
@@ -265,49 +271,14 @@ void bp()
 {
 }
 
-TraceProvBindData *setup_layers(
-    const uint64_t worker_id,
-    uint64_t layer_number,
-    const int64_t log_offset,
-    int64_t *record_count,
+bool validate_layer(
+    const traceprov_aggregate_layer *layer,
     const bool expect_present,
-    const uint64_t partition_idx)
-{
-    // -1 so that it can be ignored, if not set.
-    int64_t found_record_count = -1;
-
-    initialize_global_context();
-    auto my_bind_data = allocate_bind_data();
-    my_bind_data->rel_args.offset = log_offset;
-    my_bind_data->offset_in_chunk = -1;
-
-    my_bind_data->rel_args.worker_id = worker_id;
-    uint64_t current_worker_id = worker_id;
-
-    bool is_dummy = false;
-    if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size())
+    const uint64_t layer_number
+){
+    if (layer->layer_number != layer_number)
     {
-        current_worker_id = 1;
-        is_dummy = true;
-        // elog(INFO, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.");
-        return NULL;
-    }
-
-    auto current_local_context = g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
-    auto current_layer = &current_local_context->cached_layers[layer_number - 1];
-    if (partition_idx > 0)
-    { // because == 0 is always current.
-        layer_number = current_layer->buckets[partition_idx - 1];
-        if (layer_number == 0)
-            elog(ERROR, "Got invalid comptued!");
-        current_layer = &current_local_context->cached_layers[layer_number - 1];
-    }
-
-    my_bind_data->rel_args.layer_number = layer_number;
-
-    if (current_layer->layer_number != layer_number)
-    {
-        if (current_layer->layer_number != 0)
+        if (layer->layer_number != 0)
         {
             // This assertion should hold regardless of what caller expects.
             elog(ERROR, "Expected layer to be 0!");
@@ -318,29 +289,46 @@ TraceProvBindData *setup_layers(
         }
         else
         {
-            return NULL;
+            return false;
         }
     }
+    return true;
+}
+
+TraceProvBindData *_setup_layer(
+    const uint64_t log_offset,
+    uint64_t current_worker_id,
+    local_context *current_local_context,
+    const traceprov_aggregate_layer *current_layer,
+    const bool expect_present,
+    int64_t &found_record_count
+){
+    auto bind_data = allocate_bind_data();
+    bind_data->rel_args.offset = log_offset;
+    bind_data->offset_in_chunk = -1;
+    bind_data->rel_args.worker_id = current_worker_id;
+    bind_data->rel_args.layer_number = current_layer->layer_number;
+
 
     uint64_t column_count = current_layer->num_pk_records;
 
-    my_bind_data->is_strict_rows = false;
+    bind_data->is_strict_rows = false;
 
     if (current_layer->page_mapping == NULL)
     {
-        map_layer_file(current_layer->layer_number, current_worker_id, &my_bind_data->col_layer_ptr, current_layer->size);
+        map_layer_file(current_layer->layer_number, current_worker_id, &bind_data->col_layer_ptr, current_layer->size);
     }
     else
     {
-        my_bind_data->col_layer_ptr = current_layer->page_mapping[0];
+        bind_data->col_layer_ptr = current_layer->page_mapping[0];
         if (current_layer->rows_layer_number == 0)
         {
             // In this case, have page mapping, but not rows.
             // This will be the case for combine.
             const uint64_t logged_chunk_size = (TRACEPROV_GET_RECORD_SIZE(current_layer));
-            my_bind_data->first_page_element_count = (TRACEPROV_PAGE_SIZE / logged_chunk_size);
-            my_bind_data->incr_page_element_count = ((TRACEPROV_PAGE_SIZE * TRACEPROV_INCREMENT_TRACE_BY_PG) / logged_chunk_size);
-            my_bind_data->is_strict_rows = true;
+            bind_data->first_page_element_count = (TRACEPROV_PAGE_SIZE / logged_chunk_size);
+            bind_data->incr_page_element_count = ((TRACEPROV_PAGE_SIZE * TRACEPROV_INCREMENT_TRACE_BY_PG) / logged_chunk_size);
+            bind_data->is_strict_rows = true;
             if (TRACEPROV_PAGE_SIZE % logged_chunk_size)
                 elog(ERROR, "expected complete chunks!");
             if (((TRACEPROV_PAGE_SIZE * TRACEPROV_INCREMENT_TRACE_BY_PG) % logged_chunk_size))
@@ -348,7 +336,7 @@ TraceProvBindData *setup_layers(
         }
     }
 
-    my_bind_data->col_layer = current_layer;
+    bind_data->col_layer = current_layer;
 
     uint64_t chunk_count = 0;
     // In duckdb case, the rows layer stores just the chunk size.
@@ -358,41 +346,100 @@ TraceProvBindData *setup_layers(
         auto rows_layer = &current_local_context->cached_layers[current_layer->rows_layer_number - 1];
         if (rows_layer->layer_number != current_layer->rows_layer_number)
             elog(ERROR, "Expected the layer number to be filled");
-        my_bind_data->row_layer = rows_layer;
+        bind_data->row_layer = rows_layer;
         if (rows_layer->page_mapping == NULL)
         {
-            map_layer_file(rows_layer->layer_number, current_worker_id, &my_bind_data->row_count_layer_ptr, rows_layer->size);
+            map_layer_file(rows_layer->layer_number, current_worker_id, &bind_data->row_count_layer_ptr, rows_layer->size);
         }
         else
         {
-            my_bind_data->row_count_layer_ptr = rows_layer->page_mapping[0];
+            bind_data->row_count_layer_ptr = rows_layer->page_mapping[0];
         }
         chunk_count = rows_layer->num_rows;
-        found_record_count = rows_layer->record_count;
+        // So that any occurence sets it correctly :)
+        found_record_count = duckdb::MaxValue(found_record_count, (int64_t)0) + rows_layer->record_count;
     }
     else
     {
-        const void *final_ptr = get_final_ptr(my_bind_data->col_layer_ptr, current_layer);
-        chunk_count = ((uint64_t)final_ptr - (uint64_t)my_bind_data->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
-        my_bind_data->is_strict_rows = true;
+        const void *final_ptr = get_final_ptr(bind_data->col_layer_ptr, current_layer);
+        chunk_count = ((uint64_t)final_ptr - (uint64_t)bind_data->col_layer_ptr) / TRACEPROV_GET_RECORD_SIZE(current_layer);
+        bind_data->is_strict_rows = true;
     }
 
-    my_bind_data->column_width = column_count;
-    my_bind_data->num_rows = chunk_count;
-    my_bind_data->is_dummy = is_dummy;
-    if (record_count)
+    bind_data->column_width = column_count;
+    bind_data->num_rows = chunk_count;
+    bind_data->is_memory_mapping = (bind_data->col_layer->page_mapping != NULL);
+
+    return bind_data;
+}
+
+std::vector<TraceProvBindData *> *setup_layers(
+    const uint64_t worker_id,
+    uint64_t layer_number,
+    const int64_t log_offset,
+    int64_t *record_count,
+    const bool expect_present,
+    const int64_t partition_idx)
+{
+    // -1 so that it can be ignored, if not set.
+    int64_t found_record_count = -1;
+
+    initialize_global_context();
+    uint64_t current_worker_id = worker_id;
+
+    bool is_dummy = false;
+
+    if (current_worker_id > g_tp_duckdb_state.worker_local_contexts->size())
     {
+        current_worker_id = 1;
+        is_dummy = true;
+        // elog(INFO, "Got case where the worker id is greater than recognized cases. Not handling this case anymore.");
+        return nullptr;
+    }
+    // Basically, if we're using partitions, then we need to select them here.
+    // if we end up not using partitions, still need to add them here.
+    std::vector<traceprov_aggregate_layer *> layers;
+    auto current_local_context = g_tp_duckdb_state.worker_local_contexts->at(current_worker_id - 1);
+    auto current_layer = &current_local_context->cached_layers[layer_number - 1];
+    if (!validate_layer(current_layer, expect_present, layer_number)) return nullptr;
+    for (int32_t idx = 0; idx < TRACEPROV_BUCKET_COUNT; idx++){
+        // If either partition is given, or no partition is selected, but bucket is filled.
+        if ((partition_idx > 0 && ((partition_idx-1)==idx)) || (partition_idx==-1)){
+            const auto part_layer_number = current_layer->buckets[idx];
+            if (part_layer_number){
+                auto part_layer = &current_local_context->cached_layers[part_layer_number-1];
+                if (!validate_layer(part_layer, false,part_layer_number )) continue;
+                layers.push_back(part_layer);
+            }
+        }
+    }
+    // If either partition idx is 0, or not selected, still need to select the current partition.
+    if (partition_idx <= 0){
+        layers.push_back(current_layer);
+    }
+    auto bind_data_computed = new std::vector<TraceProvBindData *>;
+    for (auto part_layer: layers){
+        bind_data_computed->push_back(
+            _setup_layer(
+                log_offset,
+                current_worker_id,
+                current_local_context,
+                part_layer,
+                true,
+                found_record_count
+            )
+        );
+    }
+    if (found_record_count != -1 && record_count){
         *record_count = found_record_count;
     }
-    my_bind_data->is_memory_mapping = (my_bind_data->col_layer->page_mapping != NULL);
-
-    return my_bind_data;
+    return bind_data_computed;
 }
 
 void extract_partition_info(
     TraceProvTableExtra *extra_info,
     bool &will_be_dummy,
-    uint64_t &partition_idx,
+    int64_t &partition_idx,
     uint64_t table_flags,
     uint64_t worker_idx,
     uint32_t layer_number,
@@ -469,7 +516,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
         duckdb_destroy_value(&param_4);
     }
 
-    uint64_t partition_idx = 0;
+    int64_t partition_idx = -1;
     if (duckdb_bind_get_parameter_count(info) == 5)
     {
         auto param_4 = duckdb_bind_get_parameter(info, 4);
@@ -483,6 +530,10 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
 
     TraceProvBindData *bind_data;
     int64_t total_record_count = -1;
+    // Absolutely possible that not all partitions of a worker are populated.
+    // In that case, need to correctly index into bind data vector using these
+    std::vector<uint64_t> *cummulative_sum = new std::vector<uint64_t>;
+    cummulative_sum->push_back(0);
     if (current_worker_id == 0)
     {
         bind_data = allocate_bind_data();
@@ -514,58 +565,52 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             // This assumes that the code before correctly filters those out. Seems
             if (layer_number_to_search == 0)
                 continue;
-            int64_t child_record_count = -1;
-            uint64_t local_partition = partition_idx;
+            int64_t local_partition = partition_idx;
             // Don't do this for combine, even though they have the same layer number
             bool will_be_dummy = false;
             int64_t local_offset = log_offset;
             extract_partition_info(extra_info, will_be_dummy, local_partition, table_flags, worker_idx + 1, layer_number, local_offset);
-            TraceProvBindData *child_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, &child_record_count, false, local_partition);
-            if (child_record_count != -1)
-            {
-                if (total_record_count == -1)
-                    total_record_count = 0;
-                total_record_count += child_record_count;
+            auto child_part_bind_data = setup_layers(worker_idx + 1, layer_number_to_search, log_offset, &total_record_count, false, local_partition);
+            if (child_part_bind_data == nullptr || child_part_bind_data->size() == 0) continue;
+            for (auto child_bind_data: *child_part_bind_data){
+                // It actually doesn't hurt to run any of these multiple times and are a nice sanity check anyways:::>
+                bind_data->worker_bind_data->push_back(child_bind_data);
+                bind_data->is_strict_rows |= child_bind_data->is_strict_rows;
+                bind_data->is_memory_mapping |= (child_bind_data->is_memory_mapping);
+                if (bind_data->column_width != 0 && (bind_data->column_width != child_bind_data->column_width))
+                {
+                    bp();
+                    elog(ERROR, "Got inconsitent size!");
+                }
+                bind_data->column_width = child_bind_data->column_width;
+                child_bind_data->is_dummy |= will_be_dummy;
+                child_bind_data->rel_args.offset = local_offset;
             }
-            if (child_bind_data == NULL)
-                continue;
-            bind_data->worker_bind_data->push_back(child_bind_data);
-            bind_data->is_strict_rows |= child_bind_data->is_strict_rows;
-            bind_data->is_memory_mapping |= (child_bind_data->is_memory_mapping);
-            if (bind_data->column_width != 0 && (bind_data->column_width != child_bind_data->column_width))
-            {
-                bp();
-                elog(ERROR, "Got inconsitent size!");
-            }
-            bind_data->column_width = child_bind_data->column_width;
-            child_bind_data->is_dummy |= will_be_dummy;
-            child_bind_data->rel_args.offset = local_offset;
+            delete child_part_bind_data;
+            cummulative_sum->push_back(bind_data->worker_bind_data->size());
         }
         bind_data->rel_args.offset = log_offset;
     }
     else
     {
-        int64_t child_record_count = -1;
         bool will_be_dummy = false;
-        uint64_t local_partition = partition_idx;
+        int64_t local_partition = partition_idx;
         int64_t local_offset = log_offset;
         extract_partition_info(extra_info, will_be_dummy, local_partition, table_flags, current_worker_id, layer_number, local_offset);
-        bind_data = setup_layers(current_worker_id, layer_number, log_offset, &child_record_count, false, local_partition);
-        if (child_record_count != -1)
-        {
-            if (total_record_count == -1)
-                total_record_count = 0;
-            total_record_count += child_record_count;
-        }
-        if (bind_data != NULL)
-        {
+        auto all_bind_data = setup_layers(current_worker_id, layer_number, log_offset, &total_record_count, false, local_partition);
+        bind_data = allocate_bind_data();
+        if (all_bind_data != nullptr && all_bind_data->size() != 0){
             bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
-            bind_data->is_memory_mapping = bind_data->col_layer->page_mapping != NULL;
-            bind_data->worker_bind_data->push_back(bind_data);
+            for (auto part_bind_data: *all_bind_data){
+                if (part_bind_data != NULL)
+                {
+                    bind_data->is_memory_mapping = part_bind_data->col_layer->page_mapping != NULL;
+                    bind_data->worker_bind_data->push_back(part_bind_data);
+                }
+            }
+            cummulative_sum->push_back(bind_data->worker_bind_data->size());
         }
-        else
-        {
-            bind_data = allocate_bind_data();
+        else {
             bind_data->is_dummy = true;
             // Need to go over all the logs in hopes that we find some,
             for (auto worker_layer_par : *g_tp_duckdb_state.worker_local_contexts)
@@ -660,7 +705,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             bind_data->write_vector = index_context->vector_data;
         }
     }
-
+    bind_data->partition_spec = cummulative_sum;
     duckdb_bind_set_bind_data(info, bind_data, free);
 }
 
@@ -683,7 +728,8 @@ void traceprov_duckdb_init(duckdb_init_info info)
         // Don't make init data yet for this case.
         if (!traceprov_force_seq_scan)
         {
-            max_threads = bind_data->worker_bind_data->size();
+            // part spec will always be atleast 1 size.
+            max_threads = bind_data->partition_spec->size() - 1;
         }
     }
     else
@@ -732,9 +778,16 @@ void traceprov_duckdb_local_init(duckdb_init_info info)
     }
     else
     {
-        init_data_inst->worker_init_data->push_back(
-            traceprov_make_init_data(bind_data->worker_bind_data->at(self_idx)));
-        init_data_inst->idx_in_bind = self_idx;
+        // Need to figure out here the correct bind data(s)
+        // Determined by using the partitin spec.
+        const auto start_indx = bind_data->partition_spec->at(self_idx);
+        const auto end_indx = bind_data->partition_spec->at(self_idx+1);
+        for (uint64_t idx = start_indx; idx < end_indx; idx++){
+            init_data_inst->worker_init_data->push_back(
+                traceprov_make_init_data(bind_data->worker_bind_data->at(idx))
+            );
+        }
+        init_data_inst->idx_in_bind = start_indx;
     }
     init_data_inst->is_dummy = is_dummy;
 }
@@ -812,6 +865,15 @@ uint64_t traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckd
         return 0;
     }
 
+    auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
+    while (unlikely(init_data->is_dummy)){
+        if (init_data_combined->worker_bind_idx >= init_data_combined->worker_init_data->size())
+        {
+            duckdb_data_chunk_set_size(output, 0);
+            return 0;
+        }
+        init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx++);
+    }
     TraceProvBindData *bind_data = bind_data_combined;
 
     if (bind_data_combined->worker_bind_data)
@@ -822,11 +884,12 @@ uint64_t traceprov_duckdb_func_huge_incremental(duckdb_function_info info, duckd
         }
         else
         {
-            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->idx_in_bind);
+            // Because we may be in different partitions.
+            // Index-in-bind will be index into the the global bind index data struct.
+            bind_data = bind_data_combined->worker_bind_data->at(init_data_combined->idx_in_bind + init_data_combined->worker_bind_idx);
         }
     }
 
-    auto init_data = init_data_combined->worker_init_data->at(init_data_combined->worker_bind_idx);
     const uint64_t column_start_offset = bind_data_combined->needs_rowid ? 1 : 0;
 
     if (bind_data->rel_args.offset != -1)
@@ -1413,7 +1476,7 @@ duckdb_scalar_function traceprov_create_table_window_func(
             {
                 elog(ERROR, "Expected the key to not be present!");
             }
-            window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1, NULL)});
+            window_extra->key_bind_map->insert({worker_layer_key, setup_layers(worker_id, layer_number, -1, NULL)->at(0)});
         }
     }
     window_extra->num_cols = num_args;
@@ -1428,12 +1491,17 @@ void *traceprov_get_row(
     const uint64_t log_probe_value,
     std::vector<uint8_t> *sizes)
 {
-    auto bind_data = setup_layers(worker_id, layer_number, log_probe_value, NULL, true);
+    auto part_bind_data = setup_layers(worker_id, layer_number, log_probe_value, NULL, true, -1);
+    if (part_bind_data->size() != 1){
+        elog(ERROR, "Expected part bind data to have just 1 as the size. Got: %ld", part_bind_data->size());
+    }
+    auto bind_data = part_bind_data->at(0);
     bind_data->sizes = sizes;
     auto value = (uint64_t *)malloc(sizeof(uint64_t) * (bind_data->column_width));
     read_at_offset(log_probe_value, bind_data, value, sizes);
     if (value == 0)
         elog(ERROR, "Expected value to be something!!");
+    delete part_bind_data;
     return value;
 }
 
@@ -1698,26 +1766,29 @@ std::string traceprov_get_layer_stats()
             const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
             if (layer->layer_number == 0 || layer->rows_layer_number == 0) continue;
             int64_t record_count = 0;
-            TraceProvBindData *bind_data = setup_layers(
+            auto all_bind_data = setup_layers(
                 entry->worker_id,
                 layer->layer_number,
                 -1,
                 &record_count,
                 true,
-                0
+                -1
             );
-            const uint32_t layer_key = layer->combined_aggregate_layer_number ? layer->combined_aggregate_layer_number : layer->layer_number;
-            if (layer_size_mapping.count(layer_key) == 0){
-                layer_size_mapping[layer_key] = new std::vector<uint64_t>;
+            for (auto bind_data: *all_bind_data){
+                const uint32_t layer_key = layer->combined_aggregate_layer_number ? layer->combined_aggregate_layer_number : layer->layer_number;
+                if (layer_size_mapping.count(layer_key) == 0){
+                    layer_size_mapping[layer_key] = new std::vector<uint64_t>;
+                }
+                const auto _traceprov_grow_row_count_page_mapping = bind_data->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
+                auto local_init_data = traceprov_make_init_data(bind_data);
+                for (uint64_t idx = 0; idx < bind_data->num_rows; idx++){
+                    _traceprov_grow_row_count_page_mapping(local_init_data, bind_data);
+                    const uint64_t num_rows = *((uint64_t *)local_init_data->row_count_layer_ptr);
+                    local_init_data->row_count_layer_ptr = INCR_BY_BYTES(local_init_data->row_count_layer_ptr, sizeof(uint64_t));
+                    layer_size_mapping[layer_key]->push_back(num_rows);
+                }
             }
-            const auto _traceprov_grow_row_count_page_mapping = bind_data->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
-            auto local_init_data = traceprov_make_init_data(bind_data);
-            for (uint64_t idx = 0; idx < bind_data->num_rows; idx++){
-                _traceprov_grow_row_count_page_mapping(local_init_data, bind_data);
-                const uint64_t num_rows = *((uint64_t *)local_init_data->row_count_layer_ptr);
-                local_init_data->row_count_layer_ptr = INCR_BY_BYTES(local_init_data->row_count_layer_ptr, sizeof(uint64_t));
-                layer_size_mapping[layer_key]->push_back(num_rows);
-            }
+            delete all_bind_data;
         }
     }
     std::string stat_str;

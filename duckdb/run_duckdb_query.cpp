@@ -223,6 +223,7 @@ struct Options {
     uint64_t custom_graph_type_log_chain_table_count;
     bool sd_join_mode;
     bool disable_chunk_cache;
+    uint64_t output_column_idx;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -304,7 +305,8 @@ struct Options get_base_option(){
         .custom_graph_type = CustomGraphType::INVALID,
         .custom_graph_type_log_chain_table_count = 0,
         .sd_join_mode = false,
-        .disable_chunk_cache = false
+        .disable_chunk_cache = false,
+        .output_column_idx = 0
     };
     return options;
 }
@@ -517,6 +519,9 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--traceprov_use_index")){
             traceprov_use_index = true;
             continue;
+        }  else if (IS_OPTION("--output_col_idx")){
+            options.output_column_idx = std::atoi(argv[++i]);
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -544,12 +549,14 @@ struct Options parse_args(int argc, char **argv){
 typedef struct TraceProvLightData {
     uint64_t column_count;
     uint64_t row_count;
+    std::vector<uint64_t>* output_log;
 } TraceProvLightData;
 
 // Simply populates the data, given a chunk.
 static void populate_traceprov_data(
     TraceProvLightData *traceprov_data, 
-    duckdb_data_chunk *chunk
+    duckdb_data_chunk *chunk,
+    const uint64_t output_log_id=0
 ){
     const uint64_t column_count = duckdb_data_chunk_get_column_count(*chunk);
     const uint64_t row_count = duckdb_data_chunk_get_size(*chunk);
@@ -567,6 +574,16 @@ static void populate_traceprov_data(
         // }
     }
     traceprov_data->row_count += row_count;
+    if (output_log_id){
+        duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, output_log_id-1);
+        uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
+        if (traceprov_data->output_log == nullptr)
+            traceprov_data->output_log = new std::vector<uint64_t>;
+        traceprov_data->output_log->reserve(traceprov_data->output_log->size() + row_count);
+        for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
+            traceprov_data->output_log->push_back(col_data[row_idx]);
+        }
+    }
     // for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
     //     duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, col_idx);
     //     uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
@@ -688,20 +705,21 @@ PerformQueryResult *perform_query(
     auto traceprov_data = new TraceProvLightData;
     traceprov_data->column_count = 0;
     traceprov_data->row_count = 0;
+    traceprov_data->output_log = nullptr;
 
     if (options->use_pending){
         while (true) {
             duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(final_result);
             if (!data_chunk) break;
             chunk_count++;
-            populate_traceprov_data(traceprov_data, &data_chunk);
+            populate_traceprov_data(traceprov_data, &data_chunk, options->output_column_idx);
             duckdb_destroy_data_chunk(&data_chunk);
         }
     }else{
         uint64_t total_chunk_count = duckdb_result_chunk_count(final_result);
         for (idx_t chunk_idx = 0; chunk_idx < total_chunk_count; chunk_idx++){
             duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
-            populate_traceprov_data(traceprov_data, &data_chunk);
+            populate_traceprov_data(traceprov_data, &data_chunk, options->output_column_idx);
             duckdb_destroy_data_chunk(&data_chunk);
             chunk_count++;
         }
@@ -777,7 +795,8 @@ TraceProvDerivationSpec* augment_extra_sql(
     Options *options,
     std::vector<TraceProvTableExtra *> *table_func_extra,
     std::vector<uint64_t> *log_offsets,
-    TraceProvPartitionLayers *partition_layers
+    TraceProvPartitionLayers *partition_layers,
+    std::vector<uint64_t> *output_log_offset
 );
 
 TraceProvTableExtra *make_table_extra(){
@@ -1087,7 +1106,14 @@ int main(int argc, char **argv){
             auto extra_sqls_clone = (extra_sqls);
             std::vector<TraceProvTableExtra *> table_func_extra;
 
-            const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
+            const auto spec_result = augment_extra_sql(
+                extra_sqls_clone,
+                &options,
+                &table_func_extra,
+                options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets,
+                partition_layers,
+                nullptr
+            );
             if (spec_result){
                 curr_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
             }
@@ -1174,9 +1200,19 @@ int main(int argc, char **argv){
         int extra_sql_idx = 0;
         auto extra_sqls_clone = (extra_sqls);
         std::vector<TraceProvTableExtra *> table_func_extra;
-        const auto spec_result = augment_extra_sql(extra_sqls_clone, &options, &table_func_extra, options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets, partition_layers);
-        if (main_result != NULL && spec_result != NULL){
-            main_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
+        const auto spec_result = augment_extra_sql(
+            extra_sqls_clone,
+            &options,
+            &table_func_extra,
+            options.log_offsets->size() == 0 ? new std::vector<uint64_t>(1, -1) : options.log_offsets,
+            partition_layers,
+            main_result != NULL ? main_result->data->output_log : nullptr
+        );
+        if (main_result != NULL){
+            if (spec_result != NULL)
+                main_result->option.misc_store.sql_compilation_time = spec_result->sql_compilation_time;
+            if (main_result->data->output_log)
+                delete main_result->data->output_log;
         }
         // Run extra all ;)
         for (auto extra_sql: extra_sqls_clone){
@@ -1195,6 +1231,7 @@ int main(int argc, char **argv){
             extra_options.capture_lineage = false;
             extra_options.stats_path = "";
             extra_options.get_log_size = false;
+            extra_options.output_column_idx = 0;
             char final_profile_out[256] = {0};
             duckdb_prepared_statement stmt = NULL;
             for (int i = 0; i < extra_options.repeat; i++){
@@ -1307,10 +1344,7 @@ static void populate_log_offset(
 
     for (auto pl_item: *partition_layers){
         const uint64_t logged_entry = ((uint64_t *)row)[pl_item.entry_idx];
-        if (TRACEPROV_GET_IS_COMBINED(logged_entry)){
-            // In this case, need to look at the combine logs to correctly figure out which partitions to prune.
-            elog(ERROR, "Not handling this case for now.")
-        }else{
+        if (!TRACEPROV_GET_IS_COMBINED(logged_entry)){
             // In this case, the partition is embedded in the log entry.
             auto log_worker_id = TRACEPROV_GET_WORKER_ID(logged_entry);
             if (log_worker_id == 0){
@@ -1562,7 +1596,8 @@ TraceProvDerivationSpec* augment_extra_sql(
     Options *options,
     std::vector<TraceProvTableExtra *> *table_func_extra,
     std::vector<uint64_t> *log_offsets,
-    TraceProvPartitionLayers *partition_layers
+    TraceProvPartitionLayers *partition_layers,
+    std::vector<uint64_t> *output_log_offset
 ){
     if (!options->traceprov_perform_derivation) return NULL;
     TraceProvDerivationSpec *result_spec = NULL;
@@ -1576,7 +1611,8 @@ TraceProvDerivationSpec* augment_extra_sql(
             info->cached_data = NULL;
             info->partition_data = NULL;
             info->layer_log_map = NULL;
-            populate_log_offset(log_offset, result_spec->p_context, partition_layers, info);
+            const uint64_t mapped_true_offset = output_log_offset == nullptr ? log_offset : output_log_offset->at(log_offset);
+            populate_log_offset(mapped_true_offset, result_spec->p_context, partition_layers, info);
         }
         for (auto layer_string_pair: *layer_string_map){
             auto table_extra = make_table_extra();

@@ -90,6 +90,7 @@ class DuckDBDriverOptions(NamedTuple):
     warm_up_time: int = 0
     load_micro_benchmarks: bool = False
     sd_join_mode: bool = False
+    output_col_idx: int = 0
 
     @staticmethod
     def get_suffix(parsed):

@@ -370,7 +370,6 @@ void traceprov_log_direct(DataChunk &input, ExpressionState &state, Vector &resu
         #endif
         memset(out_data, true, sizeof(bool)*num_rows);
     }else{
-        const uint64_t start_idx = chunk_size_layer->record_count;
         #if TRACEPROV_SD_MODE==1
         uint64_t *out_data = FlatVector::GetData<uint64_t>(result);
         #else
@@ -380,7 +379,7 @@ void traceprov_log_direct(DataChunk &input, ExpressionState &state, Vector &resu
         for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
             // This way, the final output of the log is unique (used for point queries)
             // Technically, this can be optimized a lot more (only do this for )
-            out_data[row_idx] = (TRACEPROV_SET_WORKER_ID((row_idx + start_idx), traceprov_current.my_worker_id));
+            out_data[row_idx] = (TRACEPROV_SET_WORKER_ID((row_idx + existing_record_count), traceprov_current.my_worker_id));
         }
     }
 

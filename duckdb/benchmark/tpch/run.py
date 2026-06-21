@@ -134,6 +134,11 @@ def run(force_materialize=False, execution_hook=None):
                     traceprov_layers_to_derive=tuple(
                         query_layer_config[query]["layers_used"]
                     ),
+                    output_column_index=(
+                        query_layer_config[query]["output_id"]
+                        if parsed.traceprov_use_column_log
+                        else 0
+                    ),
                 )
 
         if execution_hook:

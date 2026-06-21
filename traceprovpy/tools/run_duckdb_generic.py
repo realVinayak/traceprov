@@ -107,6 +107,7 @@ def run_sample_inference(
     samples: Iterable[int],
     parsed,
     traceprov_layers_to_derive: Tuple[int],
+    output_column_index: int = 0,
     iters: int = DEFAULT_REPEAT + DEFAULT_THROWAWAY,
     pre_base: Path | None = None,
     disable_col_opt: bool = False,
@@ -166,6 +167,7 @@ def run_sample_inference(
         pre_query=pre_query,
         get_log_size=True,
         warm_up_time=parsed.warm_up_time,
+        output_col_idx=output_column_index,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -851,6 +853,19 @@ def run_single(
     captured_sql = extract_capture_query(
         query_dir, parsed, use_optimized, use_aggresive_optimized
     )
+
+    if parsed.mat_capture:
+        capture_sql_content_lines = just_read(captured_sql).splitlines()
+        capture_sql_content = "\n".join(
+            [line for line in capture_sql_content_lines if not line.startswith("--")]
+        )
+        capture_sql_content = capture_sql_content.replace(";", "")
+        capture_sql_content = (
+            f"create or replace table q{query_num}_capture as ({capture_sql_content})"
+        )
+        captured_sql = Path(
+            just_write(Path("./tmp/new_capture.sql"), capture_sql_content)
+        )
 
     exec_str = exe.as_posix()
 

@@ -45,6 +45,14 @@ def make_duckdb_parse():
     parser.add_argument(
         "--traceprov_fast", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--traceprov_use_column_log",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
+    parser.add_argument(
+        "--mat_capture", action=argparse.BooleanOptionalAction, default=False
+    )
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
 
