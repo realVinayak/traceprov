@@ -431,7 +431,7 @@ std::vector<TraceProvBindData *> *setup_layers(
         );
     }
     if (found_record_count != -1 && record_count){
-        *record_count = found_record_count;
+        *record_count = duckdb::MaxValue(*record_count, (int64_t)0) + found_record_count;
     }
     return bind_data_computed;
 }
