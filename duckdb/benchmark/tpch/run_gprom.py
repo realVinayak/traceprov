@@ -80,7 +80,7 @@ def run_possible_queries(
         assert query.exists(), f"Expected {query} to exist!"
         queries[safe_key] = query
     for key, query_str in queries.items():
-        traceprov_assert_safe_run(f"rm -rf {parsed.db}/.tmp/")
+        traceprov_assert_safe_run(f"rm -rf {parsed.db}.tmp/")
         # first, run it just once with a timeout, to check if it'll finish in timeout or not.
         original_query_str = query_str
         if parsed.single_row_mode:
