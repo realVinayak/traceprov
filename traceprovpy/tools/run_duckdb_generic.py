@@ -42,6 +42,8 @@ def infer_sample_id(base_row_count: int, parsed):
     out_ids = range(base_row_count)
     if parsed.sample_inference == "sample":
         out_ids = _infer_sample_id(out_ids, base_row_count, parsed.sample_num)
+    elif parsed.sample_inference == "limit":
+        return out_ids[: parsed.sample_inference_limit]
     return out_ids
 
 
@@ -976,7 +978,9 @@ def run_single(
     return final_result
 
 
-def run_combined(parsed, total_iters, query, pre_query: list[str]):
+def run_combined(
+    parsed, total_iters, query, pre_query: list[str], output_column_index=0
+):
     sample_inference_result = None
     if parsed.sd_mode:
         query_result = dict(
@@ -1030,6 +1034,7 @@ def run_combined(parsed, total_iters, query, pre_query: list[str]):
                 traceprov_layers_to_derive=(1,),
                 iters=total_iters,
                 pre_query=pre_query,
+                output_column_index=output_column_index,
             )
     query_result = {
         **query_result,

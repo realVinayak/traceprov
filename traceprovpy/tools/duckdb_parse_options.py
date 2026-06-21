@@ -11,7 +11,9 @@ def make_duckdb_parse():
     parser.add_argument("--suff", required=True)
     parser.add_argument("--sd_mode", choices=["old"], default=None)
     parser.add_argument("--sd_extension_path", required=False)
-    parser.add_argument("--sample_inference", choices=["all", "sample"], default=None)
+    parser.add_argument(
+        "--sample_inference", choices=["all", "sample", "limit"], default=None
+    )
     parser.add_argument(
         "--validate", action=argparse.BooleanOptionalAction, default=False
     )
@@ -53,6 +55,7 @@ def make_duckdb_parse():
     parser.add_argument(
         "--mat_capture", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument("--sample_inference_limit", type=int, default=10)
     DuckDBDriverOptions.add_parse_options(parser)
     return parser
 
@@ -67,6 +70,12 @@ def traceprov_handle_suffix(parsed):
         parsed.traceprov_use_compact = True
         parsed.traceprov_use_table_stats = True
         parsed.optimized = True
+    if (
+        parsed.threads > 1
+        and parsed.sample_inference is not None
+        and parsed.traceprov_use_partition_in_agg
+    ):
+        parsed.traceprov_use_column_log = True
     if SMART_TOKEN not in parsed.suff:
         return
     suff = DuckDBDriverOptions.get_suffix(parsed)
