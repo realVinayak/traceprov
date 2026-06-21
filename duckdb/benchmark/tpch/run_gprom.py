@@ -1,4 +1,5 @@
 # gprom driver.
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -12,6 +13,7 @@ from traceprovpy.tools.benchmark_utils import (
     infer_gprom_candidates,
     traceprov_dump_safe_results,
 )
+from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,
@@ -32,33 +34,66 @@ from traceprovpy.tools.run_duckdb_generic import (
 from traceprovpy.tools.run_with_timeout import MakeKeySelection
 
 
-def handle_rewrite_single_row_mode(query_name: str, query_str: Path, temp_dir: Path):
-    query = just_read(query_str)
+def handle_rewrite_single_row_mode(
+    query_name: str,
+    base_query_path: Path,
+    temp_dir: Path,
+):
+    query = just_read(base_query_path)
+    assert query is not None
     query_out_path = temp_dir / "query_out.json"
     query_rewritten = temp_dir / f"query_rewritten_{query_name}.sql"
     query = query.replace(";", "")
-    query = f"copy (select * from ({query}) LIMIT 1 OFFSET 0) to '{query_out_path.as_posix()}'"
+    query = f"copy (select * from ({query})) to '{query_out_path.as_posix()}'"
     just_write(query_rewritten, query)
     return query_rewritten, query_out_path
 
 
 def add_predicates(
-    query_name: str, query_path: Path, result_path: Path, temp_dir: Path
+    query_name: str,
+    query_path: Path,
+    result_path: Path,
+    temp_dir: Path,
+    query_keys: dict,
 ):
-    query_result = json_read_file(result_path)
+    raw_query_result = just_read(result_path).splitlines()
+    assert isinstance(raw_query_result, list)
+    query_result = list(map(json.loads, raw_query_result))
     print(query_result)
-    assert isinstance(query_result, dict)
     query = just_read(query_path)
-    filter_pack = {
-        key: value
-        for (key, value) in query_result.items()
-        if not key.lower().startswith("prov_")
-    }
-    preprocessor = MakeKeySelection(filter_pack)
-    filtered = preprocessor.preprocess(query)
-    query_rewritten_file = temp_dir / f"filtered_{query_name}.sql"
-    just_write(query_rewritten_file, filtered)
-    return query_rewritten_file
+    files: list[Path] = []
+    query_keys = [key.lower() for key in query_keys]
+    for row_result_idx, row_result in enumerate(query_result):
+        filter_pack = {
+            key: value
+            for (key, value) in row_result.items()
+            if not key.lower().startswith("prov_") and key.lower() in query_keys
+        }
+        preprocessor = MakeKeySelection(filter_pack)
+        filtered = preprocessor.preprocess(query)
+        out_dir = temp_dir / str(row_result_idx)
+        os.makedirs(out_dir, exist_ok=True)
+        query_rewritten_file = out_dir / f"filtered_{query_name}.sql"
+        just_write(query_rewritten_file, filtered)
+        files.append(query_rewritten_file)
+    return files
+
+
+def run_option(exec_str: str, options: DuckDBDriverOptions):
+    try:
+        later_sub_result = subprocess.run(
+            [
+                exec_str,
+                *[x for f in options.get_list_options() for x in f.split(" ")],
+            ],
+            timeout=300,
+        )
+    except Exception as e:
+        return dict(later_error=str(e))
+
+    if later_sub_result.returncode != 0:
+        return dict(later_errorcode=later_sub_result.returncode)
+    return infer_option_results(options)
 
 
 def run_possible_queries(
@@ -69,6 +104,8 @@ def run_possible_queries(
     iters,
     gprom_query_dir: Path,
     temp_dir: Path,
+    base_query_path: Path,
+    keys: dict,
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     result = dict()
@@ -85,7 +122,7 @@ def run_possible_queries(
         original_query_str = query_str
         if parsed.single_row_mode:
             query_str, query_out_path = handle_rewrite_single_row_mode(
-                query_name, query_str, temp_dir
+                query_name, base_query_path / query_name / "base.sql", temp_dir
             )
         exec_str, options = run_single_query_dry(query_str.as_posix(), parsed, 1)
         repeat_options = options._replace(repeat=iters)
@@ -110,31 +147,24 @@ def run_possible_queries(
             result[key] = dict(errorcode=sub_result.returncode)
             continue
 
+        options_to_run = [repeat_options]
         if parsed.single_row_mode:
-            filtered = add_predicates(
-                query_name, original_query_str, query_out_path, temp_dir
+            rewritten_files = add_predicates(
+                query_name,
+                original_query_str,
+                query_out_path,
+                temp_dir,
+                keys[query_name],
             )
-            repeat_options = repeat_options._replace(i=filtered.as_posix())
-
-        try:
-            later_sub_result = subprocess.run(
-                [
-                    exec_str,
-                    *[
-                        x
-                        for f in repeat_options.get_list_options()
-                        for x in f.split(" ")
-                    ],
-                ]
-            )
-        except Exception as e:
-            result[key] = dict(later_error=str(e))
-
-        if later_sub_result.returncode != 0:
-            result[key] = dict(later_errorcode=later_sub_result.returncode)
-            continue
-
-        result[key] = infer_option_results(repeat_options)
+            options_to_run = [
+                repeat_options._replace(i=rewritten_file.as_posix())
+                for rewritten_file in rewritten_files
+            ]
+        results = list(
+            [run_option(exec_str, option_to_run) for option_to_run in options_to_run]
+        )
+        result[key] = results
+    traceprov_assert_safe_run(f"rm -rf {parsed.db}/.tmp/")
     return {query_name: result}
 
 
@@ -143,6 +173,15 @@ def run():
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--dir", required=True)
     base_parser.add_argument("--temp_dir", required=False, default="./tmp/")
+    base_parser.add_argument("--base_dir", required=False, default="./")
+    keys_path = Path(
+        "../../../../postgres/benchmark/tpch/legacy_scale_1/params_default/extract_gprom/keys.json"
+    )
+    base_parser.add_argument(
+        "--keys",
+        required=False,
+        default=keys_path,
+    )
     add_gprom_candidates(base_parser)
     # traceprov_handle_suffix(parsed)
 
@@ -181,6 +220,8 @@ def run():
             total_iters,
             gprom_query_dir,
             temp_dir,
+            Path(parsed.base_dir),
+            json_read_file(Path(parsed.keys)),
         )
         new_result = {**query_results, **result}
         assert len(new_result) > len(query_results), "Got some duplicated keys!"
