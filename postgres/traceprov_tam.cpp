@@ -25,7 +25,8 @@ extern "C"
         .map = NULL,
         .log_offset = NULL};
 
-#define TP_TAP_LOCATION elog(INFO, "Got here: %s, %d", __FILE__, __LINE__)
+// #define TP_TAP_LOCATION elog(INFO, "Got here: %s, %d", __FILE__, __LINE__)
+#define TP_TAP_LOCATION 0
     static TraceProvLayerNumber get_layer_from_rel(Relation rel);
 
     static const TupleTableSlotOps *tp_am_slot_callbacks(
