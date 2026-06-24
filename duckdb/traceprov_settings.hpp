@@ -19,4 +19,6 @@ extern bool traceprov_skip_sql_cache;
 extern bool traceprov_use_table_stats;
 extern bool traceprov_ignore_direct_join;
 extern bool traceprov_use_index;
+extern bool traceprov_use_join_filter_rewrite;
+extern bool traceprov_use_filter_pushdown;
 #endif

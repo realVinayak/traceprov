@@ -74,5 +74,5 @@ extern "C" {
 std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext context);
 void traceprov_mock_set_dependency(TraceProvParseContext *context, TraceProvDependency *dependency);
 void traceprov_create_join_chain_dependency(const uint64_t table_count, const bool add_agg=false);
-
+TraceProvNode *traceprov_perform_join_to_condition(TraceProvNode *current, const TraceProvLayerNumber root);
 #endif

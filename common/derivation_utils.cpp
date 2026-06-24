@@ -180,6 +180,9 @@ extern "C" {
         } else if (node->tag == T_TP_EXISTS){
             TraceProvExists *exists = (TraceProvExists *)node;
             return traceprov_get_node_column_count(exists->current);
+        } else if (node->tag == T_TP_FILTER_REMAP){
+            TraceProvFilterRemap *filter_remap = (TraceProvFilterRemap *)node;
+            return filter_remap->output_columns->size();
         }
         EXIT_WITH_MESSAGE("Got unexpected node!");
         return 0;
@@ -346,6 +349,48 @@ extern "C" {
         return make_traceprov_join_from_rel(join_side, right_side, self_logs->size(), join_side_idx);
     }
 
+    std::vector<TraceProvColumn*> *get_join_exprn_columns(const TraceProvJoinExpr *join_exprn){
+        auto columns = new std::vector<TraceProvColumn*>;
+        if (join_exprn->is_left_star){
+            for (uint64_t idx = 0; idx < traceprov_get_node_column_count(join_exprn->left); idx++){
+                columns->push_back(new TraceProvColumn(1, idx + 1));
+            }
+        }
+        if (join_exprn->is_right_star){
+            for (uint64_t idx = 0; idx < traceprov_get_node_column_count(join_exprn->right); idx++){
+                columns->push_back(new TraceProvColumn(2, idx + 1));
+            }
+        }
+        if (join_exprn->output_columns != nullptr){
+            for (auto output_column: *join_exprn->output_columns){
+                if (
+                    (output_column->first == 1 && join_exprn->is_left_star) ||
+                    (output_column->first == 2 && join_exprn->is_right_star)
+                ){
+                    continue;
+                }
+                columns->push_back(output_column);
+            }
+        }
+        return columns;
+    }
+
+    TraceProvFilterRemap *make_traceprov_filter_remap(
+        const TraceProvJoinExpr *in_join_expr
+    ){
+        auto tp_filter_remap = tp_alloc0_object(TraceProvFilterRemap);
+        tp_filter_remap->tag = T_TP_FILTER_REMAP;
+        // In this case, rewrite the filter to add the filtering.
+        auto expanded_refs = get_join_exprn_columns(in_join_expr);
+        if (in_join_expr->const_join_condition != nullptr && in_join_expr->const_join_condition->size()>0){
+            EXIT_WITH_MESSAGE("Expected the const join condition to be empty!");
+        }
+        tp_filter_remap->current = in_join_expr->right;
+        tp_filter_remap->filter_condition = in_join_expr->join_condition;
+        tp_filter_remap->output_columns = expanded_refs;
+        return tp_filter_remap;
+    }
+
     TraceProvColumnData *traceprov_make_empty_column(){
         auto col_data = tp_alloc0_object(TraceProvColumnData);
         col_data->data = new std::vector<uint64_t>;
@@ -464,7 +509,7 @@ extern "C" {
         return tp_psprintf("%s.column_%d", alias, column_idx);
     }
 
-static std::string traceprov_get_column_select(
+    static std::string traceprov_get_column_select(
         char *alias,
         uint64_t column_count,
         bool add_bigint_cast,
@@ -643,6 +688,62 @@ static std::string traceprov_get_column_select(
         return append_repr;
     }
 
+    std::string concat_string_vec(std::vector<std::string> &vec, std::string sep ){
+        bool needs_sep = false;
+        std::string concat = "";
+        for (auto cell: vec){
+            if (needs_sep){
+                concat += sep;
+            }
+            needs_sep = true;
+            concat += cell;
+        }
+        return concat;
+    }
+
+    static std::string traceprov_filter_remap_to_sql(TraceProvFilterRemap *filter_remap, TraceProvToSQLContext context){
+        if (context.row_content == NULL){
+            EXIT_WITH_MESSAGE("Expected row content to be set!");
+        }
+        std::string sql_repr;
+        sql_repr += "SELECT ";
+        std::vector<std::string> column_reprs;
+        std::vector<std::string> join_conditions;
+        std::string child_node_raw_sql = traceprov_node_to_sql(filter_remap->current, context);
+        char *child_alias = filter_remap->current->alias_name;
+        std::string child_alias_expanded = expand_alias(child_alias, traceprov_get_node_column_count(filter_remap->current));
+        char *child_sql = tp_psprintf("(%s) as %s", child_node_raw_sql.c_str(), child_alias_expanded.c_str());
+        for (auto output_column: *filter_remap->output_columns){
+            if (output_column->first == 1){
+                const uint64_t cell_value = context.row_content[output_column->second-1];
+                // auto cell_value = tp_psprintf("$%d", output_column->second);
+                auto column_repr = tp_psprintf("%ld as %s", cell_value, traceprov_get_column_name_idx(nullptr, output_column->second-1));
+                column_reprs.push_back(std::string(column_repr));
+                continue;
+            }
+            auto column_repr = traceprov_get_column_name_idx(child_alias, output_column->second -1);
+            column_reprs.push_back(std::string(column_repr));
+        }
+        for (auto join_condition: *filter_remap->filter_condition){
+            auto join_condition_repr = tp_psprintf(
+                "%s=%ld",
+                traceprov_get_column_name_idx(child_alias, join_condition->second->second-1),
+                context.row_content[join_condition->first->second-1]
+            );
+            join_conditions.push_back(std::string(join_condition_repr));
+        }
+        std::string target_list = concat_string_vec(column_reprs, ", ");
+        std::string join_condition_repr = concat_string_vec(join_conditions, " AND ");
+        sql_repr = safe_append(
+            sql_repr,
+            tp_psprintf(
+                "%s FROM %s WHERE %s", target_list.c_str(), child_sql, join_condition_repr.c_str()
+            )
+        );
+        return sql_repr;
+    }
+
+
     std::string expand_alias(const char *alias_name, const uint64_t column_count){
         // Expands alias such that it is as table(col0, col1, col2...)
         auto select = traceprov_get_column_select(nullptr, column_count);
@@ -670,6 +771,9 @@ std::string traceprov_node_to_sql(TraceProvNode *node, TraceProvToSQLContext con
         gen_sql = traceprov_join_to_sql((TraceProvJoinExpr *)node, context);
     } else if (node->tag == T_TP_APPEND){
         gen_sql = traceprov_append_to_sql((TraceProvAppend *)node, context);
+    } else if (node->tag == T_TP_FILTER_REMAP) {
+        node->alias_name = tp_parse_get_unique_alias(context.context);
+        gen_sql = traceprov_filter_remap_to_sql((TraceProvFilterRemap *)node, context);
     } else {
         EXIT_WITH_MESSAGE("Found handling invalid node in toSQL");
     }
@@ -722,4 +826,36 @@ void traceprov_create_join_chain_dependency(const uint64_t table_count, const bo
         dependency = wrapped;
     }
     traceprov_mock_set_dependency(parse_context, dependency);
+}
+
+static TraceProvNode *_traceprov_perform_join_to_condition(TraceProvNode *current, TraceProvJoinRewriteContext context){
+    if (current->tag == T_TP_JOIN){
+        TraceProvJoinExpr *join_exprn = (TraceProvJoinExpr *)current;
+        if (join_exprn->left->tag == T_TP_RELATION){
+            TraceProvRelation *rel = (TraceProvRelation *)(join_exprn->left);
+            if (rel->rel_args->layer_number == context.root){
+                auto rewritten = make_traceprov_filter_remap(join_exprn);
+                return (TraceProvNode *)rewritten;
+            }
+        }
+        join_exprn->left = _traceprov_perform_join_to_condition(join_exprn->left, context);
+        join_exprn->right = _traceprov_perform_join_to_condition(join_exprn->right, context);
+    }else if (current->tag == T_TP_APPEND){
+        TraceProvAppend *append = (TraceProvAppend *)current;
+        for (uint32_t idx = 0; idx < list_length(append->nodes); idx++){
+            append->nodes->elements[idx].ptr_value = _traceprov_perform_join_to_condition((TraceProvNode *)list_nth(append->nodes, idx), context);
+        }
+        return current;
+    }
+    return current;
+}
+
+TraceProvNode *traceprov_perform_join_to_condition(TraceProvNode *current, const TraceProvLayerNumber root){
+    TraceProvJoinRewriteContext context = {
+        .rewritten = new std::unordered_map<TraceProvNode *, bool>,
+        .root = root
+    };
+    auto rewritten = _traceprov_perform_join_to_condition(current, context);
+    delete context.rewritten;
+    return rewritten;
 }

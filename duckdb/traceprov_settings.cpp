@@ -51,3 +51,6 @@ bool traceprov_use_table_stats = false;
 bool traceprov_ignore_direct_join = false;
 
 bool traceprov_use_index = false;
+
+bool traceprov_use_join_filter_rewrite = false;
+bool traceprov_use_filter_pushdown = false;

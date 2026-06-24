@@ -238,7 +238,8 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
     Options *options,
     TraceProvDerivationSpec **derivation_spec,
     std::vector<std::string> &ddls,
-    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls
+    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
+    const bool derive_sql_mapping = true
 );
 MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Funcs table_funcs);
 
@@ -522,6 +523,12 @@ struct Options parse_args(int argc, char **argv){
         }  else if (IS_OPTION("--output_col_idx")){
             options.output_column_idx = std::atoi(argv[++i]);
             continue;
+        }  else if (IS_OPTION("--traceprov_use_join_filter_rewrite")){
+            traceprov_use_join_filter_rewrite = true;
+            continue;
+        }  else if (IS_OPTION("--traceprov_use_filter_pushdown")){
+            traceprov_use_filter_pushdown = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -679,9 +686,9 @@ PerformQueryResult *perform_query(
 
     auto start_time = std::chrono::steady_clock::now();
 
-    // if (later_stmt != NULL){
-    //     stmt = *later_stmt;
-    // }
+    if (later_stmt != NULL){
+        stmt = *later_stmt;
+    }
 
     if (stmt == NULL)
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
@@ -726,7 +733,8 @@ PerformQueryResult *perform_query(
     }
 
     duckdb_destroy_result(&final_result);
-    duckdb_destroy_prepare(&stmt);
+    if (later_stmt == NULL)
+        duckdb_destroy_prepare(&stmt);
 
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
@@ -1072,6 +1080,7 @@ int main(int argc, char **argv){
                 elapsed += (std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)).count();
             }
         }
+        duckdb_prepared_statement cached_stmt = NULL;
         for (int i = 0; i < options.repeat; i++){
             char final_profile_out[256] = {0};
             char final_stats_query[256] = {0};
@@ -1101,7 +1110,7 @@ int main(int argc, char **argv){
                 }
             }
 
-            auto curr_result = perform_query(&options, con, in_sql, &agg_result, final_profile_out, final_stats_query, layer_stats_out_str);
+            auto curr_result = perform_query(&options, con, in_sql, &agg_result, final_profile_out, final_stats_query, layer_stats_out_str, &cached_stmt);
 
             auto extra_sqls_clone = (extra_sqls);
             std::vector<TraceProvTableExtra *> table_func_extra;
@@ -1164,6 +1173,8 @@ int main(int argc, char **argv){
             // DUCKDB_RUN_SHORT_QUERY(con, "SET disabled_optimizers = '';", "run enable all optimaztions");
 
         }
+        duckdb_destroy_prepare(&cached_stmt);
+
     }else{
         // run main once.
         PerformQueryResult *main_result = NULL;
@@ -1243,6 +1254,7 @@ int main(int argc, char **argv){
                 extra_options._extra_output = extra_sql.extra;
                 perform_query(&extra_options, con, extra_sql.sql, &agg_result, final_profile_out, NULL, "", &stmt);
             }
+            duckdb_destroy_prepare(&stmt);
             // eh, so that the state is still consistent later.
             duckdb_table_function_set_extra_info(table_funcs.tp_read_offset_func, NULL, nullptr);
             duckdb_table_function_set_extra_info(table_funcs.tp_read_func, NULL, nullptr);
@@ -1525,20 +1537,14 @@ MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Fu
     return key_value;
 }
 
-std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
+std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
+    TraceProvDerivationSpec *result_spec,
     Options *options,
-    TraceProvDerivationSpec **derivation_spec,
     std::vector<std::string> &ddls,
-    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls
+    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
+    void *row_content=NULL
 ){
-    TraceProvParseContext *parsed_back_context;
-    char *parsed_sql = NULL;
-    const auto start_time = std::chrono::steady_clock::now();
-    auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
-    const auto end_time = std::chrono::steady_clock::now();
-    result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
     auto layer_string_map = new std::unordered_map<TraceProvLayerNumber, std::string>;
-
     std::unordered_map<uint64_t, std::string> sql_cache;
     for (auto result_map_pair: *result_spec->result_map){
         if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
@@ -1561,19 +1567,49 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
         auto node_sql = traceprov_node_to_sql(
             result_map_pair.second, 
             TraceProvToSQLContext{
-                .context = parsed_back_context,
+                .context = result_spec->parse_context,
                 .use_table_def = true,
                 .ddls = &ddls,
                 .added_ddls = &added_ddls,
                 .pointer_context = NULL,
-                .cache = traceprov_skip_sql_cache ? NULL : &sql_cache
+                .cache = traceprov_skip_sql_cache ? NULL : &sql_cache,
+                .row_content = (uint64_t*)row_content
             }
         );
         const auto end_sql_time = std::chrono::steady_clock::now();
         result_spec->sql_compilation_time += std::chrono::duration_cast<std::chrono::microseconds>(end_sql_time - start_sql_time).count();
         layer_string_map->insert({result_map_pair.first, node_sql});
     }
+    return layer_string_map;
+}
+
+std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
+    Options *options,
+    TraceProvDerivationSpec **derivation_spec,
+    std::vector<std::string> &ddls,
+    std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
+    const bool derive_sql_mapping
+){
+    TraceProvParseContext *parsed_back_context;
+    char *parsed_sql = NULL;
+    const auto start_time = std::chrono::steady_clock::now();
+    auto result_spec = get_generic_derivation_spec(&parsed_back_context, NULL, &parsed_sql);
+    if (traceprov_use_join_filter_rewrite){
+        for (auto entry: *result_spec->result_map){
+            result_spec->result_map->at(entry.first) = traceprov_perform_join_to_condition(entry.second, result_spec->root_layer_number);
+        }
+    }
+    const auto end_time = std::chrono::steady_clock::now();
+    result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+    result_spec->parse_context = parsed_back_context;
     *derivation_spec = result_spec;
+    if (!derive_sql_mapping) return nullptr;
+    auto layer_string_map = get_sql_mapping(
+        result_spec,
+        options,
+        ddls,
+        added_ddls
+    );
     return layer_string_map;
 }
 
@@ -1603,7 +1639,7 @@ TraceProvDerivationSpec* augment_extra_sql(
     TraceProvDerivationSpec *result_spec = NULL;
     std::vector<std::string> ddls;
     std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
-    auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls);
+    auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls, !traceprov_use_join_filter_rewrite);
     for (auto log_offset: *log_offsets){
         TraceProvPartitionInfo *info = NULL;
         if (log_offset != -1 && !traceprov_use_index){
@@ -1613,15 +1649,24 @@ TraceProvDerivationSpec* augment_extra_sql(
             info->layer_log_map = NULL;
             const uint64_t mapped_true_offset = output_log_offset == nullptr ? log_offset : output_log_offset->at(log_offset);
             populate_log_offset(mapped_true_offset, result_spec->p_context, partition_layers, info);
+            if (traceprov_use_join_filter_rewrite){
+                layer_string_map = get_sql_mapping(
+                    result_spec,
+                    options,
+                    ddls,
+                    added_ddls,
+                    info->cached_data->at(result_spec->root_layer_number)
+                );
+            }
         }
         for (auto layer_string_pair: *layer_string_map){
             auto table_extra = make_table_extra();
             uint64_t extra_added = 0;
-            //elog(INFO, "SQL Query: %s", node_sql.c_str());
             auto node_sql = layer_string_pair.second;
             if (traceprov_use_index && log_offset != -1){
                 node_sql = get_index_query(layer_string_pair.first, log_offset);
             }
+            // elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(layer_string_pair.first);
                 if (log_offset != -1){

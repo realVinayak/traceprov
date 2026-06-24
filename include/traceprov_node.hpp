@@ -21,7 +21,8 @@ extern "C" {
         T_TP_APPEND,
         T_TP_WINDOW_READ,
         T_TP_FILTER,
-        T_TP_EXISTS
+        T_TP_EXISTS,
+        T_TP_FILTER_REMAP
     };
 
     typedef struct TraceProvDescriptor {
@@ -130,6 +131,18 @@ extern "C" {
         TraceProvNode *condition;
     } TraceProvExists;
 
+    // Used rewriting the JOIN->FILTER
+    typedef struct TraceProvFilterRemap {
+        TraceProvNodeKind tag;
+        char *alias_name;
+        // The remaining node
+        TraceProvNode *current;
+        // this is a special kind of filter condition.
+        TraceProvJoinConditions *filter_condition;
+        // Output columns
+        std::vector<TraceProvColumn*> *output_columns;
+    } TraceProvFilterRemap;
+
     typedef struct TraceProvDerivedNode {
         TraceProvLayerNumber layer_number;
         TraceProvNode *node;
@@ -164,6 +177,7 @@ extern "C" {
         uint64_t sql_compilation_time;
         List *directly_derivable; // store the sublinks derivable.
         TraceProvLayerNumber root_layer_number;
+        TraceProvParseContext *parse_context;
     } TraceProvDerivationSpec;
 
     typedef std::unordered_map<TraceProvLayerNumber, List *> TraceProvPendingSublinks;
@@ -226,6 +240,7 @@ extern "C" {
         TraceProvPointerContext *pointer_context;
         // Maintain a cache of the nodes that have been compiled.
         std::unordered_map<uint64_t, std::string> *cache;
+        uint64_t *row_content;
     } TraceProvToSQLContext;
 
     typedef struct TraceProvInferSetupExtra {
@@ -243,6 +258,11 @@ extern "C" {
         List *derived_join_exprns;
         List *utilized_sublinks;
     } TraceProvDerivation;
+
+    typedef struct TraceProvJoinRewriteContext {
+        std::unordered_map<TraceProvNode *, bool> *rewritten;
+        TraceProvLayerNumber root;
+    } TraceProvJoinRewriteContext;
 }
 
 #endif
