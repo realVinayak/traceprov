@@ -702,8 +702,8 @@ PerformQueryResult *perform_query(
     }else{
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_execute_prepared(stmt, &final_result), duckdb_result_error(&final_result));
     }
-    if (later_stmt)
-        *later_stmt = stmt;
+    // if (later_stmt)
+    //     *later_stmt = stmt;
 
     std::cout << "Is streaming: " << duckdb_result_is_streaming(final_result) << std::endl;
 
