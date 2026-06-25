@@ -165,7 +165,12 @@ class QuerySpec(NamedTuple):
         )
         results = dict(base=[], materialize=[], extras=[])
 
-        def _run_extras(extras: list[ExtraQuery], _extra_context: dict | None = None):
+        def _run_extras(
+            extras: list[ExtraQuery],
+            relevant_result: dict,
+            _extra_context: dict | None = None,
+            is_global_last: bool = False,
+        ):
             extra_results = defaultdict(list)
             for extra in extras:
                 extra_pack = QuerySpec.get_pack(
@@ -187,9 +192,15 @@ class QuerySpec(NamedTuple):
                 # Assume that func is smart enough to handle the repeat correctly.
                 for _ in range(extra.repeat if not extra.func else 1):
                     if extra.func:
-                        extra_result = extra.func(
-                            self, extra, extra_pack, get_run_options
+                        arg_dict = dict(
+                            self=self,
+                            extra=extra,
+                            extra_pack=extra_pack,
+                            get_run_options=get_run_options,
+                            current_result=relevant_result,
+                            is_global_last=is_global_last,
                         )
+                        extra_result = extra.func(arg_dict)
                     else:
                         extra_result = _run_with_timeout(extra_pack)
                     extra_results[extra.label].append(extra_result)
@@ -202,6 +213,7 @@ class QuerySpec(NamedTuple):
             return options._replace(skip_validation=True)
 
         iter_count = 0
+        total_count = base_pack.params.repeat + base_pack.params.throwaway
         start_perf_counter = time.perf_counter()
         while True:
             # for iter in range(base_pack.params.repeat + base_pack.params.throwaway):
@@ -217,10 +229,11 @@ class QuerySpec(NamedTuple):
                 ):
                     break
             if base_pack.params.repeat is not None:
-                if iter_count >= base_pack.params.repeat + base_pack.params.throwaway:
+                if iter_count >= total_count:
                     break
 
             print("ON INDEX: ", iter_count)
+            global_is_last = iter_count == total_count - 1
             traceprov_reinit_state(base_pack.connection_params)
             base_context = dict()
             base_pack = base_pack._replace(extras=base_context)
@@ -234,7 +247,9 @@ class QuerySpec(NamedTuple):
                 extra for extra in self.extras if extra.runs_after_base
             ]
 
-            base_extra_results = _run_extras(base_extras_to_run, base_context)
+            base_extra_results = _run_extras(
+                base_extras_to_run, base_time, base_context, global_is_last
+            )
             base_pack.close_all()
             materialize_context = dict()
             is_timeout = False
@@ -266,7 +281,10 @@ class QuerySpec(NamedTuple):
                     extra for extra in self.extras if extra.runs_after_materialize
                 ]
                 materialize_extra_results = _run_extras(
-                    mat_extras_to_run, materialize_context
+                    mat_extras_to_run,
+                    materialize_time,
+                    materialize_context,
+                    global_is_last,
                 )
 
             # This is where we end up closing the connections.
