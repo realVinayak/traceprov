@@ -47,7 +47,7 @@ def special_query(
     extra_commands: list[str] = [],
     layers_to_derive=[],
     is_validate: bool = False,
-    offset: int = -1,
+    bulk_derive: bool = True,
 ):
     if query_name != "15":
         return None
@@ -84,7 +84,7 @@ def special_query(
                 {
                     TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                     TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
-                    TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                    TRACEPROV_DERIVE_OFFSET_KEY: bulk_derive,
                     TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
                 }
                 if is_traceprov
@@ -120,7 +120,7 @@ def make_normal_query(
     layers_to_derive=[],
     is_validate=False,
     toggle_join_choices=True,
-    offset=-1,
+    bulk_derive: bool = True,
 ):
     if not is_traceprov:
         return Query(
@@ -150,7 +150,7 @@ def make_normal_query(
             extra_options={
                 TRACEPROV_LAYERS_TO_DERIVE_KEY: layers_to_derive,
                 TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
-                TRACEPROV_DERIVE_OFFSET_KEY: offset,
+                TRACEPROV_DERIVE_OFFSET_KEY: bulk_derive,
                 TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
             },
         ),
@@ -166,7 +166,7 @@ def get_query(
     is_validate = parsed.validate
     is_dump_graph_mode = parsed.dump_graph_mode
     subdir_queries: List[Query] = []
-    offset = 0 if parsed.offset_mode else -1
+    bulk_derive = parsed.bulk_derive
 
     special_query_maybe = special_query(
         query_name, is_traceprov=False, parsed=parsed, extra_commands=extra_commands
@@ -180,7 +180,7 @@ def get_query(
             extra_commands=extra_commands,
             layers_to_derive=layers_to_derive,
             is_validate=is_validate,
-            offset=offset,
+            bulk_derive=bulk_derive,
         )
         assert special_query_traceprov is not None
         subdir_queries.append(special_query_traceprov)
@@ -201,7 +201,7 @@ def get_query(
                 extra_commands=extra_commands,
                 layers_to_derive=layers_to_derive,
                 is_validate=is_validate,
-                offset=offset,
+                bulk_derive=bulk_derive,
             )
         )
 
@@ -257,7 +257,7 @@ def main():
     )
     parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
     parser.add_argument(
-        "--offset_mode", action=argparse.BooleanOptionalAction, default=False
+        "--bulk_derive", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument(
         f"--collect_duckdb_profile",
