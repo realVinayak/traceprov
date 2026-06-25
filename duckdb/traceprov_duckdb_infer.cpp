@@ -1474,6 +1474,9 @@ public:
 	static unique_ptr<Expression> Deserialize(Deserializer &deserializer);
 };
 
+// defines the empty value
+#define EMPTY_VALUE ((uint64_t)-1)
+
 static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
                                                          FunctionData *bind_data,
                                                          vector<unique_ptr<Expression>> &filters){
@@ -1509,8 +1512,8 @@ static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
         auto column_stats = traceprov_duckdb_table_stats(context, bind_data, 0);
         if (column_stats != nullptr){
             const auto stats = column_stats.get();
-            uint64_t min_value = -1;
-            uint64_t max_value = -1;
+            uint64_t min_value = EMPTY_VALUE;
+            uint64_t max_value = EMPTY_VALUE;
             if (stats->GetType() == LogicalType::UBIGINT || stats->GetType() == LogicalType::UINTEGER){
                 if(NumericStats::HasMax(*stats)){
                     if (stats->GetType() == LogicalType::UBIGINT ){
@@ -1527,7 +1530,7 @@ static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
                     }
                 }
             }
-            const bool is_valid = (min_value == -1 || right_const_can >= min_value) && (max_value == -1 || right_const_can <= max_value);
+            const bool is_valid = (min_value == EMPTY_VALUE || right_const_can >= min_value) && (max_value == EMPTY_VALUE || right_const_can <= max_value);
             tp_bind_data->is_dummy = !is_valid;
         }
         filters.clear();
