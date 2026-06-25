@@ -286,7 +286,9 @@ def plot_data(
     slowdown_fig, slowdown_axis = plt.subplots(1, 1, figsize=(14, 3))
     total_time_fig, total_time_axis = plt.subplots(1, 1, figsize=(14, 3))
     capture_backtrace_fig, capture_backtrace_axis = plt.subplots(2, 1, figsize=(14, 3))
+    print([item[0] for item in data])
     data = [item for item in data if item[0] in categories]
+    print([item[0] for item in data])
     result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
     q11_idx = x_axis_values.index("11")
     pending_bars = []
@@ -476,7 +478,7 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
     interesting_categories = [
         "base",
         # "gprom_join_heuristics",
-        "gprom_window_heuristics",
+        "gprom_gprom_window_heuristics",
         "muller",
         "traceprov_stats",
     ]
@@ -484,7 +486,7 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
     mapping = {
         "base": "Baseline",
         # "gprom_join_heuristics": "GProM Join. Heu.",
-        "gprom_window_heuristics": "GProM Win. Heu.",
+        "gprom_gprom_window_heuristics": "GProM Win. Heu.",
         "muller": "Muller",
         "traceprov_stats": "TraceProv",
     }
