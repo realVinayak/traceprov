@@ -640,7 +640,6 @@ PerformQueryResult *perform_query(
     std::string layer_stats_out,
     duckdb_prepared_statement *later_stmt = NULL
 ){
-
     if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
         reset_global_context();
@@ -686,9 +685,9 @@ PerformQueryResult *perform_query(
 
     auto start_time = std::chrono::steady_clock::now();
 
-    if (later_stmt != NULL){
-        stmt = *later_stmt;
-    }
+    // if (later_stmt != NULL){
+    //     stmt = *later_stmt;
+    // }
 
     if (stmt == NULL)
         DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, in_sql.c_str(), &stmt), duckdb_prepare_error(stmt));
@@ -733,8 +732,7 @@ PerformQueryResult *perform_query(
     }
 
     duckdb_destroy_result(&final_result);
-    if (later_stmt == NULL)
-        duckdb_destroy_prepare(&stmt);
+    duckdb_destroy_prepare(&stmt);
 
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
