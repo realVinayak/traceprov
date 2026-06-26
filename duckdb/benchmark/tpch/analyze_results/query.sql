@@ -53,7 +53,8 @@ from (
             any_value(mean_stdev) as mean_stdev,
             stddev(capture_profile_latency) as capture_profile_stdev_raw,
             median(extra_index_build_time) as index_build_time_median,
-            stddev(extra_index_build_time) as index_build_time_stdev
+            stddev(extra_index_build_time) as index_build_time_stdev,
+            any_value(sum_backtrace_time) as total_backtrace_time,
         from dumped
         where iter >= 6
         group by category,
