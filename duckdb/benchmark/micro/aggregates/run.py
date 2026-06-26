@@ -13,6 +13,8 @@ from traceprovpy.tools.run_duckdb_generic import create_base_offset, run_combine
 
 random.seed(10)
 
+output_log_spec = {"q01": 4, "q02": 4, "q03": 4, "q04": 4, "q06": 4, "q07": 4}
+
 
 def run_count_query(num_rows: int, query: str, parsed, tmp: Path, total_iters):
     query_dir = Path(f"queries/{query}/")
@@ -45,7 +47,7 @@ def run_count_query(num_rows: int, query: str, parsed, tmp: Path, total_iters):
         replacer(validate_new_offset_sql),
     )
     just_write(out_dir / "validate_new.sql", replacer(validate_new_sql))
-    query_result = run_combined(parsed, total_iters, query, [])
+    query_result = run_combined(parsed, total_iters, query, [], output_log_spec[query])
     return query_result
 
 
