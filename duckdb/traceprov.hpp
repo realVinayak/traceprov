@@ -523,4 +523,6 @@ inline void merge_stats(TraceProvStatistics *base, const TraceProvStatistics *ot
 
 extern TraceProvAggExtra *g_tp_agg_extra;
 
+#define TP_MAKE_MIN_MAX(MIN_VALUE, MAX_VALUE) ((((uint64_t)MAX_VALUE) << 32) | ((uint64_t)MIN_VALUE))
+
 #endif

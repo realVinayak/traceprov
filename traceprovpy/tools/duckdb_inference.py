@@ -33,6 +33,7 @@ class DriverDefaultValues(NamedTuple):
     traceprov_use_index: bool = False
     traceprov_use_join_filter_rewrite: bool = False
     traceprov_use_filter_pushdown: bool = False
+    traceprov_use_hash_index: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -95,6 +96,7 @@ class DuckDBDriverOptions(NamedTuple):
     traceprov_use_filter_pushdown: bool = (
         DriverDefaultValues.traceprov_use_filter_pushdown
     )
+    traceprov_use_hash_index: bool = DriverDefaultValues.traceprov_use_hash_index
     warm_up_time: int = 0
     load_micro_benchmarks: bool = False
     sd_join_mode: bool = False
@@ -128,22 +130,7 @@ class DuckDBDriverOptions(NamedTuple):
 
     @staticmethod
     def _optimizations():
-        optimizations = {
-            "traceprov_use_partition_in_agg",
-            "traceprov_skip_page_cache",
-            "traceprov_use_merge_chunks",
-            "traceprov_use_implicit_union",
-            "traceprov_use_compact",
-            "traceprov_force_seq_scan",
-            "traceprov_skip_sql_cache",
-            "traceprov_use_table_stats",
-            "traceprov_ignore_direct_join",
-            "traceprov_use_index",
-            "traceprov_use_join_filter_rewrite",
-            "traceprov_use_filter_pushdown",
-        }
-        recognized = set(DriverDefaultValuesInstance._fields)
-        assert recognized == optimizations
+        optimizations = set(DriverDefaultValuesInstance._fields)
         return optimizations
 
     def _boolean_options(self):

@@ -529,6 +529,9 @@ struct Options parse_args(int argc, char **argv){
         }  else if (IS_OPTION("--traceprov_use_filter_pushdown")){
             traceprov_use_filter_pushdown = true;
             continue;
+        }  else if (IS_OPTION("--traceprov_use_hash_index")){
+            traceprov_use_hash_index = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -557,6 +560,7 @@ typedef struct TraceProvLightData {
     uint64_t column_count;
     uint64_t row_count;
     std::vector<uint64_t>* output_log;
+    std::vector<duckdb_data_chunk> *chunk_cache;
 } TraceProvLightData;
 
 // Simply populates the data, given a chunk.
@@ -590,6 +594,9 @@ static void populate_traceprov_data(
         for (uint64_t row_idx = 0; row_idx < row_count; row_idx++){
             traceprov_data->output_log->push_back(col_data[row_idx]);
         }
+    }
+    if (traceprov_data->chunk_cache){
+        traceprov_data->chunk_cache->push_back(*chunk);
     }
     // for (uint64_t col_idx = 0; col_idx < column_count; col_idx++){
     //     duckdb_vector col = duckdb_data_chunk_get_vector(*chunk, col_idx);
@@ -638,7 +645,8 @@ PerformQueryResult *perform_query(
     const char *final_profile_out,
     const char *final_stats_query,
     std::string layer_stats_out,
-    duckdb_prepared_statement *later_stmt = NULL
+    duckdb_prepared_statement *later_stmt = NULL,
+    const bool cache_chunks = false
 ){
     if (!options->no_reinit_state){
         DUCKDB_RUN_SHORT_QUERY(con, "select reinit_state();", "reinit-state");
@@ -712,27 +720,31 @@ PerformQueryResult *perform_query(
     traceprov_data->column_count = 0;
     traceprov_data->row_count = 0;
     traceprov_data->output_log = nullptr;
-
+    traceprov_data->chunk_cache = cache_chunks ? new std::vector<duckdb_data_chunk> : nullptr;
     if (options->use_pending){
         while (true) {
             duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(final_result);
             if (!data_chunk) break;
             chunk_count++;
             populate_traceprov_data(traceprov_data, &data_chunk, options->output_column_idx);
-            duckdb_destroy_data_chunk(&data_chunk);
+            if (!cache_chunks) duckdb_destroy_data_chunk(&data_chunk);
         }
     }else{
         uint64_t total_chunk_count = duckdb_result_chunk_count(final_result);
+        if (traceprov_data->chunk_cache) traceprov_data->chunk_cache->reserve(total_chunk_count);
         for (idx_t chunk_idx = 0; chunk_idx < total_chunk_count; chunk_idx++){
             duckdb_data_chunk data_chunk = duckdb_result_get_chunk(final_result, chunk_idx);
             populate_traceprov_data(traceprov_data, &data_chunk, options->output_column_idx);
-            duckdb_destroy_data_chunk(&data_chunk);
             chunk_count++;
+            if (!cache_chunks) duckdb_destroy_data_chunk(&data_chunk);
         }
     }
 
-    duckdb_destroy_result(&final_result);
-    duckdb_destroy_prepare(&stmt);
+    if (!cache_chunks){
+        duckdb_destroy_result(&final_result);
+        duckdb_destroy_prepare(&stmt);
+    }
+
 
     auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
@@ -741,10 +753,9 @@ PerformQueryResult *perform_query(
         exit(1);
     }
 
-    PerformQueryResult *result = NULL;
+    PerformQueryResult *result = make_result(duration.count(), traceprov_data, options);;
 
     if (agg_result){
-        result = make_result(duration.count(), traceprov_data, options);
         if (options->get_log_size){
             result->option.misc_store.total_log_size = traceprov_get_total_layer_size();
             result->option.misc_store.layer_stats = traceprov_get_layer_stats();
@@ -895,6 +906,11 @@ Funcs traceprov_add_funcs(duckdb_connection con){
     duckdb_scalar_function tp_read_vector_func = traceprov_create_read_vector_func();
     DUCKDB_EXIT_ON_ERROR(duckdb_register_scalar_function(con, tp_read_vector_func));
     #endif
+
+    if (traceprov_use_hash_index){
+        duckdb_table_function tp_read_hash_table_chunk = traceprov_create_hash_table_func();
+        DUCKDB_EXIT_ON_ERROR(duckdb_register_table_function(con, tp_read_hash_table_chunk));
+    }
 
     return Funcs {
         .tp_read_func = tp_read_func,
@@ -1463,6 +1479,8 @@ TraceProvIndexContext *make_tp_index_context(const TraceProvLayerNumber layer_nu
     auto index_context = tp_alloc0_object(TraceProvIndexContext);
     index_context->index_context_mutex = new std::mutex;
     index_context->root_layer_number = layer_number;
+    if (traceprov_use_hash_index)
+        index_context->hash_index_map = new HashIndexItemMap;
     return index_context;
 }
 
@@ -1479,6 +1497,48 @@ bool should_make_index(duckdb_connection con, std::string table_name){
     const uint64_t base_result_count = g_tp_duckdb_state.index_context->vector_size;
     const uint64_t average_per_out = table_count / base_result_count;
     return average_per_out <= MAX(DUCKDB_DEFAULT_SCAN_MAX_COUNT, DUCKDB_DEFAULT_SELECTIVITY*((double)(average_per_out)));
+}
+
+// In MOST cases, counts are less than 32.
+// In few as low as 256.
+// So generally a good idea to use a compact representation here, especially since misjudgint the sizes
+// can blow it out the water (cache, hehe)
+template <typename T>  HashIndexDir populate_counts(std::vector<duckdb_data_chunk> *chunks, const uint64_t prov_row_size, const uint64_t output_row_size){
+    auto counts = new std::vector<T>(output_row_size+1, 0);
+    auto counts_copy = new std::vector<T>(output_row_size+1, 0);
+    // counts->
+    for (auto chunk: *chunks){
+        duckdb_vector row_id_vec = duckdb_data_chunk_get_vector(chunk, 0);
+        auto row_id_data =  (uint64_t*)duckdb_vector_get_data(row_id_vec);
+        const uint64_t chunk_size = duckdb_data_chunk_get_size(chunk);
+        for (uint64_t row_id_index = 0; row_id_index < chunk_size; row_id_index++){
+            counts->at(row_id_data[row_id_index])++;
+        }
+    }
+    T last_sum = 0;
+    T last_value = 0;
+    for (uint64_t count_id = 0; count_id < output_row_size+1; count_id++){
+        T current_sum = last_sum + last_value;
+        last_value = counts->at(count_id);
+        counts->at(count_id) = current_sum;
+        counts_copy->at(count_id) = current_sum;
+        last_sum = current_sum;
+    }
+    std::vector<uint64_t> *chunk_map = new std::vector<uint64_t>(prov_row_size);
+    for (uint64_t chunk_idx = 0; chunk_idx < chunks->size(); chunk_idx++){
+        auto chunk = chunks->at(chunk_idx);
+        duckdb_vector row_id_vec = duckdb_data_chunk_get_vector(chunk, 0);
+        auto row_id_data =  (uint64_t*)duckdb_vector_get_data(row_id_vec);
+        const uint64_t chunk_size = duckdb_data_chunk_get_size(chunk);
+        for (uint64_t row_id_index = 0; row_id_index < chunk_size; row_id_index++){
+            chunk_map->at(counts_copy->at(row_id_data[row_id_index])++) = ((uint64_t)(chunk_idx) << 32) | (row_id_index);
+        }
+    }
+    // Now go over the chunks again and inser them in the correct place.
+    return HashIndexDir {
+        .count_list = counts,
+        .count_map = chunk_map
+    };
 }
 
 
@@ -1503,22 +1563,60 @@ MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Fu
     layers_with_index += "[";
     bool needs_sep = false;
     for (auto layer_string_pair : *layer_string_map){
-        std::string layer_sql = get_traceprov_table_view(layer_string_pair.first);
-        auto table_name = get_traceprov_table_view(layer_string_pair.first);
-        std::string wrapped = "create or replace table " + table_name + " as (" + layer_string_pair.second + ");";
-        elog(INFO, "Index query: %s", wrapped.c_str())
-        perform_query(&new_options, con, wrapped, NULL, NULL, NULL, "", NULL);
-        if (list_member_int(result_spec->directly_derivable, layer_string_pair.first) && should_make_index(con, table_name)){
-            // Need to create index.
-            std::string index_name = table_name + "_column_0_idx";
-            DUCKDB_RUN_SHORT_QUERY(con, ("drop index if exists "+ index_name).c_str(), ("drop index "+index_name));
-            char *index_command = tp_psprintf("create index %s on %s (column_0)", index_name.c_str(), table_name.c_str());
-            DUCKDB_RUN_SHORT_QUERY(con, index_command, index_command);
-            if (needs_sep){
-                layers_with_index += ",";
+        if (traceprov_use_hash_index){
+            // Cache the chunks instead of creating a table.
+            // We then scan over it to determine cache
+            // std::string query = "select * from (" + layer_string_pair.second + ") order by column_0";
+            const auto query_result = perform_query(&new_options, con, layer_string_pair.second, NULL, NULL, NULL, "", NULL, true);
+            auto hash_index_item = tp_alloc0_object(HashIndexItem);
+            auto light_data = query_result->data;
+            auto chunk_cache = light_data->chunk_cache;
+            auto row_count = light_data->row_count;
+            hash_index_item->chunk_cache = chunk_cache;
+            if (list_member_int(result_spec->directly_derivable, layer_string_pair.first)){
+                // setup a vector to hold counts.
+                if (!g_tp_duckdb_state.index_context->vector_size){
+                    elog(ERROR, "Expected vector size to be set!");
+                }
+                uint8_t col_size = 0;
+                HashIndexDir dir;
+                if (row_count < (((uint64_t)1)<<8)){
+                    dir = populate_counts<uint8_t>(chunk_cache, row_count, g_tp_duckdb_state.index_context->vector_size);
+                    col_size = sizeof(uint8_t);
+                }else if (row_count < (((uint64_t)1)<<16)){
+                    dir = populate_counts<uint16_t>(chunk_cache, row_count, g_tp_duckdb_state.index_context->vector_size);
+                    col_size = sizeof(uint16_t);
+                } else if (row_count < (((uint64_t)1)<<32)){
+                    dir = populate_counts<uint32_t>(chunk_cache, row_count, g_tp_duckdb_state.index_context->vector_size);
+                    col_size = sizeof(uint32_t);
+                }else {
+                    dir = populate_counts<uint64_t>(chunk_cache, row_count, g_tp_duckdb_state.index_context->vector_size);
+                    col_size = sizeof(uint64_t);
+                }
+                hash_index_item->count_list_item_size = col_size;
+                hash_index_item->dir = dir;
             }
-            layers_with_index += std::to_string(layer_string_pair.first);
-            needs_sep = true;
+            hash_index_item->running_count = row_count;
+            g_tp_duckdb_state.index_context->hash_index_map->insert({layer_string_pair.first,hash_index_item});
+        }else{
+            // Do the original indexing
+            std::string layer_sql = get_traceprov_table_view(layer_string_pair.first);
+            auto table_name = get_traceprov_table_view(layer_string_pair.first);
+            std::string wrapped = "create or replace temp table " + table_name + " as (" + layer_string_pair.second + ");";
+            elog(INFO, "Index query: %s", wrapped.c_str())
+            perform_query(&new_options, con, wrapped, NULL, NULL, NULL, "", NULL);
+            if (list_member_int(result_spec->directly_derivable, layer_string_pair.first) && should_make_index(con, table_name)){
+                // Need to create index.
+                std::string index_name = table_name + "_column_0_idx";
+                DUCKDB_RUN_SHORT_QUERY(con, ("drop index if exists "+ index_name).c_str(), ("drop index "+index_name));
+                char *index_command = tp_psprintf("create index %s on %s (column_0)", index_name.c_str(), table_name.c_str());
+                DUCKDB_RUN_SHORT_QUERY(con, index_command, index_command);
+                if (needs_sep){
+                    layers_with_index += ",";
+                }
+                layers_with_index += std::to_string(layer_string_pair.first);
+                needs_sep = true;
+            }
         }
     }
     layers_with_index += "]";
@@ -1542,6 +1640,7 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
     std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
     void *row_content=NULL
 ){
+
     auto layer_string_map = new std::unordered_map<TraceProvLayerNumber, std::string>;
     std::unordered_map<uint64_t, std::string> sql_cache;
     for (auto result_map_pair: *result_spec->result_map){
@@ -1612,6 +1711,9 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
 }
 
 std::string get_index_query(const TraceProvLayerNumber layer, const uint64_t offset){
+    if (traceprov_use_hash_index){
+        return std::string(tp_psprintf("select * from traceprov_read_chunk_cache(%ld::bigint, %ld::bigint)", layer, offset));
+    }
     std::string query = std::string("select * from ") + get_traceprov_table_view(layer);
     if (g_tp_duckdb_state.index_context){
         if (list_member_int(g_tp_duckdb_state.index_context->directly_derivable, layer)){
@@ -1664,7 +1766,7 @@ TraceProvDerivationSpec* augment_extra_sql(
             if (traceprov_use_index && log_offset != -1){
                 node_sql = get_index_query(layer_string_pair.first, log_offset);
             }
-            // elog(INFO, "SQL Query: %s", node_sql.c_str());
+            elog(INFO, "SQL Query: %s", node_sql.c_str());
             if (options->traceprov_materialize_derivation){
                 std::string table_name = "traceprov_lineage_" + std::to_string(layer_string_pair.first);
                 if (log_offset != -1){

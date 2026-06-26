@@ -54,3 +54,5 @@ bool traceprov_use_index = false;
 
 bool traceprov_use_join_filter_rewrite = false;
 bool traceprov_use_filter_pushdown = false;
+
+bool traceprov_use_hash_index = false;

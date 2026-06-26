@@ -11,6 +11,7 @@ from typing import Any, Dict, NamedTuple, Tuple
 import statistics
 
 from traceprovpy.tools.file_utils import json_read_file, just_read
+import json
 
 
 class MaskedParser(argparse.ArgumentParser):
@@ -24,6 +25,23 @@ class MaskedParser(argparse.ArgumentParser):
         parse_result = super().parse_args(*args, **kwargs)
         self._other.parsed = parse_result
         return parse_result
+
+
+class FileContent(object):
+    def __init__(self, file):
+        self.file = file
+        self._content = None
+
+    def get_content(self):
+        if self._content is None:
+            content = just_read(self.file)
+            self._content = json.loads(content)
+            del content
+        return self._content
+
+    def delete(self):
+        del self._content
+        self._content = None
 
 
 class BenchmarkPlot:
@@ -63,7 +81,7 @@ class BenchmarkPlot:
         self.plot_args = kwargs
 
     # a generator because why not.
-    def read_files(self, file_name: str):
+    def read_files(self, file_name: str, callback: bool = False):
         parsed = self.parsed
         files_to_read = parsed.files
         if not files_to_read:
@@ -81,7 +99,13 @@ class BenchmarkPlot:
             paths = glob.glob(complete_path)
             for path in paths:
                 assert Path(path).exists(), f"Expected {path} to exist!"
-                contents = json_read_file(path)
+                # soooo turns out the JSON files can be 1 GIGA BYTE in size for TraceProv.
+                # ofc, Python chokes on that (OOM errors when there are multiple files)
+                # no, all the data needs to be strictly callback functions that the callers can decide whether worth
+                # recording at once or not
+                contents = FileContent(path)
+                if not callback:
+                    contents = contents.get_content()
                 yield (path, contents)
 
 

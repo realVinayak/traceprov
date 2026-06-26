@@ -40,7 +40,7 @@ class Normalizable(object):
     def keys(self):
         raise Exception("Expected to be implemented")
 
-    def normalize(self) -> list[dict]:
+    def normalize(self, preserve_null=False) -> list[dict]:
         keys = self.keys()
         extendables = [
             getattr(self, key).add_key(key)
@@ -54,7 +54,7 @@ class Normalizable(object):
             for key in keys
             if hasattr(self, key)
             and not isinstance(getattr(self, key), Extendable)
-            and getattr(self, key) is not None
+            and (preserve_null or getattr(self, key) is not None)
         }
         if len(extended) == 0:
             return [simple_keys]

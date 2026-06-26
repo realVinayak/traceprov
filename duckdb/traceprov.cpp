@@ -36,6 +36,8 @@ typedef struct TraceProvLogBind {
 } TraceProvLogBind;
 
 
+#define GET_LAYER_RECORD_LENGTH() (traceprov_use_table_stats ? 2 : 1)
+
 static void bp(){
 
 }
@@ -96,6 +98,26 @@ static int initialize_local_and_layer(
     grow_if_full(LAYER); \
     *((uint64_t *)LAYER->current_row) = CHUNK_SIZE; \
     LAYER->current_row = INCR_BY_BYTES(LAYER->current_row, sizeof(uint64_t)); \
+    LAYER->num_rows++; \
+    LAYER->record_count += CHUNK_SIZE; \
+} \
+
+#define TP_APPEND_CHUNK_SIZE_MIN_MAX(LAYER, CHUNK_SIZE, MIN_MAX) { \
+    grow_if_full(LAYER); \
+    *((uint64_t *)LAYER->current_row) = CHUNK_SIZE; \
+    *(((uint64_t *)LAYER->current_row) + 1) = MIN_MAX; \
+    LAYER->current_row = INCR_BY_BYTES(LAYER->current_row, 2*sizeof(uint64_t)); \
+    LAYER->num_rows++; \
+    LAYER->record_count += CHUNK_SIZE; \
+} \
+
+
+#define TP_APPEND_CHUNK_SIZE_MIN_MAX_SEP(LAYER, CHUNK_SIZE, MIN_VALUE, MAX_VALUE) { \
+    grow_if_full(LAYER); \
+    *((uint64_t *)LAYER->current_row) = CHUNK_SIZE; \
+    *(((uint64_t *)LAYER->current_row) + 1) = MIN_VALUE; \
+    *(((uint64_t *)LAYER->current_row) + 2) = MAX_VALUE; \
+    LAYER->current_row = INCR_BY_BYTES(LAYER->current_row, 4*sizeof(uint64_t)); \
     LAYER->num_rows++; \
     LAYER->record_count += CHUNK_SIZE; \
 } \
@@ -574,7 +596,7 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     }
 
     const bool can_be_null = bind_data.infer_null || bind_data.cols != NULL;
-    if (initialize_local_and_layer(layer_number, num_cols, 1, true, false, can_be_null)){
+    if (initialize_local_and_layer(layer_number, num_cols, GET_LAYER_RECORD_LENGTH(), true, false, can_be_null)){
         elog(ERROR, "Error setting up local or layer!");
         return;
     }
@@ -586,6 +608,10 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
     #endif
     struct traceprov_aggregate_layer *main_layer = get_layer(layer_number);
 
+    uint32_t max_group_number = 0;
+    uint32_t min_group_number = -1;
+
+    // const bool collect_min_max = traceprov_use_filter_pushdown && traceprov_use_table_stats;
     if (likely(agg_contexts != NULL && !extra->ignore_gn)){
         if (traceprov_use_compact){
             const uint64_t chunk_size = sizeof(uint32_t)*num_rows;
@@ -596,16 +622,20 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
                     // Annotate the group with the worker id.
                     agg_contexts[row_idx]->state = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
                 }
-                *((uint32_t*)main_layer->current_row) = (uint32_t)agg_contexts[row_idx]->state;
+                const uint64_t new_group_count = agg_contexts[row_idx]->state;
+                *((uint32_t*)main_layer->current_row) = (uint32_t)new_group_count;
+                // eh, we could technically be more more precise and only do this when we're doing filter pushdown.
+                // But frankly that seems like something that would be done more generically anyways
+                max_group_number = MAX(max_group_number, (uint32_t)new_group_count);
+                min_group_number = MIN(min_group_number, (uint32_t)new_group_count);
                 main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint32_t));
                 if (unlikely(main_layer->mask == 0)){
                     // Extract out the mask.
                     // During reading, we reapply this mask ;)
-                    main_layer->mask = agg_contexts[row_idx]->state >> 32;
+                    main_layer->mask = new_group_count >> 32;
                 }
             }
         } else{
-            main_layer->mask = -1;
             const uint64_t chunk_size = sizeof(uint64_t)*num_rows;
             TRACEPROV_GROW_IF_TRUE(main_layer, (((uint64_t)main_layer->current_row + chunk_size) > (uint64_t)main_layer->end_of_memory_zone));
             for (idx_t row_idx = 0; row_idx < num_rows; row_idx++){
@@ -614,8 +644,19 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
                     // Annotate the group with the worker id.
                     agg_contexts[row_idx]->state = TRACEPROV_SET_WORKER_ID((++main_layer->num_groups), traceprov_current.my_worker_id);
                 }
-                *((uint64_t*)main_layer->current_row) = agg_contexts[row_idx]->state;
+                const uint64_t new_group_count = agg_contexts[row_idx]->state;
+                *((uint64_t*)main_layer->current_row) = new_group_count;
                 main_layer->current_row = INCR_BY_BYTES(main_layer->current_row, sizeof(uint64_t));
+                // We used to not do this when dealing with compact.
+                // but, now we do this in all cases, mostly because it is also useful during filter pushdown.
+                // with this, we only need 4 bytes to encode min/max values.
+                max_group_number = MAX(max_group_number, (uint32_t)new_group_count);
+                min_group_number = MIN(min_group_number, (uint32_t)new_group_count);
+                if (unlikely(main_layer->mask == 0)){
+                    // Extract out the mask.
+                    // During reading, we reapply this mask ;)
+                    main_layer->mask = new_group_count >> 32;
+                }
             }
         }
     }
@@ -648,7 +689,11 @@ static void traceprov_direct_update(Vector inputs[], AggregateInputData &aggr_in
 
     // Append the current size..., yuck.
     struct traceprov_aggregate_layer *chunk_size_layer = get_layer(main_layer->rows_layer_number);
-    TP_APPEND_CHUNK_SIZE(chunk_size_layer, num_rows);
+    if (traceprov_use_table_stats){
+        TP_APPEND_CHUNK_SIZE_MIN_MAX(chunk_size_layer, num_rows, (TP_MAKE_MIN_MAX(min_group_number, max_group_number)));    
+    }else{
+        TP_APPEND_CHUNK_SIZE(chunk_size_layer, num_rows);
+    }
 
     // Need to figure out if the chunk is null. This is much more easier in this version (than using C-API)
     if (can_be_null){
@@ -708,7 +753,7 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
     const idx_t orig_num_cols = input_count;
 
     const bool can_be_null = bind_data.infer_null || bind_data.cols != NULL;
-    if (initialize_local_and_layer(layer_number, orig_num_cols, 1, true, true, can_be_null)){
+    if (initialize_local_and_layer(layer_number, orig_num_cols, GET_LAYER_RECORD_LENGTH(), true, true, can_be_null)){
         elog(ERROR, "Error setting up local or layer!");
         return;
     }
@@ -885,14 +930,19 @@ static void traceprov_direct_update_partition(Vector inputs[], AggregateInputDat
                 merge_stats(&current_layer->stats[col_idx - 1], &local_stats);
             }
         }
+        struct traceprov_aggregate_layer *chunk_size_layer = get_layer(current_layer->rows_layer_number);
+
         if (traceprov_use_table_stats){
             // Also adjust the distinct layer count.
             // We, here, misuse the record count because otherwise we'll heavily overstimate distinct count for the main layer.
             current_layer->record_count += distinct_count[idx];
-            merge_stats(&current_layer->stats[orig_num_cols], &bucket_stats[idx]);
+            auto current_bucket_stats = bucket_stats[idx];
+            merge_stats(&current_layer->stats[orig_num_cols], &current_bucket_stats);
+            TP_APPEND_CHUNK_SIZE_MIN_MAX(chunk_size_layer, slice_size, TP_MAKE_MIN_MAX(((uint32_t)current_bucket_stats.min_value), ((uint32_t)current_bucket_stats.max_value)));
+        }else{
+            TP_APPEND_CHUNK_SIZE(chunk_size_layer, slice_size);
         }
-        struct traceprov_aggregate_layer *chunk_size_layer = get_layer(current_layer->rows_layer_number);
-        TP_APPEND_CHUNK_SIZE(chunk_size_layer, slice_size);
+
 
         if (validity_to_append.size()){
             // Need to handle NULL values.
@@ -963,7 +1013,7 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
         combined_layer_number =  main_layer->combined_aggregate_layer_number;
     }
 
-    if(initialize_local_and_layer(combined_layer_number, 2, 1, true, false, 0)){
+    if(initialize_local_and_layer(combined_layer_number, 2, traceprov_use_table_stats ? 4 : 1, true, false, 0)){
         elog(ERROR, "Error setting up local or layer!");
         return;
     }
@@ -1037,6 +1087,11 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
         }
     }
 
+    // We're not going to look at this anyways.
+    combined_layer->current_row = source_write_ptr;
+    main_layer->is_leader_layer = true;
+
+    struct traceprov_aggregate_layer *chunk_size_layer = get_layer(combined_layer->rows_layer_number);
     if (traceprov_use_table_stats){
         TraceProvStatistics target_stats = {
             .is_set = true,
@@ -1051,14 +1106,10 @@ static void traceprov_direct_combine(Vector &state, Vector &combined, AggregateI
         };
         merge_stats(&combined_layer->stats[0], &target_stats);
         merge_stats(&combined_layer->stats[1], &source_stats);
+        TP_APPEND_CHUNK_SIZE_MIN_MAX_SEP(chunk_size_layer, count, target_state_min, target_state_max);
+    }else{
+        TP_APPEND_CHUNK_SIZE(chunk_size_layer, count);
     }
-
-
-    // We're not going to look at this anyways.
-    combined_layer->current_row = source_write_ptr;
-    main_layer->is_leader_layer = true;
-    struct traceprov_aggregate_layer *chunk_size_layer = get_layer(combined_layer->rows_layer_number);
-    TP_APPEND_CHUNK_SIZE(chunk_size_layer, count);
 }
 
 static void traceprov_direct_finalize(Vector &state, AggregateInputData &aggr_input_data, Vector &result, idx_t count, idx_t offset){

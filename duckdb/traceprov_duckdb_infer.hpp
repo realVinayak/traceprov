@@ -3,18 +3,39 @@
 duckdb_table_function traceprov_create_table_func();
 duckdb_table_function traceprov_create_table_offset_func();
 duckdb_table_function traceprov_create_table_offset_partition_func();
+duckdb_table_function traceprov_create_hash_table_func();
+
+
+typedef struct HashIndexDir {
+    void *count_list;
+    std::vector<uint64_t> *count_map;
+} HashIndexDir;
+
+typedef struct HashIndexItem {
+    std::vector<duckdb_data_chunk> *chunk_cache;
+    HashIndexDir dir;
+    uint8_t count_list_item_size;
+    uint64_t running_count;
+    uint64_t column_count;
+} HashIndexItem;
+
+typedef std::unordered_map<TraceProvLayerNumber, HashIndexItem*> HashIndexItemMap;
+
 typedef struct TraceProvIndexContext {
     uint64_t *vector_data;
     uint64_t vector_size;
     std::mutex *index_context_mutex;
     TraceProvLayerNumber root_layer_number;
     List *directly_derivable;
+    HashIndexItemMap *hash_index_map;
 } TraceProvIndexContext;
+
 typedef struct TraceProvDuckDbGlobalState {
     bool did_initialize;
     std::vector<struct local_context *> *worker_local_contexts;
     TraceProvIndexContext *index_context;
 } TraceProvDuckDbGlobalState;
+
 extern TraceProvDuckDbGlobalState g_tp_duckdb_state;
 void reset_global_context();
 #if TRACEPROV_SD_MODE==0
