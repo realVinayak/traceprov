@@ -30,10 +30,24 @@ extern "C"
         FunctionCallInfo fcinfo,
         const uint32 expected_col_width);
 
+    typedef enum TraceProvInferType {
+        FOLDABLE=0,
+        SQL
+    } TraceProvInferType;
+
+    // TODO: Use union types?
     typedef struct TraceProvRelationInferExtraItem
     {
-        const char *sql;
+        TraceProvInferType tag;
         uint64_t expected_col_width;
+        // this gets used when it is a SQL
+        const char *sql;
+        // These get used when it is foldable
+        TraceProvRelationArgs *rel_args;
+        uint64_t filter_value;
+        bool use_filter_value;
+        uint64_t *foldable_values;
+        uint64_t foldable_value_count;
     } TraceProvRelationInferExtraItem;
 
     typedef std::unordered_map<TraceProvLayerNumber, int64_t> TraceProvLogOffsetMap;
@@ -44,7 +58,41 @@ extern "C"
         TraceProvLogOffsetMap *log_offset;
     } TraceProvRelationInferExtra;
 
+    void *traceprov_get_row(
+        const uint64_t layer_number,
+        const uint64_t log_probe_value
+    );
+
+    void initialize_g_tp_duckdb_state();
+
+    std::vector<TraceProvWorkerLayer> *find_layers_across_workers(
+        TraceProvLayerNumber log_layer_number,
+        const std::vector<struct local_context *> *worker_local_contexts,
+        const uint32 expected_layer_width,
+        const bool do_strict = true);
+
     extern TraceProvRelationInferExtra g_tp_relation_infer_extra;
+
+    void traceprov_duckdb_func_core(
+        TraceProvBindData *bind_data_combined,
+        TraceProvInitData *init_data_combined,
+        duckdb_data_chunk output
+    );
+
+    void traceprov_prepare_foldable(
+        TraceProvRelationInferExtraItem *item,
+        TraceProvBindData **bind_data_core,
+        TraceProvInitData **init_data_core,
+        TraceProvInitData **local_init_data
+    );
+    // void traceprov_prepare_foldable(
+    //     const TraceProvRelationArgs *rel_args,
+    //     uint64_t filter_value,
+    //     bool use_filter_value,
+    //     TraceProvBindData **bind_data_core,
+    //     TraceProvInitData **init_data_core,
+    //     TraceProvInitData **local_init_data
+    // );
 
 // Format of the infer table.
 #define TRACEPROV_RELATION_INFER_NAME "traceprov_relation_infer_%d"

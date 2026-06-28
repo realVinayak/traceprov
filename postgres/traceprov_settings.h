@@ -11,4 +11,7 @@ extern bool traceprov_use_rowid_duckdb;
 extern bool traceprov_force_seq_scan;
 extern bool traceprov_use_table_stats;
 extern char *traceprov_duckdb_profile_out;
+extern bool traceprov_use_join_filter_rewrite;
+extern bool traceprov_use_filter_pushdown;
+extern bool traceprov_use_foldable;
 #endif

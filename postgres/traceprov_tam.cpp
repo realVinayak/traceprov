@@ -50,8 +50,16 @@ extern "C"
         idx_t current_idx_chunk;
         // The end of the chunk. (cached.)
         idx_t end_idx_chunk;
+        TraceProvBindData *bind_data;
+        TraceProvInitData *init_data;
+        TraceProvInitData *local_init_data;
+        TraceProvInferType scan_tag;
+        // Some values that need to be artificially inserted.
+        uint64_t *foldable_values;
+        uint64_t foldable_value_count;
     };
 
+    
     static TableScanDesc tp_am_beginscan(
         Relation relation,
         Snapshot snapshot,
@@ -80,21 +88,52 @@ extern "C"
             elog(ERROR, "Expected the rel to be found!");
         }
         auto relation_item = g_tp_relation_infer_extra.map->at(relation_layer);
-        duckdb_connection con = traceprov_current.infer_context->con;
-
-        PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, relation_item.sql, &scan->stmt), duckdb_prepare_error(scan->stmt));
-        duckdb_pending_result result;
-        duckdb_result final_result;
-        PG_DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(scan->stmt, &result));
-        PG_DUCKDB_EXIT_ON_ERROR(duckdb_execute_pending(
-            result,
-            &final_result));
-        if (!duckdb_result_is_streaming(final_result))
-        {
-            elog(ERROR, "Expected the final result to be pending!");
+        if (relation_item.tag == TraceProvInferType::FOLDABLE){
+            // In this case, we don't use DuckDB because the table is going to be a simple scan.
+            // Instead, we hold three pointers: TraceProvBindData, TraceProvInitData, TraceProvLocalInitData
+            // During the scan, we just iterate till we get no rows.
+            // Basically, the only thing that changes between this and SQL version is the method to get the next chunk.
+            // TODO: Implement this via callbacks? Not done right now for performance, but maybe that won't be too bad..
+            traceprov_prepare_foldable(&relation_item, &scan->bind_data, &scan->init_data, &scan->local_init_data);
+            auto col_logical_type = duckdb_create_logical_type(DUCKDB_TYPE_UBIGINT);
+            if (relation_item.expected_col_width <= relation_item.foldable_value_count){
+                elog(ERROR, "Expected some gap between total column width and the foldable value count!");
+            }
+            const uint64_t canonical_chunk_width = relation_item.expected_col_width - relation_item.foldable_value_count;
+            auto col_types = (duckdb_logical_type*)malloc(sizeof(duckdb_logical_type)*canonical_chunk_width);
+            for (uint32_t idx = 0; idx < canonical_chunk_width; idx++){
+                col_types[idx] = col_logical_type;
+            }
+            auto data_chunk = duckdb_create_data_chunk(col_types, canonical_chunk_width);
+            duckdb_destroy_logical_type(&col_logical_type);
+            free(col_types);
+            scan->current_chunk = data_chunk;
+        }else if (relation_item.tag == TraceProvInferType::SQL){
+            duckdb_connection con = traceprov_current.infer_context->con;
+            {
+                TP_EVALUATE_START();
+                PG_DUCKDB_EXIT_ON_ERROR_MSG(duckdb_prepare(con, relation_item.sql, &scan->stmt), duckdb_prepare_error(scan->stmt));
+                TP_EVALUATE_END();
+                elog(INFO, "Prepare timing: %ld", TP_EVALUATE_DURATION());
+            }
+            duckdb_pending_result result;
+            duckdb_result final_result;
+            PG_DUCKDB_EXIT_ON_ERROR(duckdb_pending_prepared_streaming(scan->stmt, &result));
+            PG_DUCKDB_EXIT_ON_ERROR(duckdb_execute_pending(
+                result,
+                &final_result));
+            if (!duckdb_result_is_streaming(final_result))
+            {
+                elog(ERROR, "Expected the final result to be pending!");
+            }
+            scan->final_result = final_result;
+        }else{
+            elog(ERROR, "Got unexpected type: %ld", relation_item.tag);
         }
+        scan->foldable_value_count = relation_item.foldable_value_count;
+        scan->foldable_values = relation_item.foldable_values;
+        scan->scan_tag = relation_item.tag;
 
-        scan->final_result = final_result;
         return (TableScanDesc)scan;
     }
 
@@ -136,15 +175,27 @@ extern "C"
         {
             if (scan_desc->current_chunk != NULL)
             {
-                duckdb_destroy_data_chunk(&scan_desc->current_chunk);
+                if (scan_desc->scan_tag == TraceProvInferType::FOLDABLE){
+                    duckdb_data_chunk_reset(scan_desc->current_chunk);
+                }else{
+                    duckdb_destroy_data_chunk(&scan_desc->current_chunk);
+                }
             }
+            duckdb_data_chunk data_chunk = nullptr;
             // Right of the bat, execute the query.
-            duckdb_data_chunk data_chunk = duckdb_stream_fetch_chunk(scan_desc->final_result);
-            if (!data_chunk)
-            {
-                return false;
+            if (scan_desc->scan_tag == TraceProvInferType::SQL){
+                data_chunk = duckdb_stream_fetch_chunk(scan_desc->final_result);
+                if (!data_chunk)
+                {
+                    return false;
+                }
+                scan_desc->current_chunk = data_chunk;
+            }else{
+                // Run it via the callback func.
+                traceprov_duckdb_func_core(scan_desc->bind_data, scan_desc->local_init_data, scan_desc->current_chunk);
+                if ( duckdb_data_chunk_get_size(scan_desc->current_chunk) == 0 ) return false;
+                data_chunk = scan_desc->current_chunk;
             }
-            scan_desc->current_chunk = data_chunk;
             scan_desc->current_idx_chunk = 0;
             scan_desc->end_idx_chunk = duckdb_data_chunk_get_size(data_chunk);
         }
@@ -159,10 +210,20 @@ extern "C"
         {
             duckdb_vector col = duckdb_data_chunk_get_vector(curr_chunk, col_idx);
             const uint64_t *col_data = (uint64_t *)duckdb_vector_get_data(col);
-            slot->tts_values[col_idx] = Int64GetDatum(col_data[row_idx]);
+            const uint64_t true_column_index = col_idx + scan_desc->foldable_value_count;
+            slot->tts_values[true_column_index] = Int64GetDatum(col_data[row_idx]);
             uint64_t *col_validity = (uint64_t *)duckdb_vector_get_validity(col);
             if (col_validity)
-                slot->tts_isnull[col_idx] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+                slot->tts_isnull[true_column_index] = !duckdb_validity_row_is_valid(col_validity, row_idx);
+        }
+        if (scan_desc->foldable_value_count){
+            if (scan_desc->foldable_values == NULL){
+                elog(ERROR, "Expected foldable values to be set!");
+            }
+            // Need to insert the foldable const values now.
+            for (idx_t col_idx = 0; col_idx < scan_desc->foldable_value_count; col_idx++){
+                slot->tts_values[col_idx] = Int64GetDatum(scan_desc->foldable_values[col_idx]);
+            }
         }
         scan_desc->current_idx_chunk++;
         ExecStoreVirtualTuple(slot);

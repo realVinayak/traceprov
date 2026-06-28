@@ -22,6 +22,8 @@
 #include "traceprov_derive.hpp"
 #include "derivation_utils.hpp"
 
+#include "tp_exprns.hpp"
+
 TraceProvDuckDbGlobalState g_tp_duckdb_state{
     .did_initialize = false,
     .worker_local_contexts = NULL,
@@ -1456,54 +1458,6 @@ duckdb::TableFunction *GetCTableFunction(duckdb_table_function function)
     return reinterpret_cast<duckdb::TableFunction *>(function);
 }
 
-class TraceProvBoundComparison : public Expression {
-public:
-	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_COMPARISON;
-
-public:
-	TraceProvBoundComparison(ExpressionType type, unique_ptr<Expression> left, unique_ptr<Expression> right);
-
-	unique_ptr<Expression> left;
-	unique_ptr<Expression> right;
-
-public:
-	string ToString() const override;
-
-	bool Equals(const BaseExpression &other) const override;
-
-	// unique_ptr<Expression> Copy() override;
-
-	void Serialize(Serializer &serializer) const override;
-	static unique_ptr<Expression> Deserialize(Deserializer &deserializer);
-
-public:
-	static LogicalType BindComparison(ClientContext &context, const LogicalType &left_type,
-	                                  const LogicalType &right_type, ExpressionType comparison_type);
-	static bool TryBindComparison(ClientContext &context, const LogicalType &left_type, const LogicalType &right_type,
-	                              LogicalType &result_type, ExpressionType comparison_type);
-};
-
-class TraceProvBoundConstantExpression : public Expression {
-public:
-	static constexpr const ExpressionClass TYPE = ExpressionClass::BOUND_CONSTANT;
-
-public:
-	explicit TraceProvBoundConstantExpression(Value value);
-
-	Value value;
-
-public:
-	string ToString() const override;
-
-	bool Equals(const BaseExpression &other) const override;
-	hash_t Hash() const override;
-
-	// unique_ptr<Expression> Copy() override;
-
-	void Serialize(Serializer &serializer) const override;
-	static unique_ptr<Expression> Deserialize(Deserializer &deserializer);
-};
-
 
 static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
                                                          FunctionData *bind_data,
@@ -1562,7 +1516,7 @@ static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
             tp_bind_data->is_dummy = !is_valid;
         }
         filters.clear();
-    } 
+    }
 }
 
 duckdb_table_function traceprov_create_table_func()

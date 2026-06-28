@@ -14,3 +14,6 @@ bool traceprov_use_rowid_duckdb = false;
 bool traceprov_force_seq_scan = false;
 bool traceprov_use_table_stats = false;
 char *traceprov_duckdb_profile_out = NULL;
+bool traceprov_use_join_filter_rewrite = false;
+bool traceprov_use_filter_pushdown = false;
+bool traceprov_use_foldable = false;

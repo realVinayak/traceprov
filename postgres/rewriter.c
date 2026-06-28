@@ -172,6 +172,42 @@ void _PG_init(){
         NULL,
         NULL
     );
+    DefineCustomBoolVariable(
+        "traceprov.use_join_filter_rewrite",
+        "use join-filter rewrite",
+        "",
+        &traceprov_use_join_filter_rewrite,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_filter_pushdown",
+        "Use filter-pushdown",
+        "",
+        &traceprov_use_filter_pushdown,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
+    DefineCustomBoolVariable(
+        "traceprov.use_foldable",
+        "Use filter-pushdown",
+        "",
+        &traceprov_use_foldable,
+        false,
+        PGC_SUSET,
+        0,
+        NULL,
+        NULL,
+        NULL
+    );
     DefineCustomStringVariable(
         "traceprov.duckdb_profile_out",
         "DuckDB profile out",
