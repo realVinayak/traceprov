@@ -3,14 +3,23 @@
 import getpass
 import json
 from pathlib import Path
-from traceprovpy.tools.benchmark import OPTION_GETTER, ExtraQuery, QuerySpec
-from traceprovpy.tools.file_utils import just_read, traceprov_assert_safe_run
+from traceprovpy.tools.file_utils import (
+    just_read,
+    just_write,
+    traceprov_assert_safe_run,
+)
 from traceprovpy.tools.run_with_timeout import RunWithTimeoutOptions, run_with_timeout
+import random
 
 TRACEPROV_LAYERS_TO_DERIVE_KEY = "TRACEPROV_LAYERS_TO_DERIVE_KEY"
 TRACEPROV_MATERIALIZE_LAYER_KEY = "TRACEPROV_MATERIALIZE_LAYER_KEY"
 TRACEPROV_DERIVE_OFFSET_KEY = "TRACEPROV_DERIVE_BULK"
 TRACEPROV_PROFILE_DUCKDB = "TRACEPROV_PROFILE_DUCKDB"
+TRACEPROV_SHOULD_SAMPLE = "TRACEPROV_SHOULD_SAMPLE"
+TRACEPROV_OFFSET_LIMIT = "TRACEPROV_OFFSET_LIMIT"
+TRACEPROV_USE_EXTRA_RESULT = "TRACEPROV_USE_EXTRA_RESULT"
+
+RAND_SEED = 2324
 
 TRACEPROV_INFER_SPEC_QUERY = (
     "select * from traceprov_get_generic_derivation_spec(false);"
@@ -55,10 +64,21 @@ def set_profile_path(cursor, path):
     cursor.execute(f"SET traceprov.duckdb_profile_out='{path}'")
 
 
-def infer_offsets(current_result: dict):
+def infer_offsets(current_result: dict, should_sample, sample_limit):
+    # print(current_result)
     complete_plan = json.loads(current_result["complete_plan"])
     row_count = complete_plan["Plan"]["Actual Rows"]
-    return list(range(0, row_count))
+    adjusted_row_count = min(
+        row_count if sample_limit == 0 else sample_limit, row_count
+    )
+    ranges = list(range(0, row_count))
+    if should_sample:
+        random.seed(RAND_SEED)
+        return list(random.sample(ranges, adjusted_row_count))
+    return list(ranges[:adjusted_row_count])
+
+
+TRACEPROV_TEMP_OFFSET_FILE = "/tmp/test_file.json"
 
 
 def get_traceprov_extra_infer_func(perform_inference: bool = True):
@@ -69,13 +89,24 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         run_time_options: RunWithTimeoutOptions = args["extra_pack"]
         getter = args["get_run_options"]
         current_result = args["current_result"]
+        # print(args)
         assert query_spec.extra_options is not None
         layers_to_derive = query_spec.extra_options[TRACEPROV_LAYERS_TO_DERIVE_KEY]
         print("Deriving layers: ", layers_to_derive)
         is_validate = query_spec.extra_options[TRACEPROV_MATERIALIZE_LAYER_KEY]
         bulk_derive = query_spec.extra_options[TRACEPROV_DERIVE_OFFSET_KEY]
+        should_sample = query_spec.extra_options[TRACEPROV_SHOULD_SAMPLE]
+        sample_limit = query_spec.extra_options[TRACEPROV_OFFSET_LIMIT]
+        use_extra_result = query_spec.extra_options[TRACEPROV_USE_EXTRA_RESULT]
         global_is_last = args["is_global_last"]
-        all_offsets = [-1] if bulk_derive else infer_offsets(current_result)
+        can_result = current_result
+        if use_extra_result:
+            can_result = args["extra_results"]["traceprov"][0]
+        all_offsets = (
+            [-1]
+            if bulk_derive
+            else infer_offsets(can_result, should_sample, sample_limit)
+        )
 
         if not bulk_derive and not global_is_last:
             return dict(type="early")
@@ -124,11 +155,12 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
                 if not is_validate:
                     continue
 
-                new_table = f"{table}_mat"
+                new_table = f"{table}_mat" if offset == -1 else f"{table}_mat_{offset}"
                 create_table_sql = (
                     f"create table {new_table} USING heap as (select * from {table})"
                 )
                 cursor.execute(f"DROP TABLE IF EXISTS {new_table};")
+                print(create_table_sql)
                 cursor.execute(create_table_sql)
             results = []
 
@@ -177,6 +209,12 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
                 create_table_analyze_results=create_table_analyze_results,
             )
             return offset_results
+
+        if is_validate:
+            validate_pack = dict(offsets=list(all_offsets))
+            # dump the offsets out.
+            # the simplest way for now.
+            just_write(TRACEPROV_TEMP_OFFSET_FILE, json.dumps(validate_pack))
 
         final_results = list(
             [

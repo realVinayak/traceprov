@@ -78,3 +78,6 @@ def get_total_iters(config: dict):
     run_time_options = config["runTimeOptions"]
     total_iters = run_time_options["repeat"] + run_time_options["throwaway"]
     return total_iters
+
+
+TP_OUT_ID_TICKER = "%OUT_ID%"

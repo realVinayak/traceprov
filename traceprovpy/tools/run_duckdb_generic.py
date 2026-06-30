@@ -22,7 +22,6 @@ import re
 random.seed(10)
 
 TP_OFFSET_TICKER = "__TP_OFFSET__"
-TP_OUT_ID_TICKER = "%OUT_ID%"
 
 TRACEPROV_CAPTURE_ENTRY = ("capture", 0, 0)
 

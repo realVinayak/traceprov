@@ -17,10 +17,17 @@
 #       -- Q02
 
 from collections import defaultdict
+import re
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.connection_utils import postgres_connection_from_cmd
-from traceprovpy.tools.file_utils import just_write, traceprov_assert_safe_run
+from traceprovpy.tools.file_utils import (
+    TP_OUT_ID_TICKER,
+    json_read_file,
+    just_read,
+    just_write,
+    traceprov_assert_safe_run,
+)
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     ConnectionParams,
@@ -48,6 +55,8 @@ from datetime import date, datetime
 from traceprovpy.tools.setup import traceprov_reinit_state, traceprov_setup
 from traceprovpy.tools.stats.stats_collector import StatsCollector
 import decimal
+
+from traceprovpy.tools.traceprov_extra_func import TRACEPROV_TEMP_OFFSET_FILE
 
 
 def json_serial(obj):
@@ -199,6 +208,7 @@ class QuerySpec(NamedTuple):
                             get_run_options=get_run_options,
                             current_result=relevant_result,
                             is_global_last=is_global_last,
+                            extra_results=extra_results,
                         )
                         extra_result = extra.func(arg_dict)
                     else:
@@ -313,21 +323,52 @@ class QuerySpec(NamedTuple):
         return {**self._asdict(), "extras": [extra._asdict() for extra in self.extras]}
 
 
+TRACEPROV_TABLE_RE = r"traceprov_relation_infer_[\d+]_mat"
+
+
+def replace_out_id(in_file_path: str, out_path: Path, offset_id: int, use_replace=True):
+    original = just_read(in_file_path)
+    assert original is not None
+    assert TP_OUT_ID_TICKER in original or not use_replace
+    if use_replace:
+        replaced = original.replace(TP_OUT_ID_TICKER, str(offset_id))
+    else:
+        traceprov_tables = list(re.findall(TRACEPROV_TABLE_RE, original))
+        replaced = original
+        for table in traceprov_tables:
+            replaced = replaced.replace(table, f"{table}_{offset_id}")
+    return just_write(out_path, replaced)
+
+
 class ValidationQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options, benchmark):
-        print("[validation]: ", self.base, self.materialize)
-        base_pack = self.get_pack(top_dir, self.base, get_run_options)
-        assert self.materialize
-        other_pack = self.get_pack(top_dir, self.materialize, get_run_options)
-
-        base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_pack.file_path} > /tmp/traceprov_base.out"
-        other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_pack.file_path} > /tmp/traceprov_other.out"
-        traceprov_assert_safe_run(base_result)
-        traceprov_assert_safe_run(other_result)
-        traceprov_assert_safe_run(
-            "diff -u /tmp/traceprov_base.out /tmp/traceprov_other.out"
-        )
+        is_bulk_derive = self.extra_options["bulk_derive"]
+        offsets = [-1]
+        if not is_bulk_derive:
+            offset_pack = json_read_file(TRACEPROV_TEMP_OFFSET_FILE)
+            assert offset_pack is not None
+            offsets = offset_pack["offsets"]
+        for offset in offsets:
+            print("[validation]: ", self.base, self.materialize)
+            base_pack = self.get_pack(top_dir, self.base, get_run_options)
+            assert self.materialize
+            other_pack = self.get_pack(top_dir, self.materialize, get_run_options)
+            base_path = base_pack.file_path
+            other_path = other_pack.file_path
+            if offset != -1:
+                # need to massage the files a bit.
+                base_path = replace_out_id(base_path, "/tmp/base_path.sql", offset)
+                other_path = replace_out_id(
+                    other_path, "/tmp/other_path.sql", offset, False
+                )
+            base_result = f"psql {base_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {base_path} > /tmp/traceprov_base.out"
+            other_result = f"psql {other_pack.connection_params.get_flat()} -A --field-separator='|' -P \"footer=off\" -f {other_path} > /tmp/traceprov_other.out"
+            traceprov_assert_safe_run(base_result)
+            traceprov_assert_safe_run(other_result)
+            traceprov_assert_safe_run(
+                "diff -u /tmp/traceprov_base.out /tmp/traceprov_other.out"
+            )
         return 0
 
 
@@ -434,6 +475,9 @@ bench_has_smokedduck = bench_has_bool_option(SMOKEDDUCK_OPTION)
 
 class TraceProvOptimizations(NamedTuple):
     traceprov_use_table_stats: bool = False
+    traceprov_use_join_filter_rewrite: bool = False
+    traceprov_use_filter_pushdown: bool = False
+    traceprov_use_foldable: bool = False
 
     @staticmethod
     def _bool_to_switch(val: bool):
@@ -441,10 +485,18 @@ class TraceProvOptimizations(NamedTuple):
 
     def get_options(self):
         options = []
-        if self.traceprov_use_table_stats:
-            options.append(("traceprov.use_table_stats", True))
-
-        return [f"set {opt[0]}={self._bool_to_switch(opt[1])}" for opt in options]
+        name_mapping = dict(
+            traceprov_use_table_stats="use_table_stats",
+            traceprov_use_join_filter_rewrite="use_join_filter_rewrite",
+            traceprov_use_filter_pushdown="use_filter_pushdown",
+            traceprov_use_foldable="use_foldable",
+        )
+        options = [
+            (name_mapping[key], value) for (key, value) in self._asdict().items()
+        ]
+        return [
+            f"set traceprov.{opt[0]}={self._bool_to_switch(opt[1])}" for opt in options
+        ]
 
     @classmethod
     def make_from_parsed(cls, parsed):
@@ -520,6 +572,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-sd_lib", required=False, type=str)
         parser.add_argument("-sd_include", required=False, type=str)
         parser.add_argument("-sd_num_threads", required=False, type=int)
+        parser.add_argument("--procs", required=False, type=int, default=None)
         parser.add_argument(
             f"--{INFER_DUCKDB_OPTION}",
             action=argparse.BooleanOptionalAction,
@@ -563,13 +616,21 @@ class GenericBenchmark(NamedTuple):
         )
         local_optimization_instance = TraceProvOptimizations.make_from_parsed(parsed)
         start = time.perf_counter()
+        self_extra_sql = (
+            [f"set max_parallel_workers_per_gather={parsed.procs}"]
+            if parsed.procs is not None
+            else []
+        )
         called_benchmark, result = setup_bench.run(
             parsed.test_root,
             directories,
             connection_params,
             params,
             init_sql,
-            self_extra_sql=local_optimization_instance.get_options(),
+            self_extra_sql=[
+                *self_extra_sql,
+                *local_optimization_instance.get_options(),
+            ],
         )
         end = time.perf_counter()
         final_result = dict(

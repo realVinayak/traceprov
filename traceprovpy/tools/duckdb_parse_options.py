@@ -73,7 +73,6 @@ def traceprov_handle_suffix(parsed):
     if (
         parsed.threads > 1
         and parsed.sample_inference is not None
-        and parsed.traceprov_use_partition_in_agg
     ):
         parsed.traceprov_use_column_log = True
     if SMART_TOKEN not in parsed.suff:
