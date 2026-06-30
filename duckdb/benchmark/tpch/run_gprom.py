@@ -80,20 +80,10 @@ def add_predicates(
 
 
 def run_option(exec_str: str, options: DuckDBDriverOptions):
-    try:
-        later_sub_result = subprocess.run(
-            [
-                exec_str,
-                *[x for f in options.get_list_options() for x in f.split(" ")],
-            ],
-            timeout=300,
-        )
-    except Exception as e:
-        return dict(later_error=str(e))
-
-    if later_sub_result.returncode != 0:
-        return dict(later_errorcode=later_sub_result.returncode)
-    return infer_option_results(options)
+    result = os.system(f"{exec_str} {options.serialize()}")
+    if result != 0:
+        return dict(type="fail", code=result)
+    return dict(type="sucess", infer=infer_option_results(options))
 
 
 def run_possible_queries(
@@ -160,9 +150,14 @@ def run_possible_queries(
                 repeat_options._replace(i=rewritten_file.as_posix())
                 for rewritten_file in rewritten_files
             ]
-        results = list(
-            [run_option(exec_str, option_to_run) for option_to_run in options_to_run]
-        )
+
+        results = []
+        for option_to_run in options_to_run:
+            option_result = run_option(exec_str, option_to_run)
+            results.append(option_result)
+            if option_result["type"] == "fail":
+                # if there is a failure, early out.
+                break
         result[key] = results
     traceprov_assert_safe_run(f"rm -rf {parsed.db}/.tmp/")
     return {query_name: result}
