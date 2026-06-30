@@ -37,7 +37,14 @@ from traceprovpy.tools.traceprov_extra_func import (
     TRACEPROV_LAYERS_TO_DERIVE_KEY,
     TRACEPROV_MATERIALIZE_LAYER_KEY,
     TRACEPROV_PROFILE_DUCKDB,
+    TRACEPROV_USE_EXTRA_RESULT,
 )
+
+
+def get_extras(is_validate):
+    if is_validate:
+        return {"TRACEPROV_SHOULD_SAMPLE": True, "TRACEPROV_OFFSET_LIMIT": 100}
+    return dict()
 
 
 def special_query(
@@ -78,7 +85,15 @@ def special_query(
                     if is_traceprov
                     else []
                 ),
-                traceprov_make_drop_view("15_post_step_1", "revenue0", strict=True),
+                *(
+                    [
+                        traceprov_make_drop_view(
+                            "15_post_step_1", "revenue0", strict=True
+                        )
+                    ]
+                    if not is_validate
+                    else []
+                ),
             ],
             extra_options=(
                 {
@@ -86,6 +101,8 @@ def special_query(
                     TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
                     TRACEPROV_DERIVE_OFFSET_KEY: bulk_derive,
                     TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
+                    TRACEPROV_USE_EXTRA_RESULT: True,
+                    **get_extras(is_validate),
                 }
                 if is_traceprov
                 else None
@@ -152,6 +169,8 @@ def make_normal_query(
                 TRACEPROV_MATERIALIZE_LAYER_KEY: is_validate,
                 TRACEPROV_DERIVE_OFFSET_KEY: bulk_derive,
                 TRACEPROV_PROFILE_DUCKDB: parsed.collect_duckdb_profile,
+                TRACEPROV_USE_EXTRA_RESULT: False,
+                **get_extras(is_validate),
             },
         ),
     )
@@ -221,13 +240,16 @@ def get_query(
         )
 
     if is_validate:
+        base_sql_file = "base.sql" if bulk_derive else "base_offset.sql"
+        validate_sql_file = "validate_rel_infer.sql"
         subdir_queries.append(
             Query(
                 query_name=query_name,
                 spec=ValidationQuerySpec(
-                    base="base.sql",
+                    base=base_sql_file,
                     key="VALIDATION",
-                    materialize="validate_rel_infer.sql",
+                    materialize=validate_sql_file,
+                    extra_options=dict(bulk_derive=bulk_derive),
                 ),
             )
         )
