@@ -3758,10 +3758,9 @@ extern "C"
             infer_item.expected_col_width = col_count;
             infer_item.foldable_value_count = 0;
             infer_item.foldable_values = NULL;
+            infer_item.use_filter_value = false;
             if (traceprov_use_foldable && traceprov_node_is_foldable(node) ){
                 infer_item.tag = TraceProvInferType::FOLDABLE;
-                infer_item.filter_value = ((uint64_t*)row_content)[0];
-                infer_item.use_filter_value = node->tag == T_TP_FILTER_REMAP;
                 // It is possible that we'd be in a different memory context.
                 // So, copy the relation args
                 infer_item.rel_args = copy_rel_args(traceprov_get_relation_args(node, offset));
@@ -3771,6 +3770,10 @@ extern "C"
                     const uint64_t child_col_cont = traceprov_get_node_column_count(filter_remap_node->current);
                     infer_item.foldable_value_count = col_count - child_col_cont;
                     infer_item.foldable_values = (uint64_t*)row_content;
+                    infer_item.use_filter_value = true;
+                    const auto join_condition = filter_remap_node->filter_condition->at(0);
+                    const auto lhs_column = join_condition->first->second;
+                    infer_item.filter_value = ((uint64_t*)row_content)[lhs_column-1];
                 }
             }else{
                 const char *sql = traceprov_node_to_sql(

@@ -351,14 +351,15 @@ extern "C"
     }
 
     TraceProvInitData *traceprov_duckdb_local_init_core(
-        TraceProvBindData *bind_data
+        TraceProvBindData *bind_data,
+         const bool force_seq_scan=false
     ){
         TraceProvInitData *init_data_inst = allocate_init_data();
         bind_data->bind_data_mutex->lock();
         const uint64_t self_idx = bind_data->max_worker_idx++;
         bind_data->bind_data_mutex->unlock();
         bool is_dummy = false;
-        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN || traceprov_force_seq_scan)
+        if (bind_data->rel_args.table_flags & TRACEPROV_TABLE_SEQ_SCAN || traceprov_force_seq_scan || force_seq_scan)
         {
             if (self_idx == 0)
             {
@@ -1197,7 +1198,7 @@ extern "C"
             bind_data->filter_value_set = true;
         }
         *init_data_core = traceprov_duckdb_init_core(bind_data);
-        *local_init_data = traceprov_duckdb_init_core(bind_data);
+        *local_init_data = traceprov_duckdb_local_init_core(bind_data, true);
         *bind_data_core = bind_data;
     }
 
