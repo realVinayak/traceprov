@@ -1366,7 +1366,11 @@ static void populate_log_offset(
     }
     partition_info->layer_log_map->insert({graph->headNumber, log_offset});
 
-    if (!traceprov_use_partition_in_agg) return;
+    if (!traceprov_use_partition_in_agg){
+        const auto early_end_time = std::chrono::steady_clock::now();
+        partition_info->partition_time = (std::chrono::duration_cast<std::chrono::microseconds>(early_end_time - start_time)).count();
+        return;
+    }
 
     for (auto pl_item: *partition_layers){
         const uint64_t logged_entry = ((uint64_t *)row)[pl_item.entry_idx];
@@ -1604,7 +1608,10 @@ MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Fu
             auto table_name = get_traceprov_table_view(layer_string_pair.first);
             std::string wrapped = "create or replace temp table " + table_name + " as (" + layer_string_pair.second + ");";
             elog(INFO, "Index query: %s", wrapped.c_str())
+            const bool old_traceprov_force_seq_scan = traceprov_force_seq_scan;
+            traceprov_force_seq_scan = true;
             perform_query(&new_options, con, wrapped, NULL, NULL, NULL, "", NULL);
+            traceprov_force_seq_scan = old_traceprov_force_seq_scan;
             if (list_member_int(result_spec->directly_derivable, layer_string_pair.first) && should_make_index(con, table_name)){
                 // Need to create index.
                 std::string index_name = table_name + "_column_0_idx";
@@ -1660,7 +1667,6 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
             {
                 continue;
             }
-        const auto start_sql_time = std::chrono::steady_clock::now();
         auto node_sql = traceprov_node_to_sql(
             result_map_pair.second, 
             TraceProvToSQLContext{
@@ -1673,8 +1679,6 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
                 .row_content = (uint64_t*)row_content
             }
         );
-        const auto end_sql_time = std::chrono::steady_clock::now();
-        result_spec->sql_compilation_time += std::chrono::duration_cast<std::chrono::microseconds>(end_sql_time - start_sql_time).count();
         layer_string_map->insert({result_map_pair.first, node_sql});
     }
     return layer_string_map;
@@ -1696,17 +1700,24 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
             result_spec->result_map->at(entry.first) = traceprov_perform_join_to_condition(entry.second, result_spec->root_layer_number);
         }
     }
-    const auto end_time = std::chrono::steady_clock::now();
-    result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
     result_spec->parse_context = parsed_back_context;
     *derivation_spec = result_spec;
-    if (!derive_sql_mapping) return nullptr;
+    if (!derive_sql_mapping) {
+        const auto end_time = std::chrono::steady_clock::now();
+        result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+        return nullptr;
+    }
     auto layer_string_map = get_sql_mapping(
         result_spec,
         options,
         ddls,
         added_ddls
     );
+    const auto later_end_time = std::chrono::steady_clock::now();
+    if (result_spec->sql_compilation_time != 0){
+        elog(ERROR, "Expected SQL compilation time to be empty!");
+    }
+    result_spec->sql_compilation_time = std::chrono::duration_cast<std::chrono::microseconds>(later_end_time - start_time).count();
     return layer_string_map;
 }
 
@@ -1750,6 +1761,7 @@ TraceProvDerivationSpec* augment_extra_sql(
             const uint64_t mapped_true_offset = output_log_offset == nullptr ? log_offset : output_log_offset->at(log_offset);
             populate_log_offset(mapped_true_offset, result_spec->p_context, partition_layers, info);
             if (traceprov_use_join_filter_rewrite){
+                const auto _start_time = std::chrono::steady_clock::now();
                 layer_string_map = get_sql_mapping(
                     result_spec,
                     options,
@@ -1757,6 +1769,8 @@ TraceProvDerivationSpec* augment_extra_sql(
                     added_ddls,
                     info->cached_data->at(result_spec->root_layer_number)
                 );
+                const auto _end_time = std::chrono::steady_clock::now();
+                info->partition_time += (std::chrono::duration_cast<std::chrono::microseconds>(_end_time - _start_time)).count();
             }
         }
         for (auto layer_string_pair: *layer_string_map){

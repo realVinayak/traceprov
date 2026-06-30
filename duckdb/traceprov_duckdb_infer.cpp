@@ -62,6 +62,15 @@ typedef struct TraceProvBindData
     std::vector<uint64_t> *partition_spec;
     uint64_t filter_value;
     uint64_t total_record_count;
+    // this is only used to set min-max stats (rather than it being approximate)
+    // because we already have the data at this point.
+    void *cached_row;
+    uint64_t min_value;
+    uint64_t max_value;
+    bool lower_inclusive;
+    bool upper_exclusive;
+    bool min_max_set;
+    bool is_approx;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData
@@ -140,6 +149,8 @@ static inline void traceprov_grow_col_page_mapping_file(const uint64_t extra_siz
 static inline void traceprov_grow_row_count_page_mapping_file(TraceProvInitData *init, TraceProvBindData *bind)
 {
 }
+
+uint64_t compute_table_count(TraceProvBindData *bind_data);
 
 TraceProvInitData *allocate_init_data()
 {
@@ -599,8 +610,9 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             }
             delete child_part_bind_data;
             cummulative_sum->push_back(bind_data->worker_bind_data->size());
+            if (local_offset != -1)
+                bind_data->rel_args.offset = local_offset;
         }
-        bind_data->rel_args.offset = log_offset;
     }
     else
     {
@@ -610,6 +622,7 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
         extract_partition_info(extra_info, will_be_dummy, local_partition, table_flags, current_worker_id, layer_number, local_offset);
         auto all_bind_data = setup_layers(current_worker_id, layer_number, log_offset, &total_record_count, false, local_partition);
         bind_data = allocate_bind_data();
+        bind_data->rel_args.offset = log_offset;
         if (all_bind_data != nullptr && all_bind_data->size() != 0){
             bind_data->worker_bind_data = new std::vector<TraceProvBindData *>;
             for (auto part_bind_data: *all_bind_data){
@@ -639,7 +652,8 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             }
         }
         bind_data->is_dummy |= will_be_dummy;
-        bind_data->rel_args.offset = local_offset;
+        if (log_offset != -1)
+            bind_data->rel_args.offset = log_offset;
     }
     std::vector<uint8_t> *sizes = NULL;
     if (extra_info == NULL || (extra_info->pointer_spec == NULL))
@@ -696,13 +710,22 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
     }
     bind_data->rel_args.table_flags = table_flags;
     bind_data->rel_args.layer_number = layer_number;
-
+    if (extra_info && extra_info->partition_spec){
+        if (extra_info->partition_spec->cached_data->count(layer_number))
+            bind_data->cached_row = extra_info->partition_spec->cached_data->at(layer_number); 
+    }
     if (total_record_count != -1)
     {
         bind_data->total_record_count = total_record_count;
-        duckdb_bind_set_cardinality(info, total_record_count, true);
+        if (bind_data->rel_args.offset != -1){
+            duckdb_bind_set_cardinality(info, 1, true);
+        }else{
+            duckdb_bind_set_cardinality(info, total_record_count, true);
+        }
+    }else{
+        bind_data->total_record_count = -1;
     }
-
+    bind_data->partition_spec = cummulative_sum;
     if (g_tp_duckdb_state.index_context){
         auto index_context = g_tp_duckdb_state.index_context;
         if (layer_number == index_context->root_layer_number){
@@ -718,7 +741,6 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             bind_data->write_vector = index_context->vector_data;
         }
     }
-    bind_data->partition_spec = cummulative_sum;
     duckdb_bind_set_bind_data(info, bind_data, free);
 }
 
@@ -756,6 +778,51 @@ void traceprov_duckdb_init(duckdb_init_info info)
     duckdb_init_set_max_threads(info, max_threads);
 }
 
+
+uint64_t compute_table_count(TraceProvBindData *combind_bind_data){
+    uint64_t total_record_count = 0;
+    for (auto child_bind_data: *combind_bind_data->worker_bind_data){
+        if (child_bind_data->is_dummy) continue;
+        auto init_data = traceprov_make_init_data(child_bind_data);
+        const auto _traceprov_grow_row_count_page_mapping = combind_bind_data->is_memory_mapping ? traceprov_grow_row_count_page_mapping : traceprov_grow_row_count_page_mapping_file;
+        // Won't find stats here, anyways.
+        const uint32_t num_pk_records = child_bind_data->row_layer->num_pk_records;
+        if (num_pk_records == 1) continue;
+        while (init_data->current++ < child_bind_data->num_rows){
+            _traceprov_grow_row_count_page_mapping(init_data, child_bind_data);
+            uint64_t min_value = EMPTY_VALUE;
+            uint64_t max_value = EMPTY_VALUE;
+            const uint64_t num_rows = ((uint64_t *)init_data->row_count_layer_ptr)[0];
+            if (num_pk_records == 2){
+                if (unlikely(child_bind_data->col_layer->mask == 0)){
+                    elog(ERROR, "Expected mask to be set!");
+                }
+                const uint64_t min_max_composite = ((uint64_t *)init_data->row_count_layer_ptr)[1];
+                const uint64_t mask_to_apply = (child_bind_data->col_layer->mask << 32);
+                min_value = mask_to_apply | ((uint32_t)min_max_composite);
+                max_value = mask_to_apply | (uint32_t)(min_max_composite >> 32);
+            } else if (num_pk_records == 4){
+                min_value = ((uint64_t *)init_data->row_count_layer_ptr)[1];
+                max_value = ((uint64_t *)init_data->row_count_layer_ptr)[2];
+            }
+            init_data->row_count_layer_ptr = INCR_BY_BYTES(init_data->row_count_layer_ptr, sizeof(uint64_t)*num_pk_records);
+            if (combind_bind_data->min_max_set){
+                const uint64_t probe_min_value = combind_bind_data->min_value;
+                const uint64_t probe_max_value = combind_bind_data->max_value;
+                // elog(INFO, "[%ld, %ld] -> [%ld, %ld]", min_value, max_value, probe_min_value, probe_max_value);
+                const bool is_invalid = (max_value != EMPTY_VALUE && max_value < probe_min_value) || (min_value != EMPTY_VALUE && min_value > probe_max_value);
+                if (is_invalid) continue;
+            }else if (combind_bind_data->filter_value){
+                const uint64_t probe_value = combind_bind_data->filter_value;
+                const bool is_invalid = (max_value != EMPTY_VALUE && max_value < probe_value) || (min_value != EMPTY_VALUE && min_value > probe_value);
+                if (is_invalid) continue;
+            }
+
+            total_record_count += num_rows;
+        }
+    }
+    return total_record_count;
+}
 
 void handle_eager_parallel(TraceProvBindData *bind_data, TraceProvInitData *global_init_data, TraceProvInitData *local_init_data){
     if (global_init_data->is_dummy){
@@ -1375,6 +1442,7 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
 #endif
     uint64_t distinct_count = 0;
     TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
+    // elog(INFO, "Getting stats for %d")
     if (tp_bind_data->needs_rowid){
         if (column_index == 0){
             auto result = NumericStats::CreateEmpty(LogicalType::UBIGINT);
@@ -1393,50 +1461,59 @@ unique_ptr<BaseStatistics> traceprov_duckdb_table_stats(
         .is_set = false,
         .min_value = 0,
         .max_value = 0};
-    bool is_combine = (tp_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
-    TraceProvLayerNumber layer = tp_bind_data->rel_args.layer_number;
-    if (tp_bind_data->col_layer)
-    {
-        bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index);
-        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine))
+
+    if (tp_bind_data->cached_row){
+        // elog(INFO, "Using cached data for stats!");
+        stats.min_value = ((uint64_t*)tp_bind_data->cached_row)[column_index];
+        stats.max_value = ((uint64_t*)tp_bind_data->cached_row)[column_index];
+        stats.is_set = true;
+        distinct_count = 1;
+    }else{
+        bool is_combine = (tp_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
+        TraceProvLayerNumber layer = tp_bind_data->rel_args.layer_number;
+        if (tp_bind_data->col_layer)
         {
-            if (tp_bind_data->col_layer->record_count)
+            bind_data_stats(&stats, tp_bind_data, tp_bind_data->is_aggregate, column_index);
+            if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine))
             {
-                distinct_count += tp_bind_data->col_layer->record_count;
-            }
-            else
-            {
-                distinct_count += tp_bind_data->col_layer->num_groups;
+                if (tp_bind_data->col_layer->record_count)
+                {
+                    distinct_count += tp_bind_data->col_layer->record_count;
+                }
+                else
+                {
+                    distinct_count += tp_bind_data->col_layer->num_groups;
+                }
             }
         }
-    }
-    if (is_combine && column_index && tp_bind_data->total_record_count){
-        distinct_count = tp_bind_data->total_record_count;
-    }
-    // if (layer == 2 && column_index == 1){
-    //     distinct_count = 249312;
-    // }
-    // if (layer == 3 && column_index == 0){
-    //     distinct_count = 82;
-    // }
-    bool is_first = true;
-    for (auto child_bind_data : *tp_bind_data->worker_bind_data)
-    {   
-        if (is_first) bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index);
-        layer = child_bind_data->rel_args.layer_number;
-        is_combine |= (child_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
-        if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine))
-        {
-            if (child_bind_data->col_layer->record_count)
-            {
-                distinct_count += child_bind_data->col_layer->record_count;
-            }
-            else
-            {
-                distinct_count += child_bind_data->col_layer->num_groups;
-            }
+        if (is_combine && column_index && tp_bind_data->total_record_count){
+            distinct_count = tp_bind_data->total_record_count;
         }
-        // is_first = false;
+        // if (layer == 2 && column_index == 1){
+        //     distinct_count = 249312;
+        // }
+        // if (layer == 3 && column_index == 0){
+        //     distinct_count = 82;
+        // }
+        bool is_first = true;
+        for (auto child_bind_data : *tp_bind_data->worker_bind_data)
+        {   
+            if (is_first) bind_data_stats(&stats, child_bind_data, tp_bind_data->is_aggregate, column_index);
+            layer = child_bind_data->rel_args.layer_number;
+            is_combine |= (child_bind_data->rel_args.table_flags & TRACEPROV_TABLE_COMBINE) != 0;
+            if (column_index == 0 && (tp_bind_data->is_aggregate || is_combine))
+            {
+                if (child_bind_data->col_layer->record_count)
+                {
+                    distinct_count += child_bind_data->col_layer->record_count;
+                }
+                else
+                {
+                    distinct_count += child_bind_data->col_layer->num_groups;
+                }
+            }
+            // is_first = false;
+        }
     }
     const uint8_t column_size = tp_bind_data->sizes->at(column_index);
     auto result = NumericStats::CreateEmpty(column_size == sizeof(uint64_t) ? LogicalType::UBIGINT : LogicalType::UINTEGER);
@@ -1499,6 +1576,38 @@ duckdb::TableFunction *GetCTableFunction(duckdb_table_function function)
 }
 
 
+bool is_strict_column(const Expression *expression){
+    auto left_expression_class = expression->GetExpressionClass();
+    if (left_expression_class != duckdb::ExpressionClass::BOUND_COLUMN_REF) return false;
+    const auto column = reinterpret_cast<const BoundColumnRefExpression *>(expression)->binding.column_index;
+    if (column != 0) return false;
+    return true;
+}
+
+bool get_raw_value(const Expression *expression, uint64_t &value){
+    const auto right_value = expression;
+    auto right_expression_class = right_value->GetExpressionClass();
+    const bool is_constant = right_expression_class == duckdb::ExpressionClass::BOUND_CONSTANT;
+    if (!is_constant){
+        return false;
+    }
+    const auto right_const_value = reinterpret_cast<const TraceProvBoundConstantExpression *>(right_value);
+    const auto right_const_can = UBigIntValue::Get(right_const_value->value);
+    value = right_const_can;
+    return true;
+}
+
+unique_ptr<NodeStatistics> traceprov_cardinality(ClientContext &context, const FunctionData *bind_data){
+    TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
+    if (tp_bind_data->total_record_count == -1) return nullptr;
+    // elog(INFO, "Propagating: [%p -> [%d]] %ld", tp_bind_data, tp_bind_data->rel_args.layer_number, tp_bind_data->total_record_count);
+    if (tp_bind_data->is_approx){
+        return duckdb::make_uniq<duckdb::NodeStatistics>(tp_bind_data->total_record_count, tp_bind_data->total_record_count);
+    }
+    return duckdb::make_uniq<duckdb::NodeStatistics>(tp_bind_data->total_record_count);
+
+}
+
 static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
                                                          FunctionData *bind_data,
                                                          vector<unique_ptr<Expression>> &filters){
@@ -1508,54 +1617,75 @@ static void traceprov_pushdown(ClientContext &context, LogicalGet &get,
     //     filters.at(idx).get()->Print();
     //     elog(INFO, "Filter content: %s, type: %ld",  filters.at(idx).get()->ToString().c_str(), filters.at(idx).get()->type);
     // }
+    TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
     if (filters.size() == 1){
         auto &main_filter = filters[0];
         auto value = main_filter.get()->GetExpressionClass();
-        if (value != duckdb::ExpressionClass::BOUND_COMPARISON){
-            return;
-        }
-        auto comparison = reinterpret_cast<TraceProvBoundComparison *>(main_filter.get());
-        if (comparison->type != ExpressionType::COMPARE_EQUAL) return;
-        auto left_value = comparison->left.get();
-        auto left_expression_class = left_value->GetExpressionClass();
-        if (left_expression_class != duckdb::ExpressionClass::BOUND_COLUMN_REF) return;
-        const auto column = reinterpret_cast<BoundColumnRefExpression *>(left_value)->binding.column_index;
-        if (column != 0) return;
-        auto right_value = comparison->right.get();
-        auto right_expression_class = right_value->GetExpressionClass();
-        const bool is_constant = right_expression_class == duckdb::ExpressionClass::BOUND_CONSTANT;
-        if (!is_constant){
-            return;
-        }
-        const auto right_const_value = reinterpret_cast<TraceProvBoundConstantExpression *>(right_value);
-        const auto right_const_can = UBigIntValue::Get(right_const_value->value);
-        TraceProvBindData *tp_bind_data = (TraceProvBindData *)((TraceProvCTableBindData *)bind_data)->bind_data;
-        tp_bind_data->filter_value = right_const_can;
-        auto column_stats = traceprov_duckdb_table_stats(context, bind_data, 0);
-        if (column_stats != nullptr){
-            const auto stats = column_stats.get();
-            uint64_t min_value = EMPTY_VALUE;
-            uint64_t max_value = EMPTY_VALUE;
-            if (stats->GetType() == LogicalType::UBIGINT || stats->GetType() == LogicalType::UINTEGER){
-                if(NumericStats::HasMax(*stats)){
-                    if (stats->GetType() == LogicalType::UBIGINT ){
-                        max_value = NumericStats::GetMax<uint64_t>(*stats);
-                    }else{
-                        max_value = NumericStats::GetMax<uint32_t>(*stats);
+        if (value == duckdb::ExpressionClass::BOUND_COMPARISON){
+            auto comparison = reinterpret_cast<TraceProvBoundComparison *>(main_filter.get());
+            if (comparison->type != ExpressionType::COMPARE_EQUAL) return;
+            if (!is_strict_column(comparison->left.get())) return;
+            uint64_t right_value = 0;
+            if (!get_raw_value(comparison->right.get(), right_value)) return;
+            tp_bind_data->filter_value = right_value;
+            auto column_stats = traceprov_duckdb_table_stats(context, bind_data, 0);
+            if (column_stats != nullptr){
+                const auto stats = column_stats.get();
+                uint64_t min_value = EMPTY_VALUE;
+                uint64_t max_value = EMPTY_VALUE;
+                if (stats->GetType() == LogicalType::UBIGINT || stats->GetType() == LogicalType::UINTEGER){
+                    if(NumericStats::HasMax(*stats)){
+                        if (stats->GetType() == LogicalType::UBIGINT ){
+                            max_value = NumericStats::GetMax<uint64_t>(*stats);
+                        }else{
+                            max_value = NumericStats::GetMax<uint32_t>(*stats);
+                        }
+                    }
+                    if(NumericStats::HasMin(*stats)){
+                        if (stats->GetType() == LogicalType::UBIGINT ){
+                            min_value = NumericStats::GetMin<uint64_t>(*stats);
+                        }else{
+                            min_value = NumericStats::GetMin<uint32_t>(*stats);
+                        }
                     }
                 }
-                if(NumericStats::HasMin(*stats)){
-                    if (stats->GetType() == LogicalType::UBIGINT ){
-                        min_value = NumericStats::GetMin<uint64_t>(*stats);
-                    }else{
-                        min_value = NumericStats::GetMin<uint32_t>(*stats);
-                    }
-                }
+                const bool is_valid = (min_value == EMPTY_VALUE || right_value >= min_value) && (max_value == EMPTY_VALUE || right_value <= max_value);
+                tp_bind_data->is_dummy = !is_valid;
             }
-            const bool is_valid = (min_value == EMPTY_VALUE || right_const_can >= min_value) && (max_value == EMPTY_VALUE || right_const_can <= max_value);
-            tp_bind_data->is_dummy = !is_valid;
+            filters.clear();
+        }else if (value == ExpressionClass::BOUND_BETWEEN){
+            auto comparison = reinterpret_cast<TraceProvBoundBetweenExpression *>(main_filter.get());
+            const auto input = comparison->input.get();
+            if (!is_strict_column(input)) return;
+            uint64_t upper_value=0, lower_value=0;
+            if (!get_raw_value(comparison->lower.get(), lower_value)) return;
+            if (!get_raw_value(comparison->upper.get(), upper_value)) return;
+            // Now, we have the lower and upper values.
+            // Store that.
+            tp_bind_data->min_max_set = true;
+            tp_bind_data->min_value = lower_value;
+            tp_bind_data->max_value = upper_value;
+            tp_bind_data->lower_inclusive = comparison->lower_inclusive;
+            tp_bind_data->upper_exclusive = comparison->upper_inclusive;
+            // don't actually clear this filter, because this is used just for stats
+            // for now.
+            // filters.clear();
+            // elog(INFO, "Used bound between: [%ld, %ld]", lower_value, upper_value);
+        }else{
+            return;
         }
-        filters.clear();
+    }
+
+    if (traceprov_use_table_stats){
+        // Attempt to be a bit more smart here.
+        // use the table stats to compute the exact cardinality, so upper layers
+        // can handle things correctly.
+        const uint64_t stats_table_count = compute_table_count(tp_bind_data);
+        if (stats_table_count != 0){
+            // elog(INFO, "Propagating: [%p -> [%d]] %ld. New: %ld", tp_bind_data, tp_bind_data->rel_args.layer_number, tp_bind_data->total_record_count, stats_table_count);
+            tp_bind_data->total_record_count = stats_table_count;
+            tp_bind_data->is_approx = true;
+        }
     }
 }
 
@@ -1577,6 +1707,7 @@ duckdb_table_function traceprov_create_table_func()
     duckdb_function->statistics = traceprov_duckdb_table_stats;
     duckdb_function->filter_pushdown = traceprov_use_filter_pushdown;
     duckdb_function->pushdown_complex_filter = traceprov_use_filter_pushdown == NULL ? NULL : traceprov_pushdown;
+    duckdb_function->cardinality = traceprov_cardinality;
     return function;
 }
 

@@ -659,7 +659,10 @@ extern "C" {
         sql_repr = safe_append(
             sql_repr, 
             tp_psprintf(
-                " FROM %s JOIN %s ON (%s) ", left_node_sql, right_node_sql, join_repr.c_str()
+                // Not sure why (yet), but apprently DuckDB trips up (even though we present the same stats about the tables)
+                // if we make the join the other way. Anyways, this doesn't change anything (since the columns have already been referred
+                // by their alias, so swapping the order here doesn't make any meaningful change)
+                " FROM %s JOIN %s ON (%s) ", right_node_sql, left_node_sql, join_repr.c_str()
             )
         );
         return sql_repr;

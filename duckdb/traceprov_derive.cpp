@@ -470,6 +470,7 @@ TraceProvDerivationSpec *get_generic_derivation_spec(
     spec->result_map = result_map;
     spec->directly_derivable = derivable_sublinks;
     spec->root_layer_number = ((TraceProvDependency *)list_nth(graphs, 0))->headNumber;
+    spec->sql_compilation_time = 0;
     return spec;
 }
 
