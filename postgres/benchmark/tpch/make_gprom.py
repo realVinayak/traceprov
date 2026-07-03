@@ -83,6 +83,16 @@ def handle_keys(parsed, query_path: Path, in_query_num: str):
     return just_write(f"./tmp/query_keys_{in_query_num}.sql", query_contents)
 
 
+def try_backend_path(source: Path, backend: str, file_name: str):
+    backend_name = source / f"{file_name}.{backend}.sql"
+    if backend_name.exists():
+        return backend_name
+    absolute_input_path = source / f"{file_name}.sql"
+    if absolute_input_path.exists():
+        return absolute_input_path
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
     parser.add_argument("--source", required=True, type=str)
@@ -117,6 +127,7 @@ def main():
     # queries = ["04"]
     # queries = ["21"]
     # queries = ["22"]
+    queries = ["15"]
     passed = defaultdict(dict)
     gprom_suffixes = ["extract"]
     if parsed.is_all:
@@ -127,10 +138,13 @@ def main():
         gprom_suffixes.append("optimized")
     path = "_".join(gprom_suffixes)
     for query in queries:
-        absolute_input_path = Path(parsed.source) / f"{query}.gprom.{path}.sql"
-        if not absolute_input_path.exists():
+        absolute_input_path = try_backend_path(
+            Path(parsed.source), parsed.backend, f"{query}.gprom.{path}"
+        )
+        if not absolute_input_path:
             print("Skipping: ", absolute_input_path)
             continue
+        print("Using: ", absolute_input_path)
         # assert absolute_input_path.exists(), f"Expected {absolute_input_path} to exist"
         absolute_input_path = handle_special_cases(parsed, absolute_input_path, query)
         absolute_input_path = handle_keys(parsed, absolute_input_path, query)
