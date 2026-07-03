@@ -163,6 +163,7 @@ int get_error_no();
     if (state == DuckDBError){ \
         std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
         std::cout << "error: " << msg << std::endl; \
+        std::cerr << "error: " << msg << std::endl; \
         std::exit(1); \
     } \
 }
@@ -171,6 +172,7 @@ int get_error_no();
     if (state == DuckDBError){ \
         std::cout << "Received duckdberror state at " << __FILE__ << ":" << __LINE__ << std::endl; \
         std::cout << duckdb_result_error(&result) << std::endl; \
+        std::cerr << duckdb_result_error(&result) << std::endl; \
         std::exit(1); \
     } \
 }

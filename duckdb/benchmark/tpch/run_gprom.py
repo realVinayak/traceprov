@@ -123,6 +123,8 @@ def run_possible_queries(
                     exec_str,
                     *[x for f in options.get_list_options() for x in f.split(" ")],
                 ],
+                stderr=subprocess.PIPE,
+                text=True,
                 timeout=300,
             )
         except subprocess.TimeoutExpired:
@@ -134,7 +136,9 @@ def run_possible_queries(
             continue
 
         if sub_result.returncode != 0:
-            result[key] = dict(errorcode=sub_result.returncode)
+            result[key] = dict(
+                errorcode=sub_result.returncode, error_content=sub_result.stderr
+            )
             continue
 
         options_to_run = [repeat_options]
