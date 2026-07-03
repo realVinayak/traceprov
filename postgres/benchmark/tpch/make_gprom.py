@@ -19,7 +19,7 @@ from traceprovpy.tools.run_with_timeout import ConnectionParams
 
 import re
 
-needs_unnest = ["02", "17", "15", "11"]
+needs_unnest = ["02", "17", "11"]
 needs_lateral = ["02", "17"]
 
 # needs_unnest = []
