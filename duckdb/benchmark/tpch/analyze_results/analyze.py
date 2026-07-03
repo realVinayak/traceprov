@@ -8,9 +8,9 @@ from pathlib import Path
 import re
 import statistics
 import sys
-from typing import Callable, Dict, Literal
+from typing import Callable, Dict, Literal, NamedTuple
 
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, ticker
 import numpy as np
 
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
@@ -456,10 +456,10 @@ CATEGORIES = [
 
 INTERESTING_CATEGORIES = [
     "SmokedDuck",
-    "optimized-y__threads-1__merge_chunks-y__table_stats-y",
-    "optimized-y__threads-1__join_filter_rewrite-y__merge_chunks-y__table_stats-y",
-    "optimized-y__threads-1__filter_pushdown-y__join_filter_rewrite-y__merge_chunks-y__table_stats-y",
-    "optimized-y__threads-1__index-y__merge_chunks-y__table_stats-y",
+    "optimized-n__threads-1__partition_in_agg-y",
+    "optimized-n__threads-1__join_filter_rewrite-y__partition_in_agg-y",
+    "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y",
+    "optimized-n__threads-1__index-y",
     # "optimized-n__threads-1",
     # "optimized-n__threads-1__index-y",
     # # "optimized-y__threads-1__compact-y__merge_chunks-y",
@@ -531,7 +531,9 @@ def get_nice_num(in_int):
     assert 0, in_int
 
 
-def plot_repeat(cursor, sf: str, out_dir: Path, fetched_results):
+def plot_repeat(
+    cursor, sf: str, out_dir: Path, fetched_results, categories, label: str
+):
     fetched_results_map = {
         category: {
             item["query_num"]: item["capture_profile_latency"]
@@ -556,6 +558,7 @@ def plot_repeat(cursor, sf: str, out_dir: Path, fetched_results):
     # queries = ["1"]
     multiplier = [1, 10, 1000, 10000, 1_000_000]
     multiplier_label = {1: "1", 10: "10", 1000: "1K", 10000: "10K", 1_000_000: "1M"}
+    raw_percent_results = dict()
     for percent in percents:
         print("Running: ", percent)
         cursor.execute(f"drop table if exists {sample_offset_table}")
@@ -590,6 +593,7 @@ def plot_repeat(cursor, sf: str, out_dir: Path, fetched_results):
             f"insert into {sample_offset_table} BY NAME select * from df_data"
         )
         category_results = run_query(cursor, offset_query)
+        raw_percent_results[percent] = category_results
         for _mult in multiplier:
             percent_result[(_mult, percent)] = {
                 category: {
@@ -606,11 +610,6 @@ def plot_repeat(cursor, sf: str, out_dir: Path, fetched_results):
                 for (category, category_result) in category_results
             }
     # print(percent_result)
-    categories = [
-        "SmokedDuck",
-        # "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
-        "optimized-n__threads-1__index-y",
-    ]
     all_percent_result = []
     all_percent_result_total = []
 
@@ -732,7 +731,232 @@ def plot_repeat(cursor, sf: str, out_dir: Path, fetched_results):
         out_dir / f"iter_count_total.pdf",
         bbox_inches="tight",
     )
-    # just_write("percent_result.json", json.dumps(percent_result, indent=2))
+    plot_overall_breakeven(
+        raw_percent_results, categories, query_row_count_result_map, out_dir
+    )
+
+
+def get_percent_break(sd_percent_result: dict, current_percent_result: dict):
+    assert (sd_percent_result.keys()) == (current_percent_result.keys())
+    return {
+        key: {
+            query_num: _get_break(
+                dict(
+                    diff_index=sd_percent_result[key][query_num]["index_time"]
+                    - current_percent_result[key][query_num]["index_time"],
+                    diff_latency=current_percent_result[key][query_num]["latency"]
+                    - sd_percent_result[key][query_num]["latency"],
+                    record_count=current_percent_result[key][query_num]["repeat"],
+                )
+            )
+            for query_num in sd_percent_result[key]
+        }
+        for key in sd_percent_result
+    }
+
+
+# returns False if latter never underforms
+# returns the count otherwise
+def _get_break(in_dict: dict):
+    latency_diff = in_dict["diff_latency"]
+    index_diff = in_dict["diff_index"]
+    is_less = latency_diff < 0
+    count = math.ceil(index_diff / latency_diff)
+    if count < 0:
+        if is_less:
+            return False
+        count = 0
+    return dict(
+        iter=count, is_less=is_less, total_count=int(in_dict["record_count"] * count)
+    )
+
+
+def plot_overall_breakeven(
+    raw_percent_results: dict,
+    categories: list[str],
+    query_row_count_map: dict,
+    out_dir: Path = None,
+):
+    mapped_result = {
+        percent: {
+            category: {
+                result_item["query_num"]: dict(
+                    repeat=result_item["repeat_count"],
+                    latency=result_item["latency"],
+                    index_time=(result_item["index_build_time"] or 0),
+                )
+                for result_item in category_result
+            }
+            for (category, category_result) in category_results
+        }
+        for (percent, category_results) in raw_percent_results.items()
+    }
+    all_categories = list(mapped_result.values())[0].keys()
+    category_flipped = {
+        category: {
+            percent: percent_result[category]
+            for (percent, percent_result) in mapped_result.items()
+        }
+        for category in all_categories
+    }
+    sd_result = category_flipped[categories[0]]
+    percent_diff_results = {
+        category: get_percent_break(sd_result, category_result)
+        for (category, category_result) in category_flipped.items()
+        if category in categories[1:]
+    }
+    percent_diff_results_filtered = {
+        category: {
+            percent: {
+                query_num: query_result
+                for query_num, query_result in percent_result.items()
+                if query_result != False
+                and ((not query_result["is_less"]) or query_result["iter"] > 0)
+            }
+            for percent, percent_result in category_result.items()
+        }
+        for category, category_result in percent_diff_results.items()
+    }
+    # total_time_fig, total_time_axis = plt.subplots(1, 1, figsize=figsize)
+    #
+    just_write("./tmp/percent_diff.json", json.dumps(percent_diff_results_filtered))
+    # figure out the smallest subsection of queries that the results are available for.
+
+    _query_num_available = [
+        set(percent_result.keys())
+        for _, category_result in percent_diff_results_filtered.items()
+        for __, percent_result in category_result.items()
+    ]
+    query_available = reduce(
+        lambda prev, curr: prev | curr, _query_num_available, set()
+    )
+    x_axis_values = sorted(list(query_available), key=lambda q: int(q))
+    x_axis = np.arange(len(x_axis_values))
+    percent_breakeven_fig, percent_breakeven_axis = plt.subplots(1, 1, figsize=(10, 4))
+    width = 0.14
+    group_gap = 0.01
+    for category, category_result in percent_diff_results_filtered.items():
+        category_result_sorted = sorted(
+            category_result.items(), key=lambda per: int(per[0])
+        )
+        for percent_idx, (percent, percent_result) in enumerate(category_result_sorted):
+            get_less = lambda key, is_less: [
+                (
+                    0
+                    if x not in percent_result
+                    else (
+                        percent_result[x][key]
+                        if not (is_less ^ percent_result[x]["is_less"])
+                        else 0
+                    )
+                )
+                for x in x_axis_values
+            ]
+            y_values = get_less("iter", False)
+            y_values_less = get_less("iter", True)
+            y_values_count = get_less("total_count", False)
+            y_values_count_less = get_less("total_count", True)
+            percent_breakeven_axis.bar(
+                x_axis + width * percent_idx,
+                y_values,
+                width=width,
+                label=f"{percent}%",
+                color=BenchmarkPlot.colors[percent_idx],
+            )
+            percent_breakeven_axis.bar(
+                x_axis + width * percent_idx,
+                y_values_less,
+                width=width,
+                hatch="///",
+                alpha=0.99,
+                color=BenchmarkPlot.colors[percent_idx],
+            )
+            percent_breakeven_axis.bar(
+                x_axis + width * percent_idx,
+                [-1 * int(y) for y in y_values_count],
+                width=width,
+                # label=f"{percent}%",
+                color=BenchmarkPlot.colors[percent_idx],
+            )
+            print(y_values_less)
+            print(y_values_count)
+            print(y_values_count_less)
+            percent_breakeven_axis.bar(
+                x_axis + width * percent_idx,
+                [-1 * int(y) for y in y_values_count_less],
+                width=width,
+                hatch="///",
+                color=BenchmarkPlot.colors[percent_idx],
+                alpha=0.99,
+            )
+        # add row count bars
+        for query_id, query in enumerate(x_axis_values):
+            base_count = query_row_count_map[query]
+            # x_start =
+            percent_breakeven_axis.hlines(
+                y=-1 * base_count,
+                color="black",
+                linestyle="solid",
+                xmin=query_id - (width / 2),
+                xmax=query_id + ((percent_idx + 1) * width) - (width / 2),
+                linewidth=1,
+            )
+    percent_breakeven_axis.set_xticks(x_axis + width * (percent_idx / 2), x_axis_values)
+    percent_breakeven_axis.set_yscale("symlog")
+    yticks = []
+    ytick_labels = []
+    percent_breakeven_axis.axhline(y=0, color="black", linestyle="solid")
+    percent_breakeven_axis.axhline(y=1, color="black", linestyle="--", linewidth=0.7)
+    percent_breakeven_axis.set_xlabel("Query")
+    percent_breakeven_axis.legend(ncols=3)
+    percent_breakeven_axis.text(
+        -0.05,
+        0.75,
+        "Breakeven \n Iteration",
+        transform=percent_breakeven_axis.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=10,
+        horizontalalignment="center",
+        verticalalignment="center",
+        ma="center",
+    )
+    percent_breakeven_axis.text(
+        -0.05,
+        0.25,
+        "Total Request \n Count",
+        transform=percent_breakeven_axis.transAxes,
+        ha="right",
+        va="top",
+        fontsize=10,
+        horizontalalignment="center",
+        verticalalignment="center",
+        ma="center",
+    )
+    percent_breakeven_axis.set_ylabel(
+        ""
+    )  # leave main label empty, or use a generic axis title
+    for tick_labels in percent_breakeven_axis.get_yticklabels():
+        yticks.append(tick_labels.get_position()[1])
+        ytick_labels.append(tick_labels.get_text().replace("-", ""))
+    print(yticks, ytick_labels)
+    percent_breakeven_axis.set_yticks(yticks, ytick_labels)
+    percent_breakeven_axis.yaxis.set_minor_locator(
+        ticker.SymmetricalLogLocator(
+            base=10.0,
+            subs=[2, 3, 4, 5, 6, 7, 8, 9],
+            linthresh=percent_breakeven_axis.yaxis.get_transform().linthresh,
+        )
+    )
+    percent_breakeven_axis.tick_params(axis="y", which="minor", left=True)
+
+    percent_breakeven_axis.set_title(
+        "Breakeven Iteration & \n Total Request Count per Query"
+    )
+    # percent_breakeven_axis.set_xticklabels(x_axis)
+    percent_breakeven_fig.savefig(
+        out_dir / "percent_breakeven.pdf", bbox_inches="tight"
+    )
 
 
 def plot_box_plot(cursor, sf: str, out_dir: Path):
@@ -1281,7 +1505,18 @@ def main():
 
     plot_box_plot(cursor, sf=parsed.sf, out_dir=out_dir)
 
-    # plot_repeat(cursor, parsed.sf, out_dir, fetched_result)
+    plot_repeat(
+        cursor,
+        parsed.sf,
+        out_dir,
+        fetched_result,
+        categories=[
+            "SmokedDuck",
+            # "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
+            "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y",
+        ],
+        label=None,
+    )
 
 
 if __name__ == "__main__":
