@@ -1,0 +1,25 @@
+From 657d34e736751e246510d12f815516cea1f77c71 Mon Sep 17 00:00:00 2001
+From: realVinayak <realvinayak123@gmail.com>
+Date: Wed, 1 Jul 2026 15:52:57 -0500
+Subject: [PATCH 4/4] feat: fix seg fault
+
+---
+ src/execution/lineage/operator_lineage.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/execution/lineage/operator_lineage.cpp b/src/execution/lineage/operator_lineage.cpp
+index ad6eb421d6..adde482523 100644
+--- a/src/execution/lineage/operator_lineage.cpp
++++ b/src/execution/lineage/operator_lineage.cpp
+@@ -781,7 +781,7 @@ idx_t OperatorLineage::GetLineageAsChunkLocal(idx_t data_idx, idx_t global_count
+       auto left = log->perfect_probe_ht_log[lsn].left;
+       auto right = log->perfect_probe_ht_log[lsn].right;
+ 
+-      if (left == nullptr) {
++      if (left == nullptr || left == (void *)-1) {
+         for (idx_t j=0; j < count; ++j) {
+           if (right){
+             rhs_col_data[j] = log_index->perfect_codes[ right[j] ];
+-- 
+2.43.0
+

@@ -1,7 +1,7 @@
 From 876769fcf37b8b2f888d41554c7fffe42521f93f Mon Sep 17 00:00:00 2001
 From: realVinayak <realvinayak123@gmail.com>
 Date: Fri, 12 Jun 2026 21:49:29 -0500
-Subject: [PATCH 2/3] feat: allow collecting stats
+Subject: [PATCH 2/4] feat: allow collecting stats
 
 ---
  src/execution/lineage/lineage_query.cpp       | 575 ++++++++++++++++++

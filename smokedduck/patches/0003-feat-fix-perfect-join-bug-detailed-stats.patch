@@ -1,7 +1,7 @@
 From 9019d17df49e9287233e57eab01e493149d6671b Mon Sep 17 00:00:00 2001
 From: realVinayak <realvinayak123@gmail.com>
 Date: Mon, 15 Jun 2026 23:58:49 -0500
-Subject: [PATCH 3/3] feat: fix perfect-join bug + detailed stats
+Subject: [PATCH 3/4] feat: fix perfect-join bug + detailed stats
 
 ---
  src/execution/lineage/lineage_query.cpp       | 49 +++++++++++++++++--
