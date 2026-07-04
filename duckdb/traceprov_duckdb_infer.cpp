@@ -2333,6 +2333,8 @@ typedef struct LogStats {
     int64_t min_value;
     uint64_t max_value;
     uint64_t avg_value;
+    uint64_t count;
+    uint64_t sum;
 } LogStats;
 
 typedef std::vector<idx_t> LogSizeVector;
@@ -2350,7 +2352,9 @@ LogStats tp_compute_stats(const LogSizeVector *log_size_vector){
     return LogStats {
         .min_value = (int64_t)min_value,
         .max_value = max_value,
-        .avg_value = log_size_vector->empty() ? 0 : (sum / log_size_vector->size())
+        .avg_value = log_size_vector->empty() ? 0 : (sum / log_size_vector->size()),
+        .count = log_size_vector->size(),
+        .sum = sum
     };
 }
 
@@ -2358,6 +2362,7 @@ std::string traceprov_get_layer_stats()
 {
     initialize_global_context();
     std::unordered_map<TraceProvLayerNumber, std::vector<uint64_t> *> layer_size_mapping;
+    std::unordered_map<TraceProvLayerNumber, uint64_t> layer_width_mapping;
     for (auto entry: *g_tp_duckdb_state.worker_local_contexts){
         for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
             const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
@@ -2384,6 +2389,7 @@ std::string traceprov_get_layer_stats()
                     local_init_data->row_count_layer_ptr = INCR_BY_BYTES(local_init_data->row_count_layer_ptr, sizeof(uint64_t)*(bind_data->row_layer->num_pk_records));
                     layer_size_mapping[layer_key]->push_back(num_rows);
                 }
+                layer_width_mapping[layer_key] = bind_data->col_layer->num_pk_records;
             }
             delete all_bind_data;
         }
@@ -2402,6 +2408,12 @@ std::string traceprov_get_layer_stats()
         stat_str += "\"max\": " + std::to_string(stats.max_value);
         stat_str += ",";
         stat_str += "\"avg\": " + std::to_string(stats.avg_value);
+        stat_str += ",";
+        stat_str += "\"count\": " + std::to_string(stats.count);
+        stat_str += ",";
+        stat_str += "\"sum\": " + std::to_string(stats.sum);
+        stat_str += ",";
+        stat_str += "\"column_count\": " + std::to_string(layer_width_mapping[layer_key]);
         stat_str += "}";
     }
     stat_str += "}";
