@@ -29,10 +29,11 @@ def resolve_value(raw_value):
 def get_row(raw_result):
     sf = raw_result[0]
     category = raw_result[1]
-    if sf == 1 and category == "base":
-        time_key = "normalization_value"
-    else:
-        time_key = "normalized_time"
+    time_key = "true_slowdown"
+    # if sf == 1 and category == "base":
+    #     time_key = "normalization_value"
+    # else:
+    #     time_key = "normalized_time"
     normal_results = raw_result[2]
     mapped = {
         cell["query_num"]: resolve_value(cell[time_key]) for cell in normal_results
@@ -40,11 +41,12 @@ def get_row(raw_result):
     # print(mapped)
     queries = list(range(1, 23))
     query_values = [mapped.get(str(q), resolve_value(-1)) for q in queries]
-    return [sf, category, *list(query_values)]
+    true_values = [mapped.get(str(q), None) for q in queries]
+    return [sf, category, *list(query_values)], list(true_values)
 
 
 CATEGORY_LABELS = [
-    ("base", "Base"),
+    # ("base", "Base"),
     ("gprom_gprom_window_heuristics", "GProM"),
     ("muller", "SQLProv"),
     ("traceprov_stats", "TraceProv"),
@@ -109,6 +111,26 @@ def add_thick_line(fig, ax, table, row, column_count):
     )
     ax.add_line(line)
 
+def get_max_spec(true_values: list[list[float]], all_rows):
+    row_size = [len(row) for row in true_values]
+    assert len(set((row_size))) == 1
+    sf_list = [row[0] for row in all_rows]
+    sf_set = set(sf_list)
+    sf_part = [[_idx for _idx, _cell in enumerate(sf_list) if _cell == sf ] for sf in sf_set]
+    cmap = plt.cm.YlGnBu
+    # norm = plt.Normalize(vmin=df.values.min(), vmax=df.values.max())
+    all_rows_color = [list(range(row_size[0])) for _ in range(len(all_rows))]
+    for query in range(row_size[0]):
+        for current_sf in sf_part:
+            query_values = [all_rows[sf_cell][query] for sf_cell in current_sf]
+            query_values = [val for val in query_values if val is not None]
+            normalizer = plt.Normalize(vmin=min(query_values), vmax=max(query_values))
+            all_rows_color
+    # for current_sf in sf_part:
+    #     for query in range(row_size[0]):
+    #         all_rows[current_sf][query] 
+        # Figure for each query the one with maximum 
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -127,6 +149,8 @@ def main():
     cursor.execute(scale_query)
     results = cursor.fetchall()
     rows = list(map(get_row, results))
+    true_values = [row[1] for row in rows]
+    rows = [row[0] for row in rows]
     rows = [row for row in rows if filter_rows(row)]
     rows = sorted(rows, key=lambda row: (row[0], category_index(row[1])))
     rows = [[*map(str, row[:1]), category_label(row[1]), *row[2:]] for row in rows]
@@ -165,7 +189,7 @@ def main():
     fig.canvas.draw()
     add_thick_line(fig, ax, table, 0, len(labels))
     add_thick_line(fig, ax, table, last_sf_1, len(labels))
-    fig.savefig(result_dir / "scalability.pdf", bbox_inches="tight")
+    fig.savefig(result_dir / "scalability_slowdown.pdf", bbox_inches="tight")
 
 
 if __name__ == "__main__":

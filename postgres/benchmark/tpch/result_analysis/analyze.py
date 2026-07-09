@@ -5,12 +5,15 @@ from pathlib import Path
 import sys
 from typing import Tuple
 
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, ticker
 import matplotlib as mpl
 
 import numpy as np
 
 from traceprovpy.tools.file_utils import (
+    get_breakpoint_labels,
+    get_nice_num,
+    get_slowdown_cats,
     json_read_file,
     just_read,
     just_write,
@@ -25,6 +28,8 @@ from traceprovpy.tools.plot_utils import (
     setup_tpch_analyzer_parser,
     slice_filter,
 )
+
+from matplotlib.transforms import blended_transform_factory
 
 
 class NormalizedPgTPCHRow(Normalizable):
@@ -271,6 +276,100 @@ class ResultAnalyzer:
         return all_rows
 
 
+def plot_capture_backtrace(
+    data: list[Tuple[str, dict]],
+    categories: list[str],
+    label: str,
+    sf: str,
+    out_dir: Path,
+    width: float,
+    category_label_mapping: dict = None,
+):
+    x_axis_values = list(map(str, range(1, 23)))
+    x_axis = np.arange(len(x_axis_values))
+    capture_backtrace_fig, capture_backtrace_axis = plt.subplots(2, 1, figsize=(9, 3))
+    data = [item for item in data if item[0] in categories]
+    result_sorted = sorted(data, key=lambda x: categories.index(x[0]))
+
+    tp_category = result_sorted[-1][1]
+    break_points = [10, 20]
+    slowdown_data = [(q, 100*((tp_category[q]['phase_1_slowdown'])-1)) for q in x_axis_values]
+    rovh_cats = get_slowdown_cats(slowdown_data, break_points)
+    new_breakpoints = break_points
+    breakpoint_labels = get_breakpoint_labels(new_breakpoints)
+    x_axis_combined = [cell for node in rovh_cats for cell in node]
+    x_axis_values = list(map(str, x_axis_combined))
+
+    for category_idx, (category, catagory_data) in enumerate(result_sorted):
+        x_axis_adjusted = (
+            x_axis + width * category_idx
+        )
+
+        def _get_key_in_dict(in_key: str):
+            return null_safe(
+                [
+                    catagory_data[q][in_key] if q in catagory_data else 0
+                    for q in x_axis_values
+                ]
+            )
+        
+        y_values_time_mean = _get_key_in_dict("phase_1_explain_time_mean")
+        y_timeout_values = [
+            y_idx for y_idx, y in enumerate(y_values_time_mean) if -1.5 < y and y < -0.5
+        ]
+        capture_y_values = slice_filter(_get_key_in_dict("phase_1_explain_time_median"), y_timeout_values)
+        backtrace_y_values = slice_filter(_get_key_in_dict("phase_2_time_median"), y_timeout_values)
+        capture_backtrace_axis[0].bar(
+            x_axis_adjusted,
+            capture_y_values,
+            width=width,
+            label=(category_label_mapping or dict()).get(category, category),
+            color=BenchmarkPlot.colors[category_idx],
+        )
+        capture_backtrace_axis[1].bar(
+            x_axis_adjusted,
+            backtrace_y_values,
+            width=width,
+            label=(category_label_mapping or dict()).get(category, category),
+            color=BenchmarkPlot.colors[category_idx],
+        )
+    capture_backtrace_axis[0].set_yscale("log")
+    capture_backtrace_axis[1].set_yscale("log")
+    capture_backtrace_axis[0].set_ylabel("Capture time (s)")
+    capture_backtrace_axis[1].set_ylabel("Backtrace time (s)")
+    capture_backtrace_axis[0].margins(x=0.0)
+    capture_backtrace_axis[1].margins(x=0.0)
+    colors = ["#d6d6d6", 'white']
+    trans = blended_transform_factory(capture_backtrace_axis[0].transData, capture_backtrace_axis[0].transAxes)
+    # categories_labels_rovh = ["<= 10%", "> 10% & <= 20%", f"<= {max_rovh}"]
+    running = 0
+    for _idx, query_category in enumerate(rovh_cats):
+        old_running = running
+        running += len(query_category)
+        def _do_for_all(func):
+            axis_all = capture_backtrace_axis
+            for axis in axis_all:
+                func(axis)
+        if _idx < len(rovh_cats) - 1:
+            _do_for_all(lambda axis: axis.axvline(x=running-width - 0.00, linestyle='solid', color='black', linewidth=1))
+        new_running = running
+        middle = int((old_running + new_running) / 2)
+        capture_backtrace_axis[0].text(middle, 1.02, breakpoint_labels[_idx], transform=trans, ha='center', va='bottom', fontsize=9, ma='center')
+        start_ = old_running-width
+        if _idx == 0:
+            start_ -= 0.1
+        _do_for_all(lambda axis: axis.axvspan(start_, new_running-width, color=colors[_idx % 2], zorder=0))
+    _do_for_all(lambda x: x.grid(visible=True, axis='y', which='major',color='gray', linestyle='--', linewidth=0.5, alpha=0.7))
+    capture_backtrace_axis[0].set_xticks(x_axis + width*1/2, x_axis_values)
+    capture_backtrace_axis[1].set_xticks(x_axis + width*1/2, x_axis_values)
+    # capture_backtrace_axis[0].set_xlabel("Query (in the order of increasing capture overhead)")
+    capture_backtrace_axis[1].set_xlabel("Query (in the order of increasing capture overhead)")
+    capture_backtrace_fig.subplots_adjust(hspace=0.3)
+    _format_wrapped = lambda x, _: get_nice_num(x)
+    # percent_breakeven_axis.set_yticks(yticks, ytick_labels)
+    capture_backtrace_axis[0].yaxis.set_major_formatter(ticker.FuncFormatter(_format_wrapped))
+    capture_backtrace_axis[1].yaxis.set_major_formatter(ticker.FuncFormatter(_format_wrapped))
+    capture_backtrace_fig.savefig(out_dir / f"capture_backrace_{label}.pdf", bbox_inches="tight")
 def plot_data(
     data: list[Tuple[str, dict]],
     categories: list[str],
@@ -509,6 +608,15 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
         out_dir,
         0.7,
         0.8,
+        mapping,
+    )
+    plot_capture_backtrace(
+        result_mapped,
+        muller_traceprov[1:],
+        "postgres_muller_traceprov",
+        sf,
+        out_dir,
+        0.3,
         mapping,
     )
 
