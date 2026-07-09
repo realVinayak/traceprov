@@ -1,6 +1,7 @@
 import argparse
 import os
 from pathlib import Path
+from traceprovpy.tools.file_utils import get_tmp_file
 from traceprovpy.tools.parser_defs import make_duckdb_selectivity_parser
 from traceprovpy.utils import get_filter_group
 from utils import make_replacer
@@ -23,13 +24,12 @@ import random
 # to make sampling reproducible.
 random.seed(10)
 
-
 def run():
     parsed = make_duckdb_selectivity_parser().parse_args()
     traceprov_handle_suffix(parsed)
 
     result = []
-    tmp = Path("./tmp/")
+    tmp = Path(get_tmp_file())
     os.makedirs(tmp, exist_ok=True)
 
     base_sql = just_read(Path(f"queries/{parsed.mode}_base.sql"))

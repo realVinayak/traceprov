@@ -11,6 +11,7 @@ from traceprovpy.tools.duckdb_parse_options import (
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.file_utils import (
+    get_tmp_file,
     get_total_iters,
     json_read_file,
     just_write,
@@ -18,7 +19,6 @@ from traceprovpy.tools.file_utils import (
 )
 from traceprovpy.tools.run_duckdb_generic import run_combined, set_extra_base_options
 from utils import set_extra
-
 
 def _make_query(columns, table_clause):
     column_joined = ",".join(columns)
@@ -47,7 +47,7 @@ def run():
     traceprov_handle_suffix(parsed)
     parsed.optimized = True
 
-    tmp = Path("./tmp/")
+    tmp = Path(get_tmp_file())
     os.makedirs(tmp, exist_ok=True)
     config = json_read_file(parsed.config)
     query_dirs = config["query_dir"]

@@ -318,3 +318,33 @@ def slice_filter(raw_values, invalid_values):
         (0 if _idx in invalid_values else raw_value)
         for (_idx, raw_value) in enumerate(raw_values)
     ]
+
+class QueryCategory(NamedTuple):
+    label: str
+    queries: list[int]
+
+def query_categories():
+    simple_scans_aggregations_small_joins_leq_3 = [
+        1, 3, 6, 12, 14, 19
+    ]
+    scans_aggregations_larger_joins = [
+        10, 5, 9, 7, 8
+    ]
+    uncorrelated_subqueries = [
+        15, 16, 18, 11
+    ]
+    correlated_subqueries_complex_subqueries = [
+        4, 2, 13, 17, 20, 21, 22
+    ]
+    CAT_LABEL_1 = "Simple Scans / \n Aggregations with # Joins < 3"
+    CAT_LABEL_2 = "Simple Scans / \n Aggregations with wider joins"
+    CAT_LABEL_3 = "Uncorrelated \n Subqueries"
+    CAT_LABEL_4 = "Correlated Subqueries / \n Complex subqueries"
+    
+    cats = [
+        QueryCategory(CAT_LABEL_1, simple_scans_aggregations_small_joins_leq_3),
+        QueryCategory(CAT_LABEL_2, scans_aggregations_larger_joins),
+        QueryCategory(CAT_LABEL_3, uncorrelated_subqueries),
+        QueryCategory(CAT_LABEL_4, correlated_subqueries_complex_subqueries),
+    ]
+    return cats

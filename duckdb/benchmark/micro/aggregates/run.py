@@ -10,6 +10,7 @@ from traceprovpy.tools.duckdb_parse_options import (
 )
 from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
 from traceprovpy.tools.run_duckdb_generic import create_base_offset, run_combined
+from traceprovpy.tools.file_utils import GLOBAL_TMP_DIR
 
 random.seed(10)
 
@@ -57,7 +58,7 @@ def run():
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     result = []
-    tmp = Path("./tmp/")
+    tmp = Path(GLOBAL_TMP_DIR)
     os.makedirs(tmp, exist_ok=True)
 
     config = json_read_file(parsed.config)

@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from traceprovpy.tools.file_utils import json_read_file, just_write
+from traceprovpy.tools.file_utils import get_tmp_file, json_read_file, just_write
 from traceprovpy.tools.normalized_row import (
     NormalizedSampleInferRow,
     extract_bucket_category,
@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from traceprovpy.utils import add_underscores_numbers
-
 
 class NormalizedRowSelctivity(NormalizedSampleInferRow):
     num_rows: int
@@ -108,7 +107,7 @@ def main():
     """
     cursor.execute(sql_query)
     fetched_result = cursor.fetchall()
-    out_dir = Path("./tmp/")
+    out_dir = Path(get_tmp_file())
     os.makedirs(out_dir, exist_ok=True)
     for fetch_row in fetched_result:
         print(fetch_row[0])

@@ -156,9 +156,9 @@ def run_sample_inference(
         repeat=iters,
         threads=parsed.threads,
         i=captured_sql.as_posix(),
-        time="./tmp/infer_time.json",
-        profile=("./tmp/infer_profile_%d_%d.json"),
-        settings=("./tmp/capture_settings.json"),
+        time=make_tmp_file("infer_time.json"),
+        profile=make_tmp_file("infer_profile_%d_%d.json"),
+        settings=make_tmp_file("capture_settings.json"),
         disable_col_opt=disable_col_opt,
         main_once_extra_all=True,
         log_offsets=log_offsets,
@@ -330,9 +330,9 @@ def run_single_smokedduck(
         repeat=iters,
         threads=parsed.threads,
         i=base_sql.as_posix(),
-        time="./tmp/base_time.json",
-        profile="./tmp/base_profile_%d.json",
-        settings="./tmp/base_settings.json",
+        time=make_tmp_file("base_time.json"),
+        profile=make_tmp_file("base_profile_%d.json"),
+        settings=make_tmp_file("base_settings.json"),
         pre_query=pre_query,
         warm_up_time=parsed.warm_up_time,
         extra_multiple_count=1,
@@ -348,10 +348,10 @@ def run_single_smokedduck(
     base_settings = json_read_file(base_options.settings)
 
     capture_options = base_options._replace(
-        time="./tmp/capture_time.json",
-        profile="./tmp/capture_profile_%d.json",
-        settings="./tmp/capture_settings.json",
-        stats="./tmp/capture_sd_stats_%d.json",
+        time=make_tmp_file("capture_time.json"),
+        profile=make_tmp_file("capture_profile_%d.json"),
+        settings=make_tmp_file("capture_settings.json"),
+        stats=make_tmp_file("capture_sd_stats_%d.json"),
         lineage=True,
         is_new_sd=is_new_sd,
         sd_extension_path=sd_extension_path,
@@ -370,8 +370,8 @@ def run_single_smokedduck(
             infer_sql = f"create or replace table {table} AS ({infer_sql})"
 
         return [
-            just_write("./tmp/prepare.sql", "PRAGMA PrepareLineage(0);"),
-            just_write("./tmp/run_infer.sql", infer_sql),
+            just_write(make_tmp_file("prepare.sql"), "PRAGMA PrepareLineage(0);"),
+            just_write(make_tmp_file("run_infer.sql"), infer_sql),
         ]
 
     def run_old_sd():
@@ -396,7 +396,7 @@ def run_single_smokedduck(
             backtrace_joined = "\n".join(backtrace_sql)
             _extras.append(
                 just_write(
-                    Path("./tmp/") / f"sd_capture_{idx}_{lineage_table_name}.sql",
+                    Path(make_tmp_file(f"sd_capture_{idx}_{lineage_table_name}.sql")),
                     backtrace_joined,
                 )
             )
@@ -470,17 +470,17 @@ def validate_query(
     exec_str: str,
     base_query_name="base.sql",
 ):
-    base_dump_path = Path("./tmp/") / "base_dump.csv"
-    capture_dump_path = Path("./tmp/") / "capture_dump.csv"
+    base_dump_path = Path(make_tmp_file("base_dump.csv"))
+    capture_dump_path = Path(make_tmp_file("capture_dump.csv"))
 
-    base_dump_query_path = Path("./tmp/") / "base_dump_query.sql"
+    base_dump_query_path = Path(make_tmp_file("base_dump_query.sql"))
     base_dump_query = make_dump_query(
         just_read(base_dir / base_query_name), base_dump_path.as_posix()
     )
     just_write(base_dump_query_path, base_dump_query)
 
     validate_query = base_dir / validate_query_name
-    capture_dump_query_path = Path("./tmp/") / "capture_dump_query.sql"
+    capture_dump_query_path = Path(make_tmp_file("capture_dump_query.sql"))
     capture_dump_query = make_dump_query(
         just_read(validate_query), capture_dump_path.as_posix()
     )
@@ -609,7 +609,7 @@ def run_sample_inference_smokedduck(
         if rc != 0:
             return dict(type="capture_on_pre_base", return_code=rc)
 
-    sample_q_dir = Path("./tmp/sd_infer/") / query_num
+    sample_q_dir = Path(make_tmp_file("sd_infer/") / query_num)
     os.makedirs(sample_q_dir, exist_ok=True)
     extra_sqls = []
     sql_spec_map = []
@@ -637,23 +637,23 @@ def run_sample_inference_smokedduck(
 
     sql_spec_map = [TRACEPROV_CAPTURE_ENTRY_SD, *sql_spec_map]
     sql_spec_map = list(product(sql_spec_map, range(iters)))
-    just_write("./tmp/extra_file.txt", "\n".join(extra_sqls))
+    just_write(make_tmp_file("extra_file.txt"), "\n".join(extra_sqls))
 
     if parsed.single_row_mode:
-        profile_path = "./tmp/infer_profile_%d.json"
+        profile_path = make_tmp_file("infer_profile_%d.json")
     else:
-        profile_path = "./tmp/infer_profile_%d_%d.json"
+        profile_path = make_tmp_file("infer_profile_%d_%d.json")
 
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
         threads=parsed.threads,
         i=base_sql.as_posix(),
-        time="./tmp/infer_time.json",
+        time=make_tmp_file("infer_time.json"),
         profile=profile_path,
-        settings="./tmp/capture_settings.json",
-        extra_file="./tmp/extra_file.txt",
-        stats="./tmp/capture_sd_stats_%d.json",
+        settings=make_tmp_file("capture_settings.json"),
+        extra_file=make_tmp_file("extra_file.txt"),
+        stats=make_tmp_file("capture_sd_stats_%d.json"),
         lineage=True,
         main_once_extra_all=not parsed.single_row_mode,
         warm_up_time=parsed.warm_up_time,
@@ -791,9 +791,9 @@ def run_single_query_dry(
         repeat=iters,
         threads=threads,
         i=query_path.as_posix(),
-        time="./tmp/base_time.json",
-        profile="./tmp/base_profile_%d.json",
-        settings="./tmp/base_settings.json",
+        time=make_tmp_file("base_time.json"),
+        profile=make_tmp_file("base_profile_%d.json"),
+        settings=make_tmp_file("base_settings.json"),
         warm_up_time=parsed.warm_up_time,
     )
 
@@ -865,7 +865,7 @@ def run_single(
             f"create or replace table q{query_num}_capture as ({capture_sql_content})"
         )
         captured_sql = Path(
-            just_write(Path("./tmp/new_capture.sql"), capture_sql_content)
+            just_write(Path(make_tmp_file("new_capture.sql")), capture_sql_content)
         )
 
     exec_str = exe.as_posix()
@@ -884,9 +884,9 @@ def run_single(
         repeat=iters,
         threads=threads,
         i=base_sql.as_posix(),
-        time="./tmp/base_time.json",
-        profile="./tmp/base_profile_%d.json",
-        settings="./tmp/base_settings.json",
+        time=make_tmp_file("base_time.json"),
+        profile=make_tmp_file("base_profile_%d.json"),
+        settings=make_tmp_file("base_settings.json"),
         pending=pending,
         pre_query=pre_query,
         warm_up_time=parsed.warm_up_time,
@@ -901,15 +901,16 @@ def run_single(
 
     capture_options = base_options._replace(
         i=captured_sql.as_posix(),
-        time="./tmp/capture_time.json",
-        profile="./tmp/capture_profile_%d.json",
+        time=make_tmp_file("capture_time.json"),
+        profile=make_tmp_file("capture_profile_%d.json"),
         disable_col_opt=disable_col_opt,
-        settings="./tmp/capture_settings.json",
+        settings=make_tmp_file("capture_settings.json"),
         traceprov_materialize_derivation=(validate or materialize_infer)
         and run_inference,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         extra_multiple_count=extra_multiple_count,
         get_log_size=True,
+        repeat=iters
     ).parse_optimizations(parsed)
 
     if parsed.single_row_mode:

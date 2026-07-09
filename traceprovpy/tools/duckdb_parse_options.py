@@ -3,6 +3,7 @@
 import argparse
 
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
+from traceprovpy.tools.file_utils import get_tmp_file, set_tmp_file
 
 
 def make_duckdb_parse():
@@ -57,6 +58,7 @@ def make_duckdb_parse():
     )
     parser.add_argument("--sample_inference_limit", type=int, default=10)
     DuckDBDriverOptions.add_parse_options(parser)
+    parser.add_argument("--g_tmp_dir", required=False, default=get_tmp_file())
     return parser
 
 
@@ -65,6 +67,8 @@ SMART_TOKEN = "SMART"
 
 # Try to be smart and automatically try to compose a suff string out of the options.
 def traceprov_handle_suffix(parsed):
+    print("Parsed: ", parsed)
+    set_tmp_file(parsed.g_tmp_dir)
     if parsed.traceprov_fast:
         parsed.traceprov_use_merge_chunks = True
         parsed.traceprov_use_compact = True

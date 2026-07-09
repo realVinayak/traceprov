@@ -15,7 +15,7 @@ import numpy as np
 
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
-from traceprovpy.tools.file_utils import just_read, just_write
+from traceprovpy.tools.file_utils import get_breakpoint_labels, get_nice_num, get_slowdown_cats, just_read, just_write
 from traceprovpy.tools.normalized_row import (
     Extendable,
     Normalizable,
@@ -41,6 +41,8 @@ import random
 
 from traceprovpy.tools.zipf import zipf_draw
 import pandas as pd
+
+from matplotlib.transforms import blended_transform_factory
 
 # mpl.rcParams.update(
 #     {
@@ -456,10 +458,10 @@ CATEGORIES = [
 
 INTERESTING_CATEGORIES = [
     "SmokedDuck",
-    "optimized-n__threads-1__partition_in_agg-y",
-    "optimized-n__threads-1__join_filter_rewrite-y__partition_in_agg-y",
+    # "optimized-n__threads-1__partition_in_agg-y",
+    # "optimized-n__threads-1__join_filter_rewrite-y__partition_in_agg-y",
     "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y",
-    "optimized-n__threads-1__index-y",
+    # "optimized-n__threads-1__index-y",
     # "optimized-n__threads-1",
     # "optimized-n__threads-1__index-y",
     # # "optimized-y__threads-1__compact-y__merge_chunks-y",
@@ -475,6 +477,7 @@ INTERESTING_CATEGORIES_MAP = {
     "optimized-y__threads-1__compact-y__merge_chunks-y__partition_in_agg-y__table_stats-y": "TraceProv (Partition)",
     "optimized-n__threads-1__index-y": "TraceProv (index)",
     "optimized-n__threads-1": "TraceProv (no index)",
+    "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y": "TraceProv"
 }
 
 LOG_SIZE_CATEGORY = [
@@ -518,17 +521,6 @@ def get_slowdown(_sd_time, _tp_time):
 
 MAX_REPEAT = 100
 
-
-def get_nice_num(in_int):
-    if in_int < 1_000:
-        return str(int(in_int))
-    if in_int < 1_000_000:
-        return f"{int(in_int / 1_000)} K"
-    if in_int < 1_000_000_000:
-        return f"{int(in_int / 1_000_000)} M"
-    if in_int < 1_000_000_000_000:
-        return f"{int(in_int / 1_000_000_000)} B"
-    assert 0, in_int
 
 
 def plot_repeat(
@@ -811,7 +803,7 @@ def plot_overall_breakeven(
                 query_num: query_result
                 for query_num, query_result in percent_result.items()
                 if query_result != False
-                and ((not query_result["is_less"]) or query_result["iter"] > 0)
+                and ((not query_result["is_less"]))
             }
             for percent, percent_result in category_result.items()
         }
@@ -830,12 +822,18 @@ def plot_overall_breakeven(
     query_available = reduce(
         lambda prev, curr: prev | curr, _query_num_available, set()
     )
-    x_axis_values = sorted(list(query_available), key=lambda q: int(q))
-    x_axis = np.arange(len(x_axis_values))
-    percent_breakeven_fig, percent_breakeven_axis = plt.subplots(1, 1, figsize=(10, 4))
+    # x_axis_values = sorted(list(query_available), key=lambda q: int(q))
+    # x_axis = np.arange(len(x_axis_values))
+    percent_breakeven_fig, percent_breakeven_axis = plt.subplots(1, 1, figsize=(6.5, 3))
     width = 0.14
     group_gap = 0.01
     for category, category_result in percent_diff_results_filtered.items():
+        print(category_result)
+        values_at_100 = category_result[100]
+        query_sort_order = sorted(values_at_100.keys(), key=lambda _key: values_at_100[_key]['iter'])
+        x_axis_values = [q for q in query_sort_order if q in query_available] 
+        x_axis = np.arange(len(x_axis_values))
+        print(x_axis_values)
         category_result_sorted = sorted(
             category_result.items(), key=lambda per: int(per[0])
         )
@@ -881,14 +879,14 @@ def plot_overall_breakeven(
             print(y_values_less)
             print(y_values_count)
             print(y_values_count_less)
-            percent_breakeven_axis.bar(
-                x_axis + width * percent_idx,
-                [-1 * int(y) for y in y_values_count_less],
-                width=width,
-                hatch="///",
-                color=BenchmarkPlot.colors[percent_idx],
-                alpha=0.99,
-            )
+            # percent_breakeven_axis.bar(
+            #     x_axis + width * percent_idx,
+            #     [-1 * int(y) for y in y_values_count_less],
+            #     width=width,
+            #     hatch="///",
+            #     color=BenchmarkPlot.colors[percent_idx],
+            #     alpha=0.99,
+            # )
         # add row count bars
         for query_id, query in enumerate(x_axis_values):
             base_count = query_row_count_map[query]
@@ -901,58 +899,82 @@ def plot_overall_breakeven(
                 xmax=query_id + ((percent_idx + 1) * width) - (width / 2),
                 linewidth=1,
             )
+
+    Y_POS = 0.8
+    X_START = 0.65
+    trans2 = blended_transform_factory(percent_breakeven_axis.transAxes, percent_breakeven_axis.transAxes)
+    percent_breakeven_axis.annotate(
+        '', 
+        xy=(X_START + 0.15, Y_POS), xycoords=trans2,      # arrow head position (top)
+        xytext=(X_START, Y_POS), textcoords=trans2, # arrow tail position (bottom)
+        arrowprops=dict(arrowstyle='->', color='black', lw=1.5)
+    )
+    percent_breakeven_axis.text(X_START, Y_POS, "Decreasing index benefit", transform=percent_breakeven_axis.transAxes, ha='right', va='center', fontsize=12)
+
     percent_breakeven_axis.set_xticks(x_axis + width * (percent_idx / 2), x_axis_values)
-    percent_breakeven_axis.set_yscale("symlog")
+    percent_breakeven_axis.set_yscale("log")
     yticks = []
     ytick_labels = []
     percent_breakeven_axis.axhline(y=0, color="black", linestyle="solid")
     percent_breakeven_axis.axhline(y=1, color="black", linestyle="--", linewidth=0.7)
-    percent_breakeven_axis.set_xlabel("Query")
-    percent_breakeven_axis.legend(ncols=3)
-    percent_breakeven_axis.text(
-        -0.05,
-        0.75,
-        "Breakeven \n Iteration",
-        transform=percent_breakeven_axis.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=10,
-        horizontalalignment="center",
-        verticalalignment="center",
-        ma="center",
-    )
-    percent_breakeven_axis.text(
-        -0.05,
-        0.25,
-        "Total Request \n Count",
-        transform=percent_breakeven_axis.transAxes,
-        ha="right",
-        va="top",
-        fontsize=10,
-        horizontalalignment="center",
-        verticalalignment="center",
-        ma="center",
-    )
+    percent_breakeven_axis.set_xlabel("Query", fontdict={'fontsize': 12})
+    percent_breakeven_axis.margins(x=0.01)
+    percent_breakeven_axis.grid(visible=True, axis='y', which='major',color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+
+    percent_breakeven_axis.legend(prop=dict(size=11.5))
+    # percent_breakeven_axis.text(
+    #     -0.05,
+    #     0.75,
+    #     "Breakeven \n Iteration",
+    #     transform=percent_breakeven_axis.transAxes,
+    #     ha="right",
+    #     va="bottom",
+    #     fontsize=10,
+    #     horizontalalignment="center",
+    #     verticalalignment="center",
+    #     ma="center",
+    # )
+    # percent_breakeven_axis.text(
+    #     -0.05,
+    #     0.25,
+    #     "Total Request \n Count",
+    #     transform=percent_breakeven_axis.transAxes,
+    #     ha="right",
+    #     va="top",
+    #     fontsize=10,
+    #     horizontalalignment="center",
+    #     verticalalignment="center",
+    #     ma="center",
+    # )
     percent_breakeven_axis.set_ylabel(
-        ""
+        "Breakeven Iteration",
+        fontdict={'fontsize': 12}
     )  # leave main label empty, or use a generic axis title
-    for tick_labels in percent_breakeven_axis.get_yticklabels():
-        yticks.append(tick_labels.get_position()[1])
-        ytick_labels.append(tick_labels.get_text().replace("-", ""))
+    # for tick_labels in percent_breakeven_axis.get_yticklabels():
+    #     yticks.append(tick_labels.get_position()[1])
+    #     print(yticks)
+    #     value = get_nice_num(int(tick_labels.get_text()))
+    #     ytick_labels.append(value)
     print(yticks, ytick_labels)
-    percent_breakeven_axis.set_yticks(yticks, ytick_labels)
+    _format_wrapped = lambda x, _: get_nice_num(x)
+    # percent_breakeven_axis.set_yticks(yticks, ytick_labels)
+    percent_breakeven_axis.yaxis.set_major_formatter(ticker.FuncFormatter(_format_wrapped))
+    # percent_breakeven_axis.
+    percent_breakeven_axis.tick_params(axis='x', labelsize=12) # Set x-axis labels to size 12
+    percent_breakeven_axis.tick_params(axis='y', labelsize=12) # Set y-axis labels to size 12
+
     percent_breakeven_axis.yaxis.set_minor_locator(
-        ticker.SymmetricalLogLocator(
+        ticker.LogLocator(
             base=10.0,
             subs=[2, 3, 4, 5, 6, 7, 8, 9],
-            linthresh=percent_breakeven_axis.yaxis.get_transform().linthresh,
+            # linthresh=percent_breakeven_axis.yaxis.get_transform().linthresh,
         )
     )
     percent_breakeven_axis.tick_params(axis="y", which="minor", left=True)
 
-    percent_breakeven_axis.set_title(
-        "Breakeven Iteration & \n Total Request Count per Query"
-    )
+    # percent_breakeven_axis.set_title(
+    #     "Breakeven Iteration & \n Total Request Count per Query"
+    # )
     # percent_breakeven_axis.set_xticklabels(x_axis)
     percent_breakeven_fig.savefig(
         out_dir / "percent_breakeven.pdf", bbox_inches="tight"
@@ -982,39 +1004,60 @@ def plot_result(
     fetched_result: list[tuple[str, list]],
     sf: str,
     categories: list[str],
+    setup_cost_result: list[tuple[str, str, float]],
     figsize=(20, 6),
     width=0.1,
     mapping: dict = None,
 ):
+    # extended_categories = ['']
     x_axis_values = list(map(str, range(1, 23)))
     x_axis = np.arange(len(x_axis_values))
     log_size_width = 0.15
-    fig, (fig_axis, infer_time_axis, infer_time_with_index_axis) = plt.subplots(
+    fig, (fig_axis, infer_time_axis, setup_cost_axis) = plt.subplots(
         3, 1, figsize=figsize
     )
+    fig.subplots_adjust(hspace=0.3)
     total_time_fig, total_time_axis = plt.subplots(1, 1, figsize=figsize)
-    log_size_fig, log_size_axis = plt.subplots(1, 3, figsize=(25, 6), sharey=True)
+    # log_size_fig, log_size_axis = plt.subplots(1, 3, figsize=(8, 6), sharey=True)
     stdev_fig, (stdev_base_axis, stdev_capture_axis) = plt.subplots(
         2, 1, figsize=(20, 6), sharex=True
     )
     fetched_result = [item for item in fetched_result if item[0] in categories]
+    setup_cost_filtered = {item[0]: item[1] for item in setup_cost_result if item[0] in categories}
     result_sorted = sorted(fetched_result, key=lambda x: categories.index(x[0]))
     log_size_incr = 0
-    fig_axis.axhline(y=10, color="r", linestyle="--")
-    fig_axis.axhline(y=20, color="r", linestyle="--")
+    # fig_axis.axhline(y=10, color="r", linestyle="--")
+    # fig_axis.axhline(y=20, color="r", linestyle="--")
     fig_axis.set_yscale("log")
     extra_labels = dict()
     pseudo_idx = 0
+    # for now.
+    assert len(categories) == 2
+    tp_category_data = result_sorted[1][1]
+    # print(tp_category_data)
+    slowdown_data = [(item['query_num'], item['relative_overhead']) for item in tp_category_data]
+    # print(slowdown_data)
+    break_points = [10, 20]
+    rovh_cats = get_slowdown_cats(slowdown_data, break_points)
+    new_breakpoints = break_points
+    breakpoint_labels = get_breakpoint_labels(new_breakpoints)
+    print(rovh_cats)
+    x_axis_combined = [cell for node in rovh_cats for cell in node]
+    x_axis_values = list(map(str, x_axis_combined))
+    # assert 0
+    get_remap_data = lambda cat_data: {item["query_num"]: item for item in cat_data}
     for category_idx, (category, category_data) in enumerate(result_sorted):
-        remapped_data = {item["query_num"]: item for item in category_data}
+        remapped_data = get_remap_data(category_data)
         parsed_category = parse_category(category)
         x_axis_adjusted = x_axis + width * pseudo_idx
         x_axis_log_adjusted = x_axis + log_size_width * log_size_incr
+        setup_cost_cat_data = get_remap_data(setup_cost_filtered[category])
 
-        def _get_key_in_dict(in_key: str):
+        def _get_key_in_dict(in_key: str, in_data=None):
+            curr_data = in_data or remapped_data
             return null_safe(
                 [
-                    remapped_data[q][in_key] if q in remapped_data else 0
+                    curr_data[q][in_key] if q in curr_data else 0
                     for q in x_axis_values
                 ]
             )
@@ -1028,14 +1071,15 @@ def plot_result(
                 ]
             )
 
-        y_values = _get_key_in_dict("relative_overhead")
+        y_values = _get_key_in_dict("capture_profile_latency")
         y_infer_time_values = _get_key_in_dict("average_time")
-        y_infer_time_values_with_index = _get_key_in_dict("average_time_with_index")
+        # y_infer_time_values_with_index = _get_key_in_dict("average_time_with_index")
         total_time_y_values = _get_key_in_dict("total_time")
         total_time_stdev = _get_key_in_dict("total_time_std")
         # y_infer_time_values_error = _get_key_in_dict("mean_stdev")
         y_infer_time_values_error = _get_key_in_dict("max_stdev")
         not_present = _get_not_present("average_time")
+        setup_cost_y_values = _get_key_in_dict("setup_cost", setup_cost_cat_data)
         print(not_present)
         # if category == "SmokedDuck":
         #     # y_values_absent = _get_not_present("relative_overhead")
@@ -1177,13 +1221,9 @@ def plot_result(
             ),
             yerr=y_infer_time_values_error,
         )
-        infer_time_with_index_axis.bar(
+        setup_cost_axis.bar(
             x_axis_adjusted,
-            (
-                y_infer_time_values
-                if parsed_category != "SmokedDuck"
-                else y_infer_time_values_with_index
-            ),
+            setup_cost_y_values,
             width=width,
             label=(
                 (mapping or dict()).get(
@@ -1195,8 +1235,8 @@ def plot_result(
                     ),
                 )
             ),
-            yerr=y_infer_time_values_error,
         )
+        pseudo_idx += 1
         # if parsed_category == "SmokedDuck":
         #     pseudo_idx += 1
         #     x_axis_adjusted = x_axis + width * pseudo_idx
@@ -1216,24 +1256,33 @@ def plot_result(
         #         ),
         #         yerr=y_infer_time_values_error,
         #     )
-        if category in LOG_SIZE_CATEGORY:
-            for (
-                log_size_single_axis,
-                log_size_single_value,
-                log_size_single_stdev,
-            ) in zip(log_size_axis, log_size_values, log_size_stdev, strict=True):
-                log_size_single_axis.bar(
-                    x_axis_log_adjusted,
-                    log_size_single_value,
-                    width=log_size_width,
-                    label=parsed_category,
-                    color=BenchmarkPlot.colors[pseudo_idx],
-                    yerr=log_size_single_stdev,
-                )
-            log_size_incr += 1
-        pseudo_idx += 1
 
-    fig_axis.set_ylabel("Rel. Ovh. (%)")
+    fig_axis.set_ylabel("Capture Time (s)")
+    # fig_axis.set
+    fig_axis.margins(x=0.0)
+    colors = ["#d6d6d6", 'white']
+    trans = blended_transform_factory(fig_axis.transData, fig_axis.transAxes)
+    # categories_labels_rovh = ["<= 10%", "> 10% & <= 20%", f"<= {max_rovh}"]
+    running = 0
+    for _idx, query_category in enumerate(rovh_cats):
+        old_running = running
+        running += len(query_category)
+        def _do_for_all(func):
+            axis_all = (fig_axis, infer_time_axis, setup_cost_axis)
+            for axis in axis_all:
+                func(axis)
+        if _idx < len(rovh_cats) - 1:
+            _do_for_all(lambda axis: axis.axvline(x=running-width - 0.00, linestyle='solid', color='black', linewidth=1))
+        new_running = running
+        middle = int((old_running + new_running) / 2)
+        fig_axis.text(middle, 1.02, breakpoint_labels[_idx], transform=trans, ha='center', va='bottom', fontsize=9, ma='center')
+        start_ = old_running-width
+        if _idx == 0:
+            start_ -= 0.1
+        _do_for_all(lambda axis: axis.axvspan(start_, new_running-width, color=colors[_idx % 2], zorder=0))
+        
+
+    total_time_axis.margins(x=0.01)
     total_time_axis.set_ylabel("Total Time (s)")
     # fig_axis.set_yscale("log")
     if sf == "1":
@@ -1243,17 +1292,19 @@ def plot_result(
             labels.extend(extra_labels.keys())
         fig_axis.legend(handles=handles, labels=labels, loc="upper right")
     else:
-        fig_axis.legend()
+        fig_axis.legend(prop=dict(size=9),)
         # fig_axis.legend(loc="right", bbox_to_anchor=(0.95, 0.3))
 
     infer_time_axis.set_ylabel("Backtrace (s)")
     infer_time_axis.set_yscale("log")
-    infer_time_axis.set_xlabel("Query")
+    # infer_time_axis.set_xlabel("Query")
+    infer_time_axis.margins(x=0.0)
 
-    infer_time_with_index_axis.set_ylabel("Backtrace w/ Idx Bld (s)")
-    infer_time_with_index_axis.set_yscale("log")
-    infer_time_with_index_axis.set_xlabel("Query")
-    infer_time_with_index_axis.legend()
+    setup_cost_axis.set_ylabel("Setup Cost (s)")
+    setup_cost_axis.set_yscale("log")
+    setup_cost_axis.margins(x=0.0)
+    setup_cost_axis.set_xlabel("Query")
+    # infer_time_with_index_axis.legend()
 
     total_time_axis.set_xlabel("Query")
     total_time_axis.set_yscale("log")
@@ -1264,34 +1315,31 @@ def plot_result(
     fig_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     total_time_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
     # fig_axis.set_yticks([0, 10, 20, 30, 40])
-    fig.suptitle(f"DuckDB Relative Overhead & Backtrace Time - SF {sf}")
+    # fig.suptitle(f"DuckDB Relative Overhead & Backtrace Time - SF {sf}")
 
     infer_time_axis.set_xticks(x_axis + width * (len(categories) / 3), x_axis_values)
-    infer_time_with_index_axis.set_xticks(
+    setup_cost_axis.set_xticks(
         x_axis + width * (len(categories) / 3), x_axis_values
     )
-    for log_size_axe in log_size_axis:
-        log_size_axe.set_xticks(
-            x_axis + log_size_width * (len(LOG_SIZE_CATEGORY) / 2), x_axis_values
-        )
-
-    log_size_axis[0].set_title("Page Requested (Bytes)")
-    log_size_axis[1].set_title("Page Used (Bytes)")
-    log_size_axis[2].set_title("Bytes Used (Bytes)")
-
-    log_size_axis[0].set_yscale("log")
-    log_size_axis[1].set_yscale("log")
-    log_size_axis[2].set_yscale("log")
-    log_size_axis[2].legend()
-    log_size_fig.suptitle(f"Log Size for SF={sf}")
 
     stdev_capture_axis.set_xticks(x_axis + width * (len(categories) / 2), x_axis_values)
     stdev_capture_axis.legend()
     stdev_capture_axis.set_ylabel("Standard Deviation / Mean")
     stdev_base_axis.set_ylabel("Standard Deviation / Mean")
 
+    _do_for_all(lambda x: x.yaxis.set_minor_locator(ticker.LogLocator(
+            base=10.0,
+            subs=[2, 3, 4, 5, 6, 7, 8, 9]
+        ))
+        )
+
+    # setup_cost_axis.yaxis.set_minor_locator(ticker.LogLocator(
+    #         base=10.0,
+    #         subs=[2, 3, 4,]
+    #     ))
+    _do_for_all(lambda x: x.grid(visible=True, axis='y', which='major',color='gray', linestyle='--', linewidth=0.5, alpha=0.7))
     stdev_fig.suptitle(f"Standard Deviation / Mean for SF={sf}")
-    return fig, log_size_fig, stdev_fig, total_time_fig
+    return fig, None, stdev_fig, total_time_fig
 
 
 def combine_smokedduck_results(all_results: list[dict], parsed: list):
@@ -1483,6 +1531,21 @@ def main():
     for fetched in fetched_result:
         print(fetched[0])
 
+    setup_cost_query = """
+        select
+            category, 
+            list(struct_pack(query_num:=query_num, setup_cost:=setup_cost))
+            from (
+                select 
+                    category, 
+                    query_num, 
+                    any_value(coalesce(sql_time, 0.0) + coalesce(index_build_time, 0.0)) as setup_cost
+                    from dumped_sample group by category,query_num
+                ) 
+            group by category;
+    """
+    cursor.execute(setup_cost_query)
+    setup_cost_result = cursor.fetchall()
     # fig, log_size_fig, stdev_fig =
     # fig.savefig(out_dir / "capture_backtrace.pdf", bbox_inches="tight")
     # log_size_fig.savefig(out_dir / "log_size.pdf", bbox_inches="tight")
@@ -1491,13 +1554,14 @@ def main():
     fig, log_size_fig, stdev_fig, total_time_fig = plot_result(
         fetched_result,
         parsed.sf,
+        setup_cost_result=setup_cost_result,
         categories=INTERESTING_CATEGORIES,
         mapping=INTERESTING_CATEGORIES_MAP,
-        width=0.15,
-        figsize=(14, 5),
+        width=0.24,
+        figsize=(8, 5),
     )
     fig.savefig(out_dir / "interesting_capture_backtrace.pdf", bbox_inches="tight")
-    log_size_fig.savefig(out_dir / "interesting_log_size.pdf", bbox_inches="tight")
+    if log_size_fig: log_size_fig.savefig(out_dir / "interesting_log_size.pdf", bbox_inches="tight")
     stdev_fig.savefig(out_dir / "interesting_stdev.pdf", bbox_inches="tight")
     total_time_fig.savefig(out_dir / "interesting_total_time.pdf", bbox_inches="tight")
     command = " ".join(sys.argv)
@@ -1505,18 +1569,18 @@ def main():
 
     plot_box_plot(cursor, sf=parsed.sf, out_dir=out_dir)
 
-    plot_repeat(
-        cursor,
-        parsed.sf,
-        out_dir,
-        fetched_result,
-        categories=[
-            "SmokedDuck",
-            # "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
-            "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y",
-        ],
-        label=None,
-    )
+    # plot_repeat(
+    #     cursor,
+    #     parsed.sf,
+    #     out_dir,
+    #     fetched_result,
+    #     categories=[
+    #         "SmokedDuck",
+    #         # "optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
+    #         "optimized-n__threads-1__filter_pushdown-y__join_filter_rewrite-y__partition_in_agg-y",
+    #     ],
+    #     label=None,
+    # )
 
 
 if __name__ == "__main__":

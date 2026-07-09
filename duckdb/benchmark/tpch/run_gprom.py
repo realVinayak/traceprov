@@ -20,6 +20,7 @@ from traceprovpy.tools.duckdb_parse_options import (
 )
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
 from traceprovpy.tools.file_utils import (
+    get_tmp_file,
     json_read_file,
     just_read,
     just_write,
@@ -32,7 +33,6 @@ from traceprovpy.tools.run_duckdb_generic import (
     run_single_query_dry,
 )
 from traceprovpy.tools.run_with_timeout import MakeKeySelection
-
 
 def handle_rewrite_single_row_mode(
     query_name: str,
@@ -171,7 +171,7 @@ def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("-cfg", "--config", required=True)
     base_parser.add_argument("--dir", required=True)
-    base_parser.add_argument("--temp_dir", required=False, default="./tmp/")
+    base_parser.add_argument("--temp_dir", required=False, default=get_tmp_file())
     base_parser.add_argument("--base_dir", required=False, default="./")
     keys_path = Path(
         "../../../../postgres/benchmark/tpch/legacy_scale_1/params_default/extract_gprom/keys.json"

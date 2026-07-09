@@ -298,6 +298,16 @@ exit_initialize_local_context:
     return rc;
 }
 
+
+static inline void maybe_set_advise(void *trace_ptr, const uint64_t alloc_size){
+    #if TRACEPROV_MAP_TRANS_HUGE_PAGE==1
+        // Call madvice.
+        if (madvise(trace_ptr, alloc_size, MADV_HUGEPAGE)){
+            elog(ERROR, "Got error setting huge page adviseL %d!", errno);
+        }
+    #endif
+}
+
 int get_or_create_layer(
     uint32_t layer_number,
     struct traceprov_aggregate_layer **p_layer,
@@ -407,8 +417,10 @@ int get_or_create_layer(
     void *trace_ptr = NULL;
     auto entry_line = &g_page_cache.initial_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
     int trace_file_fd = 0;
+    bool reused = false;
     if (entry_line->idx < entry_line->size){
         trace_ptr = entry_line->pages[entry_line->idx++];
+        reused = true;
         // elog(INFO, "rEUSING PGES!");
     }else{
         // Need to mmap the file.
@@ -450,6 +462,10 @@ int get_or_create_layer(
 
     if (trace_ptr == MAP_FAILED){
         elog(ERROR, "Mapping the trace file failed.");
+    }
+
+    if (!reused){
+        maybe_set_advise(trace_ptr, TRACEPROV_PAGE_SIZE);
     }
 
     layer->num_pk_records = record_width;
@@ -564,8 +580,10 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
     current_layer->size += TRACEPROV_INCREMENT_TRACE_BY_PG;
     void *trace_ptr = NULL;
     auto entry_line = &g_page_cache.later_entries[TRACEPROV_PAGE_CACHE_IDX(traceprov_current)-1];
+    bool reused = false;
     if (entry_line->idx < entry_line->size){
         trace_ptr = entry_line->pages[entry_line->idx++];
+        reused = true;
     }else{
         trace_ptr = mmap(
             NULL,
@@ -579,6 +597,11 @@ int grow_layer_file_huge(struct traceprov_aggregate_layer *current_layer){
     if (trace_ptr == MAP_FAILED){
         elog(ERROR, "remap failed for huge.");
     }
+
+    if (!reused){
+        maybe_set_advise(trace_ptr, TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG);
+    }
+    
     // once every 4096...
     if (unlikely(current_layer->page_mapping_size == current_layer->page_mapping_capacity)){
         current_layer->page_mapping_capacity += TRACEPROV_PG_MAPPING_INCR_STEP;
@@ -947,6 +970,7 @@ void traceprov_setup_page_cache(const uint32_t num_threads, const uint32_t page_
                 if (trace_ptr == MAP_FAILED){
                     elog(ERROR, "remap failed for huge.");
                 }
+                maybe_set_advise(trace_ptr, TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG);
                 // Set the first byte.
                 // This is done so that the pages get pre-faulted
                 ((uint8_t*)trace_ptr)[0] = 1;
@@ -984,6 +1008,7 @@ void *request_simple_page(){
         if (trace_ptr == MAP_FAILED){
             elog(ERROR, "remap failed for huge.");
         }
+        maybe_set_advise(trace_ptr, TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG);
         TraceProvRawPageEntry *raw_page_entry = new TraceProvRawPageEntry;
         raw_page_entry->page = trace_ptr;
         raw_page_entry->page_used = 0;
