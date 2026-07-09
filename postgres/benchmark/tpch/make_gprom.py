@@ -33,6 +33,7 @@ def get_file(options: GpromOptions, parsed):
     combined = "_".join(flat)
     return f"{combined}.sql"
 
+from traceprovpy.tools.file_utils import make_tmp_file
 
 import sys
 
@@ -48,8 +49,8 @@ def handle_special_cases(parsed, query_path: Path, query_num: str):
     occur_count = query_contents.count(sf_1_value)
     assert occur_count == 1, f"Got {occur_count} occurences"
     query_contents = query_contents.replace(sf_1_value, sf_10_value)
-    os.makedirs("./tmp/adjusted", exist_ok=True)
-    return just_write("./tmp/adjusted/query_11_adjusted.sql", query_contents)
+    os.makedirs(make_tmp_file("adjusted"), exist_ok=True)
+    return just_write(make_tmp_file("adjusted/query_11_adjusted.sql"), query_contents)
 
 
 def handle_keys(parsed, query_path: Path, in_query_num: str):
@@ -80,7 +81,7 @@ def handle_keys(parsed, query_path: Path, in_query_num: str):
     with_keys = ",".join([split[0], *query_keys])
     new_sql = [with_keys, " from ", split[1]]
     query_contents = "\n".join(new_sql)
-    return just_write(f"./tmp/query_keys_{in_query_num}.sql", query_contents)
+    return just_write(make_tmp_file(f"query_keys_{in_query_num}.sql"), query_contents)
 
 
 def try_backend_path(source: Path, backend: str, file_name: str):

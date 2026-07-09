@@ -12,8 +12,7 @@ from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,
 )
-from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
-
+from traceprovpy.tools.file_utils import get_tmp_file, json_read_file, just_read, just_write
 
 def run():
     base_parser = make_duckdb_parse()
@@ -26,7 +25,7 @@ def run():
 
     run_time_options = config["runTimeOptions"]
     total_iters = run_time_options["repeat"] + run_time_options["throwaway"]
-    tmp_path = Path("./tmp/")
+    tmp_path = Path(get_tmp_file())
     os.makedirs(tmp_path, exist_ok=True)
 
     g_results = []

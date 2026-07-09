@@ -1,5 +1,6 @@
 from itertools import product
 import json
+import math
 import os
 from pathlib import Path
 
@@ -81,3 +82,76 @@ def get_total_iters(config: dict):
 
 
 TP_OUT_ID_TICKER = "%OUT_ID%"
+
+def get_slowdown_cats(slowdown_data, break_points):
+    slowdown_data = sorted(slowdown_data, key=lambda tup: tup[1])
+    cats = []
+    for _ in range(len(break_points)+1):
+        cats.append([])
+    for query, slowdown in slowdown_data:
+        for break_point_idx, break_point in enumerate(break_points):
+            if slowdown <= break_point:
+                break
+        else:
+            break_point_idx = len(break_points)
+        cats[break_point_idx].append(query)
+    max_slowdown = slowdown_data[-1][1]
+    assert max_slowdown > 0
+    break_points.append(math.ceil(max_slowdown))
+    return cats
+
+
+def get_breakpoint_labels(breakpoints, add_percent=True):
+    labels = []
+    for _b_idx, _b_val in enumerate(breakpoints):
+        if add_percent:
+            current = rf"$\leq {_b_val}\%$"
+        else:
+            current = rf"$\leq {_b_val}\times$"
+        if _b_idx == 0:
+            labels.append(current)
+            continue
+        if add_percent:
+            lower = f"$> {breakpoints[_b_idx-1]}\%$"
+        else:
+            lower = rf"$> {breakpoints[_b_idx-1]}\times$"
+        labels.append(f"{lower} & {current}")
+        continue
+    assert len(labels) == len(breakpoints)
+    return labels
+
+def try_leq_1(in_int):
+    return str(in_int)
+
+def get_nice_num(in_int):
+    if in_int < 1:
+        return str(in_int)
+    if in_int < 1_000:
+        return str(int(in_int))
+    if in_int < 1_000_000:
+        return f"{int(in_int / 1_000)} K"
+    if in_int < 1_000_000_000:
+        return f"{int(in_int / 1_000_000)} M"
+    if in_int < 1_000_000_000_000:
+        return f"{int(in_int / 1_000_000_000)} B"
+    assert 0, in_int
+
+# ALL the tmp files get written to this directory.
+# This is done because usually we'd prefer /tmp/traceprov
+# But, for debugging ./tmp is also nice.
+# most experiments will make do with the default
+# benefit is also that it is simpler to delete them.
+_GLOBAL_TMP_DIR = "/tmp/traceprov/"
+
+def make_tmp_file(later_path: "str"):
+    assert Path(_GLOBAL_TMP_DIR).exists(), f"Expected {_GLOBAL_TMP_DIR} to exist!"
+    return f"{_GLOBAL_TMP_DIR}/{later_path}"
+
+
+def set_tmp_file(new_path: "str"):
+    global _GLOBAL_TMP_DIR
+    os.makedirs(new_path, exist_ok=True)
+    _GLOBAL_TMP_DIR = new_path
+
+def get_tmp_file():
+    return _GLOBAL_TMP_DIR

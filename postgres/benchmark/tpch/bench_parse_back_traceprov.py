@@ -23,7 +23,7 @@ from traceprovpy.tools.benchmark_utils import (
     traceprov_make_drop_view,
 )
 from traceprovpy.tools.duckdb_inference import DuckDbInferenceBinQuerySpec
-from traceprovpy.tools.file_utils import json_read_file
+from traceprovpy.tools.file_utils import get_tmp_file, json_read_file
 from traceprovpy.tools.run_with_timeout import (
     TP_SKIPPABLE_OPTION,
     MakeTraceProv,
@@ -39,7 +39,6 @@ from traceprovpy.tools.traceprov_extra_func import (
     TRACEPROV_PROFILE_DUCKDB,
     TRACEPROV_USE_EXTRA_RESULT,
 )
-
 
 def get_extras(is_validate):
     if is_validate:
@@ -277,7 +276,7 @@ def main():
     parser.add_argument(
         "--toggle_join_choices", action=argparse.BooleanOptionalAction, default=True
     )
-    parser.add_argument("--dump_graph_dir", default="./tmp/", required=False)
+    parser.add_argument("--dump_graph_dir", default=get_tmp_file(), required=False)
     parser.add_argument(
         "--bulk_derive", action=argparse.BooleanOptionalAction, default=True
     )

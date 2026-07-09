@@ -134,7 +134,7 @@ def run():
     parsed.sample_inference = None
     parsed.infer = False
 
-    tmp = Path("./tmp/")
+    tmp = Path(get_tmp_file())
     os.makedirs(tmp, exist_ok=True)
     config = json_read_file(parsed.config)
     query_dirs = config["query_dir"]
