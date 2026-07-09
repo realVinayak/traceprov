@@ -28,7 +28,7 @@ using namespace duckdb;
 #ifdef __APPLE__
 #define MyProcTid getpid()
 #else
-#define MyProcTid gettid()
+#define MyProcTid getpid()
 #endif
 
 // TODO: Make this per-process to enable concurrent traceprovs.

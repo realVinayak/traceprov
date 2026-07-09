@@ -567,7 +567,8 @@ unique_ptr<FunctionData> shared_bind(ClientContext &context, vector<unique_ptr<E
         null_cols,
         will_hash
     );
-    return bind_ptr;
+    unique_ptr<FunctionData> duck_bind_ptr = std::move(bind_ptr);
+    return duck_bind_ptr;
 }
 
 unique_ptr<FunctionData> traceprov_direct_bind(ClientContext &context, AggregateFunction &function, vector<unique_ptr<Expression>> &arguments){

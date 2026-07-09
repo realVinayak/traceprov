@@ -10,7 +10,7 @@ authors = [{ name="Vinayak Jha", email="vinayakj@uic.edu" }]
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies=[
-    "psycopg2",
+    "psycopg2-binary",
     "duckdb",
     "matplotlib",
     "numpy",
