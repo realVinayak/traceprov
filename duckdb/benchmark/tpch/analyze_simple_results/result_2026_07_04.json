@@ -1,0 +1,38 @@
+{
+    "gprom": {
+        "file": [
+            "macos_gprom_optimized-y__threads-1_2026_07_03_22_45_42",
+            "macos_gprom_optimized-y__threads-10_2026_07_04_06_01_05",
+            "macos_gprom_optimized-y__threads-12_2026_07_04_07_32_20",
+            "macos_gprom_optimized-y__threads-2_2026_07_04_01_05_02",
+            "macos_gprom_optimized-y__threads-4_2026_07_04_02_51_51",
+            "macos_gprom_optimized-y__threads-8_2026_07_04_04_27_20"
+        ],
+        "handler": "gprom"
+    },
+    "traceprov": {
+        "file": [
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y_2026_05_06_06_04_34",
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_56_49",
+            "macos_end_to_end_optimized-y__threads-10__compact-y__merge_chunks-y_2026_05_06_06_06_15",
+            "macos_end_to_end_optimized-y__threads-10__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_58_21",
+            "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y_2026_05_06_06_06_34",
+            "macos_end_to_end_optimized-y__threads-12__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_58_39",
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y_2026_05_06_06_04_34",
+            "macos_end_to_end_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_56_49",
+            "macos_end_to_end_optimized-y__threads-2__compact-y__merge_chunks-y_2026_05_06_06_05_11",
+            "macos_end_to_end_optimized-y__threads-2__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_57_22",
+            "macos_end_to_end_optimized-y__threads-4__compact-y__merge_chunks-y_2026_05_06_06_05_36",
+            "macos_end_to_end_optimized-y__threads-4__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_57_45",
+            "macos_end_to_end_optimized-y__threads-8__compact-y__merge_chunks-y_2026_05_06_06_05_55",
+            "macos_end_to_end_optimized-y__threads-8__compact-y__merge_chunks-y__table_stats-y_2026_05_06_05_58_03"
+        ],
+        "handler": "traceprov"
+    },
+    "smokedduck": {
+        "file": [
+            "macos_infer_all_optimized-n__threads-1_2026_06_08_14_05_26"
+        ],
+        "handler": "sd"
+    }
+}

@@ -16,7 +16,7 @@ import duckdb
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+from traceprovpy.tools.file_utils import make_tmp_file
 
 class NormalizedRowTpch(NormalizedSampleInferRow):
     query_num: str
@@ -61,7 +61,7 @@ def main():
             bucket = extract_bucket_category(dir_name)
             all_results.append((path, bucket, result))
 
-    out_dir = Path(f"./tmp/{parsed.sf}")
+    out_dir = make_tmp_file(f"{parsed.sf}")
     os.makedirs(out_dir, exist_ok=True)
     all_normalized = []
     for outer_row in all_results:

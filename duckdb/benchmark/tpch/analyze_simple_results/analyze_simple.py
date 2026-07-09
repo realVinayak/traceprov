@@ -1,9 +1,12 @@
 # the simpler handling case.
 
 import argparse
+from functools import reduce
 import json
+import math
 import os
 from pathlib import Path
+import random
 from typing import Tuple
 
 from matplotlib import pyplot as plt
@@ -13,6 +16,8 @@ import numpy as np
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import (
+    get_breakpoint_labels,
+    get_slowdown_cats,
     json_read_file,
     just_read,
     just_write,
@@ -31,11 +36,15 @@ from traceprovpy.tools.normalized_row import (
 from traceprovpy.tools.plot_utils import (
     BenchmarkPlot,
     get_unique_handles_labels,
+    query_categories,
     setup_tpch_analyzer_parser,
 )
 from traceprovpy.tools.run_duckdb_generic import add_query_options
 import duckdb
 import re
+from matplotlib.transforms import blended_transform_factory
+
+from matplotlib.gridspec import GridSpec
 
 
 class NormalizedDuckTPCHRow(Normalizable):
@@ -45,6 +54,7 @@ class NormalizedDuckTPCHRow(Normalizable):
     phase_1: Extendable
     phase_1_profile: Extendable
     phase_2: Extendable
+    misc: Extendable
 
     def keys(self):
         return {
@@ -54,6 +64,7 @@ class NormalizedDuckTPCHRow(Normalizable):
             "phase_1_profile",
             "phase_2",
             "threads",
+            "misc"
         }
 
 
@@ -102,8 +113,18 @@ class ResultAnalyzer:
         rows: list[NormalizedDuckTPCHRow] = []
         call_options = result["call_options"]
         suffix, bench_parsed = get_suffix(call_options)
+        repeat = None
         for query_num, query_data in query_results.items():
-            for category, category_data in query_data.items():
+            for category, _category_data in query_data.items():
+                # print(_category_data)
+                if isinstance(_category_data, list):
+                    category_type = _category_data[0]['type']
+                    category_data = _category_data[0]['infer']
+                else:
+                    category_data = _category_data
+                    category_type = 'fail'
+                if repeat is None:
+                   repeat = len(category_data["time"])
                 category_name = f"{category}_{suffix}"
                 if "timeout" in category_data:
                     print("Handing timeout!")
@@ -111,12 +132,13 @@ class ResultAnalyzer:
                         NormalizedDuckTPCHRow(
                             category=category_name,
                             query_num=query_num,
-                            phase_1=Extendable([make_dummy_simple_result(-1)] * 15),
+                            phase_1=Extendable([make_dummy_simple_result(-1)] * repeat),
                             phase_1_profile=Extendable(
-                                [make_dummy_profile_result(-1)] * 15
+                                [make_dummy_profile_result(-1)] * repeat
                             ),
                             phase_2=None,
                             threads=bench_parsed.threads,
+                            misc=None
                         )
                     )
                     continue
@@ -125,12 +147,13 @@ class ResultAnalyzer:
                         NormalizedDuckTPCHRow(
                             category=category_name,
                             query_num=query_num,
-                            phase_1=Extendable([make_dummy_simple_result(-2)] * 15),
+                            phase_1=Extendable([make_dummy_simple_result(-2)] * repeat),
                             phase_1_profile=Extendable(
-                                [make_dummy_profile_result(-2)] * 15
+                                [make_dummy_profile_result(-2)] * repeat
                             ),
                             phase_2=None,
                             threads=bench_parsed.threads,
+                            misc=None
                         )
                     )
                     continue
@@ -144,6 +167,7 @@ class ResultAnalyzer:
                         phase_1_profile=Extendable(base_profile),
                         phase_2=None,
                         threads=bench_parsed.threads,
+                        misc=None
                     )
                 )
         print("Len rows: ", len(rows))
@@ -177,6 +201,7 @@ class ResultAnalyzer:
                     phase_1_profile=Extendable(base_profile),
                     phase_2=None,
                     threads=bench_parsed.threads,
+                    misc=None
                 )
             )
             phase_1 = list(map(tap_simple_result, query_result["capture_time"]))
@@ -192,6 +217,7 @@ class ResultAnalyzer:
                     phase_1_profile=Extendable(phase_1_profile),
                     phase_2=Extendable(phase_2),
                     threads=bench_parsed.threads,
+                    misc=None
                 )
             )
         all_rows = [*rows]
@@ -199,6 +225,61 @@ class ResultAnalyzer:
         if base_key not in self.added_base:
             all_rows.extend(base_rows)
         self.added_base.add(base_key)
+        return all_rows
+
+    def sd(self, key: str, path: Path) -> list[NormalizedDuckTPCHRow]:
+        print("Handling SmokedDuck", key)
+        result = json_read_file(path, True)
+        query_results = result["results"]
+        rows: list[NormalizedDuckTPCHRow] = []
+        # base_rows: list[NormalizedDuckTPCHRow] = []
+        call_options = result["call_options"]
+        suffix, bench_parsed = get_suffix(call_options)
+        for query_num, query_data in query_results.items():
+            query_core_result = query_data["result"]["sd"]
+            # base = list(map(tap_simple_result, query_core_result["base_time"]))
+            # base_profile = list(
+            #     map(tap_profile_result, query_core_result["base_profile"])
+            # )
+            # base_rows.append(
+            #     NormalizedDuckTPCHRow(
+            #         category=f"base",
+            #         query_num=query_num,
+            #         phase_1=Extendable(base),
+            #         phase_1_profile=Extendable(base_profile),
+            #         phase_2=None,
+            #         threads=1,
+            #         misc=None,
+            #     )
+            # )
+            if query_core_result["capture_time"] is None:
+                continue
+            phase_1 = list(map(tap_simple_result, query_core_result["capture_time"]))
+            phase_1_profile = list(
+                map(tap_profile_result, query_core_result["capture_profile"])
+            )
+            phase_2 = extract_infer(query_core_result["infer_results"])
+            capture_stats = query_core_result["capture_stats"]
+            reduced_stats = [
+                dict(
+                    log_size_bytes=stats["size_mb"],
+                    postprocess_time=stats["postprocess_time"],
+                    build_time=stats["build_time"],
+                )
+                for stats in capture_stats
+            ]
+            rows.append(
+                NormalizedDuckTPCHRow(
+                    category="SmokedDuck",
+                    query_num=query_num,
+                    phase_1=Extendable(phase_1),
+                    phase_1_profile=Extendable(phase_1_profile),
+                    phase_2=Extendable(phase_2),
+                    threads=bench_parsed.threads,
+                    misc=Extendable(reduced_stats),
+                )
+            )
+        all_rows = [*rows]
         return all_rows
 
 
@@ -289,7 +370,7 @@ def plot_data(
                     x=[x_axis_adjusted[idx] for idx in y_timeout_values],
                     height=10**5,
                     width=width,
-                    label="Timeout (> 5 min)",
+                    label="Timeout",
                     color="lightgray",
                     hatch="///",
                     edgecolor="red",
@@ -340,30 +421,30 @@ def plot_data(
 
 ALL_CATEGORIES = [
     "base",
-    "gprom_join_heuristics_optimized-n__threads-1",
-    "gprom_join_heuristics_optimized-n__threads-2",
-    "gprom_join_heuristics_optimized-n__threads-4",
-    "gprom_join_heuristics_optimized-n__threads-8",
-    "gprom_join_heuristics_optimized-n__threads-10",
-    "gprom_join_heuristics_optimized-n__threads-12",
-    "gprom_join_optimized-n__threads-1",
-    "gprom_join_optimized-n__threads-2",
-    "gprom_join_optimized-n__threads-4",
-    "gprom_join_optimized-n__threads-8",
-    "gprom_join_optimized-n__threads-10",
-    "gprom_join_optimized-n__threads-12",
-    "gprom_window_heuristics_optimized-n__threads-1",
-    "gprom_window_heuristics_optimized-n__threads-2",
-    "gprom_window_heuristics_optimized-n__threads-4",
-    "gprom_window_heuristics_optimized-n__threads-8",
-    "gprom_window_heuristics_optimized-n__threads-10",
-    "gprom_window_heuristics_optimized-n__threads-12",
-    "gprom_window_optimized-n__threads-1",
-    "gprom_window_optimized-n__threads-2",
-    "gprom_window_optimized-n__threads-4",
-    "gprom_window_optimized-n__threads-8",
-    "gprom_window_optimized-n__threads-10",
-    "gprom_window_optimized-n__threads-12",
+    "gprom_join_heuristics_optimized-y__threads-1",
+    "gprom_join_heuristics_optimized-y__threads-2",
+    "gprom_join_heuristics_optimized-y__threads-4",
+    "gprom_join_heuristics_optimized-y__threads-8",
+    "gprom_join_heuristics_optimized-y__threads-10",
+    "gprom_join_heuristics_optimized-y__threads-12",
+    "gprom_join_optimized-y__threads-1",
+    "gprom_join_optimized-y__threads-2",
+    "gprom_join_optimized-y__threads-4",
+    "gprom_join_optimized-y__threads-8",
+    "gprom_join_optimized-y__threads-10",
+    "gprom_join_optimized-y__threads-12",
+    "gprom_window_heuristics_optimized-y__threads-1",
+    "gprom_window_heuristics_optimized-y__threads-2",
+    "gprom_window_heuristics_optimized-y__threads-4",
+    "gprom_window_heuristics_optimized-y__threads-8",
+    "gprom_window_heuristics_optimized-y__threads-10",
+    "gprom_window_heuristics_optimized-y__threads-12",
+    "gprom_window_optimized-y__threads-1",
+    "gprom_window_optimized-y__threads-2",
+    "gprom_window_optimized-y__threads-4",
+    "gprom_window_optimized-y__threads-8",
+    "gprom_window_optimized-y__threads-10",
+    "gprom_window_optimized-y__threads-12",
     "traceprov_optimized-y__threads-1__compact-y__merge_chunks-y",
     "traceprov_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y",
     "traceprov_optimized-y__threads-2__compact-y__merge_chunks-y",
@@ -389,36 +470,36 @@ BASE_CASES = [
 GPROM_CASES = {
     "base": BASE_CASES,
     "gprom_join": [
-        "gprom_join_optimized-n__threads-1",
-        "gprom_join_optimized-n__threads-2",
-        "gprom_join_optimized-n__threads-4",
-        "gprom_join_optimized-n__threads-8",
-        "gprom_join_optimized-n__threads-10",
-        "gprom_join_optimized-n__threads-12",
+        "gprom_join_optimized-y__threads-1",
+        "gprom_join_optimized-y__threads-2",
+        "gprom_join_optimized-y__threads-4",
+        "gprom_join_optimized-y__threads-8",
+        "gprom_join_optimized-y__threads-10",
+        "gprom_join_optimized-y__threads-12",
     ],
     "gprom_join_heuristics": [
-        "gprom_join_heuristics_optimized-n__threads-1",
-        "gprom_join_heuristics_optimized-n__threads-2",
-        "gprom_join_heuristics_optimized-n__threads-4",
-        "gprom_join_heuristics_optimized-n__threads-8",
-        "gprom_join_heuristics_optimized-n__threads-10",
-        "gprom_join_heuristics_optimized-n__threads-12",
+        "gprom_join_heuristics_optimized-y__threads-1",
+        "gprom_join_heuristics_optimized-y__threads-2",
+        "gprom_join_heuristics_optimized-y__threads-4",
+        "gprom_join_heuristics_optimized-y__threads-8",
+        "gprom_join_heuristics_optimized-y__threads-10",
+        "gprom_join_heuristics_optimized-y__threads-12",
     ],
     "gprom_window": [
-        "gprom_window_optimized-n__threads-1",
-        "gprom_window_optimized-n__threads-2",
-        "gprom_window_optimized-n__threads-4",
-        "gprom_window_optimized-n__threads-8",
-        "gprom_window_optimized-n__threads-10",
-        "gprom_window_optimized-n__threads-12",
+        "gprom_window_optimized-y__threads-1",
+        "gprom_window_optimized-y__threads-2",
+        "gprom_window_optimized-y__threads-4",
+        "gprom_window_optimized-y__threads-8",
+        "gprom_window_optimized-y__threads-10",
+        "gprom_window_optimized-y__threads-12",
     ],
     "gprom_window_heuristics": [
-        "gprom_window_heuristics_optimized-n__threads-1",
-        "gprom_window_heuristics_optimized-n__threads-2",
-        "gprom_window_heuristics_optimized-n__threads-4",
-        "gprom_window_heuristics_optimized-n__threads-8",
-        "gprom_window_heuristics_optimized-n__threads-10",
-        "gprom_window_heuristics_optimized-n__threads-12",
+        "gprom_window_heuristics_optimized-y__threads-1",
+        "gprom_window_heuristics_optimized-y__threads-2",
+        "gprom_window_heuristics_optimized-y__threads-4",
+        "gprom_window_heuristics_optimized-y__threads-8",
+        "gprom_window_heuristics_optimized-y__threads-10",
+        "gprom_window_heuristics_optimized-y__threads-12",
     ],
 }
 
@@ -453,6 +534,7 @@ def gen_time_plots(
     legend_labels: list[str],
     value_data_key,
 ):
+    return
     x_axis_values = list(map(str, range(1, 23)))
     x_axis = np.arange(len(x_axis_values))
     time_plot_fig, top_plot_axis = plt.subplots(
@@ -468,6 +550,7 @@ def gen_time_plots(
             for x in original_data:
                 print("VALUE", x[0])
             if isinstance(item, str):
+                # print(original_data)
                 filtered = [x for x in original_data if x[0][0] == item][0]
             else:
                 # print(original_data)
@@ -537,8 +620,9 @@ DATA_SPEC_THREADS = lambda threads_count: [
     # f"gprom_join_optimized-n__threads-{threads_count}",
     # f"gprom_join_heuristics_optimized-n__threads-{threads_count}",
     # f"gprom_window_optimized-n__threads-{threads_count}",
-    f"gprom_window_heuristics_optimized-n__threads-{threads_count}",
     f"traceprov_optimized-y__threads-{threads_count}__compact-y__merge_chunks-y__table_stats-y",
+    f"gprom_window_heuristics_optimized-y__threads-{threads_count}",
+    "SmokedDuck",
 ]
 
 
@@ -571,10 +655,17 @@ def gen_generate_shared_plots(
     value_median_key,
     needs_extra=False,
 ):
-    x_axis_values = list(map(str, range(1, 23)))
+    # width = 0.
+    x_axis_categories = query_categories()
+    x_axis_combined = [cat.queries for cat in x_axis_categories]
+    x_axis_values = [str(_query) for _queries in x_axis_combined for _query in _queries]
+    assert len(x_axis_values) == 22 and len(set(x_axis_values)) == 22
+    # x_axis_values = list(map(str, range(1, 23)))
+    # gap_multiplier = 1.1
     x_axis = np.arange(len(x_axis_values))
+
     time_plot_fig, top_plot_axis = plt.subplots(
-        1, 1, figsize=(14, 6), gridspec_kw={"hspace": 0.5, "wspace": 0}
+        1, 1, figsize=(13, 2), gridspec_kw={"hspace": 0.5, "wspace": 0}
     )
     data = []
     for item in categories:
@@ -582,8 +673,10 @@ def gen_generate_shared_plots(
         data.append(filtered)
     timeout_max = 0
     pending_bars = []
-    timeout_label = "Timeout (> 5 min)"
+    timeout_label = "Timeout"
     errorout_label = "Error"
+    MARGIN = 0.0
+    top_plot_axis.margins(x=MARGIN)
     for category_idx, (combined_category, category_data) in enumerate(data):
         category = combined_category[0]
 
@@ -662,25 +755,60 @@ def gen_generate_shared_plots(
         top_plot_axis.axhline(y=1, color="r", linestyle="--")
         top_plot_axis.axhline(y=2, color="r", linestyle="--")
     top_plot_axis.set_yscale("log", base=10)
-    time_plot_fig.suptitle(title)
+    # time_plot_fig.suptitle(title)
     top_plot_axis.set_xticks(
-        x_axis + width * (len(categories) / 2),
+        x_axis + width*1.5,
         x_axis_values,
     )
     top_plot_axis.set_xlabel("Query")
-    top_plot_axis.set_ylabel(ylabel)
+    # top_plot_axis.set_ylabel(ylabel)
     for bar in pending_bars:
         bar["height"] = timeout_max
         top_plot_axis.bar(**bar)
 
     legend_labels_all, handles_all = get_unique_handles_labels(top_plot_axis)
+    running = 0
+    trans = blended_transform_factory(top_plot_axis.transData, top_plot_axis.transAxes)
+
+    colors = ["#d6d6d6", 'white']
+    for _idx, query_category in enumerate(x_axis_combined):
+        old_running = running
+        running += len(query_category)
+        if _idx < len(x_axis_combined) - 1:
+            top_plot_axis.vlines(x=running-width - 0.00, colors='black', linestyles='solid', ymin=0, ymax=1_000_000 * timeout_max, linewidth=1)
+        new_running = running
+        middle = int((old_running + new_running) / 2)
+        top_plot_axis.text(middle, 1.02, x_axis_categories[_idx].label, transform=trans, ha='center', va='bottom', fontsize=9)
+        start_ = old_running-width
+        if _idx == 0:
+            start_ -= 0.1
+        top_plot_axis.axvspan(start_, new_running-width, color=colors[_idx % 2], zorder=0)
+
     top_plot_axis.legend(
         handles=handles_all,
         labels=legend_labels_all,
         loc="center right",
         bbox_to_anchor=(1.10, 0.95),
-        prop=dict(size=8),
+        prop=dict(size=9),
     )
+
+    top_plot_axis.grid(visible=True, axis='y', which='major',color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+    y_values_ticks = [10**(-2), 10**(-1), 1]
+    y_value_labels = ["0.01", "0.1", "1"]
+    top_plot_axis.set_yticks(y_values_ticks)
+    top_plot_axis.set_yticklabels(y_value_labels)
+
+    trans2 = blended_transform_factory(top_plot_axis.transAxes, top_plot_axis.transAxes)
+    top_plot_axis.annotate(
+        '', 
+        xy=(0, 1.1), xycoords=trans2,      # arrow head position (top)
+        xytext=(0, 0.0), textcoords=trans2, # arrow tail position (bottom)
+        arrowprops=dict(arrowstyle='->', color='black', lw=1.5)
+    )
+
+    # Label at the top of the arrow
+    top_plot_axis.text(0, 1.12, "Total Time (s)", transform=top_plot_axis.transAxes, ha='center', va='bottom', fontsize=10)
+
     time_plot_fig.savefig(
         out_dir / f"end_to_end_comparison_{thread_count}_{value_data_key}.pdf",
         bbox_inches="tight",
@@ -702,9 +830,32 @@ def plot_scalability_plot(
         }
         for (key, value) in raw_scalability.items()
     }
+    # Figure out the max slowdown per query.
+    traceprov_cat = categories[1]
+    gprom_cat = categories[2]
+    print("Using traceprov Cat: ", traceprov_cat)
     print(scalability)
-    scalability_figure, scalability_axis = plt.subplots(1, 1, figsize=(14, 3))
-    x_axis_values = list(map(str, range(1, 23)))
+    flattened = [(query, print('query data', query_data) or query_data['phase_all_slowdown']) for cat_result in scalability.values() for query, query_data in cat_result[traceprov_cat].items()]
+
+    def _get_max(prev, curr):
+        _query, _query_slowdown = curr
+        max_value = _query_slowdown
+        if _query in prev:
+            max_value = max(max_value, prev[_query])
+        return {**prev, _query: max_value }
+    max_slowdown_per_query = reduce(_get_max, flattened, dict())
+    break_points = [1.2, 1.4]
+    slowdown_cats = get_slowdown_cats(max_slowdown_per_query.items(), break_points)
+    breakpoint_labels = get_breakpoint_labels(break_points, add_percent=False)
+    x_axis_values = [cell for node in slowdown_cats for cell in node]
+    print(max_slowdown_per_query)
+    
+    combined_figure = plt.figure(figsize=(14, 3.5))
+    gs = GridSpec(2, 2, figure=combined_figure, hspace=0.4)
+    # scalability_figure, scalability_axis = plt.subplots(1, 1, )
+    scalability_axis = combined_figure.add_subplot(gs[0, :])
+    # scalability_axis.set_title("End-to-end Runtime (s)")
+    # x_axis_values = list(map(str, range(1, 23)))
     group_gap = 5.2
     x_axis = np.arange(len(x_axis_values)) * (1 + group_gap)
     width = 1.3
@@ -720,11 +871,13 @@ def plot_scalability_plot(
         ):
             return_value = scalability_axis.scatter(
                 x_axis + width * thread_idx,
-                [(category_data.get(x, None)) for x in x_axis_values],
+                [(category_data.get(x, dict()).get('phase_total_time_median')) for x in x_axis_values],
                 label=labels[categories.index(category)],
                 marker=markers[categories.index(category)],
-                c=BenchmarkPlot.colors[thread_idx],
-                s=80 if cat_idx < 2 else 70,
+                # c=BenchmarkPlot.colors[thread_idx],
+                c=BenchmarkPlot.colors[cat_idx],
+                s=50,
+                # s=80 if cat_idx < 2 else 70,
             )
             if cat_idx == 0:
                 for offsets in return_value.get_offsets():
@@ -735,10 +888,10 @@ def plot_scalability_plot(
                 y_line_axis.append(
                     (return_value.get_offsets()[0][0], vline.get_ydata(False)[0])
                 )
-    scalability_axis.axhline(y=1, color="r", linestyle="--", linewidth=0.3)
-    scalability_axis.axhline(y=2, color="r", linestyle="--", linewidth=0.3)
-    scalability_axis.axhline(y=10, color="r", linestyle="--", linewidth=0.3)
-    scalability_axis.axhline(y=100, color="r", linestyle="--", linewidth=0.3)
+    # scalability_axis.axhline(y=1, color="r", linestyle="--", linewidth=0.3)
+    # scalability_axis.axhline(y=2, color="r", linestyle="--", linewidth=0.3)
+    # scalability_axis.axhline(y=10, color="r", linestyle="--", linewidth=0.3)
+    # scalability_axis.axhline(y=100, color="r", linestyle="--", linewidth=0.3)
     scalability_axis.set_xticks(x_axis + width * (len(scalability) / 2), x_axis_values)
     scalability_axis.set_yscale("log")
     legend_labels_all, handles_all = get_unique_handles_labels(scalability_axis)
@@ -753,8 +906,149 @@ def plot_scalability_plot(
         # bbox_to_anchor=(1.10, 0.95),
         prop=dict(size=8),
     )
-    scalability_axis.margins(x=0.01)
-    scalability_figure.savefig(out_dir / "duckdb_scalability.pdf", bbox_inches="tight")
+    colors = ["#d6d6d6", 'white']
+    # scalability_axis.margins(0.0)
+    x_axis_augmented = np.arange(len(x_axis_values)+1) * (1 + group_gap)
+    for _idx, x_span in enumerate(x_axis_augmented[:-1]):
+        _start = x_span-width
+        if _idx == 0:
+            _start -= 0.1
+        scalability_axis.axvspan(_start, x_axis_augmented[_idx+1], color=colors[_idx % 2], zorder=0)
+    scalability_axis.margins(x=0.0)
+    trans2 = blended_transform_factory(scalability_axis.transAxes, scalability_axis.transAxes)
+    scalability_axis.annotate(
+        '', 
+        xy=(0, 1.1), xycoords=trans2,      # arrow head position (top)
+        xytext=(0, 0.0), textcoords=trans2, # arrow tail position (bottom)
+        arrowprops=dict(arrowstyle='->', color='black', lw=1.5)
+    )
+
+    # Label at the top of the arrow
+    scalability_axis.text(0, 1.12, "Total Time (s)", transform=scalability_axis.transAxes, ha='center', va='bottom', fontsize=10)
+    running_len = 0
+    trans = blended_transform_factory(scalability_axis.transData, scalability_axis.transAxes)
+    for _idx, slowdown_cat in enumerate(slowdown_cats):
+        old_running = running_len
+        running_len += len(slowdown_cat)
+        middle = int((old_running + running_len) / 2)
+        middle = (group_gap  + 1)* middle
+        scalability_axis.text(middle, 1.02, breakpoint_labels[_idx], transform=trans, ha='center', va='bottom', fontsize=9, ma='center')
+        if _idx < len(slowdown_cats) - 1:
+            scalability_axis.axvline(x=running_len*(1+group_gap) - 1, linestyle='solid', color='black', linewidth=4)
+    scalability_axis.grid(visible=True, axis='y', which='major',color='gray', linestyle='--', linewidth=0.5, alpha=0.7)
+    reduced_slowdown = combined_figure.add_subplot(gs[1, 0])
+    red_slowdown_cats = [
+        "TraceProv (I)",
+        "TraceProv (I + II)",
+        # "GProM"
+    ]
+    red_slowdown_queries = slowdown_cats[-1]
+    print("slowdown queries: ", red_slowdown_queries)
+    red_slowdown_data = dict()
+    def _get_data(in_category, out_category, data_key, query_list=None):
+        query_list = red_slowdown_queries if query_list is None else query_list
+        return {
+            key: {
+                out_category: [ 0 if val < 0 else val for val in [value[in_category][q][data_key] for q in query_list]]
+            }
+            for (key, value) in scalability.items()
+        }
+    def merge_data(prev, curr):
+        assert len(prev) != 0 or len(curr) != 0
+        if len(prev) != 0:
+            prev, curr = curr, prev
+        if len(prev) == 0: return curr
+        assert prev.keys() == curr.keys()
+        return {
+            key: {**prev[key], **curr[key]}
+            for key in prev.keys()
+        }
+    red_slowdown_data = merge_data(_get_data(traceprov_cat, red_slowdown_cats[0], "phase_1_slowdown"), dict())
+    red_slowdown_data = merge_data(_get_data(traceprov_cat, red_slowdown_cats[1], "phase_all_slowdown"), red_slowdown_data)
+    # red_slowdown_data = merge_data(_get_data(gprom_cat, red_slowdown_cats[2], "phase_all_slowdown"), red_slowdown_data)
+    red_x_axis = np.arange(len(red_slowdown_queries)) * (1 + group_gap)
+    for thread_idx, (thread, thread_data) in enumerate(
+        sorted(red_slowdown_data.items(), key=lambda x: x[0])
+    ):
+        threads.append(thread)
+        for cat_idx, (category, category_data) in enumerate(
+            sorted(thread_data.items(), key=lambda x: red_slowdown_cats.index(x[0]))
+        ):
+            print("Plotting cat: ", category, cat_idx, category_data)
+            if all(x < 0 for x in category_data): continue
+            return_value = reduced_slowdown.scatter(
+                red_x_axis + width * thread_idx,
+                category_data,
+                label=category,
+                marker=markers[cat_idx],
+                # c=BenchmarkPlot.colors[thread_idx],
+                c=BenchmarkPlot.colors[cat_idx],
+                s=50,
+                # s=80 if cat_idx < 2 else 70,
+            )
+            if cat_idx == 0:
+                for offsets in return_value.get_offsets():
+                    vline = reduced_slowdown.axvline(
+                        offsets[0], linewidth=0.05, color="black"
+                    )
+                # print(vline.get_xydata())
+                y_line_axis.append(
+                    (return_value.get_offsets()[0][0], vline.get_ydata(False)[0])
+                )
+    legend_labels_all, handles_all = get_unique_handles_labels(reduced_slowdown)
+    for _idx, points in enumerate(y_line_axis):
+        print(points)
+        reduced_slowdown.annotate(
+            f"{threads[_idx]}", (points[0] - 0.75, 1100), rotation=0, fontsize=8
+        )
+    reduced_slowdown.legend(
+        handles=handles_all,
+        labels=legend_labels_all,
+        # bbox_to_anchor=(1.10, 0.95),
+        prop=dict(size=8),
+    )
+    print(red_slowdown_data)
+    # reduced_slowdown.legend()
+    reduced_slowdown.set_xticks(red_x_axis + width * (len(scalability) / 3), red_slowdown_queries)
+    # reduced_slowdown.set_yscale("log")
+    reduced_slowdown.axhline(y=1, color="r", linestyle="--", linewidth=0.3)
+    reduced_slowdown.axhline(y=2, color="r", linestyle="--", linewidth=0.3)
+    reduced_backtrace_time = combined_figure.add_subplot(gs[1, 1])
+    reduced_slowdown.set_title("Slowdown")
+
+    red_backtrace_cat = "TraceProv (II)"
+    red_backtrace_cat_queries = [q for _cat in slowdown_cats for q in random.sample(_cat, min(len(_cat), 8))]
+    red_backtrace_data = merge_data(_get_data(traceprov_cat, red_backtrace_cat, "phase_2_time_median", red_backtrace_cat_queries), dict())
+    reduced_backtrace_time.set_title("Backtrace Time (s)")
+    red_backtrace_x_axis = np.arange(len(red_backtrace_cat_queries)) * (1 + group_gap)
+    for thread_idx, (thread, thread_data) in enumerate(
+        sorted(red_backtrace_data.items(), key=lambda x: x[0])
+    ):
+        threads.append(thread)
+        # print("Plotting cat: ", category, cat_idx, category_data)
+        if all(x < 0 for x in category_data): continue
+        return_value = reduced_backtrace_time.scatter(
+            red_backtrace_x_axis + width * thread_idx,
+            thread_data[red_backtrace_cat],
+            label=category,
+            marker=markers[cat_idx],
+            # c=BenchmarkPlot.colors[thread_idx],
+            c=BenchmarkPlot.colors[cat_idx],
+            s=50,
+            # s=80 if cat_idx < 2 else 70,
+        )
+        for offsets in return_value.get_offsets():
+            vline = reduced_backtrace_time.axvline(
+                offsets[0], linewidth=0.05, color="black"
+            )
+        # print(vline.get_xydata())
+        y_line_axis.append(
+            (return_value.get_offsets()[0][0], vline.get_ydata(False)[0])
+        )
+    reduced_backtrace_time.set_yscale("log")
+    reduced_backtrace_time.set_xticks(red_backtrace_x_axis + width * (len(scalability) / 3), red_backtrace_cat_queries)
+    # figure out which queries have the maximum slowdown of more than 1.4 >
+    combined_figure.savefig(out_dir / "duckdb_scalability_time.pdf", bbox_inches="tight")
 
 
 def gen_plots(database_file: Path, out_dir: Path, sf):
@@ -780,115 +1074,132 @@ def gen_plots(database_file: Path, out_dir: Path, sf):
     )
     print("ALL KEYS")
     print(list(key[0] for key in result_mapped))
-    gen_time_plots(
-        result_mapped,
-        GPROM_CASES,
-        "gprom_all",
-        sf,
-        out_dir,
-        0.1,
-        [
-            "(Thread 1)",
-            "(Thread 2)",
-            "(Thread 4)",
-            "(Thread 8)",
-            "(Thread 10)",
-            "(Thread 12)",
-        ],
-        value_data_key="phase_1_explain_time",
-    )
-    gen_time_plots(
-        result_mapped,
-        TRACEPROV_OPTIMIZED_CASES,
-        "traceprov_capture",
-        sf,
-        out_dir,
-        0.1,
-        [
-            "(Thread 1)",
-            "(Thread 2)",
-            "(Thread 4)",
-            "(Thread 8)",
-            "(Thread 10)",
-            "(Thread 12)",
-        ],
-        value_data_key="phase_1_explain_time",
-    )
-    gen_time_plots(
-        result_mapped,
-        TRACEPROV_OPTIMIZED_CASES,
-        "traceprov_end_to_end",
-        sf,
-        out_dir,
-        0.1,
-        [
-            "(Thread 1)",
-            "(Thread 2)",
-            "(Thread 4)",
-            "(Thread 8)",
-            "(Thread 10)",
-            "(Thread 12)",
-        ],
-        value_data_key="phase_total_time",
-    )
     interesting_labels = [
         # "GProM Join",
         # "GProM Join Heu.",
         # "GProM Window",
-        "GProM Window Heu.",
-        "TraceProv Stats",
+        # "GProM Window Heu.",
+        # "SmokedDuck",
+        # "TraceProv Stats",
+        "TraceProv",
+        "GProM",
+        "SmokedDuck"
     ]
-    threads = [1, 2, 4, 8, 10, 12]
-    for thread in threads:
-        categories = DATA_SPEC_THREADS(thread)
+    # gen_time_plots(
+    #     result_mapped,
+    #     GPROM_CASES,
+    #     "gprom_all",
+    #     sf,
+    #     out_dir,
+    #     0.1,
+    #     [
+    #         "(Thread 1)",
+    #         "(Thread 2)",
+    #         "(Thread 4)",
+    #         "(Thread 8)",
+    #         "(Thread 10)",
+    #         "(Thread 12)",
+    #     ],
+    #     value_data_key="phase_1_explain_time",
+    # )
+    # gen_time_plots(
+    #     result_mapped,
+    #     TRACEPROV_OPTIMIZED_CASES,
+    #     "traceprov_capture",
+    #     sf,
+    #     out_dir,
+    #     0.1,
+    #     [
+    #         "(Thread 1)",
+    #         "(Thread 2)",
+    #         "(Thread 4)",
+    #         "(Thread 8)",
+    #         "(Thread 10)",
+    #         "(Thread 12)",
+    #     ],
+    #     value_data_key="phase_1_explain_time",
+    # )
+    # gen_time_plots(
+    #     result_mapped,
+    #     TRACEPROV_OPTIMIZED_CASES,
+    #     "traceprov_end_to_end",
+    #     sf,
+    #     out_dir,
+    #     0.1,
+    #     [
+    #         "(Thread 1)",
+    #         "(Thread 2)",
+    #         "(Thread 4)",
+    #         "(Thread 8)",
+    #         "(Thread 10)",
+    #         "(Thread 12)",
+    #     ],
+    #     value_data_key="phase_total_time",
+    # )
+    # interesting_labels = [
+    #     # "GProM Join",
+    #     # "GProM Join Heu.",
+    #     # "GProM Window",
+    #     # "GProM Window Heu.",
+    #     # "SmokedDuck",
+    #     # "TraceProv Stats",
+    #     "TraceProv",
+    #     "GProM",
+    #     "SmokedDuck"
+    # ]
+    # threads = [1, 2, 4, 8, 10, 12]
+    # for thread in threads:
+    #     categories = DATA_SPEC_THREADS(thread)
 
-        gen_generate_shared_plots(
-            thread,
-            result_mapped,
-            0.15,
-            out_dir,
-            ["base", *interesting_labels],
-            categories,
-            f"End-to-end Time for DuckDB (SF={sf})",
-            "Total end-to-end time (s)",
-            value_data_key="phase_total_time_median",
-            value_median_key="phase_total_time_stdev",
-        )
-        gen_generate_shared_plots(
-            thread,
-            result_mapped,
-            0.15,
-            out_dir,
-            ["base", *interesting_labels],
-            categories,
-            f"Phase 1 Time for DuckDB (SF={sf})",
-            "Phase 1 Time (s)",
-            value_data_key="phase_1_explain_time_median",
-            value_median_key="phase_1_explain_time_stdev",
-        )
-        gen_generate_shared_plots(
-            thread,
-            result_mapped,
-            0.15,
-            out_dir,
-            [*interesting_labels],
-            categories[1:],
-            f"End-to-end Slowdown for DuckDB (SF={sf})",
-            "Total end-to-end time (s)",
-            value_data_key="phase_all_slowdown",
-            value_median_key=None,
-            needs_extra=True,
-        )
+    #     gen_generate_shared_plots(
+    #         thread,
+    #         result_mapped,
+    #         0.20,
+    #         out_dir,
+    #         ["Baseline", *interesting_labels],
+    #         categories,
+    #         f"End-to-end Time for DuckDB (SF={sf})",
+    #         "Total end-to-end time (s)",
+    #         value_data_key="phase_total_time_median",
+    #         value_median_key="phase_total_time_stdev",
+    #     )
+    #     gen_generate_shared_plots(
+    #         thread,
+    #         result_mapped,
+    #         0.20,
+    #         out_dir,
+    #         ["Baseline", *interesting_labels],
+    #         categories,
+    #         f"Phase 1 Time for DuckDB (SF={sf})",
+    #         "Phase 1 Time (s)",
+    #         value_data_key="phase_1_explain_time_median",
+    #         value_median_key="phase_1_explain_time_stdev",
+    #     )
+    #     gen_generate_shared_plots(
+    #         thread,
+    #         result_mapped,
+    #         0.15,
+    #         out_dir,
+    #         [*interesting_labels],
+    #         categories[1:],
+    #         f"End-to-end Slowdown for DuckDB (SF={sf})",
+    #         "Total end-to-end time (s)",
+    #         value_data_key="phase_all_slowdown",
+    #         value_median_key=None,
+    #         needs_extra=True,
+    #     )
 
-    scalability_cats = list(map(replace_thread, DATA_SPEC_THREADS(0)[1:]))
+    scalability_cats = list(map(replace_thread, DATA_SPEC_THREADS(0)[1:-1]))
+    scalability_cats = ["base", *scalability_cats]
+    new_labels = ["Base", *interesting_labels]
     scalability = compute_scalability_ratio(result_mapped)
-    plot_scalability_plot(scalability, out_dir, scalability_cats, interesting_labels)
+    plot_scalability_plot(scalability, out_dir, scalability_cats, new_labels)
 
 
 def compute_scalability_ratio(all_results: list[tuple[tuple, dict]]):
     mapping = {
         (replace_thread(key[0]), key[1]): {
-            query: query_data["phase_all_slowdown"]
+            query: query_data
             for query, query_data in value.items()
         }
         for (key, value) in all_results
@@ -897,8 +1208,8 @@ def compute_scalability_ratio(all_results: list[tuple[tuple, dict]]):
     print(mapping.keys())
     scalability = dict()
     for (category, thread), query_data in mapping.items():
-        if category == "base":
-            continue
+        # if category == "base":
+        #     continue
         # no point in adding this.
         # if thread == 1:
         #     continue
@@ -934,6 +1245,7 @@ def main():
                 _rows = getattr(analyze, item["handler"])(key, result_file_path)
                 normalized_rows.extend(_rows)
         flatted = [row for group in normalized_rows for row in group.normalize()]
+        flatted = flatted[::-1]
         path = just_write(out_dir / "flat.json", json.dumps(flatted))
         if isinstance(path, Path):
             path = path.as_posix()
