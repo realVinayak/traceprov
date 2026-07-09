@@ -60,10 +60,15 @@ using namespace duckdb;
 #define TRACEPROV_USE_MMEM_PAGE 1
 
 // Whether to use 2 MB page
-#define TRACEPROV_USE_HUGE_PAGE 0
+#define TRACEPROV_USE_HUGE_PAGE 1
 
 // Whether to map the memory page via huge page.
-#define TRACEPROV_MAP_HUGE_PAGE 0
+#define TRACEPROV_MAP_HUGE_PAGE 1
+
+// Sometimes, we won't have root access to 1000 node machines :)
+// then we're at the mercy of the system to map huge pages (looking at you, anvil)
+// Fine, whatever, but need different way of setting up huge pages (via transparent)
+#define TRACEPROV_MAP_TRANS_HUGE_PAGE 1
 
 // if this is being changed, need to also update the query IDs used in lineage result.
 #define TRACEPROV_DEBUG_PERF 0
@@ -98,7 +103,13 @@ static_assert(0, "page size not defined!");
 // Use the huge page size as the backing page.
 #undef TRACEPROV_BACK_PAGE_SIZE
 #define TRACEPROV_BACK_PAGE_SIZE TRACEPROV_PAGE_SIZE
+// if mapping via transparent huge pages, don't need the the extra stuff, but still worth setting backing page.
+#if TRACEPROV_MAP_TRANS_HUGE_PAGE==0
 #define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | TP_MAP_HUGE_2MB )
+#else
+// TODO: See if adding POPULATE will also help here. otherwise, just use the old option.
+#define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS )
+#endif
 #else
 #define TRACEPROV_MMAP_FLAGS ( MAP_PRIVATE | MAP_ANONYMOUS )
 #endif
