@@ -53,7 +53,7 @@ def main():
         assert gprom_extract_file is not None
 
         computed_out_file = f"./{parsed.dir}/predicate_{mode}/gprom_{gprom_mode}.sql"
-        assert not os.path.exists(computed_out_file)
+        # assert not os.path.exists(computed_out_file)
         with open(computed_out_file, "w") as f:
             f.write(gprom_created_file.strip())
 
