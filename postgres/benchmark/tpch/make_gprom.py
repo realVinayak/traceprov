@@ -124,11 +124,12 @@ def main():
     connection_params = ConnectionParams.make_from_parsed(
         parsed, backend=parsed.backend
     )
+    parsed.original = True
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
     # queries = ["21"]
     # queries = ["22"]
-    queries = ["15"]
+    queries = ["20"]
     passed = defaultdict(dict)
     gprom_suffixes = ["extract"]
     if parsed.is_all:
