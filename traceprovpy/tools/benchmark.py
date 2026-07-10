@@ -409,30 +409,44 @@ class SketchValidationQuerySpec(QuerySpec):
 class QueryLimitQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options, benchmark):
-        original_pack = self.get_pack(top_dir, self.base, get_run_options)
+        query = self.extra_options['query']
+        keys = self.extra_options['keys']
+        query_keys = [key.lower() for key in keys]
+        original_pack = self.get_pack(top_dir, f"$ROOT/params_default/{query}/base.sql", get_run_options)
         back_pack = original_pack._replace(
             use_dict_cursor=True,
             capture_output=True,
             strict_run=True,
             preprocessors=[
                 *(original_pack.preprocessors or []),
-                MakeLimitOne(offset=0),
+                # MakeLimitOne(offset=0),
             ],
         )
         result = _run_with_timeout(back_pack)
         if result is None:
             return dict(timeout=True)
-        filtered_dict = {
-            key: value
-            for (key, value) in result["captured"][0].items()
-            if not (key.lower().startswith("prov_"))
-        }
-        make_selection_preprocessor = MakeKeySelection(filter_pack=filtered_dict)
-        new_query = QuerySpec(*self)
-        new_query = new_query._replace(
-            preprocess=[*(self.preprocess or []), make_selection_preprocessor]
-        )
-        return new_query.run_packs(top_dir, get_run_options, benchmark)
+        offset_results = []
+        for captured_result in result["captured"]:
+            filtered_dict = {
+                key: value
+                for (key, value) in captured_result.items()
+                if not (key.lower().startswith("prov_"))
+                and key.lower() in query_keys
+            }
+            make_selection_preprocessor = MakeKeySelection(filter_pack=filtered_dict)
+            new_query = QuerySpec(*self)
+            new_query = new_query._replace(
+                preprocess=[*(self.preprocess or []), make_selection_preprocessor]
+            )
+            offset_result = new_query.run_packs(top_dir, get_run_options, benchmark)
+            if offset_result is None: break
+            offset_result_base = offset_result['base']
+            if len(offset_result_base) == 0: break
+            if 'timeout' in offset_result_base[0]:
+                assert offset_result_base[0]['timeout']
+                break
+            offset_results.append(offset_result)
+        return offset_results
 
 
 class Query(NamedTuple):
@@ -572,7 +586,7 @@ class GenericBenchmark(NamedTuple):
         parser.add_argument("-sd_lib", required=False, type=str)
         parser.add_argument("-sd_include", required=False, type=str)
         parser.add_argument("-sd_num_threads", required=False, type=int)
-        parser.add_argument("--procs", required=False, type=int, default=None)
+        parser.add_argument("--procs", required=False, type=int, default=0)
         parser.add_argument(
             f"--{INFER_DUCKDB_OPTION}",
             action=argparse.BooleanOptionalAction,

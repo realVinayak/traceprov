@@ -26,13 +26,14 @@ def make_gprom_query(
     gprom_mode: str,
     gprom_config: dict,
     query_spec_class: QuerySpec | QueryLimitQuerySpec,
+    keys: dict
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     # print(query_spec_class)
     return [
         Query(
             query_name=query_name,
-            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key()),
+            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys[query_name])),
         )
         for spec in valid_specs
     ]
@@ -46,6 +47,14 @@ def main():
     parser.add_argument("--dir", required=True)
     parser.add_argument(
         "--keys_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    keys_path = Path(
+        "../../../../postgres/benchmark/tpch/legacy_scale_1/params_default/extract_gprom/keys.json"
+    )
+    parser.add_argument(
+        "--keys",
+        required=False,
+        default=keys_path,
     )
     # Useful for debugging.
     add_gprom_candidates(parser)
@@ -78,7 +87,7 @@ def main():
         g_config_item = gprom_config[query_name]
         subdir_queries.extend(
             make_gprom_query(
-                original_query_name, parsed.mode, g_config_item, query_class
+                original_query_name, parsed.mode, g_config_item, query_class, json_read_file(parsed.keys)
             )
         )
     dir_queries.append(QueryDirectory(dir_name=cleaned_dir, queries=subdir_queries))
