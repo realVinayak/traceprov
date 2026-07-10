@@ -389,9 +389,6 @@
         "(join - True)": {
             "passed": true
         },
-        "(window - True)": {
-            "passed": true
-        },
         "(join_composable - False)": {
             "passed": true
         },

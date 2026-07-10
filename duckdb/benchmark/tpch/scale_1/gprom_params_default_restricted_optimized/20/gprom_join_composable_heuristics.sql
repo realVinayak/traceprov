@@ -16,12 +16,11 @@ FROM
     FROM
       (
         SELECT
-          F0_0.S_SUPPKEY AS S_SUPPKEY,
           F0_0.S_NAME AS S_NAME,
           F0_0.S_NATIONKEY AS S_NATIONKEY,
           F0_0.N_NATIONKEY AS N_NATIONKEY,
           F0_0.N_NAME AS N_NAME,
-          F1_0.PS_SUPPKEY AS PS_SUPPKEY,
+          F1_0."NESTING_EVAL_3" AS "NESTING_EVAL_3",
           F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
           F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
           F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
@@ -29,251 +28,326 @@ FROM
           F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
         FROM
           (
-            (
-              SELECT
-                F0_0.S_SUPPKEY AS S_SUPPKEY,
-                F0_0.S_NAME AS S_NAME,
-                F0_0.S_NATIONKEY AS S_NATIONKEY,
-                F1_0.N_NATIONKEY AS N_NATIONKEY,
-                F1_0.N_NAME AS N_NAME,
-                F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
-                F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
-              FROM
+            SELECT
+              F0_0.S_SUPPKEY AS S_SUPPKEY,
+              F0_0.S_NAME AS S_NAME,
+              F0_0.S_NATIONKEY AS S_NATIONKEY,
+              F1_0.N_NATIONKEY AS N_NATIONKEY,
+              F1_0.N_NAME AS N_NAME,
+              F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+              F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+            FROM
+              (
                 (
-                  (
-                    SELECT
-                      F0_0.S_SUPPKEY AS S_SUPPKEY,
-                      F0_0.S_NAME AS S_NAME,
-                      F0_0.S_NATIONKEY AS S_NATIONKEY,
-                      F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
-                    FROM
-                      SUPPLIER AS F0_0
-                  ) AS F0_0
-                  CROSS JOIN (
-                    SELECT
-                      F0_0.N_NATIONKEY AS N_NATIONKEY,
-                      F0_0.N_NAME AS N_NAME,
-                      F0_0.rowid AS PROV_NATION_N__NATIONKEY
-                    FROM
-                      NATION AS F0_0
-                  ) AS F1_0
-                )
-            ) AS F0_0
-            CROSS JOIN (
-              SELECT
-                F0_0."GROUP_0" AS PS_SUPPKEY,
-                F1_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
-                F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
-                F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
-              FROM
+                  SELECT
+                    F0_0.S_SUPPKEY AS S_SUPPKEY,
+                    F0_0.S_NAME AS S_NAME,
+                    F0_0.S_NATIONKEY AS S_NATIONKEY,
+                    F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
+                  FROM
+                    SUPPLIER AS F0_0
+                ) AS F0_0
+                CROSS JOIN (
+                  SELECT
+                    F0_0.N_NATIONKEY AS N_NATIONKEY,
+                    F0_0.N_NAME AS N_NAME,
+                    F0_0.rowid AS PROV_NATION_N__NATIONKEY
+                  FROM
+                    NATION AS F0_0
+                ) AS F1_0
+              )
+          ) AS F0_0,
+          LATERAL (
+            SELECT
+              (
+                CASE
+                  WHEN ((F0_1."NESTING_EVAL_3") IS NULL) THEN FALSE
+                  WHEN (F0_1."NESTING_EVAL_3" = 1) THEN NULL
+                  ELSE (F0_1."NESTING_EVAL_3" = 2)
+                END
+              ) AS "NESTING_EVAL_3",
+              F1_1.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+              F1_1.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+              F1_1.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+            FROM
+              (
                 (
-                  (
-                    SELECT
-                      F0_0.PS_SUPPKEY AS "GROUP_0"
-                    FROM
+                  SELECT
+                    MAX(
                       (
+                        CASE
+                          WHEN (F0_0.S_SUPPKEY = F0_1.PS_SUPPKEY) THEN 2
+                          WHEN (
+                            ((F0_0.S_SUPPKEY) IS NULL)
+                            OR ((F0_1.PS_SUPPKEY) IS NULL)
+                          ) THEN 1
+                          ELSE 0
+                        END
+                      )
+                    ) AS "NESTING_EVAL_3"
+                  FROM
+                    (
+                      SELECT
+                        F0_1.PS_PARTKEY AS PS_PARTKEY,
+                        F0_1.PS_SUPPKEY AS PS_SUPPKEY,
+                        F0_1.PS_AVAILQTY AS PS_AVAILQTY
+                      FROM
+                        PARTSUPP AS F0_1
+                    ) AS F0_1,
+                    LATERAL (
+                      SELECT
+                        (
+                          CASE
+                            WHEN (
+                              (
+                                MAX(
+                                  (
+                                    CASE
+                                      WHEN (F0_1.PS_PARTKEY = F0_2.P_PARTKEY) THEN 2
+                                      WHEN (
+                                        ((F0_1.PS_PARTKEY) IS NULL)
+                                        OR ((F0_2.P_PARTKEY) IS NULL)
+                                      ) THEN 1
+                                      ELSE 0
+                                    END
+                                  )
+                                )
+                              ) IS NULL
+                            ) THEN FALSE
+                            WHEN (
+                              MAX(
+                                (
+                                  CASE
+                                    WHEN (F0_1.PS_PARTKEY = F0_2.P_PARTKEY) THEN 2
+                                    WHEN (
+                                      ((F0_1.PS_PARTKEY) IS NULL)
+                                      OR ((F0_2.P_PARTKEY) IS NULL)
+                                    ) THEN 1
+                                    ELSE 0
+                                  END
+                                )
+                              ) = 1
+                            ) THEN NULL
+                            ELSE (
+                              MAX(
+                                (
+                                  CASE
+                                    WHEN (F0_1.PS_PARTKEY = F0_2.P_PARTKEY) THEN 2
+                                    WHEN (
+                                      ((F0_1.PS_PARTKEY) IS NULL)
+                                      OR ((F0_2.P_PARTKEY) IS NULL)
+                                    ) THEN 1
+                                    ELSE 0
+                                  END
+                                )
+                              ) = 2
+                            )
+                          END
+                        ) AS "NESTING_EVAL_1"
+                      FROM
+                        (
+                          SELECT
+                            F0_2.P_PARTKEY AS P_PARTKEY,
+                            F0_2.P_NAME AS P_NAME
+                          FROM
+                            PART AS F0_2
+                        ) AS F0_2
+                      WHERE
+                        (F0_2.P_NAME LIKE 'forest%')
+                    ) AS F1_1,
+                    LATERAL (
+                      SELECT
+                        (0.500000 * SUM(F0_2.L_QUANTITY)) AS "NESTING_EVAL_2"
+                      FROM
+                        (
+                          SELECT
+                            F0_2.L_PARTKEY AS L_PARTKEY,
+                            F0_2.L_SUPPKEY AS L_SUPPKEY,
+                            F0_2.L_QUANTITY AS L_QUANTITY,
+                            F0_2.L_SHIPDATE AS L_SHIPDATE
+                          FROM
+                            LINEITEM AS F0_2
+                        ) AS F0_2
+                      WHERE
                         (
                           (
-                            SELECT
-                              F0_0.PS_PARTKEY AS PS_PARTKEY,
-                              F0_0.PS_SUPPKEY AS PS_SUPPKEY,
-                              F0_0.PS_AVAILQTY AS PS_AVAILQTY
-                            FROM
-                              PARTSUPP AS F0_0
-                          ) AS F0_0
-                          JOIN (
-                            SELECT
-                              F0_0.P_PARTKEY AS P_PARTKEY
-                            FROM
-                              (
-                                SELECT
-                                  F0_0.P_PARTKEY AS P_PARTKEY,
-                                  F0_0.P_NAME AS P_NAME
-                                FROM
-                                  PART AS F0_0
-                              ) AS F0_0
-                            WHERE
-                              (F0_0.P_NAME LIKE 'forest%')
-                          ) AS F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
+                            (
+                              (F0_2.L_PARTKEY = F0_1.PS_PARTKEY)
+                              AND (F0_2.L_SUPPKEY = F0_1.PS_SUPPKEY)
+                            )
+                            AND (F0_2.L_SHIPDATE >= '1994-01-01')
+                          )
+                          AND (F0_2.L_SHIPDATE < '1995-01-01')
                         )
-                        JOIN (
+                    ) AS F2_1
+                  WHERE
+                    (
+                      F1_1."NESTING_EVAL_1"
+                      AND (F0_1.PS_AVAILQTY > F2_1."NESTING_EVAL_2")
+                    )
+                ) AS F0_1
+                LEFT OUTER JOIN (
+                  SELECT
+                    F0_1.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                    F0_1.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                    F0_1.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                  FROM
+                    (
+                      SELECT
+                        F0_1.PS_AVAILQTY AS PS_AVAILQTY,
+                        F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+                        F1_1."NESTING_EVAL_2" AS "NESTING_EVAL_2",
+                        F0_1.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                        F0_1.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                        F1_1.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                      FROM
+                        (
                           SELECT
-                            (0.500000 * SUM(F0_0.L_QUANTITY)) AS COMPUTED,
-                            F0_0.L_PARTKEY AS L_PARTKEY,
-                            F0_0.L_SUPPKEY AS L_SUPPKEY
+                            F0_1.PS_PARTKEY AS PS_PARTKEY,
+                            F0_1.PS_SUPPKEY AS PS_SUPPKEY,
+                            F0_1.PS_AVAILQTY AS PS_AVAILQTY,
+                            F1_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+                            F0_1.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
+                            F1_1.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
                           FROM
                             (
                               SELECT
-                                F0_0.L_PARTKEY AS L_PARTKEY,
-                                F0_0.L_SUPPKEY AS L_SUPPKEY,
-                                F0_0.L_QUANTITY AS L_QUANTITY,
-                                F0_0.L_SHIPDATE AS L_SHIPDATE
+                                F0_1.PS_PARTKEY AS PS_PARTKEY,
+                                F0_1.PS_SUPPKEY AS PS_SUPPKEY,
+                                F0_1.PS_AVAILQTY AS PS_AVAILQTY,
+                                F0_1.rowid AS PROV_PARTSUPP_PS__PARTKEY
                               FROM
-                                LINEITEM AS F0_0
-                            ) AS F0_0
-                          WHERE
-                            (
-                              (F0_0.L_SHIPDATE >= '1994-01-01')
-                              AND (F0_0.L_SHIPDATE < '1995-01-01')
-                            )
-                          GROUP BY
-                            F0_0.L_PARTKEY,
-                            F0_0.L_SUPPKEY
-                        ) AS F2_0 ON (
-                          (
-                            (
-                              (F0_0.PS_PARTKEY = F2_0.L_PARTKEY)
-                              AND (F0_0.PS_SUPPKEY = F2_0.L_SUPPKEY)
-                            )
-                            AND (F0_0.PS_AVAILQTY > F2_0.COMPUTED)
-                          )
-                        )
-                      )
-                    GROUP BY
-                      F0_0.PS_SUPPKEY
-                  ) AS F0_0
-                  JOIN (
-                    SELECT
-                      F0_0.PS_SUPPKEY AS "_P_SIDE_GROUP_0",
-                      F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
-                      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
-                      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
-                    FROM
-                      (
-                        (
-                          SELECT
-                            F0_0.PS_PARTKEY AS PS_PARTKEY,
-                            F0_0.PS_SUPPKEY AS PS_SUPPKEY,
-                            F0_0.PS_AVAILQTY AS PS_AVAILQTY,
-                            F0_0.PROV_PARTSUPP_PS__PARTKEY AS PROV_PARTSUPP_PS__PARTKEY,
-                            F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
-                          FROM
-                            (
-                              (
-                                SELECT
-                                  F0_0.PS_PARTKEY AS PS_PARTKEY,
-                                  F0_0.PS_SUPPKEY AS PS_SUPPKEY,
-                                  F0_0.PS_AVAILQTY AS PS_AVAILQTY,
-                                  F0_0.rowid AS PROV_PARTSUPP_PS__PARTKEY
-                                FROM
-                                  PARTSUPP AS F0_0
-                              ) AS F0_0
-                              JOIN (
-                                SELECT
-                                  F0_0.P_PARTKEY AS P_PARTKEY,
-                                  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
-                                FROM
-                                  (
-                                    SELECT
-                                      F0_0.P_PARTKEY AS P_PARTKEY,
-                                      F0_0.P_NAME AS P_NAME,
-                                      F0_0.rowid AS PROV_PART_P__PARTKEY
-                                    FROM
-                                      PART AS F0_0
-                                  ) AS F0_0
-                                WHERE
-                                  (F0_0.P_NAME LIKE 'forest%')
-                              ) AS F1_0 ON ((F1_0.P_PARTKEY = F0_0.PS_PARTKEY))
-                            )
-                        ) AS F0_0
-                        JOIN (
-                          SELECT
-                            (0.500000 * F0_0."AGGR_0") AS COMPUTED,
-                            F0_0."GROUP_0" AS L_PARTKEY,
-                            F0_0."GROUP_1" AS L_SUPPKEY,
-                            F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
-                          FROM
-                            (
-                              (
-                                SELECT
-                                  SUM(F0_0.L_QUANTITY) AS "AGGR_0",
-                                  F0_0.L_PARTKEY AS "GROUP_0",
-                                  F0_0.L_SUPPKEY AS "GROUP_1"
-                                FROM
-                                  (
-                                    SELECT
-                                      F0_0.L_PARTKEY AS L_PARTKEY,
-                                      F0_0.L_SUPPKEY AS L_SUPPKEY,
-                                      F0_0.L_QUANTITY AS L_QUANTITY,
-                                      F0_0.L_SHIPDATE AS L_SHIPDATE
-                                    FROM
-                                      LINEITEM AS F0_0
-                                  ) AS F0_0
-                                WHERE
-                                  (
-                                    (F0_0.L_SHIPDATE >= '1994-01-01')
-                                    AND (F0_0.L_SHIPDATE < '1995-01-01')
-                                  )
-                                GROUP BY
-                                  F0_0.L_PARTKEY,
-                                  F0_0.L_SUPPKEY
-                              ) AS F0_0
-                              JOIN (
-                                SELECT
-                                  F0_0.L_PARTKEY AS "_P_SIDE_GROUP_0",
-                                  F0_0.L_SUPPKEY AS "_P_SIDE_GROUP_1",
-                                  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
-                                FROM
-                                  (
-                                    SELECT
-                                      F0_0.L_PARTKEY AS L_PARTKEY,
-                                      F0_0.L_SUPPKEY AS L_SUPPKEY,
-                                      F0_0.L_SHIPDATE AS L_SHIPDATE,
-                                      F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
-                                    FROM
-                                      LINEITEM AS F0_0
-                                  ) AS F0_0
-                                WHERE
-                                  (
-                                    (F0_0.L_SHIPDATE >= '1994-01-01')
-                                    AND (F0_0.L_SHIPDATE < '1995-01-01')
-                                  )
-                              ) AS F1_0 ON (
+                                PARTSUPP AS F0_1
+                            ) AS F0_1,
+                            LATERAL (
+                              SELECT
+                                (
+                                  CASE
+                                    WHEN ((F0_2."NESTING_EVAL_1") IS NULL) THEN FALSE
+                                    WHEN (F0_2."NESTING_EVAL_1" = 1) THEN NULL
+                                    ELSE (F0_2."NESTING_EVAL_1" = 2)
+                                  END
+                                ) AS "NESTING_EVAL_1",
+                                F1_2.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
+                              FROM
                                 (
                                   (
-                                    (F0_0."GROUP_1" = F1_0."_P_SIDE_GROUP_1")
-                                    OR (
-                                      (F0_0."GROUP_1" IS NULL)
-                                      AND (F1_0."_P_SIDE_GROUP_1" IS NULL)
-                                    )
-                                  )
-                                  AND (
-                                    (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
-                                    OR (
-                                      (F0_0."GROUP_0" IS NULL)
-                                      AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
-                                    )
-                                  )
+                                    SELECT
+                                      MAX(
+                                        (
+                                          CASE
+                                            WHEN (F0_1.PS_PARTKEY = F0_2.P_PARTKEY) THEN 2
+                                            WHEN (
+                                              ((F0_1.PS_PARTKEY) IS NULL)
+                                              OR ((F0_2.P_PARTKEY) IS NULL)
+                                            ) THEN 1
+                                            ELSE 0
+                                          END
+                                        )
+                                      ) AS "NESTING_EVAL_1"
+                                    FROM
+                                      (
+                                        SELECT
+                                          F0_2.P_PARTKEY AS P_PARTKEY,
+                                          F0_2.P_NAME AS P_NAME
+                                        FROM
+                                          PART AS F0_2
+                                      ) AS F0_2
+                                    WHERE
+                                      (F0_2.P_NAME LIKE 'forest%')
+                                  ) AS F0_2
+                                  LEFT OUTER JOIN (
+                                    SELECT
+                                      F0_2.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY
+                                    FROM
+                                      (
+                                        SELECT
+                                          F0_2.P_NAME AS P_NAME,
+                                          F0_2.rowid AS PROV_PART_P__PARTKEY
+                                        FROM
+                                          PART AS F0_2
+                                      ) AS F0_2
+                                    WHERE
+                                      (F0_2.P_NAME LIKE 'forest%')
+                                  ) AS F1_2 ON ((1 = 1))
                                 )
-                              )
-                            )
-                        ) AS F1_0 ON (
-                          (
+                            ) AS F1_1
+                        ) AS F0_1,
+                        LATERAL (
+                          SELECT
+                            (0.500000 * F0_2."AGGR_0") AS "NESTING_EVAL_2",
+                            F1_2.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                          FROM
                             (
-                              (F0_0.PS_PARTKEY = F1_0.L_PARTKEY)
-                              AND (F0_0.PS_SUPPKEY = F1_0.L_SUPPKEY)
+                              (
+                                SELECT
+                                  SUM(F0_2.L_QUANTITY) AS "AGGR_0"
+                                FROM
+                                  (
+                                    SELECT
+                                      F0_2.L_PARTKEY AS L_PARTKEY,
+                                      F0_2.L_SUPPKEY AS L_SUPPKEY,
+                                      F0_2.L_QUANTITY AS L_QUANTITY,
+                                      F0_2.L_SHIPDATE AS L_SHIPDATE
+                                    FROM
+                                      LINEITEM AS F0_2
+                                  ) AS F0_2
+                                WHERE
+                                  (
+                                    (
+                                      (
+                                        (F0_2.L_PARTKEY = F0_1.PS_PARTKEY)
+                                        AND (F0_2.L_SUPPKEY = F0_1.PS_SUPPKEY)
+                                      )
+                                      AND (F0_2.L_SHIPDATE >= '1994-01-01')
+                                    )
+                                    AND (F0_2.L_SHIPDATE < '1995-01-01')
+                                  )
+                              ) AS F0_2
+                              LEFT OUTER JOIN (
+                                SELECT
+                                  F0_2.L_PARTKEY AS L_PARTKEY,
+                                  F0_2.L_SUPPKEY AS L_SUPPKEY,
+                                  F0_2.L_SHIPDATE AS L_SHIPDATE,
+                                  F0_2.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                FROM
+                                  (
+                                    SELECT
+                                      F0_2.L_PARTKEY AS L_PARTKEY,
+                                      F0_2.L_SUPPKEY AS L_SUPPKEY,
+                                      F0_2.L_SHIPDATE AS L_SHIPDATE,
+                                      F0_2.rowid AS PROV_LINEITEM_L__ORDERKEY
+                                    FROM
+                                      LINEITEM AS F0_2
+                                  ) AS F0_2
+                                WHERE
+                                  (
+                                    (
+                                      (
+                                        (F0_2.L_PARTKEY = F0_1.PS_PARTKEY)
+                                        AND (F0_2.L_SUPPKEY = F0_1.PS_SUPPKEY)
+                                      )
+                                      AND (F0_2.L_SHIPDATE >= '1994-01-01')
+                                    )
+                                    AND (F0_2.L_SHIPDATE < '1995-01-01')
+                                  )
+                              ) AS F1_2 ON ((1 = 1))
                             )
-                            AND (F0_0.PS_AVAILQTY > F1_0.COMPUTED)
-                          )
-                        )
-                      )
-                  ) AS F1_0 ON (
+                        ) AS F1_1
+                    ) AS F0_1
+                  WHERE
                     (
-                      (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
-                      OR (
-                        (F0_0."GROUP_0" IS NULL)
-                        AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
-                      )
+                      F0_1."NESTING_EVAL_1"
+                      AND (F0_1.PS_AVAILQTY > F0_1."NESTING_EVAL_2")
                     )
-                  )
-                )
-            ) AS F1_0
-          )
+                ) AS F1_1 ON ((1 = 1))
+              )
+          ) AS F1_0
       ) AS F0_0
     WHERE
       (
         (
-          (F0_0.PS_SUPPKEY = F0_0.S_SUPPKEY)
+          F0_0."NESTING_EVAL_3"
           AND (F0_0.S_NATIONKEY = F0_0.N_NATIONKEY)
         )
         AND (F0_0.N_NAME = 'CANADA')
