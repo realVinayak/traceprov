@@ -25,18 +25,26 @@ from traceprovpy.utils import get_filter_group
 
 
 def make_simple_directory(
-    dir_name, mode, num_groups, selectivity, use_duckdb_inference: bool
+    dir_name, mode, num_groups, selectivity, use_duckdb_inference: bool, use_random
 ):
     replaces_selectivity = ReplaceSelectivity(
         get_filter_group(num_groups, selectivity, mode)
     )
+    new_name = f"data_table_{dir_name}"
+    if use_random:
+        new_name = f"data_table_{dir_name}_random"
+    replaces_random = ReplaceSelectivity(
+        new_name, f"data_table_{dir_name}"
+    )
+    # print(replaces_random)
+    # assert False
 
     make_base = lambda query_name: Query(
         query_name=f"predicate_{mode}",
         spec=QuerySpec(
             base=f"{query_name}.sql",
             key=f"{query_name}_selectivity_{selectivity}",
-            preprocess=[replaces_selectivity],
+            preprocess=[replaces_selectivity, replaces_random],
         ),
     )
     traceprov_extras = [TRACEPROV_INFER_SPEC(), TRACEPROV_GET_LAYER_SIZE()]
@@ -45,7 +53,7 @@ def make_simple_directory(
         spec=QuerySpec(
             base="base.sql",
             key=f"traceprov_selectivity_{selectivity}",
-            preprocess=[replaces_selectivity, MakeTraceProv()],
+            preprocess=[replaces_selectivity, replaces_random, MakeTraceProv()],
             extras=traceprov_extras,
             extra_options={
                 TRACEPROV_LAYERS_TO_DERIVE_KEY: (1,)
@@ -254,6 +262,9 @@ def main():
     parser.add_argument(
         "--sel_dry_run", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--random", action=argparse.BooleanOptionalAction, default=True
+    )
 
     parsed, others = parser.parse_known_args()
     print(parsed)
@@ -275,6 +286,7 @@ def main():
                 parsed.sel_num_groups,
                 parsed.sel_selectivity,
                 use_duckdb_inference=bench_has_duckdb_infer(others),
+                use_random=parsed.random
             )
         )
 
