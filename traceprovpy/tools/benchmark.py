@@ -675,6 +675,7 @@ class GenericBenchmark(NamedTuple):
         current_timestamp = datetime.now()
         datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
         result_dir = f"{out_dir}/{final_result['prefix']}_{datetime_string}/"
+        print("Out dir: ", result_dir)
         os.makedirs(result_dir, exist_ok=False)
         stats = final_result["stats"]
         called_benchmark: GenericBenchmark = final_result["called_benchmark"]

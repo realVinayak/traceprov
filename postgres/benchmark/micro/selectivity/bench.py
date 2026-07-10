@@ -9,6 +9,7 @@ from traceprovpy.tools.benchmark import (
 )
 from traceprovpy.tools.benchmark_utils import (
     TRACEPROV_GET_DERIVATION_SPEC,
+    TRACEPROV_GET_LAYER_SIZE,
     TRACEPROV_INFER_SPEC,
     TRACEPROV_SYNC_TIME,
 )
@@ -19,6 +20,7 @@ from traceprovpy.tools.run_with_timeout import (
     ReplaceSelectivity,
     RunParams,
 )
+from traceprovpy.tools.traceprov_extra_func import TRACEPROV_LAYERS_TO_DERIVE_KEY
 from traceprovpy.utils import get_filter_group
 
 
@@ -37,14 +39,17 @@ def make_simple_directory(
             preprocess=[replaces_selectivity],
         ),
     )
-
+    traceprov_extras = [TRACEPROV_INFER_SPEC(), TRACEPROV_GET_LAYER_SIZE()]
     traceprov_query = Query(
         query_name=f"predicate_{mode}",
         spec=QuerySpec(
             base="base.sql",
             key=f"traceprov_selectivity_{selectivity}",
             preprocess=[replaces_selectivity, MakeTraceProv()],
-            extras=[TRACEPROV_SYNC_TIME(), TRACEPROV_INFER_SPEC()],
+            extras=traceprov_extras,
+            extra_options={
+                TRACEPROV_LAYERS_TO_DERIVE_KEY: (1,)
+            },
         ),
     )
 
@@ -255,7 +260,7 @@ def main():
     assert parsed.sel_mode == "post" or parsed.sel_mode == "pre"
 
     # dir_names = ["1_000_000", "5_000_000", "10_000_000", "50_000_000", "100_000_000"]
-    dir_names = ["50_000_000"]
+    dir_names = ["1_000_000"]
     selectivity_directories: list[QueryDirectory] = []
     for dir_name in dir_names:
         print(
@@ -288,7 +293,7 @@ def main():
     result = benchmark.run_from_argparse(
         selectivity_directories, params=RunParams(repeat=3, throwaway=2)
     )
-    print(result)
+    # print(result)
     benchmark.dump_final_result(result)
 
 
