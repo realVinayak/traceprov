@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import sys
 from typing import Any
-from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query
+from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query, QueryLimitQuerySpec, QuerySpec
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
@@ -218,7 +218,7 @@ def add_gprom_candidates(parser):
 
 def get_gprom_candidates(gprom_mode: str):
     if gprom_mode == "all":
-        all_options = product(["join", "window"], [True])
+        all_options = product(["window"], [True])
         return [GpromOptions(*opt) for opt in all_options]
 
     option = GpromOptions.from_str(gprom_mode)
@@ -230,11 +230,17 @@ def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
     valid_specs: list[GpromOptions] = []
     for cand in cands:
         cand_key = cand.to_str()
-        if cand_key not in gprom_config:
-            continue
-        config_spec = gprom_config[cand.to_str()]
-        assert isinstance(config_spec, dict)
-        if config_spec["passed"]:
+        is_valid = False
+        if isinstance(gprom_config, bool):
+            if not gprom_config: continue
+            is_valid = True
+        elif isinstance(gprom_config, dict):
+            if  cand_key not in gprom_config:
+                continue
+            config_spec = gprom_config[cand.to_str()]
+            assert isinstance(config_spec, dict)
+            is_valid = config_spec["passed"]
+        if is_valid:
             valid_specs.append(cand)
     return valid_specs
 
@@ -253,3 +259,21 @@ def evaluate_if_str(value: str | int):
 
 def evaluate_list_if_str(in_list: list[str | int]):
     return list(map(evaluate_if_str, in_list))
+
+
+def make_gprom_query(
+    query_name: str,
+    gprom_mode: str,
+    gprom_config: dict | bool,
+    query_spec_class: QuerySpec | QueryLimitQuerySpec,
+    keys: dict
+):
+    valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
+    # print(query_spec_class)
+    return [
+        Query(
+            query_name=query_name,
+            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys)),
+        )
+        for spec in valid_specs
+    ]

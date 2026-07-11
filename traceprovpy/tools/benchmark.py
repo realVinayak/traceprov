@@ -411,14 +411,17 @@ class QueryLimitQuerySpec(QuerySpec):
     def run_packs(self, top_dir, get_run_options, benchmark):
         query = self.extra_options['query']
         keys = self.extra_options['keys']
+        default_base_getter = lambda _query: f"$ROOT/params_default/{_query}/base.sql"
+        base_getter = self.extra_options.get("base_getter", default_base_getter)
         query_keys = [key.lower() for key in keys]
-        original_pack = self.get_pack(top_dir, f"$ROOT/params_default/{query}/base.sql", get_run_options)
+        original_pack = self.get_pack(top_dir, base_getter(query), get_run_options)
         back_pack = original_pack._replace(
             use_dict_cursor=True,
             capture_output=True,
             strict_run=True,
             preprocessors=[
                 *(original_pack.preprocessors or []),
+                *(self.preprocess or []),
                 # MakeLimitOne(offset=0),
             ],
         )

@@ -18,6 +18,8 @@ def run():
     base_parser.add_argument("--num_groups", required=True, type=int)
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
+    # because we won't do any other meanigful comparison anyways.
+    parsed.optimized = True
     config: dict = json_read_file(parsed.config)
     assert config is not None
 

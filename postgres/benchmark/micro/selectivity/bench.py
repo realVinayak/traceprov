@@ -303,7 +303,7 @@ def main():
         print(selectivity_directories)
         return
     result = benchmark.run_from_argparse(
-        selectivity_directories, params=RunParams(repeat=3, throwaway=2)
+        selectivity_directories, params=RunParams()
     )
     # print(result)
     benchmark.dump_final_result(result)

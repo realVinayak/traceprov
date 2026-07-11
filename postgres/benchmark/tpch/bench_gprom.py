@@ -11,6 +11,7 @@ from traceprovpy.tools.benchmark import (
 from traceprovpy.tools.benchmark_utils import (
     add_gprom_candidates,
     infer_gprom_candidates,
+    make_gprom_query,
     parse_queries,
 )
 from traceprovpy.tools.file_utils import json_read_file
@@ -19,25 +20,6 @@ from traceprovpy.tools.run_with_timeout import RunParams
 
 def make_base_query(query_name: str):
     return Query(query_name=query_name, spec=QuerySpec(base="base.sql", key="base"))
-
-
-def make_gprom_query(
-    query_name: str,
-    gprom_mode: str,
-    gprom_config: dict,
-    query_spec_class: QuerySpec | QueryLimitQuerySpec,
-    keys: dict
-):
-    valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
-    # print(query_spec_class)
-    return [
-        Query(
-            query_name=query_name,
-            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys[query_name])),
-        )
-        for spec in valid_specs
-    ]
-
 
 def main():
     benchmark = GenericBenchmark("tpch-driver-gprom")
@@ -76,6 +58,7 @@ def main():
     assert "/" not in cleaned_dir
     subdir_queries = []
     query_repr = config["queries"]
+    key_file = json_read_file(parsed.keys)
     for query_name in parse_queries(query_repr):
         print(query_name)
         query_name = str(query_name)
@@ -87,7 +70,7 @@ def main():
         g_config_item = gprom_config[query_name]
         subdir_queries.extend(
             make_gprom_query(
-                original_query_name, parsed.mode, g_config_item, query_class, json_read_file(parsed.keys)
+                original_query_name, parsed.mode, g_config_item, query_class, key_file[original_query_name]
             )
         )
     dir_queries.append(QueryDirectory(dir_name=cleaned_dir, queries=subdir_queries))
