@@ -16,6 +16,7 @@ def run():
     base_parser.add_argument("-cfg", "--config", required=True)
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
+    parsed.optimized = True
     config: dict = json_read_file(parsed.config)
     assert config is not None
     run_time_options = config["runTimeOptions"]

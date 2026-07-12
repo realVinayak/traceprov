@@ -8,9 +8,8 @@ from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,
 )
-from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
+from traceprovpy.tools.file_utils import get_tmp_file, json_read_file, just_read, just_write
 from traceprovpy.tools.run_duckdb_generic import create_base_offset, run_combined
-from traceprovpy.tools.file_utils import GLOBAL_TMP_DIR
 
 random.seed(10)
 
@@ -48,6 +47,9 @@ def run_count_query(num_rows: int, query: str, parsed, tmp: Path, total_iters):
         replacer(validate_new_offset_sql),
     )
     just_write(out_dir / "validate_new.sql", replacer(validate_new_sql))
+    if parsed.sd_mode is not None and parsed.sample_inference is None:
+        sd_thread_1_combined_sql = just_read(query_dir / "sd_thread_1_combined.sql")
+        just_write(out_dir / "sd_thread_1_combined.sql", sd_thread_1_combined_sql)
     query_result = run_combined(parsed, total_iters, query, [], output_log_spec[query])
     return query_result
 
@@ -58,7 +60,7 @@ def run():
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     result = []
-    tmp = Path(GLOBAL_TMP_DIR)
+    tmp = Path(get_tmp_file())
     os.makedirs(tmp, exist_ok=True)
 
     config = json_read_file(parsed.config)

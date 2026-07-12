@@ -21,8 +21,10 @@ def make_duckdb_parse():
     parser.add_argument(
         "--mat_infer", action=argparse.BooleanOptionalAction, default=False
     )
+    # For DuckDB, we strictly use rowids for everything.
+    # So, using the optimized setting here by default is reasonable.
     parser.add_argument(
-        "--optimized", action=argparse.BooleanOptionalAction, default=False
+        "--optimized", action=argparse.BooleanOptionalAction, default=True
     )
     parser.add_argument(
         "--agg_optimized", action=argparse.BooleanOptionalAction, default=False

@@ -6,4 +6,5 @@ def make_replacer(num_rows: int):
     return replacer
 
 
-ALL_QUERY_LIST = ["q01", "q02", "q03", "q04", "q06", "q07"]
+# ALL_QUERY_LIST = ["q01", "q02", "q03", "q04", "q06", "q07"]
+ALL_QUERY_LIST = ["q03"]
