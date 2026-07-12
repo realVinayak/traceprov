@@ -218,7 +218,7 @@ def add_gprom_candidates(parser):
 
 def get_gprom_candidates(gprom_mode: str):
     if gprom_mode == "all":
-        all_options = product(["window"], [True])
+        all_options = product(["join", "window"], [True])
         return [GpromOptions(*opt) for opt in all_options]
 
     option = GpromOptions.from_str(gprom_mode)

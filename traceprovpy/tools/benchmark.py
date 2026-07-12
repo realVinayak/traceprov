@@ -545,6 +545,8 @@ def delete_traceprov_tables(conn, shared_libraries: list[str]):
             return
 
         for (table_name,) in tables:
+            table_name_str = str(table_name)
+            if table_name_str.lower().endswith("mat"): continue
             cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
             print(f"Dropped table: {table_name}")
 
