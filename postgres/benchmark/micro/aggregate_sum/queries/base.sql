@@ -1,0 +1,1 @@
+select sum(val), z from skew_SKEW_VALUE_num_ROW_COUNT group by z
