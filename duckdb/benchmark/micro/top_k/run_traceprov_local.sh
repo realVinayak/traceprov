@@ -1,0 +1,1 @@
+python3 ../selectivity/run.py --top_k_mode --exe ../../../bld/bin/run_smokedduck --suff local_test --db ~/projects/traceprov_clone/data/microbench_selectivity_10000_v02.db --num_groups 10_000 --config config_test.json --graph_dir ../selectivity/graphs/

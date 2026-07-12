@@ -609,7 +609,7 @@ def run_sample_inference_smokedduck(
         if rc != 0:
             return dict(type="capture_on_pre_base", return_code=rc)
 
-    sample_q_dir = Path(make_tmp_file("sd_infer/") / query_num)
+    sample_q_dir = Path(make_tmp_file("sd_infer/")) / query_num
     os.makedirs(sample_q_dir, exist_ok=True)
     extra_sqls = []
     sql_spec_map = []
@@ -621,7 +621,7 @@ def run_sample_inference_smokedduck(
         infer_with_offset = (
             f"select * from lineage_query({query_id}, 100, {out_id}::UINTEGER)"
         )
-        stats_files.append(stats_path)
+
         infer_with_offset_stats = f"copy (select * from lineage_query_stats({query_id}, 100, {out_id}::UINTEGER)) to '{stats_path.as_posix()}'"
         if validate or materialize_infer:
             infer_with_offset = (
@@ -630,10 +630,13 @@ def run_sample_inference_smokedduck(
         just_write(final_q_path, infer_with_offset)
         just_write(final_q_stats_path, infer_with_offset_stats)
         extra_sqls.append(final_q_path.as_posix())
-        extra_sqls.append(final_q_stats_path.as_posix())
         # need to append twice, because we'll have stats too
         sql_spec_map.append((sample_id, out_id))
-        sql_spec_map.append((sample_id, out_id))
+
+        if parsed.capture_sd_stats:
+            sql_spec_map.append((sample_id, out_id))
+            extra_sqls.append(final_q_stats_path.as_posix())
+            stats_files.append(stats_path)
 
     sql_spec_map = [TRACEPROV_CAPTURE_ENTRY_SD, *sql_spec_map]
     sql_spec_map = list(product(sql_spec_map, range(iters)))

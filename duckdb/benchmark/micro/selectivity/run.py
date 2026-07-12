@@ -56,6 +56,10 @@ def run():
     parsed.root = tmp.as_posix()
     parsed.base_root = tmp.as_posix()
     replace_clause = ":selectivity" if not parsed.top_k_mode else ":top_k_limit"
+    if parsed.sd_mode and parsed.sample_inference is None:
+        sd_combined_sql = just_read(Path(f"queries/sd_thread_1_combined.sql"))
+        just_write(tmp / query / "sd_thread_1_combined.sql", sd_combined_sql)
+
     for query_dir in config["dirs"]:
 
         def run(raw_selectivity):

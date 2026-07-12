@@ -56,6 +56,9 @@ def make_duckdb_parse():
     parser.add_argument(
         "--mat_capture", action=argparse.BooleanOptionalAction, default=False
     )
+    parser.add_argument(
+        "--capture_sd_stats", action=argparse.BooleanOptionalAction, default=False
+    )
     parser.add_argument("--sample_inference_limit", type=int, default=10)
     DuckDBDriverOptions.add_parse_options(parser)
     parser.add_argument("--g_tmp_dir", required=False, default=get_tmp_file())
