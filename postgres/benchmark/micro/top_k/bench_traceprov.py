@@ -27,7 +27,16 @@ def main():
         for sel in sel_list:
             top_k_limit = get_filter_group(sel_num_groups, sel, 'post')
             preprocessor = get_replacers(num_rows, top_k_limit)
-            query = Query(
+            query_name = f"sel_{sel}"
+            base_query = Query(
+                query_name=query_name,
+                spec=QuerySpec(
+                    base="$ROOT/queries/base.sql",
+                    key="base",
+                    preprocess=[*preprocessor],
+                )
+            )
+            traceprov_query = Query(
                 query_name=f"sel_{sel}",
                 extra_commands=[],
                 spec=QuerySpec(
@@ -44,7 +53,8 @@ def main():
                     }
                 )
             )
-            traceprov_queries.append(query)
+            traceprov_queries.append(base_query)
+            traceprov_queries.append(traceprov_query)
         query_dirs.append(
             QueryDirectory(
                 dir_name=num_rows,
