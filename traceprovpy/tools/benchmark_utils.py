@@ -277,3 +277,24 @@ def make_gprom_query(
         )
         for spec in valid_specs
     ]
+
+
+class LogCostBench:
+    @staticmethod
+    def select_clause(num_rows: int, num_cols: int, out_type="int"):
+        print(num_cols)
+        columns = ','.join([f"((generate_series % {col}) + generate_series)::{out_type} as column_{col}" for col in range(1, num_cols+1)])
+        from_clause = f"generate_series(1, {num_rows})"
+        select_clause_stmt = f"select {columns} from {from_clause}"
+        return select_clause_stmt
+
+    @staticmethod
+    def get_table(num_rows, num_cols=0):
+        if num_cols == 0:
+            return f"log_{num_rows}"
+        return f"log_{num_rows}_{num_cols}"
+
+    @staticmethod
+    def create_table_clause(num_rows: int, num_cols: int, include_cols: bool = False, replace_table: bool = True):
+        replace_clause = "or replace" if replace_table else ""
+        return f"create {replace_clause} table {LogCostBench.get_table(num_rows, num_cols if include_cols else 0)} as ({LogCostBench.select_clause(num_rows, num_cols)})"

@@ -7,10 +7,16 @@ extern "C" {
     #include "traceprov_interface.h"
     #include "traceprov_graph.h"
     #include "traceprov_parse_context.h"
+    
+
 
     // Instead of using Postgres List, here, heap is used.
     // This is because we may actually not be in a long lived context when this gets called :/
     typedef std::unordered_map<uint32_t, std::vector<uint32_t>* > TraceProvStatsCollectorMap;
+
+    // Needed because need to differnetiate between cases where
+    // state is invalid and null.
+    #define TP_INVALID_STATS_STATE ((TraceProvStatsCollectorMap *)(-1))
 
     typedef struct InterfaceInternal {
         TraceProvStatsCollectorMap *stats_collector_map;
@@ -21,7 +27,7 @@ extern "C" {
     };
 
     void traceprov_reset_interface(){
-        if (g_context.stats_collector_map){
+        if (g_context.stats_collector_map && g_context.stats_collector_map != TP_INVALID_STATS_STATE){
             for (auto entry: *g_context.stats_collector_map){
                 delete entry.second;
             }
@@ -84,11 +90,15 @@ extern "C" {
     static inline void setup_interface(){
         if (g_context.stats_collector_map == nullptr){
             g_context.stats_collector_map = traceprov_get_stat_columns();
+            if (g_context.stats_collector_map == NULL){
+                g_context.stats_collector_map = TP_INVALID_STATS_STATE;
+            }
         }
     }
 
     List *traceprov_get_null_columns(const uint32_t query_layer){
         setup_interface();
+        if (g_context.stats_collector_map == TP_INVALID_STATS_STATE) return NIL;
         if (g_context.stats_collector_map == nullptr) return NIL;
         if (g_context.stats_collector_map->find(query_layer) == g_context.stats_collector_map->end()) return NIL;
         auto columns =  g_context.stats_collector_map->at(query_layer);

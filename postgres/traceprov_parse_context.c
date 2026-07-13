@@ -640,7 +640,8 @@ List* deserializeTraceProvDependency(TraceProvParseContext **parsed_context, cha
     const char *dump_path = psprintf(TRACEPROV_GRAPH_FILE,  DataDir);
     FILE *fptr = fopen(dump_path, "rb"); 
     if (fptr == NULL) {
-        elog(ERROR, "Error opening file for dumping graph!");
+        elog(INFO, "Error opening file for dumping graph!");
+        return NIL;
     }
     TraceProvDependencyMetaHeader metaHeader;
     failSafeRead(fptr, &metaHeader, sizeof(TraceProvDependencyMetaHeader));
