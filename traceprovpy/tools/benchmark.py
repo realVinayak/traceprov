@@ -123,6 +123,7 @@ class ExtraQuery(NamedTuple):
 
 OPTION_GETTER = Callable[[str], RunWithTimeoutOptions]
 
+_counter = 0
 
 class QuerySpec(NamedTuple):
     key: str
@@ -139,6 +140,8 @@ class QuerySpec(NamedTuple):
         path: str,
         get_run_options: Callable[[str], RunWithTimeoutOptions],
     ):
+        global _counter
+        _counter += 1
         print(path)
         if path == TP_SKIPPABLE_OPTION:
             return SkippableRunTimeOptions(*get_run_options(path))
@@ -147,7 +150,7 @@ class QuerySpec(NamedTuple):
         elif path.startswith("$INLINE-"):
             # We allow passing queries inline (especially when it is convenient)
             sql_query = path.replace("$INLINE-", "")
-            query_path = Path("/tmp/traceprov_inline_query.sql")
+            query_path = Path(f"/tmp/genbench_inline_query_{_counter}.sql")
             with open(query_path, "w") as f:
                 f.write(sql_query)
         else:

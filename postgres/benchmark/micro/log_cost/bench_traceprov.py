@@ -1,7 +1,7 @@
 import argparse
 
 from traceprovpy.tools.benchmark import GenericBenchmark, Query, QueryDirectory, QuerySpec
-from traceprovpy.tools.benchmark_utils import LogCostBench
+from traceprovpy.tools.benchmark_utils import TRACEPROV_GET_LAYER_SIZE, LogCostBench
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_with_timeout import RunParams
 
@@ -36,7 +36,7 @@ def main():
             )
             traceprov_query = Query(
                 query_name=query_name,
-                spec=QuerySpec(base=f"$INLINE-{get_traceprov_select(num_row, num_col)}", key="traceprov"),
+                spec=QuerySpec(base=f"$INLINE-{get_traceprov_select(num_row, num_col)}", key="traceprov", extras = [TRACEPROV_GET_LAYER_SIZE()]),
             )
             queries.append(base_query)
             queries.append(traceprov_query)
