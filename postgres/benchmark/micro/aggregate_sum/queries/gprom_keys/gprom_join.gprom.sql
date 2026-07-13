@@ -1,11 +1,11 @@
 WITH temp_view_2 AS (
 SELECT /*+ materialize */ F0_0.id AS id, F0_0.z AS z, F0_0.val AS val, F0_0.id AS "prov_skew__1__0__num__1000000_id"
-FROM "skew_1_0_num_1000000" F0_0),
+FROM "skew_SKEW_VALUE_num_ROW_COUNT" F0_0),
 temp_view_1 AS (
 SELECT /*+ materialize */ F0_0."AGGR_0" AS "AGGR_0", F0_0."GROUP_0" AS "GROUP_0", F1_0."prov_skew__1__0__num__1000000_id" AS "prov_skew__1__0__num__1000000_id"
 FROM ((
 SELECT sum(F0_0.val) AS "AGGR_0", F0_0.z AS "GROUP_0"
-FROM "skew_1_0_num_1000000" F0_0
+FROM "skew_SKEW_VALUE_num_ROW_COUNT" F0_0
 GROUP BY F0_0.z) F0_0 JOIN (
 SELECT F0_0.z AS "_P_SIDE_GROUP_0", F0_0."prov_skew__1__0__num__1000000_id" AS "prov_skew__1__0__num__1000000_id"
 FROM (SELECT * FROM temp_view_2) F0_0) F1_0 ON ((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")))),

@@ -12,7 +12,7 @@ def make_replacer(num_rows, top_k):
 
 def get_replacers(num_rows, top_k):
     # replacers = []
-    replacers= [(ReplaceSelectivity(str(num_rows), "ROW_COUNT")) ]
+    replacers= [(ReplaceSelectivity(str(num_rows), "ROW_COUNT", is_strict=True)) ]
     if top_k:
-        replacers.append(ReplaceSelectivity(str(top_k), ":top_k_limit"))
+        replacers.append(ReplaceSelectivity(str(top_k), ":top_k_limit", is_strict=True))
     return replacers

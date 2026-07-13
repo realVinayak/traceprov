@@ -147,11 +147,14 @@ class ReplaceFILE(Preprocessor):
 
 
 class ReplaceSelectivity(Preprocessor):
-    def __init__(self, selectivity: Any, clause: str = ":selectivity"):
+    def __init__(self, selectivity: Any, clause: str = ":selectivity", is_strict=False):
         self.selectivity = str(selectivity)
         self.clause = clause
+        self.is_strict = is_strict
 
     def preprocess(self, in_content: str) -> str:
+        # make sure that the clause is in the in str
+        assert not self.is_strict or (self.clause in in_content)
         return in_content.replace(self.clause, self.selectivity)
 
     def __hash__(self):
@@ -159,7 +162,6 @@ class ReplaceSelectivity(Preprocessor):
 
     def __repr__(self):
         return f"ReplaceSelectivity('{self.clause}->{self.selectivity}')"
-
 
 class ReplaceBucket(Preprocessor):
     candidate_keys: Dict[str, List[int]]

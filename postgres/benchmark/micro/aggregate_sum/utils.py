@@ -27,8 +27,8 @@ def make_replacer(num_rows, skew_value: SkewValue):
 
 def get_replacers(num_rows, skew_value: SkewValue):
     # replacers = []
-    replacers= [(ReplaceSelectivity(str(num_rows), "ROW_COUNT")) ]
+    replacers= [(ReplaceSelectivity(str(num_rows), "ROW_COUNT", is_strict=True)) ]
     if skew_value:
         skew_value_str = skew_value.serialize()
-        replacers.append(ReplaceSelectivity(skew_value_str, "SKEW_VALUE"))
+        replacers.append(ReplaceSelectivity(skew_value_str, "SKEW_VALUE", is_strict=True))
     return replacers
