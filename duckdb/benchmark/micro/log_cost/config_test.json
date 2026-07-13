@@ -1,0 +1,8 @@
+{
+    "num_rows": ["10", "10_000", "10_000_000"],
+    "num_cols": [1, 2, 4, 8],
+    "runTimeOptions": {
+        "repeat": 4,
+        "throwaway": 0
+    }
+}
