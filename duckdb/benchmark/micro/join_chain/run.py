@@ -8,6 +8,7 @@ from traceprovpy.tools.duckdb_parse_options import (
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.file_utils import (
+    get_tmp_file,
     get_total_iters,
     json_read_file,
     just_write,
