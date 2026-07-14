@@ -1,0 +1,7 @@
+{
+    "dirs": ["4_000"],
+    "runTimeOptions": {
+        "repeat": 2,
+        "throwaway": 1
+    }
+}

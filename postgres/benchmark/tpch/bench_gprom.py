@@ -17,6 +17,7 @@ from traceprovpy.tools.benchmark_utils import (
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.run_with_timeout import RunParams
 
+import os
 
 def make_base_query(query_name: str):
     return Query(query_name=query_name, spec=QuerySpec(base="base.sql", key="base"))
@@ -29,6 +30,9 @@ def main():
     parser.add_argument("--dir", required=True)
     parser.add_argument(
         "--keys_mode", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--try_sample", action=argparse.BooleanOptionalAction, default=False
     )
     keys_path = Path(
         "../../../../postgres/benchmark/tpch/legacy_scale_1/params_default/extract_gprom/keys.json"
@@ -68,9 +72,10 @@ def main():
             if query_name not in gprom_config:
                 continue
         g_config_item = gprom_config[query_name]
+        sample_count = 1000 if parsed.try_sample else 0
         subdir_queries.extend(
             make_gprom_query(
-                original_query_name, parsed.mode, g_config_item, query_class, key_file[original_query_name]
+                original_query_name, parsed.mode, g_config_item, query_class, key_file[original_query_name], sample_count
             )
         )
     dir_queries.append(QueryDirectory(dir_name=cleaned_dir, queries=subdir_queries))

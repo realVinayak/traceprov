@@ -266,14 +266,15 @@ def make_gprom_query(
     gprom_mode: str,
     gprom_config: dict | bool,
     query_spec_class: QuerySpec | QueryLimitQuerySpec,
-    keys: dict
+    keys: dict,
+    sample_count=0
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     # print(query_spec_class)
     return [
         Query(
             query_name=query_name,
-            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys)),
+            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys, sample_count=sample_count)),
         )
         for spec in valid_specs
     ]

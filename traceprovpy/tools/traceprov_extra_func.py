@@ -89,11 +89,13 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         run_time_options: RunWithTimeoutOptions = args["extra_pack"]
         getter = args["get_run_options"]
         current_result = args["current_result"]
+        global_benchmark = args['global_benchmark']
         # print(args)
         assert query_spec.extra_options is not None
         layers_to_derive = query_spec.extra_options[TRACEPROV_LAYERS_TO_DERIVE_KEY]
         print("Deriving layers: ", layers_to_derive)
         is_validate = query_spec.extra_options.get(TRACEPROV_MATERIALIZE_LAYER_KEY, False)
+        is_validate = is_validate or global_benchmark.mat_infer
         bulk_derive = query_spec.extra_options.get(TRACEPROV_DERIVE_OFFSET_KEY, True)
         should_sample = query_spec.extra_options.get(TRACEPROV_SHOULD_SAMPLE, False)
         sample_limit = query_spec.extra_options.get(TRACEPROV_OFFSET_LIMIT, 100)

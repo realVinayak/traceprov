@@ -14,6 +14,7 @@ def traceprov_setup(
     sd_num_threads: None | int = None,
     sd_create_idx: bool = False,
     can_skip_build=False,
+    mat_infer=False
 ):
     assert suff is not None
 
@@ -86,6 +87,7 @@ def traceprov_setup(
         traceprov_infer_set_path=traceprv_infer_set_obj,
         traceprov_rewriter_path=rewriter_obj,
         sd_options=sd_options,
+        mat_infer=mat_infer
     )
 
 

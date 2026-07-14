@@ -17,6 +17,7 @@
 #       -- Q02
 
 from collections import defaultdict
+import random
 import re
 from typing import Any, Callable, NamedTuple, Tuple
 from traceprovpy.tools.callable_repr import CallableRepr
@@ -212,6 +213,7 @@ class QuerySpec(NamedTuple):
                             current_result=relevant_result,
                             is_global_last=is_global_last,
                             extra_results=extra_results,
+                            global_benchmark=benchmark
                         )
                         extra_result = extra.func(arg_dict)
                     else:
@@ -414,6 +416,7 @@ class QueryLimitQuerySpec(QuerySpec):
     def run_packs(self, top_dir, get_run_options, benchmark):
         query = self.extra_options['query']
         keys = self.extra_options['keys']
+        sample_count = self.extra_options.get("sample_count", 0)
         default_base_getter = lambda _query: f"$ROOT/params_default/{_query}/base.sql"
         base_getter = self.extra_options.get("base_getter", default_base_getter)
         query_keys = [key.lower() for key in keys]
@@ -432,7 +435,21 @@ class QueryLimitQuerySpec(QuerySpec):
         if result is None:
             return dict(timeout=True)
         offset_results = []
-        for captured_result in result["captured"]:
+        captured_results = result['captured']
+        random.seed(20)
+        if len(captured_results) > 1000 and sample_count > 0:
+            # sample out sample_count.
+            parts = int(sample_count / 3)
+            new_captured_result = list(captured_results[:parts])
+            new_captured_result.extend(list(captured_results[-parts:]))
+            assert len(new_captured_result) < len(captured_results)
+            middle = list(captured_results[parts:-parts])
+            remaining = sample_count - len(new_captured_result)
+            new_captured_result.extend(random.sample(middle, remaining))
+            print(f"Sampling out of {len(new_captured_result)} -> {len(captured_results)}")
+            captured_results = new_captured_result
+
+        for captured_result in captured_results:
             filtered_dict = {
                 key: value
                 for (key, value) in captured_result.items()
@@ -569,6 +586,7 @@ class GenericBenchmark(NamedTuple):
     traceprov_rewriter_path: None | str = None
     sd_options: SmokedDuckOptions | None = None
     skip_load: bool = False
+    mat_infer: bool = False
 
     def run_from_argparse(
         self,
@@ -610,6 +628,11 @@ class GenericBenchmark(NamedTuple):
             action=argparse.BooleanOptionalAction,
             default=False,
         )
+        parser.add_argument(
+            "--mat_infer",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
 
         for optimizations in TraceProvOptimizationsInstance._fields:
             parser.add_argument(
@@ -635,6 +658,7 @@ class GenericBenchmark(NamedTuple):
             parsed.sd_num_threads,
             parsed.sd_create_idx,
             can_skip_build,
+            mat_infer=parsed.mat_infer
         )
         local_optimization_instance = TraceProvOptimizations.make_from_parsed(parsed)
         start = time.perf_counter()
@@ -716,6 +740,7 @@ class GenericBenchmark(NamedTuple):
         sd_num_threads: int | None = None,
         sd_create_idx: bool = False,
         can_skip_build=False,
+        mat_infer=False
     ):
         setup_response = traceprov_setup(
             suff or self.name,
@@ -726,6 +751,7 @@ class GenericBenchmark(NamedTuple):
             sd_num_threads,
             sd_create_idx,
             can_skip_build,
+            mat_infer
         )
 
         return self._replace(**setup_response)

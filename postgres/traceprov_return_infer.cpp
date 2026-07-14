@@ -1701,7 +1701,7 @@ extern "C"
             elog(ERROR, "Expected log count to always have >= 0 col count!");
         appendStringInfo(
             &sql_repr,
-            "unnest(traceprov_read_window_%ld(%d, %d, %s, %s), recursive := true)",
+            "unnest(traceprov_read_window_%ld(%d::int, %d::int, %s::bigint, %s::bigint), recursive := true)",
             log_col_count,
             rel_arg->worker_id,
             rel_arg->layer_number,

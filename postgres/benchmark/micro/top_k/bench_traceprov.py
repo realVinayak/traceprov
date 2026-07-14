@@ -13,7 +13,7 @@ def main():
     parser = argparse.ArgumentParser("driver")
     parser.add_argument("--config", required=True, type=str)
     parser.add_argument("--keys_mode", action=argparse.BooleanOptionalAction, default=False)
-    parser.add_argument("--mat_infer", action=argparse.BooleanOptionalAction, default=False)
+    # parser.add_argument("--mat_infer", action=argparse.BooleanOptionalAction, default=False)
     parsed, _ = parser.parse_known_args()
     config = json_read_file(parsed.config)
     query_dirs = []
@@ -46,7 +46,6 @@ def main():
                     extras=extras,
                     extra_options={
                         TRACEPROV_LAYERS_TO_DERIVE_KEY: [1],
-                        TRACEPROV_MATERIALIZE_LAYER_KEY: parsed.mat_infer,
                         TRACEPROV_DERIVE_OFFSET_KEY: not parsed.keys_mode,
                         TRACEPROV_PROFILE_DUCKDB: False,
                         TRACEPROV_USE_EXTRA_RESULT: False,

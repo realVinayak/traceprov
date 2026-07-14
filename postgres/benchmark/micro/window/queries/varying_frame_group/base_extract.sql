@@ -1,5 +1,5 @@
-select *,
-    count(id) over (
+select id,
+    sum(id) over (
         ORDER BY z ROWS BETWEEN UNBOUNDED PRECEDING and CURRENT ROW
     )
-from skew_1_0_num_NUM;
+from skew_1_0_num_4000;
