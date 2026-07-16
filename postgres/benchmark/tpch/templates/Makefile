@@ -1,6 +1,6 @@
 CURRENT_DIR = $(shell pwd)/
 
-qgen_dir := ~/projects/tpch_scratch/tpch_ext/dbgen/
+qgen_dir := /home/realv/projects/tpch/extract/dbgen
 base_dir := $(CURRENT_DIR)
 seed_args = -r $(seed)
 
@@ -35,25 +35,26 @@ endif
 queries:
 	mkdir -p $(target_dir)
 	rm -rf $(target_dir)/base
-	rm -rf $(target_dir)/traceprov
-	rm -rf $(target_dir)/validate
+# 	rm -rf $(target_dir)/traceprov
+# 	rm -rf $(target_dir)/validate
 	mkdir -p $(target_dir)/base
-	mkdir -p $(target_dir)/traceprov
-	mkdir -p $(target_dir)/validate
+# 	mkdir -p $(target_dir)/traceprov
+# 	mkdir -p $(target_dir)/validate
+	for q in `seq 1 22`; do mkdir -p $(target_dir)/$$q; done
 	cd $(qgen_dir) && \
-	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)base/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/base/$$q.sql; done
-	cd $(qgen_dir) && \
-	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/traceprov/$$q.traceprov.sql; done
-	cd $(qgen_dir) && \
-	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/validate/$$q.validate.sql; done
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 11.a > $(target_dir)/validate/11.a.validate.sql;
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 11.b > $(target_dir)/validate/11.b.validate.sql;
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.a > $(target_dir)/validate/17.a.validate.sql;
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.b > $(target_dir)/validate/17.b.validate.sql;
+	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)base/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/$$q/base.sql; done
+# 	cd $(qgen_dir) && \
+# 	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/traceprov/$$q.traceprov.sql; done
+# 	cd $(qgen_dir) && \
+# 	for q in `seq 1 22`; do DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $$q > $(target_dir)/validate/$$q.validate.sql; done
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 11.a > $(target_dir)/validate/11.a.validate.sql;
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 11.b > $(target_dir)/validate/11.b.validate.sql;
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.a > $(target_dir)/validate/17.a.validate.sql;
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) 17.b > $(target_dir)/validate/17.b.validate.sql;
 
 examples:
 	echo "make queries target_dir=~/projects/prov/postgres/benchmark/tpch/scale_1/params_5 scale=1 seed=1755708657"
@@ -70,9 +71,9 @@ validate_query:
 # 	mkdir -p $(target_dir)/traceprov
 	cd $(qgen_dir) && \
 	DSS_QUERY=$(base_dir)base/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/base/$*.sql;
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/traceprov/$*.traceprov.sql;
-	cd $(qgen_dir) && \
-	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/validate/$*.validate.sql;
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)traceprov/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/traceprov/$*.traceprov.sql;
+# 	cd $(qgen_dir) && \
+# 	DSS_QUERY=$(base_dir)validate/ ./qgen -s $(scale) $(seed_args) $* > $(target_dir)/validate/$*.validate.sql;
 
 no_limit: 2.no_limit.sql 3.no_limit.sql 10.no_limit.sql 18.no_limit.sql 21.no_limit.sql
