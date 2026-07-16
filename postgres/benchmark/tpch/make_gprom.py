@@ -93,6 +93,7 @@ def try_backend_path(source: Path, backend: str, file_name: str):
         return absolute_input_path
     return None
 
+import os
 
 def main():
     parser = argparse.ArgumentParser(prog="gprom-tpch-query-gen")
@@ -124,12 +125,15 @@ def main():
     connection_params = ConnectionParams.make_from_parsed(
         parsed, backend=parsed.backend
     )
-    parsed.original = True
+    # Make this an option, better.
+    global_var = os.getenv("GPROM_USE_ORIG", "false").lower()
+    parsed.original = global_var == 'true'
     queries = [str(q).rjust(2, "0") for q in range(1, 23)]
     # queries = ["04"]
     # queries = ["21"]
     # queries = ["22"]
-    queries = ["20"]
+    # queries = ["20"]
+    queries = ['04', '18']
     passed = defaultdict(dict)
     gprom_suffixes = ["extract"]
     if parsed.is_all:
