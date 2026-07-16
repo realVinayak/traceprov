@@ -218,7 +218,8 @@ def add_gprom_candidates(parser):
 
 def get_gprom_candidates(gprom_mode: str):
     if gprom_mode == "all":
-        all_options = product(["join", "window"], [True])
+        # this is basically a ranked way.
+        all_options = product(["window", "join_composable", "join"], [True, False])
         return [GpromOptions(*opt) for opt in all_options]
 
     option = GpromOptions.from_str(gprom_mode)
@@ -299,3 +300,6 @@ class LogCostBench:
     def create_table_clause(num_rows: int, num_cols: int, include_cols: bool = False, replace_table: bool = True):
         replace_clause = "or replace" if replace_table else ""
         return f"create {replace_clause} table {LogCostBench.get_table(num_rows, num_cols if include_cols else 0)} as ({LogCostBench.select_clause(num_rows, num_cols)})"
+
+
+PROVSQL_EXTRA_COMMANDS = ["SET search_path TO provsql_test,provsql,public;"]
