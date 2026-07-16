@@ -101,3 +101,5 @@ common/Makefile
 common/Makefile.in
 common/bld/
 *.tmp.sql
+*.bkup
+dump_scratch*/
