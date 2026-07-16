@@ -338,22 +338,13 @@
     },
     "18": {
         "(join - False)": {
-            "passed": false
+            "passed": true
         },
         "(window - False)": {
             "passed": true
         },
-        "(join - True)": {
-            "passed": false
-        },
-        "(window - True)": {
-            "passed": true
-        },
         "(join_composable - False)": {
-            "passed": false
-        },
-        "(join_composable - True)": {
-            "passed": false
+            "passed": true
         }
     },
     "19": {
@@ -426,7 +417,7 @@
     },
     "call_mode": {
         "all": true,
-        "original": false,
+        "original": true,
         "is_keys": false,
         "optimized": false
     }

@@ -346,16 +346,7 @@
         "(window - False)": {
             "passed": true
         },
-        "(join - True)": {
-            "passed": true
-        },
-        "(window - True)": {
-            "passed": true
-        },
         "(join_composable - False)": {
-            "passed": true
-        },
-        "(join_composable - True)": {
             "passed": true
         }
     },
@@ -429,7 +420,7 @@
     },
     "call_mode": {
         "all": false,
-        "original": false,
+        "original": true,
         "is_keys": true,
         "optimized": false
     }

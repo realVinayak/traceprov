@@ -1,31 +1,27 @@
 WITH
-  temp_view_4 AS (
+  temp_view_2 AS (
+    /* + materialize */
     SELECT
-      F0_0.L_ORDERKEY AS L_ORDERKEY /* + materialize */,
-      F0_0.L_PARTKEY AS L_PARTKEY,
-      F0_0.L_SUPPKEY AS L_SUPPKEY,
-      F0_0.L_LINENUMBER AS L_LINENUMBER,
-      F0_0.L_QUANTITY AS L_QUANTITY,
-      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
-      F0_0.L_DISCOUNT AS L_DISCOUNT,
-      F0_0.L_TAX AS L_TAX,
-      F0_0.L_RETURNFLAG AS L_RETURNFLAG,
-      F0_0.L_LINESTATUS AS L_LINESTATUS,
-      F0_0.L_SHIPDATE AS L_SHIPDATE,
-      F0_0.L_COMMITDATE AS L_COMMITDATE,
-      F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
-      F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
-      F0_0.L_SHIPMODE AS L_SHIPMODE,
-      F0_0.L_COMMENT AS L_COMMENT,
-      F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY,
-      F0_0.rowid AS _RESULT_TID,
-      1 AS _SETPROV_DUP_COUNT
+      F0_1.L_ORDERKEY AS L_ORDERKEY
     FROM
-      LINEITEM AS F0_0
+      LINEITEM AS F0_1
+    GROUP BY
+      F0_1.L_ORDERKEY
+    HAVING
+      (SUM(F0_1.L_QUANTITY) > 300)
   ),
-  temp_view_3 AS (
+  temp_view_4 AS (
+    /* + materialize */
     SELECT
-      F0_0.O_ORDERKEY AS O_ORDERKEY /* + materialize */,
+      F0_0.C_CUSTKEY AS C_CUSTKEY,
+      F0_0.C_NAME AS C_NAME,
+      F0_0.C_ADDRESS AS C_ADDRESS,
+      F0_0.C_NATIONKEY AS C_NATIONKEY,
+      F0_0.C_PHONE AS C_PHONE,
+      F0_0.C_ACCTBAL AS C_ACCTBAL,
+      F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+      F0_0.C_COMMENT AS C_COMMENT,
+      F0_0.O_ORDERKEY AS O_ORDERKEY,
       F0_0.O_CUSTKEY AS O_CUSTKEY,
       F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
       F0_0.O_TOTALPRICE AS O_TOTALPRICE,
@@ -34,138 +30,25 @@ WITH
       F0_0.O_CLERK AS O_CLERK,
       F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
       F0_0.O_COMMENT AS O_COMMENT,
-      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
-      F0_0._RESULT_TID AS left__RESULT_TID,
-      F0_0._SETPROV_DUP_COUNT AS left__SETPROV_DUP_COUNT,
-      F1_0.INNER_L_ORDERKEY AS INNER_L_ORDERKEY,
-      F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
-      F1_0._RESULT_TID AS right__RESULT_TID,
-      F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
-      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
-      GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
-    FROM
-      (
-        (
-          SELECT
-            F0_0.O_ORDERKEY AS O_ORDERKEY,
-            F0_0.O_CUSTKEY AS O_CUSTKEY,
-            F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
-            F0_0.O_TOTALPRICE AS O_TOTALPRICE,
-            F0_0.O_ORDERDATE AS O_ORDERDATE,
-            F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
-            F0_0.O_CLERK AS O_CLERK,
-            F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
-            F0_0.O_COMMENT AS O_COMMENT,
-            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
-            F0_0.rowid AS _RESULT_TID,
-            1 AS _SETPROV_DUP_COUNT
-          FROM
-            ORDERS AS F0_0
-        ) AS F0_0
-        JOIN (
-          SELECT
-            F0_0."GROUP_0" AS INNER_L_ORDERKEY,
-            F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
-            F0_0._RESULT_TID AS _RESULT_TID,
-            F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
-          FROM
-            (
-              SELECT
-                F0_0."AGGR_0" AS "AGGR_0",
-                F0_0."GROUP_0" AS "GROUP_0",
-                F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
-                DENSE_RANK () OVER (
-                  ORDER BY
-                    F0_0."GROUP_0"
-                ) AS _RESULT_TID,
-                ROW_NUMBER() OVER (
-                  PARTITION BY
-                    F0_0."GROUP_0"
-                  ORDER BY
-                    F0_0."GROUP_0"
-                ) AS _SETPROV_DUP_COUNT
-              FROM
-                (
-                  (
-                    SELECT
-                      SUM(F0_0.L_QUANTITY) AS "AGGR_0",
-                      F0_0.L_ORDERKEY AS "GROUP_0"
-                    FROM
-                      LINEITEM AS F0_0
-                    GROUP BY
-                      F0_0.L_ORDERKEY
-                  ) AS F0_0
-                  JOIN (
-                    SELECT
-                      F0_0.L_ORDERKEY AS "_P_SIDE_GROUP_0",
-                      F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
-                    FROM
-                      (
-                        SELECT
-                          *
-                        FROM
-                          temp_view_4
-                      ) AS F0_0
-                  ) AS F1_0 ON (
-                    (
-                      (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
-                      OR (
-                        (F0_0."GROUP_0" IS NULL)
-                        AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
-                      )
-                    )
-                  )
-                )
-            ) AS F0_0
-          WHERE
-            (F0_0."AGGR_0" > 300)
-        ) AS F1_0 ON ((F1_0.INNER_L_ORDERKEY = F0_0.O_ORDERKEY))
-      )
-  ),
-  temp_view_2 AS (
-    SELECT
-      F0_0.C_CUSTKEY AS C_CUSTKEY /* + materialize */,
-      F0_0.C_NAME AS C_NAME,
-      F0_0.C_ADDRESS AS C_ADDRESS,
-      F0_0.C_NATIONKEY AS C_NATIONKEY,
-      F0_0.C_PHONE AS C_PHONE,
-      F0_0.C_ACCTBAL AS C_ACCTBAL,
-      F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
-      F0_0.C_COMMENT AS C_COMMENT,
-      F0_0.L_ORDERKEY AS L_ORDERKEY,
-      F0_0.L_PARTKEY AS L_PARTKEY,
-      F0_0.L_SUPPKEY AS L_SUPPKEY,
-      F0_0.L_LINENUMBER AS L_LINENUMBER,
-      F0_0.L_QUANTITY AS L_QUANTITY,
-      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
-      F0_0.L_DISCOUNT AS L_DISCOUNT,
-      F0_0.L_TAX AS L_TAX,
-      F0_0.L_RETURNFLAG AS L_RETURNFLAG,
-      F0_0.L_LINESTATUS AS L_LINESTATUS,
-      F0_0.L_SHIPDATE AS L_SHIPDATE,
-      F0_0.L_COMMITDATE AS L_COMMITDATE,
-      F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
-      F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
-      F0_0.L_SHIPMODE AS L_SHIPMODE,
-      F0_0.L_COMMENT AS L_COMMENT,
+      F1_0.L_ORDERKEY AS L_ORDERKEY,
+      F1_0.L_PARTKEY AS L_PARTKEY,
+      F1_0.L_SUPPKEY AS L_SUPPKEY,
+      F1_0.L_LINENUMBER AS L_LINENUMBER,
+      F1_0.L_QUANTITY AS L_QUANTITY,
+      F1_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+      F1_0.L_DISCOUNT AS L_DISCOUNT,
+      F1_0.L_TAX AS L_TAX,
+      F1_0.L_RETURNFLAG AS L_RETURNFLAG,
+      F1_0.L_LINESTATUS AS L_LINESTATUS,
+      F1_0.L_SHIPDATE AS L_SHIPDATE,
+      F1_0.L_COMMITDATE AS L_COMMITDATE,
+      F1_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+      F1_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+      F1_0.L_SHIPMODE AS L_SHIPMODE,
+      F1_0.L_COMMENT AS L_COMMENT,
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
-      F0_0._RESULT_TID AS left__RESULT_TID,
-      F0_0._SETPROV_DUP_COUNT AS left__SETPROV_DUP_COUNT,
-      F1_0.O_ORDERKEY AS O_ORDERKEY,
-      F1_0.O_CUSTKEY AS O_CUSTKEY,
-      F1_0.O_ORDERSTATUS AS O_ORDERSTATUS,
-      F1_0.O_TOTALPRICE AS O_TOTALPRICE,
-      F1_0.O_ORDERDATE AS O_ORDERDATE,
-      F1_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
-      F1_0.O_CLERK AS O_CLERK,
-      F1_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
-      F1_0.O_COMMENT AS O_COMMENT,
-      F1_0.INNER_L_ORDERKEY AS INNER_L_ORDERKEY,
-      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
-      F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
-      F1_0._RESULT_TID AS right__RESULT_TID,
-      F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
       GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
     FROM
@@ -180,24 +63,17 @@ WITH
             F0_0.C_ACCTBAL AS C_ACCTBAL,
             F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
             F0_0.C_COMMENT AS C_COMMENT,
-            F1_0.L_ORDERKEY AS L_ORDERKEY,
-            F1_0.L_PARTKEY AS L_PARTKEY,
-            F1_0.L_SUPPKEY AS L_SUPPKEY,
-            F1_0.L_LINENUMBER AS L_LINENUMBER,
-            F1_0.L_QUANTITY AS L_QUANTITY,
-            F1_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
-            F1_0.L_DISCOUNT AS L_DISCOUNT,
-            F1_0.L_TAX AS L_TAX,
-            F1_0.L_RETURNFLAG AS L_RETURNFLAG,
-            F1_0.L_LINESTATUS AS L_LINESTATUS,
-            F1_0.L_SHIPDATE AS L_SHIPDATE,
-            F1_0.L_COMMITDATE AS L_COMMITDATE,
-            F1_0.L_RECEIPTDATE AS L_RECEIPTDATE,
-            F1_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
-            F1_0.L_SHIPMODE AS L_SHIPMODE,
-            F1_0.L_COMMENT AS L_COMMENT,
+            F1_0.O_ORDERKEY AS O_ORDERKEY,
+            F1_0.O_CUSTKEY AS O_CUSTKEY,
+            F1_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+            F1_0.O_TOTALPRICE AS O_TOTALPRICE,
+            F1_0.O_ORDERDATE AS O_ORDERDATE,
+            F1_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+            F1_0.O_CLERK AS O_CLERK,
+            F1_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+            F1_0.O_COMMENT AS O_COMMENT,
             F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-            F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+            F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
             HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
             GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
           FROM
@@ -220,67 +96,335 @@ WITH
               ) AS F0_0
               CROSS JOIN (
                 SELECT
-                  F0_0.L_ORDERKEY AS L_ORDERKEY,
-                  F0_0.L_PARTKEY AS L_PARTKEY,
-                  F0_0.L_SUPPKEY AS L_SUPPKEY,
-                  F0_0.L_LINENUMBER AS L_LINENUMBER,
-                  F0_0.L_QUANTITY AS L_QUANTITY,
-                  F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
-                  F0_0.L_DISCOUNT AS L_DISCOUNT,
-                  F0_0.L_TAX AS L_TAX,
-                  F0_0.L_RETURNFLAG AS L_RETURNFLAG,
-                  F0_0.L_LINESTATUS AS L_LINESTATUS,
-                  F0_0.L_SHIPDATE AS L_SHIPDATE,
-                  F0_0.L_COMMITDATE AS L_COMMITDATE,
-                  F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
-                  F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
-                  F0_0.L_SHIPMODE AS L_SHIPMODE,
-                  F0_0.L_COMMENT AS L_COMMENT,
-                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
+                  F0_0.O_ORDERKEY AS O_ORDERKEY,
+                  F0_0.O_CUSTKEY AS O_CUSTKEY,
+                  F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+                  F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+                  F0_0.O_ORDERDATE AS O_ORDERDATE,
+                  F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+                  F0_0.O_CLERK AS O_CLERK,
+                  F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+                  F0_0.O_COMMENT AS O_COMMENT,
+                  F0_0.rowid AS PROV_ORDERS_O__ORDERKEY,
                   F0_0.rowid AS _RESULT_TID,
                   1 AS _SETPROV_DUP_COUNT
                 FROM
-                  LINEITEM AS F0_0
+                  ORDERS AS F0_0
               ) AS F1_0
             )
         ) AS F0_0
         CROSS JOIN (
           SELECT
-            F0_0.O_ORDERKEY AS O_ORDERKEY,
-            F0_0.O_CUSTKEY AS O_CUSTKEY,
-            F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
-            F0_0.O_TOTALPRICE AS O_TOTALPRICE,
-            F0_0.O_ORDERDATE AS O_ORDERDATE,
-            F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
-            F0_0.O_CLERK AS O_CLERK,
-            F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
-            F0_0.O_COMMENT AS O_COMMENT,
-            F0_0.INNER_L_ORDERKEY AS INNER_L_ORDERKEY,
-            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
-            F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
-            F0_0._RESULT_TID AS _RESULT_TID,
-            F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+            F0_0.L_ORDERKEY AS L_ORDERKEY,
+            F0_0.L_PARTKEY AS L_PARTKEY,
+            F0_0.L_SUPPKEY AS L_SUPPKEY,
+            F0_0.L_LINENUMBER AS L_LINENUMBER,
+            F0_0.L_QUANTITY AS L_QUANTITY,
+            F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+            F0_0.L_DISCOUNT AS L_DISCOUNT,
+            F0_0.L_TAX AS L_TAX,
+            F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+            F0_0.L_LINESTATUS AS L_LINESTATUS,
+            F0_0.L_SHIPDATE AS L_SHIPDATE,
+            F0_0.L_COMMITDATE AS L_COMMITDATE,
+            F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+            F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+            F0_0.L_SHIPMODE AS L_SHIPMODE,
+            F0_0.L_COMMENT AS L_COMMENT,
+            F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
+            F0_0.rowid AS _RESULT_TID,
+            1 AS _SETPROV_DUP_COUNT
           FROM
-            (
-              SELECT
-                *
-              FROM
-                temp_view_3
-            ) AS F0_0
+            LINEITEM AS F0_0
         ) AS F1_0
       )
   ),
-  temp_view_1 AS (
+  temp_view_5 AS (
+    /* + materialize */
     SELECT
-      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_1.L_ORDERKEY AS L_ORDERKEY
+    FROM
+      LINEITEM AS F0_1
+    GROUP BY
+      F0_1.L_ORDERKEY
+    HAVING
+      (SUM(F0_1.L_QUANTITY) > 300)
+  ),
+  temp_view_7 AS (
+    /* + materialize */
+    SELECT
+      F0_1.L_ORDERKEY AS L_ORDERKEY,
+      F0_1.L_PARTKEY AS L_PARTKEY,
+      F0_1.L_SUPPKEY AS L_SUPPKEY,
+      F0_1.L_LINENUMBER AS L_LINENUMBER,
+      F0_1.L_QUANTITY AS L_QUANTITY,
+      F0_1.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+      F0_1.L_DISCOUNT AS L_DISCOUNT,
+      F0_1.L_TAX AS L_TAX,
+      F0_1.L_RETURNFLAG AS L_RETURNFLAG,
+      F0_1.L_LINESTATUS AS L_LINESTATUS,
+      F0_1.L_SHIPDATE AS L_SHIPDATE,
+      F0_1.L_COMMITDATE AS L_COMMITDATE,
+      F0_1.L_RECEIPTDATE AS L_RECEIPTDATE,
+      F0_1.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+      F0_1.L_SHIPMODE AS L_SHIPMODE,
+      F0_1.L_COMMENT AS L_COMMENT,
+      F0_1.rowid AS PROV_LINEITEM_1_L__ORDERKEY,
+      F0_1.rowid AS _RESULT_TID,
+      1 AS _SETPROV_DUP_COUNT
+    FROM
+      LINEITEM AS F0_1
+  ),
+  temp_view_6 AS (
+    /* + materialize */
+    SELECT
+      F0_1."GROUP_0" AS L_ORDERKEY,
+      F0_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      F0_1._RESULT_TID AS _RESULT_TID,
+      F0_1._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        SELECT
+          F0_1."AGGR_0" AS "AGGR_0",
+          F0_1."GROUP_0" AS "GROUP_0",
+          F1_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+          DENSE_RANK () OVER (
+            ORDER BY
+              F0_1."GROUP_0"
+          ) AS _RESULT_TID,
+          ROW_NUMBER() OVER (
+            PARTITION BY
+              F0_1."GROUP_0"
+            ORDER BY
+              F0_1."GROUP_0"
+          ) AS _SETPROV_DUP_COUNT
+        FROM
+          (
+            (
+              SELECT
+                SUM(F0_1.L_QUANTITY) AS "AGGR_0",
+                F0_1.L_ORDERKEY AS "GROUP_0"
+              FROM
+                LINEITEM AS F0_1
+              GROUP BY
+                F0_1.L_ORDERKEY
+            ) AS F0_1
+            JOIN (
+              SELECT
+                F0_1.L_ORDERKEY AS "_P_SIDE_GROUP_0",
+                F0_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
+              FROM
+                (
+                  SELECT
+                    *
+                  FROM
+                    temp_view_7
+                ) AS F0_1
+            ) AS F1_1 ON (
+              (
+                (F0_1."GROUP_0" = F1_1."_P_SIDE_GROUP_0")
+                OR (
+                  (F0_1."GROUP_0" IS NULL)
+                  AND (F1_1."_P_SIDE_GROUP_0" IS NULL)
+                )
+              )
+            )
+          )
+      ) AS F0_1
+    WHERE
+      (F0_1."AGGR_0" > 300)
+  ),
+  temp_view_3 AS (
+    /* + materialize */
+    SELECT
+      F0_0.C_CUSTKEY AS C_CUSTKEY,
+      F0_0.C_NAME AS C_NAME,
+      F0_0.C_ADDRESS AS C_ADDRESS,
+      F0_0.C_NATIONKEY AS C_NATIONKEY,
+      F0_0.C_PHONE AS C_PHONE,
+      F0_0.C_ACCTBAL AS C_ACCTBAL,
+      F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+      F0_0.C_COMMENT AS C_COMMENT,
+      F0_0.O_ORDERKEY AS O_ORDERKEY,
+      F0_0.O_CUSTKEY AS O_CUSTKEY,
+      F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+      F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+      F0_0.O_ORDERDATE AS O_ORDERDATE,
+      F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+      F0_0.O_CLERK AS O_CLERK,
+      F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+      F0_0.O_COMMENT AS O_COMMENT,
+      F0_0.L_ORDERKEY AS L_ORDERKEY,
+      F0_0.L_PARTKEY AS L_PARTKEY,
+      F0_0.L_SUPPKEY AS L_SUPPKEY,
+      F0_0.L_LINENUMBER AS L_LINENUMBER,
+      F0_0.L_QUANTITY AS L_QUANTITY,
+      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+      F0_0.L_DISCOUNT AS L_DISCOUNT,
+      F0_0.L_TAX AS L_TAX,
+      F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+      F0_0.L_LINESTATUS AS L_LINESTATUS,
+      F0_0.L_SHIPDATE AS L_SHIPDATE,
+      F0_0.L_COMMITDATE AS L_COMMITDATE,
+      F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+      F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+      F0_0.L_SHIPMODE AS L_SHIPMODE,
+      F0_0.L_COMMENT AS L_COMMENT,
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.left__RESULT_TID AS left__RESULT_TID,
+      F0_0.left__SETPROV_DUP_COUNT AS left__SETPROV_DUP_COUNT,
+      F1_0."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+      F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      F1_0.right__RESULT_TID AS right__RESULT_TID,
+      F1_0.right__SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
+      HASH(F0_0.left__RESULT_TID, F1_0.right__RESULT_TID) AS _RESULT_TID,
+      GREATEST(
+        F0_0.left__SETPROV_DUP_COUNT,
+        F1_0.right__SETPROV_DUP_COUNT
+      ) AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        SELECT
+          F0_0.C_CUSTKEY AS C_CUSTKEY,
+          F0_0.C_NAME AS C_NAME,
+          F0_0.C_ADDRESS AS C_ADDRESS,
+          F0_0.C_NATIONKEY AS C_NATIONKEY,
+          F0_0.C_PHONE AS C_PHONE,
+          F0_0.C_ACCTBAL AS C_ACCTBAL,
+          F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+          F0_0.C_COMMENT AS C_COMMENT,
+          F0_0.O_ORDERKEY AS O_ORDERKEY,
+          F0_0.O_CUSTKEY AS O_CUSTKEY,
+          F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+          F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+          F0_0.O_ORDERDATE AS O_ORDERDATE,
+          F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+          F0_0.O_CLERK AS O_CLERK,
+          F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+          F0_0.O_COMMENT AS O_COMMENT,
+          F0_0.L_ORDERKEY AS L_ORDERKEY,
+          F0_0.L_PARTKEY AS L_PARTKEY,
+          F0_0.L_SUPPKEY AS L_SUPPKEY,
+          F0_0.L_LINENUMBER AS L_LINENUMBER,
+          F0_0.L_QUANTITY AS L_QUANTITY,
+          F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+          F0_0.L_DISCOUNT AS L_DISCOUNT,
+          F0_0.L_TAX AS L_TAX,
+          F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+          F0_0.L_LINESTATUS AS L_LINESTATUS,
+          F0_0.L_SHIPDATE AS L_SHIPDATE,
+          F0_0.L_COMMITDATE AS L_COMMITDATE,
+          F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+          F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+          F0_0.L_SHIPMODE AS L_SHIPMODE,
+          F0_0.L_COMMENT AS L_COMMENT,
+          F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+          F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+          F0_0._RESULT_TID AS left__RESULT_TID,
+          F0_0._SETPROV_DUP_COUNT AS left__SETPROV_DUP_COUNT
+        FROM
+          (
+            SELECT
+              *
+            FROM
+              temp_view_4
+          ) AS F0_0
+      ) AS F0_0,
+      LATERAL (
+        SELECT
+          F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+          F0_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+          F0_1._RESULT_TID AS right__RESULT_TID,
+          F0_1._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT
+        FROM
+          (
+            /* + materialize */
+            SELECT
+              (
+                CASE
+                  WHEN ((F0_1."NESTING_EVAL_1") IS NULL) THEN FALSE
+                  WHEN (F0_1."NESTING_EVAL_1" = 1) THEN NULL
+                  ELSE (F0_1."NESTING_EVAL_1" = 2)
+                END
+              ) AS "NESTING_EVAL_1",
+              F0_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+              F0_1._RESULT_TID AS _RESULT_TID,
+              F0_1._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+            FROM
+              (
+                /* + materialize */
+                SELECT
+                  F0_1."NESTING_EVAL_1" AS "NESTING_EVAL_1",
+                  F1_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+                  1 AS _RESULT_TID,
+                  ROW_NUMBER() OVER () AS _SETPROV_DUP_COUNT
+                FROM
+                  (
+                    (
+                      SELECT
+                        MAX(
+                          (
+                            CASE
+                              WHEN (F0_0.O_ORDERKEY = F0_1.L_ORDERKEY) THEN 2
+                              WHEN (
+                                ((F0_0.O_ORDERKEY) IS NULL)
+                                OR ((F0_1.L_ORDERKEY) IS NULL)
+                              ) THEN 1
+                              ELSE 0
+                            END
+                          )
+                        ) AS "NESTING_EVAL_1"
+                      FROM
+                        (
+                          SELECT
+                            *
+                          FROM
+                            temp_view_5
+                        ) AS F0_1
+                    ) AS F0_1
+                    LEFT OUTER JOIN (
+                      SELECT
+                        (
+                          CASE
+                            WHEN (F0_0.O_ORDERKEY = F0_1.L_ORDERKEY) THEN 2
+                            WHEN (
+                              ((F0_0.O_ORDERKEY) IS NULL)
+                              OR ((F0_1.L_ORDERKEY) IS NULL)
+                            ) THEN 1
+                            ELSE 0
+                          END
+                        ) AS NESTING_EVAL_HELP,
+                        F0_1."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+                        F0_1._RESULT_TID AS _RESULT_TID,
+                        F0_1._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+                      FROM
+                        (
+                          SELECT
+                            *
+                          FROM
+                            temp_view_6
+                        ) AS F0_1
+                    ) AS F1_1 ON ((1 = 1))
+                  )
+              ) AS F0_1
+          ) AS F0_1
+      ) AS F1_0
+  ),
+  temp_view_1 AS (
+    /* + materialize */
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0",
       F0_0."GROUP_0" AS "GROUP_0",
       F0_0."GROUP_1" AS "GROUP_1",
       F0_0."GROUP_2" AS "GROUP_2",
       F0_0."GROUP_3" AS "GROUP_3",
       F0_0."GROUP_4" AS "GROUP_4",
       F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
       DENSE_RANK () OVER (
         ORDER BY
@@ -308,43 +452,92 @@ WITH
       (
         (
           SELECT
-            SUM(F1_0.L_QUANTITY) AS "AGGR_0",
+            SUM(F2_0.L_QUANTITY) AS "AGGR_0",
             F0_0.C_NAME AS "GROUP_0",
             F0_0.C_CUSTKEY AS "GROUP_1",
-            F2_0.O_ORDERKEY AS "GROUP_2",
-            F2_0.O_ORDERDATE AS "GROUP_3",
-            F2_0.O_TOTALPRICE AS "GROUP_4"
+            F1_0.O_ORDERKEY AS "GROUP_2",
+            F1_0.O_ORDERDATE AS "GROUP_3",
+            F1_0.O_TOTALPRICE AS "GROUP_4"
           FROM
             (
               (
                 CUSTOMER AS F0_0
-                CROSS JOIN LINEITEM AS F1_0
+                CROSS JOIN ORDERS AS F1_0
               )
-              CROSS JOIN (
-                ORDERS AS F2_0
-                JOIN (
+              CROSS JOIN LINEITEM AS F2_0
+            ),
+            LATERAL (
+              SELECT
+                (
+                  CASE
+                    WHEN (
+                      (
+                        MAX(
+                          (
+                            CASE
+                              WHEN (F1_0.O_ORDERKEY = F0_1.L_ORDERKEY) THEN 2
+                              WHEN (
+                                ((F1_0.O_ORDERKEY) IS NULL)
+                                OR ((F0_1.L_ORDERKEY) IS NULL)
+                              ) THEN 1
+                              ELSE 0
+                            END
+                          )
+                        )
+                      ) IS NULL
+                    ) THEN FALSE
+                    WHEN (
+                      MAX(
+                        (
+                          CASE
+                            WHEN (F1_0.O_ORDERKEY = F0_1.L_ORDERKEY) THEN 2
+                            WHEN (
+                              ((F1_0.O_ORDERKEY) IS NULL)
+                              OR ((F0_1.L_ORDERKEY) IS NULL)
+                            ) THEN 1
+                            ELSE 0
+                          END
+                        )
+                      ) = 1
+                    ) THEN NULL
+                    ELSE (
+                      MAX(
+                        (
+                          CASE
+                            WHEN (F1_0.O_ORDERKEY = F0_1.L_ORDERKEY) THEN 2
+                            WHEN (
+                              ((F1_0.O_ORDERKEY) IS NULL)
+                              OR ((F0_1.L_ORDERKEY) IS NULL)
+                            ) THEN 1
+                            ELSE 0
+                          END
+                        )
+                      ) = 2
+                    )
+                  END
+                ) AS "NESTING_EVAL_1"
+              FROM
+                (
                   SELECT
-                    F0_0.L_ORDERKEY AS INNER_L_ORDERKEY
+                    *
                   FROM
-                    LINEITEM AS F0_0
-                  GROUP BY
-                    F0_0.L_ORDERKEY
-                  HAVING
-                    (SUM(F0_0.L_QUANTITY) > 300)
-                ) AS F3_0 ON ((F3_0.INNER_L_ORDERKEY = F0_0.C_CUSTKEY))
-              )
-            )
+                    temp_view_2
+                ) AS F0_1
+            ) AS F3_0
           WHERE
             (
-              (F0_0.C_CUSTKEY = F2_0.O_CUSTKEY)
-              AND (F2_0.O_ORDERKEY = F1_0.L_ORDERKEY)
+              (
+                F3_0."NESTING_EVAL_1"
+                AND (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+              )
+              AND (F1_0.O_ORDERKEY = F2_0.L_ORDERKEY)
             )
           GROUP BY
             F0_0.C_NAME,
             F0_0.C_CUSTKEY,
-            F2_0.O_ORDERKEY,
-            F2_0.O_ORDERDATE,
-            F2_0.O_TOTALPRICE
+            F1_0.O_ORDERKEY,
+            F1_0.O_ORDERDATE,
+            F1_0.O_TOTALPRICE
         ) AS F0_0
         JOIN (
           SELECT
@@ -354,8 +547,8 @@ WITH
             F0_0.O_ORDERDATE AS "_P_SIDE_GROUP_3",
             F0_0.O_TOTALPRICE AS "_P_SIDE_GROUP_4",
             F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
             F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
             F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
           FROM
             (
@@ -368,6 +561,15 @@ WITH
                 F0_0.C_ACCTBAL AS C_ACCTBAL,
                 F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
                 F0_0.C_COMMENT AS C_COMMENT,
+                F0_0.O_ORDERKEY AS O_ORDERKEY,
+                F0_0.O_CUSTKEY AS O_CUSTKEY,
+                F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+                F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+                F0_0.O_ORDERDATE AS O_ORDERDATE,
+                F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+                F0_0.O_CLERK AS O_CLERK,
+                F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+                F0_0.O_COMMENT AS O_COMMENT,
                 F0_0.L_ORDERKEY AS L_ORDERKEY,
                 F0_0.L_PARTKEY AS L_PARTKEY,
                 F0_0.L_SUPPKEY AS L_SUPPKEY,
@@ -384,19 +586,10 @@ WITH
                 F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
                 F0_0.L_SHIPMODE AS L_SHIPMODE,
                 F0_0.L_COMMENT AS L_COMMENT,
-                F0_0.O_ORDERKEY AS O_ORDERKEY,
-                F0_0.O_CUSTKEY AS O_CUSTKEY,
-                F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
-                F0_0.O_TOTALPRICE AS O_TOTALPRICE,
-                F0_0.O_ORDERDATE AS O_ORDERDATE,
-                F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
-                F0_0.O_CLERK AS O_CLERK,
-                F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
-                F0_0.O_COMMENT AS O_COMMENT,
-                F0_0.INNER_L_ORDERKEY AS INNER_L_ORDERKEY,
+                F0_0."NESTING_EVAL_1" AS "NESTING_EVAL_1",
                 F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-                F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
                 F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
                 F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
                 F0_0._RESULT_TID AS _RESULT_TID,
                 F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
@@ -405,12 +598,15 @@ WITH
                   SELECT
                     *
                   FROM
-                    temp_view_2
+                    temp_view_3
                 ) AS F0_0
             ) AS F0_0
           WHERE
             (
-              (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
+              (
+                F0_0."NESTING_EVAL_1"
+                AND (F0_0.C_CUSTKEY = F0_0.O_CUSTKEY)
+              )
               AND (F0_0.O_ORDERKEY = F0_0.L_ORDERKEY)
             )
         ) AS F1_0 ON (
@@ -461,16 +657,17 @@ WITH
       )
   ),
   temp_view_0 AS (
+    /* + materialize */
     SELECT
-      F0_0.C_NAME AS C_NAME /* + materialize */,
+      F0_0.C_NAME AS C_NAME,
       F0_0.C_CUSTKEY AS C_CUSTKEY,
       F0_0.O_ORDERKEY AS O_ORDERKEY,
       F0_0.O_ORDERDATE AS O_ORDERDATE,
       F0_0.O_TOTALPRICE AS O_TOTALPRICE,
       F0_0."SUM(L_QUANTITY)" AS "SUM(L_QUANTITY)",
       F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
       F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
     FROM
       (
@@ -482,8 +679,8 @@ WITH
           F0_0.O_TOTALPRICE AS O_TOTALPRICE,
           F0_0."SUM(L_QUANTITY)" AS "SUM(L_QUANTITY)",
           F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
           F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
           F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
           DENSE_RANK () OVER (
             ORDER BY
@@ -502,8 +699,8 @@ WITH
               F0_0."GROUP_4" AS O_TOTALPRICE,
               F0_0."AGGR_0" AS "SUM(L_QUANTITY)",
               F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
-              F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
               F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+              F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
               F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
               F0_0._RESULT_TID AS _RESULT_TID,
               F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
