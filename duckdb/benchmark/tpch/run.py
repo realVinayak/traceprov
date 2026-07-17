@@ -15,6 +15,7 @@ from traceprovpy.tools.duckdb_parse_options import (
     traceprov_handle_suffix,
 )
 from traceprovpy.tools.run_duckdb_generic import (
+    ValidateException,
     add_query_options,
     extract_graph_dir,
     infer_detailed_option_setting,
@@ -40,6 +41,9 @@ def run(force_materialize=False, execution_hook=None):
     base_parser.add_argument("--order_spec", required=False)
     base_parser.add_argument(
         "--use_order", action=argparse.BooleanOptionalAction, required=False
+    )
+    base_parser.add_argument(
+        "--capture_error", action=argparse.BooleanOptionalAction, required=False
     )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
@@ -68,89 +72,99 @@ def run(force_materialize=False, execution_hook=None):
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
-        sample_inference_result = None
-        if parsed.sd_mode:
-            # if query in needs_join_mode:
-            #     set_extra_traceprov_options(parsed, "--sd_join_mode")
-            query_result = dict(
-                sd_type=parsed.sd_mode,
-                sd=run_single_smokedduck(
-                    query_num=query,
-                    parsed=parsed,
-                    iters=total_iters,
-                    pre_base=pre_base_path,
-                ),
-            )
-            set_extra_traceprov_options(parsed, "")
-        else:
-            disable_col_opt = query in NEEDS_DISABLE
-            graph_dir = extract_graph_dir(parsed)
-            query_result = run_single(
-                query_num=query,
-                traceprov_graph_path=graph_dir / query / "graph.bin",
-                traceprov_layers_to_derive=tuple(
-                    query_layer_config[query]["layers_used"]
-                ),
-                parsed=parsed,
-                iters=total_iters,
-                disable_col_opt=disable_col_opt,
-                pre_base=pre_base_path,
-            )
 
-        if parsed.sample_inference:
-            # need to sample the inference.
+        def _run():
+            sample_inference_result = None
             if parsed.sd_mode:
-                base_result = query_result["sd"]["base_time"][0]
-            else:
-                base_result = query_result["base_time"][0]
-            base_row_count: int = base_result["row_count"]
-            if parsed.single_row_mode:
-                out_ids = [0]
-            else:
-                out_ids = infer_sample_id(base_row_count, parsed)
-
-            if parsed.sd_mode:
-                extra_options = ["disable_chunk_cache"]
-                if query in needs_perfect_hash_disable:
-                    extra_options.append("disable_perfect_hash")
-                extra_options = " ".join([f"--{key}" for key in extra_options])
-                set_extra_traceprov_options(parsed, extra_options)
-                query_id = infer_detailed_option_setting(parsed.exe)
-                sample_inference_result = run_sample_inference_smokedduck(
-                    query_num=query,
-                    samples=out_ids,
-                    query_id=query_id,
-                    parsed=parsed,
-                    iters=total_iters,
-                    pre_base=pre_base_path,
+                # if query in needs_join_mode:
+                #     set_extra_traceprov_options(parsed, "--sd_join_mode")
+                query_result = dict(
+                    sd_type=parsed.sd_mode,
+                    sd=run_single_smokedduck(
+                        query_num=query,
+                        parsed=parsed,
+                        iters=total_iters,
+                        pre_base=pre_base_path,
+                    ),
                 )
                 set_extra_traceprov_options(parsed, "")
             else:
-                sample_inference_result = run_sample_inference(
+                disable_col_opt = query in NEEDS_DISABLE
+                graph_dir = extract_graph_dir(parsed)
+                query_result = run_single(
                     query_num=query,
-                    samples=out_ids,
-                    parsed=parsed,
-                    iters=total_iters,
-                    pre_base=pre_base_path,
-                    disable_col_opt=disable_col_opt,
+                    traceprov_graph_path=graph_dir / query / "graph.bin",
                     traceprov_layers_to_derive=tuple(
                         query_layer_config[query]["layers_used"]
                     ),
-                    output_column_index=(
-                        query_layer_config[query]["output_id"]
-                        if parsed.traceprov_use_column_log
-                        else 0
-                    ),
+                    parsed=parsed,
+                    iters=total_iters,
+                    disable_col_opt=disable_col_opt,
+                    pre_base=pre_base_path,
                 )
 
+            if parsed.sample_inference:
+                # need to sample the inference.
+                if parsed.sd_mode:
+                    base_result = query_result["sd"]["base_time"][0]
+                else:
+                    base_result = query_result["base_time"][0]
+                base_row_count: int = base_result["row_count"]
+                if parsed.single_row_mode:
+                    out_ids = [0]
+                else:
+                    out_ids = infer_sample_id(base_row_count, parsed)
+
+                if parsed.sd_mode:
+                    extra_options = ["disable_chunk_cache"]
+                    if query in needs_perfect_hash_disable:
+                        extra_options.append("disable_perfect_hash")
+                    extra_options = " ".join([f"--{key}" for key in extra_options])
+                    set_extra_traceprov_options(parsed, extra_options)
+                    query_id = infer_detailed_option_setting(parsed.exe)
+                    sample_inference_result = run_sample_inference_smokedduck(
+                        query_num=query,
+                        samples=out_ids,
+                        query_id=query_id,
+                        parsed=parsed,
+                        iters=total_iters,
+                        pre_base=pre_base_path,
+                    )
+                    set_extra_traceprov_options(parsed, "")
+                else:
+                    sample_inference_result = run_sample_inference(
+                        query_num=query,
+                        samples=out_ids,
+                        parsed=parsed,
+                        iters=total_iters,
+                        pre_base=pre_base_path,
+                        disable_col_opt=disable_col_opt,
+                        traceprov_layers_to_derive=tuple(
+                            query_layer_config[query]["layers_used"]
+                        ),
+                        output_column_index=(
+                            query_layer_config[query]["output_id"]
+                            if parsed.traceprov_use_column_log
+                            else 0
+                        ),
+                    )
+            return query_result, sample_inference_result
+
+        try:
+            main_query_result, main_sample_inference_result = _run()
+        except ValidateException:
+            if not parsed.capture_error:
+                raise
+            main_query_result = dict(type="validation_failed")
+            main_sample_inference_result = None
         if execution_hook:
-            execution_hook((parsed, query, query_result))
+            execution_hook((parsed, query, main_query_result))
 
         assert query not in results
         results = {
             **results,
             query: dict(
-                result=query_result, sample_inference_result=sample_inference_result
+                result=main_query_result, sample_inference_result=main_sample_inference_result
             ),
         }
 

@@ -473,6 +473,7 @@ def run_single_smokedduck(
     )
     return final_result
 
+class ValidateException(Exception): ...
 
 def validate_query(
     base_dir: Path,
@@ -509,9 +510,10 @@ def validate_query(
     print(base_dump_path, base_dump_path.stat().st_size)
     print(capture_dump_path, capture_dump_path.stat().st_size)
 
-    traceprov_assert_safe_run(
+    rc = os.system(
         f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
     )
+    if (rc): raise ValidateException(rc)
 
 
 def run_nice(cmd: str):
