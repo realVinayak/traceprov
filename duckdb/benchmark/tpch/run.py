@@ -60,16 +60,18 @@ def run(force_materialize=False, execution_hook=None):
     config_queries = config["queries"]
     if isinstance(config_queries, str):
         config_queries = eval(config_queries)
-    sd_join_mode = [7, 8, 9]
-    sd_join_mode = [8]
-    needs_join_mode = list(map(str, config.get("queries_sd_join_mode", sd_join_mode)))
+    # sd_join_mode = [7, 8, 9]
+    # sd_join_mode = [8]
+    # if parsed.
+    # needs_perfect_hash_disable = [8]
+    needs_perfect_hash_disable = ['8']
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
         sample_inference_result = None
         if parsed.sd_mode:
-            if query in needs_join_mode:
-                set_extra_traceprov_options(parsed, "--sd_join_mode")
+            # if query in needs_join_mode:
+            #     set_extra_traceprov_options(parsed, "--sd_join_mode")
             query_result = dict(
                 sd_type=parsed.sd_mode,
                 sd=run_single_smokedduck(
@@ -109,8 +111,8 @@ def run(force_materialize=False, execution_hook=None):
 
             if parsed.sd_mode:
                 extra_options = ["disable_chunk_cache"]
-                if query in needs_join_mode:
-                    extra_options.append("sd_join_mode")
+                if query in needs_perfect_hash_disable:
+                    extra_options.append("disable_perfect_hash")
                 extra_options = " ".join([f"--{key}" for key in extra_options])
                 set_extra_traceprov_options(parsed, extra_options)
                 query_id = infer_detailed_option_setting(parsed.exe)

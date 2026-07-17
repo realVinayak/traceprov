@@ -375,7 +375,18 @@ def run_single_smokedduck(
         ]
 
     def run_old_sd():
-        thread_combined_sql = base_dir / f"sd_thread_{1}_combined.sql"
+        sysname = os.uname().sysname.lower()
+        if sysname == 'darwin':
+            prefix = "macos"
+        else:
+            prefix = None
+        thread_combined_sql = None
+        if prefix:
+            thread_combined_sql = base_dir / f"sd_thread_{1}_combined.{prefix}.sql"
+            if not thread_combined_sql.exists():
+                thread_combined_sql = None
+        if thread_combined_sql is None: 
+            thread_combined_sql = base_dir / f"sd_thread_{1}_combined.sql"
         backtrace_queries = parse_backtrace_queries(thread_combined_sql)
         query_id = infer_detailed_option_setting(exe)
         backtrace_queries_sub = {

@@ -62,6 +62,9 @@ extern "C" {
 #define TP_SD_DISABLE_CHUNK_CACHE "PRAGMA disable_cache;"
 #define TP_SD_ENABLE_CHUNK_CACHE "PRAGMA enable_cache;"
 
+#define TP_SD_DISABLE_PERFECT_HASH "SET perfect_ht_threshold=0;"
+#define TP_SD_ENABLE_PERFECT_HASH "SET perfect_ht_threshold=12;"
+
 #define DUCKDB_DEFAULT_SELECTIVITY 0.001
 #define DUCKDB_DEFAULT_SCAN_MAX_COUNT 2048
 
@@ -224,6 +227,7 @@ struct Options {
     bool sd_join_mode;
     bool disable_chunk_cache;
     uint64_t output_column_idx;
+    bool disable_perfect_hash;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -307,7 +311,8 @@ struct Options get_base_option(){
         .custom_graph_type_log_chain_table_count = 0,
         .sd_join_mode = false,
         .disable_chunk_cache = false,
-        .output_column_idx = 0
+        .output_column_idx = 0,
+        .disable_perfect_hash = false
     };
     return options;
 }
@@ -532,6 +537,9 @@ struct Options parse_args(int argc, char **argv){
         }  else if (IS_OPTION("--traceprov_use_hash_index")){
             traceprov_use_hash_index = true;
             continue;
+        } else if (IS_OPTION("--disable_perfect_hash")){
+            options.disable_perfect_hash = true;
+            continue;
         }
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
@@ -659,6 +667,11 @@ PerformQueryResult *perform_query(
         DUCKDB_RUN_SHORT_QUERY(con, TP_SD_DISABLE_CHUNK_CACHE, TP_SD_DISABLE_CHUNK_CACHE);
     }else{
         DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
+    }
+    if (options->disable_perfect_hash){
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_DISABLE_PERFECT_HASH, TP_SD_DISABLE_PERFECT_HASH);
+    }else{
+        DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_PERFECT_HASH, TP_SD_ENABLE_PERFECT_HASH);
     }
     #endif
     // if (options->disable_column_optimizer){
@@ -797,6 +810,7 @@ PerformQueryResult *perform_query(
 
     #if TRACEPROV_SD_MODE==1
     DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_CHUNK_CACHE, TP_SD_ENABLE_CHUNK_CACHE);
+    DUCKDB_RUN_SHORT_QUERY(con, TP_SD_ENABLE_PERFECT_HASH, TP_SD_ENABLE_PERFECT_HASH);
     #endif
 
     return result;
