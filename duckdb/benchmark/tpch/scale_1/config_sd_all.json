@@ -1,0 +1,11 @@
+{
+    "queries": [
+        1,
+        6,
+        15
+    ],
+    "runTimeOptions": {
+        "repeat": 30,
+        "throwaway": 5
+    }
+}
