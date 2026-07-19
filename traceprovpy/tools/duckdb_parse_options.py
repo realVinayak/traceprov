@@ -51,6 +51,12 @@ def make_duckdb_parse():
         "--traceprov_fast", action=argparse.BooleanOptionalAction, default=False
     )
     parser.add_argument(
+        "--traceprov_sample_fast", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
+        "--traceprov_join_rewrite", action=argparse.BooleanOptionalAction, default=False
+    )
+    parser.add_argument(
         "--traceprov_use_column_log",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -74,11 +80,18 @@ SMART_TOKEN = "SMART"
 def traceprov_handle_suffix(parsed):
     print("Parsed: ", parsed)
     set_tmp_file(parsed.g_tmp_dir)
-    if parsed.traceprov_fast:
+    if parsed.traceprov_fast or parsed.traceprov_sample_fast:
         parsed.traceprov_use_merge_chunks = True
         parsed.traceprov_use_compact = True
         parsed.traceprov_use_table_stats = True
         parsed.optimized = True
+    if parsed.sample_inference is not None and parsed.traceprov_sample_fast:
+        parsed.traceprov_use_partition_in_agg = True
+        parsed.traceprov_use_join_filter_rewrite = True
+        parsed.traceprov_use_filter_pushdown = True
+    if parsed.traceprov_join_rewrite:
+        parsed.traceprov_use_join_filter_rewrite = True
+        parsed.traceprov_use_filter_pushdown = True
     if (
         parsed.threads > 1
         and parsed.sample_inference is not None
