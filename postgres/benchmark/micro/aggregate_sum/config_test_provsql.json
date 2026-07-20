@@ -1,0 +1,12 @@
+{
+    "dirs": [
+        {
+            "num_rows": "4000",
+            "skew": ["1_0"]
+        }
+    ],
+    "runTimeOptions": {
+        "repeat": 2,
+        "throwaway": 1
+    }
+}

@@ -120,7 +120,7 @@ class ExtraQuery(NamedTuple):
     # Allows running arbitrary functions in an ExtraQuery.
     # Useful for the dynamic infer (where we don't need to memoize the "spec")
     func: CallableRepr | None = None
-
+    use_dict_cursor: bool = False
 
 OPTION_GETTER = Callable[[str], RunWithTimeoutOptions]
 
@@ -193,6 +193,7 @@ class QuerySpec(NamedTuple):
                     extras=_extra_context,
                     skip_validation=extra.skip_validation,
                     strict_run=extra.strict_run,
+                    use_dict_cursor=extra.use_dict_cursor,
                 )
                 if extra.preprocess:
                     extra_pack = extra_pack._replace(
@@ -213,7 +214,8 @@ class QuerySpec(NamedTuple):
                             current_result=relevant_result,
                             is_global_last=is_global_last,
                             extra_results=extra_results,
-                            global_benchmark=benchmark
+                            global_benchmark=benchmark,
+                            extra_query_spec=extra_pack,
                         )
                         extra_result = extra.func(arg_dict)
                     else:
