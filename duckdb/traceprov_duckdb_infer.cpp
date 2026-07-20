@@ -101,6 +101,7 @@ typedef struct TraceProvInitData
     std::mutex *bind_data_mutex;
     uint64_t max_worker_idx;
     bool eager_parallel;
+    uint64_t *read_time;
 } TraceProvInitData;
 
 std::vector<TraceProvBindData *> *setup_layers(
@@ -269,8 +270,19 @@ void initialize_global_context()
 
         g_tp_duckdb_state.did_initialize = true;
         g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
+        if (g_tp_duckdb_state.layer_time_index == NULL){
+            const auto size = (traceprov_thread_count)*sizeof(TraceProvLayerTime);
+            g_tp_duckdb_state.layer_time_index = (TraceProvLayerTime**)malloc(size);
+            for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
+                g_tp_duckdb_state.layer_time_index[idx] = new TraceProvLayerTime;
+            }
+        }
     }
     g_tp_state_mutex.unlock();
+}
+
+TraceProvLayerTime** dump_worker_layer_time(){
+    return (g_tp_duckdb_state.layer_time_index);
 }
 
 void reset_global_context()
@@ -279,6 +291,13 @@ void reset_global_context()
     g_tp_duckdb_state.worker_local_contexts = nullptr;
     // TODO: Free here?
     g_tp_duckdb_state.index_context = nullptr;
+    if (g_tp_duckdb_state.layer_time_index){
+        for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
+            delete g_tp_duckdb_state.layer_time_index[idx];
+        }
+        free(g_tp_duckdb_state.layer_time_index);
+        g_tp_duckdb_state.layer_time_index = NULL;
+    }
 }
 
 static TraceProvBindData *allocate_bind_data()
@@ -1328,6 +1347,14 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
     auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
     auto global_init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
     auto init_data = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
+    auto current_time_entry = g_tp_duckdb_state.layer_time_index[traceprov_current.page_cache_idx - 1];
+    
+    const uint64_t current_layer_number = (bind_data->rel_args.table_flags << 32) | bind_data->rel_args.layer_number;
+    // once per scan, so why not.
+    if (unlikely(current_time_entry->find(current_layer_number) == current_time_entry->end())){
+        current_time_entry->insert({current_layer_number, 0});
+    }
+    const auto read_start = std::chrono::steady_clock::now();
 
     if (unlikely(init_data->eager_parallel)){
         handle_eager_parallel(bind_data, global_init_data, init_data);
@@ -1336,6 +1363,8 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
     if (init_data->is_dummy)
     {
         duckdb_data_chunk_set_size(output, 0);
+        const auto read_end = std::chrono::steady_clock::now();
+        current_time_entry->at(current_layer_number) += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
         return;
     }
 
@@ -1349,6 +1378,8 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
     }
     init_data->running_count += out_chunk_size;
 
+    const auto read_end = std::chrono::steady_clock::now();
+    current_time_entry->at(current_layer_number) += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
 }
 
 struct TraceProvCTableFunctionInfo : public TableFunctionInfo

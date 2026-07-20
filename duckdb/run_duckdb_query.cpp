@@ -228,6 +228,7 @@ struct Options {
     bool disable_chunk_cache;
     uint64_t output_column_idx;
     bool disable_perfect_hash;
+    bool _dump_worker_layer_time;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -246,7 +247,7 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
     const bool derive_sql_mapping = true
 );
 MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Funcs table_funcs);
-
+static std::string serialize_worker_layer_time(TraceProvLayerTime** worker_layer_time);
 std::string *get_disabled_optimizations(const Options *options){
     std::string disabled = "";
     std::vector<std::string> disabled_names;
@@ -312,7 +313,8 @@ struct Options get_base_option(){
         .sd_join_mode = false,
         .disable_chunk_cache = false,
         .output_column_idx = 0,
-        .disable_perfect_hash = false
+        .disable_perfect_hash = false,
+        ._dump_worker_layer_time = false
     };
     return options;
 }
@@ -635,13 +637,15 @@ typedef struct PerformQueryResult {
     int64_t computed_time;
     TraceProvLightData *data;
     Options option;
+    TraceProvLayerTime** worker_layer_time_dump;
 } PerformQueryResult;
 
-PerformQueryResult *make_result(int64_t computed_time, TraceProvLightData *data, const Options *options){
+PerformQueryResult *make_result(int64_t computed_time, TraceProvLightData *data, const Options *options, TraceProvLayerTime** worker_layer_time_dump){
     auto result = new PerformQueryResult;
     result->computed_time = computed_time;
     result->data = data;
     result->option = *options;
+    result->worker_layer_time_dump = worker_layer_time_dump;
     return result;
 }
 
@@ -766,7 +770,7 @@ PerformQueryResult *perform_query(
         exit(1);
     }
 
-    PerformQueryResult *result = make_result(duration.count(), traceprov_data, options);;
+    PerformQueryResult *result = make_result(duration.count(), traceprov_data, options, dump_worker_layer_time());
 
     if (agg_result){
         if (options->get_log_size){
@@ -1314,6 +1318,11 @@ int main(int argc, char **argv){
             time_out_json += "\"row_count\": " + std::to_string(row_count);
             time_out_json += ",";
             time_out_json += "\"option\": " + serialize_option(&current->option, null_map);
+            if (current->worker_layer_time_dump){
+                time_out_json += ",";
+                time_out_json += "\"worker_layer_time\": " + serialize_worker_layer_time(current->worker_layer_time_dump);
+                
+            }
             time_out_json += "}";
         }
         time_out_json += "]";
@@ -1416,6 +1425,40 @@ static void populate_log_offset(
 
 bool is_initial_misc_key_value(const MiscKeyValue *key_value){
     return memcmp(&key_value->total_log_size, &g_init_misc_key_value, sizeof(MiscKeyValue));
+}
+
+static std::string serialize_map(TraceProvLayerTime* layer_time){
+    std::string serialized = "{";
+    bool needs_sep = false;
+    for (auto entry: *layer_time){
+        if (needs_sep){
+            serialized += ",";
+        }
+        serialized += "\"" + std::to_string(entry.first) + "\": ";
+        serialized += std::to_string(entry.second);
+        needs_sep = true;
+    }
+    serialized += "}";
+    return serialized;
+}
+
+static std::string serialize_worker_layer_time(TraceProvLayerTime** worker_layer_time){
+    std::string serialized = "";
+    uint32_t not_empty_count = 0;
+    // elog(INFO, "traceprov thread count: %d", traceprov_thread_count);
+    for (uint32_t worker_idx = 0; worker_idx < traceprov_thread_count; worker_idx++){
+        const auto worker_layer_data = worker_layer_time[worker_idx];
+        if (serialized != "") serialized += ",";
+        if (!worker_layer_data->empty()){
+            not_empty_count++;
+            serialized += serialize_map(worker_layer_data);
+        }else{
+            serialized += "null";
+        }
+    }
+    if (not_empty_count==0) return "null";
+    serialized = "[" + serialized + "]";
+    return serialized;
 }
 // This doesn't do all of option (that'll be too much)
 static std::string serialize_option(Options *option, const TraceProvNullMap *null_map){
