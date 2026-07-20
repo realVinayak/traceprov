@@ -8,6 +8,7 @@ from typing import Any
 from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query, QueryLimitQuerySpec, QuerySpec
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
+from traceprovpy.tools.provsql_utiis import provsql_get_log_size
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
 
@@ -137,6 +138,15 @@ MULLER_GET_LOG_SIZE = lambda: ExtraQuery(
     runs_after_base=True,
     strict_run=True,
     capture_output=True,
+)
+
+PROVSQL_LOG_SIZE_SPEC = lambda: ExtraQuery(
+    label="provsql_log_size",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(
+        provsql_get_log_size, "provsql_get_log_size"
+    ),
+    runs_after_base=True,
 )
 
 
