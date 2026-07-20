@@ -7,7 +7,7 @@ from traceprovpy.tools.run_with_timeout import RunParams
 
 def get_provsql_select(num_rows, num_cols):
     table_name = LogCostBench.get_table(num_rows, num_cols)
-    select_clause = f"select * from {table_name}"
+    select_clause = f"select provsql.create_gate(uuid_generate_v5(provsql.uuid_ns_provsql(), 'test'), 'project', ARRAY[provsql]) from {table_name}"
     return select_clause
 
 def main():
