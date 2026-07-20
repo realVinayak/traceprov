@@ -1321,7 +1321,7 @@ int main(int argc, char **argv){
             if (current->worker_layer_time_dump){
                 time_out_json += ",";
                 time_out_json += "\"worker_layer_time\": " + serialize_worker_layer_time(current->worker_layer_time_dump);
-                
+                reset_layer_time(current->worker_layer_time_dump);
             }
             time_out_json += "}";
         }

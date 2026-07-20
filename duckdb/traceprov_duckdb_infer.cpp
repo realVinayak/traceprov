@@ -285,19 +285,21 @@ TraceProvLayerTime** dump_worker_layer_time(){
     return (g_tp_duckdb_state.layer_time_index);
 }
 
+void reset_layer_time(TraceProvLayerTime **layer_time_index){
+    for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
+        delete layer_time_index[idx];
+    }
+    free(layer_time_index);
+    layer_time_index = NULL;
+}
+
 void reset_global_context()
 {
     g_tp_duckdb_state.did_initialize = false;
     g_tp_duckdb_state.worker_local_contexts = nullptr;
     // TODO: Free here?
     g_tp_duckdb_state.index_context = nullptr;
-    if (g_tp_duckdb_state.layer_time_index){
-        for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
-            delete g_tp_duckdb_state.layer_time_index[idx];
-        }
-        free(g_tp_duckdb_state.layer_time_index);
-        g_tp_duckdb_state.layer_time_index = NULL;
-    }
+    g_tp_duckdb_state.layer_time_index = NULL;
 }
 
 static TraceProvBindData *allocate_bind_data()

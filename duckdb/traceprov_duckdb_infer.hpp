@@ -42,6 +42,7 @@ typedef struct TraceProvDuckDbGlobalState {
 extern TraceProvDuckDbGlobalState g_tp_duckdb_state;
 void reset_global_context();
 TraceProvLayerTime** dump_worker_layer_time();
+void reset_layer_time(TraceProvLayerTime **layer_time_index);
 #if TRACEPROV_SD_MODE==0
 duckdb_scalar_function traceprov_create_table_window_func(const uint64_t num_args, const uint32_t worker_count, std::vector<uint32_t> *expected_layers);
 duckdb_scalar_function traceprov_create_read_vector_func();
