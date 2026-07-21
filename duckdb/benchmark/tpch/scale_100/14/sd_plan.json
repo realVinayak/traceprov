@@ -1,0 +1,40 @@
+{
+    "name": "PROJECTION",
+    "opid": "5",
+    "children": [
+        {
+            "name": "UNGROUPED_AGGREGATE",
+            "opid": "4",
+            "children": [
+                {
+                    "name": "PROJECTION",
+                    "opid": "3",
+                    "children": [
+                        {
+                            "name": "HASH_JOIN",
+                            "opid": "2",
+                            "children": [
+                                {
+                                    "name": "SEQ_SCAN ",
+                                    "opid": "0",
+                                    "children": [],
+                                    "extra": ""
+                                },
+                                {
+                                    "name": "SEQ_SCAN ",
+                                    "opid": "1",
+                                    "children": [],
+                                    "extra": ""
+                                }
+                            ],
+                            "extra": ""
+                        }
+                    ],
+                    "extra": ""
+                }
+            ],
+            "extra": ""
+        }
+    ],
+    "extra": ""
+}

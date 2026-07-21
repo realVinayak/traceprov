@@ -1,0 +1,7 @@
+{
+    "sql": [
+        "CREATE TABLE traceprov_relation_infer_2(col_0 BIGINT,col_1 BIGINT,col_2 BIGINT,col_3 BIGINT) USING traceprov_am;",
+        "CREATE TABLE traceprov_relation_infer_5(col_0 BIGINT,col_1 BIGINT) USING traceprov_am;",
+        "CREATE TABLE traceprov_relation_infer_1(col_0 BIGINT,col_1 BIGINT,col_2 BIGINT,col_3 BIGINT) USING traceprov_am;"
+    ]
+}

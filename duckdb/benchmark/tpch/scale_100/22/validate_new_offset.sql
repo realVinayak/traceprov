@@ -1,0 +1,47 @@
+-- using default substitutions
+select
+    cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from
+    (
+        select
+            substring(
+                c_phone
+                from
+                    1 for 2
+            ) as cntrycode,
+            c_acctbal
+        from
+            customer
+        where
+            customer.rowid in (
+                select
+                    eval(column_1, column_1_1)
+                from
+                    LAYER_3_%OUT_ID%
+            )
+            and c_acctbal > (
+				select
+					avg(c_acctbal)
+				from
+					customer
+				where
+                    (customer.rowid) in (
+                        select column_1
+                        from LAYER_1_%OUT_ID%
+                )
+            )
+            and not exists (
+                select
+                    *
+                from
+                    orders
+                where
+                    o_custkey = c_custkey
+            )
+    ) as custsale
+group by
+    cntrycode
+order by
+    cntrycode;
