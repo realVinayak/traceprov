@@ -1298,7 +1298,7 @@ int main(int argc, char **argv){
         sprintf(settings_out_query, TP_DUMP_SETTINGS, options.settings_out_path.c_str());
         DUCKDB_RUN_SHORT_QUERY(con, settings_out_query, "dumping settings");
     }
-
+    std::unordered_map<TraceProvLayerTime **, bool> freed_items;
     if (IS_SET(options.time_out_path)){
         std::string time_out_json = "[";
         for (uint64_t computed_time_idx = 0; computed_time_idx < agg_result.size(); computed_time_idx++){
@@ -1321,7 +1321,7 @@ int main(int argc, char **argv){
             if (current->worker_layer_time_dump){
                 time_out_json += ",";
                 time_out_json += "\"worker_layer_time\": " + serialize_worker_layer_time(current->worker_layer_time_dump);
-                reset_layer_time(current->worker_layer_time_dump);
+                freed_items.insert({current->worker_layer_time_dump, true});
             }
             time_out_json += "}";
         }
@@ -1329,6 +1329,9 @@ int main(int argc, char **argv){
         std::ofstream out(options.time_out_path);
         out << time_out_json;
         out.close();
+    }
+    for (auto entry: freed_items){
+        reset_layer_time(entry.first);
     }
 
     duckdb_disconnect(&con);
