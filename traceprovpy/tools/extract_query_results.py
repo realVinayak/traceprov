@@ -41,7 +41,10 @@ class TpchRow(Normalizable):
             "index_build_time",
             "sql_time",
             "partition_time",
-            "version"
+            "version",
+            "phase_1",
+            "phase_2",
+            "fail_reason"
         }
 
 # if it is sample then there's just offset to keep track off.
@@ -68,6 +71,11 @@ def get_error(result: dict):
         return "Timeout"
     if 'errorcode' in result:
         return result['error_content']
+    assert isinstance(result, list), f"Got result of type {type(result)}"
+    for _result in result:
+        if _result['type'] == 'fail':
+            code = _result['code']
+            return f"code_{code}"
     return None
 
 def flatten(rows: list[list[Any]]):
@@ -81,7 +89,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
     version = parse_reg(terminal_name)
     call_options = result['call_options']
     bench_parser = make_duckdb_parse()
-    add_query_options(bench_parser)
+    #add_query_options(bench_parser)
     bench_parsed, _ = bench_parser.parse_known_args(call_options)
     thread_count = bench_parsed.threads
 
@@ -96,8 +104,11 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             index_build_time=0.0,
             sql_time=0.0,
             partition_time=0.0,
-            version=version
+            version=version,
+            fail_reason=fail_reason or ''
         )
+        if mode != 'all':
+            def_raw_args = ({**def_raw_args, 'offset': -1})
         kwarg_list = []
         if fail_reason is None:
             for offset_id, offset_result in enumerate(gprom_result):
@@ -109,7 +120,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
                     phase_2=None,
                     phase_2_profile=None
                 )
-                if mode == 'all':
+                if mode != 'all':
                     kwargs = ({**kwargs, 'offset': offset_id})
                 kwarg_list.append(kwargs)
         else:
@@ -122,6 +133,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
                 )
             )
         _cls = TpchRow if mode == 'all' else TpchSampleRow
+        print("Using class", _cls)
         rows = [
             _cls(**{**def_raw_args, **row_arg})
             for row_arg in kwarg_list
@@ -131,16 +143,17 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
 
     if db_system == 'gprom':
         rows = flatten([
-            _handle_gprom_result(query, gprom_mode, gprom_result)
+            _handle_gprom_result((query, gprom_mode, gprom_result))
             for query, query_result in main_res.items()
             for gprom_mode, gprom_result in query_result.items()
         ])
     else:
         raise Exception("Not implemented anything else!")
-    return rows
+    rows_list.extend(rows)
 
 def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: list):
     print("postgres handling ", db_system, result_path)
+    return
     result = json_read_file(result_path)
     main_res: dict = get_first_value(result['result'])
     terminal_name = result_path.name
@@ -148,19 +161,42 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
     for query, query_result in main_res.items():
         ...
 
+import duckdb
+def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
+    name = f"data_{sf}_{db_name}_{mode}"
+    db_name = out_dir / f"{name}.db"
+    tmp_file_name = out_dir / f"{name}.json"
+    normalized = [row for rows in rows_list for row in rows.normalize()]
+    just_write(tmp_file_name, json.dumps(normalized))
+    connection = duckdb.connect(db_name)
+    cursor = connection.cursor()
+    cursor.execute(
+        f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}'))"
+    )
+    cursor.close()
+    connection.close()
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--root", required=True)
-    parsed = parser.parse_args()
+def get_new_rows():
     postgres_rows = dict(offset=[], all=[])
     duckdb_rows = dict(offset=[], all=[])
     new_duckdb_rows = dict(offset=[], all=[])
-    all_rows = dict(
+    return dict(
         postgres=postgres_rows,
         duckdb=duckdb_rows,
         newduckdb=new_duckdb_rows
     )
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--out_dir", required=True)
+    parsed = parser.parse_args()
+    out_dir = Path(parsed.out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+    postgres_rows = dict(offset=[], all=[])
+    duckdb_rows = dict(offset=[], all=[])
+    new_duckdb_rows = dict(offset=[], all=[])
+    all_rows = dict()
     for dir_path, dirnames, filenames in os.walk(parsed.root):
         # print(dir_path, dirnames, filenames)
         if len(dirnames) == 0:
@@ -174,14 +210,29 @@ def main():
             mode = adjusted_split[-2]
             print(db_name, db_system)
             print(list(sorted(filenames)))
-            current_rows = all_rows[db_name][mode]
+            filenames = list(sorted(filenames))
+            sf = adjusted_split[1]
+            if sf not in all_rows:
+                all_rows[sf] = get_new_rows()
+            current_rows = all_rows[sf][db_name][mode]
             handler = handle_duckdb if (db_name == 'duckdb' or db_name == 'newduckdb') else handle_postgres
             print(handler)
+            print("before length", len(current_rows))
             for file in filenames:
                 if 'main_result.json' in file or 'result.json' in file:
-                    handler(db_system, mode, Path(dir_path) / file )
+                    handler(db_system, mode, Path(dir_path) / file , current_rows)
+                    #dump_result(all_rows)
+                    print("after", len(current_rows))
         else:
             ...
+    dump_result(all_rows, out_dir)
+    return
+
+def dump_result(all_rows, out_dir: Path):
+    for sf, sf_result in all_rows.items():
+        for db, db_result in sf_result.items():
+            for mode, mode_result in db_result.items():
+                dump_rows_list(sf, db, mode, mode_result, out_dir)
 
 if __name__ == '__main__':
     main()
