@@ -1,0 +1,211 @@
+WITH
+  temp_view_1 AS (
+    SELECT
+      F0_0.C_CUSTKEY AS C_CUSTKEY /* + materialize */,
+      COUNT(F1_0.O_ORDERKEY) AS C_COUNT
+    FROM
+      (
+        CUSTOMER AS F0_0
+        LEFT OUTER JOIN ORDERS AS F1_0 ON (
+          (
+            (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+            AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%')))
+          )
+        )
+      )
+    GROUP BY
+      F0_0.C_CUSTKEY
+  ),
+  temp_view_5 AS (
+    SELECT
+      F0_0.C_CUSTKEY AS C_CUSTKEY /* + materialize */,
+      F0_0.C_NAME AS C_NAME,
+      F0_0.C_ADDRESS AS C_ADDRESS,
+      F0_0.C_NATIONKEY AS C_NATIONKEY,
+      F0_0.C_PHONE AS C_PHONE,
+      F0_0.C_ACCTBAL AS C_ACCTBAL,
+      F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+      F0_0.C_COMMENT AS C_COMMENT,
+      F1_0.O_ORDERKEY AS O_ORDERKEY,
+      F1_0.O_CUSTKEY AS O_CUSTKEY,
+      F1_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+      F1_0.O_TOTALPRICE AS O_TOTALPRICE,
+      F1_0.O_ORDERDATE AS O_ORDERDATE,
+      F1_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+      F1_0.O_CLERK AS O_CLERK,
+      F1_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+      F1_0.O_COMMENT AS O_COMMENT,
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        (
+          SELECT
+            F0_0.C_CUSTKEY AS C_CUSTKEY,
+            F0_0.C_NAME AS C_NAME,
+            F0_0.C_ADDRESS AS C_ADDRESS,
+            F0_0.C_NATIONKEY AS C_NATIONKEY,
+            F0_0.C_PHONE AS C_PHONE,
+            F0_0.C_ACCTBAL AS C_ACCTBAL,
+            F0_0.C_MKTSEGMENT AS C_MKTSEGMENT,
+            F0_0.C_COMMENT AS C_COMMENT,
+            F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
+          FROM
+            CUSTOMER AS F0_0
+        ) AS F0_0
+        LEFT OUTER JOIN (
+          SELECT
+            F0_0.O_ORDERKEY AS O_ORDERKEY,
+            F0_0.O_CUSTKEY AS O_CUSTKEY,
+            F0_0.O_ORDERSTATUS AS O_ORDERSTATUS,
+            F0_0.O_TOTALPRICE AS O_TOTALPRICE,
+            F0_0.O_ORDERDATE AS O_ORDERDATE,
+            F0_0.O_ORDERPRIORITY AS O_ORDERPRIORITY,
+            F0_0.O_CLERK AS O_CLERK,
+            F0_0.O_SHIPPRIORITY AS O_SHIPPRIORITY,
+            F0_0.O_COMMENT AS O_COMMENT,
+            F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
+          FROM
+            ORDERS AS F0_0
+        ) AS F1_0 ON (
+          (
+            (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+            AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%')))
+          )
+        )
+      )
+  ),
+  temp_view_4 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0."GROUP_0" AS "GROUP_0",
+      F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        (
+          SELECT
+            COUNT(F1_0.O_ORDERKEY) AS "AGGR_0",
+            F0_0.C_CUSTKEY AS "GROUP_0"
+          FROM
+            (
+              CUSTOMER AS F0_0
+              LEFT OUTER JOIN ORDERS AS F1_0 ON (
+                (
+                  (F0_0.C_CUSTKEY = F1_0.O_CUSTKEY)
+                  AND (NOT ((F1_0.O_COMMENT LIKE '%special%requests%')))
+                )
+              )
+            )
+          GROUP BY
+            F0_0.C_CUSTKEY
+        ) AS F0_0
+        JOIN (
+          SELECT
+            F0_0.C_CUSTKEY AS "_P_SIDE_GROUP_0",
+            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_5
+            ) AS F0_0
+        ) AS F1_0 ON (
+          (
+            (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
+            OR (
+              (F0_0."GROUP_0" IS NULL)
+              AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
+            )
+          )
+        )
+      )
+  ),
+  temp_view_3 AS (
+    SELECT
+      F0_0."GROUP_0" AS C_CUSTKEY /* + materialize */,
+      F0_0."AGGR_0" AS C_COUNT,
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_4
+      ) AS F0_0
+  ),
+  temp_view_2 AS (
+    SELECT
+      1 AS "AGG_GB_ARG0" /* + materialize */,
+      F0_0.C_COUNT AS "AGG_GB_ARG1",
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_3
+      ) AS F0_0
+  ),
+  temp_view_0 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0."GROUP_0" AS "GROUP_0",
+      F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        (
+          SELECT
+            COUNT(1) AS "AGGR_0",
+            F0_0.C_COUNT AS "GROUP_0"
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_1
+            ) AS F0_0
+          GROUP BY
+            F0_0.C_COUNT
+        ) AS F0_0
+        JOIN (
+          SELECT
+            F0_0."AGG_GB_ARG1" AS "_P_SIDE_GROUP_0",
+            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_2
+            ) AS F0_0
+        ) AS F1_0 ON ((F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0"))
+      )
+  )
+SELECT
+  F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+  F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+FROM
+  (
+    SELECT
+      F0_0."GROUP_0" AS C_COUNT,
+      F0_0."AGGR_0" AS CUSTDIST,
+      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_0
+      ) AS F0_0
+    ORDER BY
+      CUSTDIST DESC,
+      C_COUNT DESC
+  ) AS F0_0

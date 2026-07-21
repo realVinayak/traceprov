@@ -1,0 +1,412 @@
+WITH
+  temp_view_4 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0.L_PARTKEY AS "L_PARTKEY_1",
+      F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      DENSE_RANK () OVER (
+        ORDER BY
+          F0_0.L_PARTKEY
+      ) AS _RESULT_TID,
+      ROW_NUMBER() OVER (
+        PARTITION BY
+          F0_0.L_PARTKEY
+        ORDER BY
+          F0_0.L_PARTKEY
+      ) AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        SELECT
+          F0_0.L_ORDERKEY AS L_ORDERKEY,
+          F0_0.L_PARTKEY AS L_PARTKEY,
+          F0_0.L_SUPPKEY AS L_SUPPKEY,
+          F0_0.L_LINENUMBER AS L_LINENUMBER,
+          F0_0.L_QUANTITY AS L_QUANTITY,
+          F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+          F0_0.L_DISCOUNT AS L_DISCOUNT,
+          F0_0.L_TAX AS L_TAX,
+          F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+          F0_0.L_LINESTATUS AS L_LINESTATUS,
+          F0_0.L_SHIPDATE AS L_SHIPDATE,
+          F0_0.L_COMMITDATE AS L_COMMITDATE,
+          F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+          F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+          F0_0.L_SHIPMODE AS L_SHIPMODE,
+          F0_0.L_COMMENT AS L_COMMENT,
+          F0_0.rowid AS PROV_LINEITEM_1_L__ORDERKEY,
+          F0_0.rowid AS _RESULT_TID,
+          1 AS _SETPROV_DUP_COUNT,
+          AVG(F0_0.L_QUANTITY) OVER (
+            PARTITION BY
+              F0_0.L_PARTKEY
+          ) AS "AGGR_0"
+        FROM
+          LINEITEM AS F0_0
+      ) AS F0_0
+  ),
+  temp_view_3 AS (
+    SELECT
+      F0_0.L_ORDERKEY AS L_ORDERKEY /* + materialize */,
+      F0_0.L_PARTKEY AS L_PARTKEY,
+      F0_0.L_SUPPKEY AS L_SUPPKEY,
+      F0_0.L_LINENUMBER AS L_LINENUMBER,
+      F0_0.L_QUANTITY AS L_QUANTITY,
+      F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+      F0_0.L_DISCOUNT AS L_DISCOUNT,
+      F0_0.L_TAX AS L_TAX,
+      F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+      F0_0.L_LINESTATUS AS L_LINESTATUS,
+      F0_0.L_SHIPDATE AS L_SHIPDATE,
+      F0_0.L_COMMITDATE AS L_COMMITDATE,
+      F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+      F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+      F0_0.L_SHIPMODE AS L_SHIPMODE,
+      F0_0.L_COMMENT AS L_COMMENT,
+      F0_0.P_PARTKEY AS P_PARTKEY,
+      F0_0.P_NAME AS P_NAME,
+      F0_0.P_MFGR AS P_MFGR,
+      F0_0.P_BRAND AS P_BRAND,
+      F0_0.P_TYPE AS P_TYPE,
+      F0_0.P_SIZE AS P_SIZE,
+      F0_0.P_CONTAINER AS P_CONTAINER,
+      F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+      F0_0.P_COMMENT AS P_COMMENT,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0._RESULT_TID AS left__RESULT_TID,
+      F0_0._SETPROV_DUP_COUNT AS left__SETPROV_DUP_COUNT,
+      F1_0."(0200000*AVG(L_QUANTITY))" AS "(0200000*AVG(L_QUANTITY))",
+      F1_0."L_PARTKEY_1" AS "L_PARTKEY_1",
+      F1_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      F1_0._RESULT_TID AS right__RESULT_TID,
+      F1_0._SETPROV_DUP_COUNT AS right__SETPROV_DUP_COUNT,
+      HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+      GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        (
+          SELECT
+            F0_0.L_ORDERKEY AS L_ORDERKEY,
+            F0_0.L_PARTKEY AS L_PARTKEY,
+            F0_0.L_SUPPKEY AS L_SUPPKEY,
+            F0_0.L_LINENUMBER AS L_LINENUMBER,
+            F0_0.L_QUANTITY AS L_QUANTITY,
+            F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+            F0_0.L_DISCOUNT AS L_DISCOUNT,
+            F0_0.L_TAX AS L_TAX,
+            F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+            F0_0.L_LINESTATUS AS L_LINESTATUS,
+            F0_0.L_SHIPDATE AS L_SHIPDATE,
+            F0_0.L_COMMITDATE AS L_COMMITDATE,
+            F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+            F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+            F0_0.L_SHIPMODE AS L_SHIPMODE,
+            F0_0.L_COMMENT AS L_COMMENT,
+            F1_0.P_PARTKEY AS P_PARTKEY,
+            F1_0.P_NAME AS P_NAME,
+            F1_0.P_MFGR AS P_MFGR,
+            F1_0.P_BRAND AS P_BRAND,
+            F1_0.P_TYPE AS P_TYPE,
+            F1_0.P_SIZE AS P_SIZE,
+            F1_0.P_CONTAINER AS P_CONTAINER,
+            F1_0.P_RETAILPRICE AS P_RETAILPRICE,
+            F1_0.P_COMMENT AS P_COMMENT,
+            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+            F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+            HASH(F0_0._RESULT_TID, F1_0._RESULT_TID) AS _RESULT_TID,
+            GREATEST(F0_0._SETPROV_DUP_COUNT, F1_0._SETPROV_DUP_COUNT) AS _SETPROV_DUP_COUNT
+          FROM
+            (
+              (
+                SELECT
+                  F0_0.L_ORDERKEY AS L_ORDERKEY,
+                  F0_0.L_PARTKEY AS L_PARTKEY,
+                  F0_0.L_SUPPKEY AS L_SUPPKEY,
+                  F0_0.L_LINENUMBER AS L_LINENUMBER,
+                  F0_0.L_QUANTITY AS L_QUANTITY,
+                  F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                  F0_0.L_DISCOUNT AS L_DISCOUNT,
+                  F0_0.L_TAX AS L_TAX,
+                  F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+                  F0_0.L_LINESTATUS AS L_LINESTATUS,
+                  F0_0.L_SHIPDATE AS L_SHIPDATE,
+                  F0_0.L_COMMITDATE AS L_COMMITDATE,
+                  F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+                  F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+                  F0_0.L_SHIPMODE AS L_SHIPMODE,
+                  F0_0.L_COMMENT AS L_COMMENT,
+                  F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY,
+                  F0_0.rowid AS _RESULT_TID,
+                  1 AS _SETPROV_DUP_COUNT
+                FROM
+                  LINEITEM AS F0_0
+              ) AS F0_0
+              CROSS JOIN (
+                SELECT
+                  F0_0.P_PARTKEY AS P_PARTKEY,
+                  F0_0.P_NAME AS P_NAME,
+                  F0_0.P_MFGR AS P_MFGR,
+                  F0_0.P_BRAND AS P_BRAND,
+                  F0_0.P_TYPE AS P_TYPE,
+                  F0_0.P_SIZE AS P_SIZE,
+                  F0_0.P_CONTAINER AS P_CONTAINER,
+                  F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+                  F0_0.P_COMMENT AS P_COMMENT,
+                  F0_0.rowid AS PROV_PART_P__PARTKEY,
+                  F0_0.rowid AS _RESULT_TID,
+                  1 AS _SETPROV_DUP_COUNT
+                FROM
+                  PART AS F0_0
+              ) AS F1_0
+            )
+        ) AS F0_0
+        CROSS JOIN (
+          SELECT
+            (0.200000 * F0_0."AGGR_0") AS "(0200000*AVG(L_QUANTITY))",
+            F0_0."L_PARTKEY_1" AS "L_PARTKEY_1",
+            F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+            F0_0._RESULT_TID AS _RESULT_TID,
+            F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+          FROM
+            (
+              SELECT
+                *
+              FROM
+                temp_view_4
+            ) AS F0_0
+        ) AS F1_0
+      )
+  ),
+  temp_view_2 AS (
+    SELECT
+      F0_0."AGGR_0" AS "AGGR_0" /* + materialize */,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      1 AS _RESULT_TID,
+      ROW_NUMBER() OVER () AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        SELECT
+          F0_0.L_ORDERKEY AS L_ORDERKEY,
+          F0_0.L_PARTKEY AS L_PARTKEY,
+          F0_0.L_SUPPKEY AS L_SUPPKEY,
+          F0_0.L_LINENUMBER AS L_LINENUMBER,
+          F0_0.L_QUANTITY AS L_QUANTITY,
+          F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+          F0_0.L_DISCOUNT AS L_DISCOUNT,
+          F0_0.L_TAX AS L_TAX,
+          F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+          F0_0.L_LINESTATUS AS L_LINESTATUS,
+          F0_0.L_SHIPDATE AS L_SHIPDATE,
+          F0_0.L_COMMITDATE AS L_COMMITDATE,
+          F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+          F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+          F0_0.L_SHIPMODE AS L_SHIPMODE,
+          F0_0.L_COMMENT AS L_COMMENT,
+          F0_0.P_PARTKEY AS P_PARTKEY,
+          F0_0.P_NAME AS P_NAME,
+          F0_0.P_MFGR AS P_MFGR,
+          F0_0.P_BRAND AS P_BRAND,
+          F0_0.P_TYPE AS P_TYPE,
+          F0_0.P_SIZE AS P_SIZE,
+          F0_0.P_CONTAINER AS P_CONTAINER,
+          F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+          F0_0.P_COMMENT AS P_COMMENT,
+          F0_0."(0200000*AVG(L_QUANTITY))" AS "(0200000*AVG(L_QUANTITY))",
+          F0_0."L_PARTKEY_1" AS "L_PARTKEY_1",
+          F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+          F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+          F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+          F0_0._RESULT_TID AS _RESULT_TID,
+          F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT,
+          SUM(
+            (
+              CASE
+                WHEN (1 = F0_0._SETPROV_DUP_COUNT) THEN F0_0.L_EXTENDEDPRICE
+                ELSE NULL
+              END
+            )
+          ) OVER () AS "AGGR_0",
+          COUNT(1) OVER () AS __DUMMY_CNT
+        FROM
+          (
+            (
+              SELECT
+                F0_0.L_ORDERKEY AS L_ORDERKEY,
+                F0_0.L_PARTKEY AS L_PARTKEY,
+                F0_0.L_SUPPKEY AS L_SUPPKEY,
+                F0_0.L_LINENUMBER AS L_LINENUMBER,
+                F0_0.L_QUANTITY AS L_QUANTITY,
+                F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                F0_0.L_DISCOUNT AS L_DISCOUNT,
+                F0_0.L_TAX AS L_TAX,
+                F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+                F0_0.L_LINESTATUS AS L_LINESTATUS,
+                F0_0.L_SHIPDATE AS L_SHIPDATE,
+                F0_0.L_COMMITDATE AS L_COMMITDATE,
+                F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+                F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+                F0_0.L_SHIPMODE AS L_SHIPMODE,
+                F0_0.L_COMMENT AS L_COMMENT,
+                F0_0.P_PARTKEY AS P_PARTKEY,
+                F0_0.P_NAME AS P_NAME,
+                F0_0.P_MFGR AS P_MFGR,
+                F0_0.P_BRAND AS P_BRAND,
+                F0_0.P_TYPE AS P_TYPE,
+                F0_0.P_SIZE AS P_SIZE,
+                F0_0.P_CONTAINER AS P_CONTAINER,
+                F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+                F0_0.P_COMMENT AS P_COMMENT,
+                F0_0."(0200000*AVG(L_QUANTITY))" AS "(0200000*AVG(L_QUANTITY))",
+                F0_0."L_PARTKEY_1" AS "L_PARTKEY_1",
+                F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+                F0_0._RESULT_TID AS _RESULT_TID,
+                F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+              FROM
+                (
+                  SELECT
+                    F0_0.L_ORDERKEY AS L_ORDERKEY,
+                    F0_0.L_PARTKEY AS L_PARTKEY,
+                    F0_0.L_SUPPKEY AS L_SUPPKEY,
+                    F0_0.L_LINENUMBER AS L_LINENUMBER,
+                    F0_0.L_QUANTITY AS L_QUANTITY,
+                    F0_0.L_EXTENDEDPRICE AS L_EXTENDEDPRICE,
+                    F0_0.L_DISCOUNT AS L_DISCOUNT,
+                    F0_0.L_TAX AS L_TAX,
+                    F0_0.L_RETURNFLAG AS L_RETURNFLAG,
+                    F0_0.L_LINESTATUS AS L_LINESTATUS,
+                    F0_0.L_SHIPDATE AS L_SHIPDATE,
+                    F0_0.L_COMMITDATE AS L_COMMITDATE,
+                    F0_0.L_RECEIPTDATE AS L_RECEIPTDATE,
+                    F0_0.L_SHIPINSTRUCT AS L_SHIPINSTRUCT,
+                    F0_0.L_SHIPMODE AS L_SHIPMODE,
+                    F0_0.L_COMMENT AS L_COMMENT,
+                    F0_0.P_PARTKEY AS P_PARTKEY,
+                    F0_0.P_NAME AS P_NAME,
+                    F0_0.P_MFGR AS P_MFGR,
+                    F0_0.P_BRAND AS P_BRAND,
+                    F0_0.P_TYPE AS P_TYPE,
+                    F0_0.P_SIZE AS P_SIZE,
+                    F0_0.P_CONTAINER AS P_CONTAINER,
+                    F0_0.P_RETAILPRICE AS P_RETAILPRICE,
+                    F0_0.P_COMMENT AS P_COMMENT,
+                    F0_0."(0200000*AVG(L_QUANTITY))" AS "(0200000*AVG(L_QUANTITY))",
+                    F0_0."L_PARTKEY_1" AS "L_PARTKEY_1",
+                    F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                    F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                    F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+                    F0_0._RESULT_TID AS _RESULT_TID,
+                    F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+                  FROM
+                    (
+                      SELECT
+                        *
+                      FROM
+                        temp_view_3
+                    ) AS F0_0
+                ) AS F0_0
+              WHERE
+                (
+                  (
+                    (
+                      (
+                        (F0_0.P_PARTKEY = F0_0.L_PARTKEY)
+                        AND (F0_0.P_BRAND = 'Brand#23')
+                      )
+                      AND (F0_0.P_CONTAINER = 'MED BOX')
+                    )
+                    AND (
+                      F0_0.L_QUANTITY < F0_0."(0200000*AVG(L_QUANTITY))"
+                    )
+                  )
+                  AND (F0_0.P_PARTKEY = F0_0."L_PARTKEY_1")
+                )
+              UNION ALL
+              (
+                SELECT
+                  NULL AS L_ORDERKEY,
+                  NULL AS L_PARTKEY,
+                  NULL AS L_SUPPKEY,
+                  NULL AS L_LINENUMBER,
+                  NULL AS L_QUANTITY,
+                  NULL AS L_EXTENDEDPRICE,
+                  NULL AS L_DISCOUNT,
+                  NULL AS L_TAX,
+                  NULL AS L_RETURNFLAG,
+                  NULL AS L_LINESTATUS,
+                  NULL AS L_SHIPDATE,
+                  NULL AS L_COMMITDATE,
+                  NULL AS L_RECEIPTDATE,
+                  NULL AS L_SHIPINSTRUCT,
+                  NULL AS L_SHIPMODE,
+                  NULL AS L_COMMENT,
+                  NULL AS P_PARTKEY,
+                  NULL AS P_NAME,
+                  NULL AS P_MFGR,
+                  NULL AS P_BRAND,
+                  NULL AS P_TYPE,
+                  NULL AS P_SIZE,
+                  NULL AS P_CONTAINER,
+                  NULL AS P_RETAILPRICE,
+                  NULL AS P_COMMENT,
+                  NULL AS "(0200000*AVG(L_QUANTITY))",
+                  NULL AS "L_PARTKEY_1",
+                  NULL AS PROV_LINEITEM_L__ORDERKEY,
+                  NULL AS PROV_PART_P__PARTKEY,
+                  NULL AS "PROV_LINEITEM_1_L__ORDERKEY",
+                  -1 AS _RESULT_TID,
+                  NULL AS _SETPROV_DUP_COUNT
+              )
+            )
+          ) AS F0_0
+      ) AS F0_0
+    WHERE
+      (
+        (F0_0.__DUMMY_CNT = 1)
+        OR (F0_0._RESULT_TID <> -1)
+      )
+  ),
+  temp_view_1 AS (
+    SELECT
+      (F0_0."AGGR_0" / 7.000000) AS AVG_YEARLY /* + materialize */,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY",
+      F0_0._RESULT_TID AS _RESULT_TID,
+      F0_0._SETPROV_DUP_COUNT AS _SETPROV_DUP_COUNT
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_2
+      ) AS F0_0
+  ),
+  temp_view_0 AS (
+    SELECT
+      F0_0.AVG_YEARLY AS AVG_YEARLY /* + materialize */,
+      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
+    FROM
+      (
+        SELECT
+          *
+        FROM
+          temp_view_1
+      ) AS F0_0
+  )
+SELECT
+  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+  F0_0."PROV_LINEITEM_1_L__ORDERKEY" AS "PROV_LINEITEM_1_L__ORDERKEY"
+FROM
+  (
+    SELECT
+      *
+    FROM
+      temp_view_0
+  ) AS F0_0

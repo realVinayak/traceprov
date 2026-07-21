@@ -1,0 +1,412 @@
+SELECT
+  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+  F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+  F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+  F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+  F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+  F0_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
+  F0_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY,
+  F0_0.O_YEAR AS O_YEAR
+FROM
+  (
+    SELECT
+      F0_0."GROUP_0" AS O_YEAR,
+      F1_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+      F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+      F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+      F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+      F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+      F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+      F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
+      F1_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY
+    FROM
+      (
+        (
+          SELECT
+            DATE_PART('YEAR', CAST((F3_0.O_ORDERDATE) AS DATE)) AS "GROUP_0"
+          FROM
+            (
+              (
+                (
+                  (
+                    (
+                      (
+                        (
+                          (
+                            SELECT
+                              F0_0.P_PARTKEY AS P_PARTKEY,
+                              F0_0.P_TYPE AS P_TYPE
+                            FROM
+                              PART AS F0_0
+                          ) AS F0_0
+                          CROSS JOIN (
+                            SELECT
+                              F0_0.S_SUPPKEY AS S_SUPPKEY,
+                              F0_0.S_NATIONKEY AS S_NATIONKEY
+                            FROM
+                              SUPPLIER AS F0_0
+                          ) AS F1_0
+                        )
+                        CROSS JOIN (
+                          SELECT
+                            F0_0.L_ORDERKEY AS L_ORDERKEY,
+                            F0_0.L_PARTKEY AS L_PARTKEY,
+                            F0_0.L_SUPPKEY AS L_SUPPKEY
+                          FROM
+                            LINEITEM AS F0_0
+                        ) AS F2_0
+                      )
+                      CROSS JOIN (
+                        SELECT
+                          F0_0.O_ORDERKEY AS O_ORDERKEY,
+                          F0_0.O_CUSTKEY AS O_CUSTKEY,
+                          F0_0.O_ORDERDATE AS O_ORDERDATE
+                        FROM
+                          ORDERS AS F0_0
+                      ) AS F3_0
+                    )
+                    CROSS JOIN (
+                      SELECT
+                        F0_0.C_CUSTKEY AS C_CUSTKEY,
+                        F0_0.C_NATIONKEY AS C_NATIONKEY
+                      FROM
+                        CUSTOMER AS F0_0
+                    ) AS F4_0
+                  )
+                  CROSS JOIN (
+                    SELECT
+                      F0_0.N_NATIONKEY AS N_NATIONKEY,
+                      F0_0.N_REGIONKEY AS N_REGIONKEY
+                    FROM
+                      NATION AS F0_0
+                  ) AS F5_0
+                )
+                CROSS JOIN (
+                  SELECT
+                    F0_0.N_NATIONKEY AS N_NATIONKEY
+                  FROM
+                    NATION AS F0_0
+                ) AS F6_0
+              )
+              CROSS JOIN (
+                SELECT
+                  F0_0.R_REGIONKEY AS R_REGIONKEY,
+                  F0_0.R_NAME AS R_NAME
+                FROM
+                  REGION AS F0_0
+              ) AS F7_0
+            )
+          WHERE
+            (
+              (
+                (
+                  (
+                    (
+                      (
+                        (
+                          (
+                            (
+                              (
+                                (F0_0.P_PARTKEY = F2_0.L_PARTKEY)
+                                AND (F1_0.S_SUPPKEY = F2_0.L_SUPPKEY)
+                              )
+                              AND (F2_0.L_ORDERKEY = F3_0.O_ORDERKEY)
+                            )
+                            AND (F3_0.O_CUSTKEY = F4_0.C_CUSTKEY)
+                          )
+                          AND (F4_0.C_NATIONKEY = F5_0.N_NATIONKEY)
+                        )
+                        AND (F5_0.N_REGIONKEY = F7_0.R_REGIONKEY)
+                      )
+                      AND (F7_0.R_NAME = 'AMERICA')
+                    )
+                    AND (F1_0.S_NATIONKEY = F6_0.N_NATIONKEY)
+                  )
+                  AND (F3_0.O_ORDERDATE >= '1995-01-01')
+                )
+                AND (F3_0.O_ORDERDATE <= '1996-12-31')
+              )
+              AND (F0_0.P_TYPE = 'ECONOMY ANODIZED STEEL')
+            )
+          GROUP BY
+            DATE_PART('YEAR', CAST((F3_0.O_ORDERDATE) AS DATE))
+        ) AS F0_0
+        JOIN (
+          SELECT
+            DATE_PART('YEAR', CAST((F0_0.O_ORDERDATE) AS DATE)) AS "_P_SIDE_GROUP_0",
+            F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+            F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+            F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+            F0_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
+            F0_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY
+          FROM
+            (
+              SELECT
+                F0_0.P_PARTKEY AS P_PARTKEY,
+                F0_0.P_TYPE AS P_TYPE,
+                F0_0.S_SUPPKEY AS S_SUPPKEY,
+                F0_0.S_NATIONKEY AS S_NATIONKEY,
+                F0_0.L_ORDERKEY AS L_ORDERKEY,
+                F0_0.L_PARTKEY AS L_PARTKEY,
+                F0_0.L_SUPPKEY AS L_SUPPKEY,
+                F0_0.O_ORDERKEY AS O_ORDERKEY,
+                F0_0.O_CUSTKEY AS O_CUSTKEY,
+                F0_0.O_ORDERDATE AS O_ORDERDATE,
+                F0_0.C_CUSTKEY AS C_CUSTKEY,
+                F0_0.C_NATIONKEY AS C_NATIONKEY,
+                F0_0.N_NATIONKEY AS N_NATIONKEY,
+                F0_0.N_REGIONKEY AS N_REGIONKEY,
+                F0_0."N_NATIONKEY1" AS "N_NATIONKEY1",
+                F1_0.R_REGIONKEY AS R_REGIONKEY,
+                F1_0.R_NAME AS R_NAME,
+                F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+                F0_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY",
+                F1_0.PROV_REGION_R__REGIONKEY AS PROV_REGION_R__REGIONKEY
+              FROM
+                (
+                  (
+                    SELECT
+                      F0_0.P_PARTKEY AS P_PARTKEY,
+                      F0_0.P_TYPE AS P_TYPE,
+                      F0_0.S_SUPPKEY AS S_SUPPKEY,
+                      F0_0.S_NATIONKEY AS S_NATIONKEY,
+                      F0_0.L_ORDERKEY AS L_ORDERKEY,
+                      F0_0.L_PARTKEY AS L_PARTKEY,
+                      F0_0.L_SUPPKEY AS L_SUPPKEY,
+                      F0_0.O_ORDERKEY AS O_ORDERKEY,
+                      F0_0.O_CUSTKEY AS O_CUSTKEY,
+                      F0_0.O_ORDERDATE AS O_ORDERDATE,
+                      F0_0.C_CUSTKEY AS C_CUSTKEY,
+                      F0_0.C_NATIONKEY AS C_NATIONKEY,
+                      F0_0.N_NATIONKEY AS N_NATIONKEY,
+                      F0_0.N_REGIONKEY AS N_REGIONKEY,
+                      F1_0.N_NATIONKEY AS "N_NATIONKEY1",
+                      F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                      F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                      F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                      F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                      F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                      F0_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY,
+                      F1_0."PROV_NATION_1_N__NATIONKEY" AS "PROV_NATION_1_N__NATIONKEY"
+                    FROM
+                      (
+                        (
+                          SELECT
+                            F0_0.P_PARTKEY AS P_PARTKEY,
+                            F0_0.P_TYPE AS P_TYPE,
+                            F0_0.S_SUPPKEY AS S_SUPPKEY,
+                            F0_0.S_NATIONKEY AS S_NATIONKEY,
+                            F0_0.L_ORDERKEY AS L_ORDERKEY,
+                            F0_0.L_PARTKEY AS L_PARTKEY,
+                            F0_0.L_SUPPKEY AS L_SUPPKEY,
+                            F0_0.O_ORDERKEY AS O_ORDERKEY,
+                            F0_0.O_CUSTKEY AS O_CUSTKEY,
+                            F0_0.O_ORDERDATE AS O_ORDERDATE,
+                            F0_0.C_CUSTKEY AS C_CUSTKEY,
+                            F0_0.C_NATIONKEY AS C_NATIONKEY,
+                            F1_0.N_NATIONKEY AS N_NATIONKEY,
+                            F1_0.N_REGIONKEY AS N_REGIONKEY,
+                            F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                            F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                            F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                            F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                            F0_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY,
+                            F1_0.PROV_NATION_N__NATIONKEY AS PROV_NATION_N__NATIONKEY
+                          FROM
+                            (
+                              (
+                                SELECT
+                                  F0_0.P_PARTKEY AS P_PARTKEY,
+                                  F0_0.P_TYPE AS P_TYPE,
+                                  F0_0.S_SUPPKEY AS S_SUPPKEY,
+                                  F0_0.S_NATIONKEY AS S_NATIONKEY,
+                                  F0_0.L_ORDERKEY AS L_ORDERKEY,
+                                  F0_0.L_PARTKEY AS L_PARTKEY,
+                                  F0_0.L_SUPPKEY AS L_SUPPKEY,
+                                  F0_0.O_ORDERKEY AS O_ORDERKEY,
+                                  F0_0.O_CUSTKEY AS O_CUSTKEY,
+                                  F0_0.O_ORDERDATE AS O_ORDERDATE,
+                                  F1_0.C_CUSTKEY AS C_CUSTKEY,
+                                  F1_0.C_NATIONKEY AS C_NATIONKEY,
+                                  F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                                  F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                  F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                                  F0_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY,
+                                  F1_0.PROV_CUSTOMER_C__CUSTKEY AS PROV_CUSTOMER_C__CUSTKEY
+                                FROM
+                                  (
+                                    (
+                                      SELECT
+                                        F0_0.P_PARTKEY AS P_PARTKEY,
+                                        F0_0.P_TYPE AS P_TYPE,
+                                        F0_0.S_SUPPKEY AS S_SUPPKEY,
+                                        F0_0.S_NATIONKEY AS S_NATIONKEY,
+                                        F0_0.L_ORDERKEY AS L_ORDERKEY,
+                                        F0_0.L_PARTKEY AS L_PARTKEY,
+                                        F0_0.L_SUPPKEY AS L_SUPPKEY,
+                                        F1_0.O_ORDERKEY AS O_ORDERKEY,
+                                        F1_0.O_CUSTKEY AS O_CUSTKEY,
+                                        F1_0.O_ORDERDATE AS O_ORDERDATE,
+                                        F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                                        F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                        F0_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY,
+                                        F1_0.PROV_ORDERS_O__ORDERKEY AS PROV_ORDERS_O__ORDERKEY
+                                      FROM
+                                        (
+                                          (
+                                            SELECT
+                                              F0_0.P_PARTKEY AS P_PARTKEY,
+                                              F0_0.P_TYPE AS P_TYPE,
+                                              F0_0.S_SUPPKEY AS S_SUPPKEY,
+                                              F0_0.S_NATIONKEY AS S_NATIONKEY,
+                                              F1_0.L_ORDERKEY AS L_ORDERKEY,
+                                              F1_0.L_PARTKEY AS L_PARTKEY,
+                                              F1_0.L_SUPPKEY AS L_SUPPKEY,
+                                              F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                                              F0_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY,
+                                              F1_0.PROV_LINEITEM_L__ORDERKEY AS PROV_LINEITEM_L__ORDERKEY
+                                            FROM
+                                              (
+                                                (
+                                                  SELECT
+                                                    F0_0.P_PARTKEY AS P_PARTKEY,
+                                                    F0_0.P_TYPE AS P_TYPE,
+                                                    F1_0.S_SUPPKEY AS S_SUPPKEY,
+                                                    F1_0.S_NATIONKEY AS S_NATIONKEY,
+                                                    F0_0.PROV_PART_P__PARTKEY AS PROV_PART_P__PARTKEY,
+                                                    F1_0.PROV_SUPPLIER_S__SUPPKEY AS PROV_SUPPLIER_S__SUPPKEY
+                                                  FROM
+                                                    (
+                                                      (
+                                                        SELECT
+                                                          F0_0.P_PARTKEY AS P_PARTKEY,
+                                                          F0_0.P_TYPE AS P_TYPE,
+                                                          F0_0.rowid AS PROV_PART_P__PARTKEY
+                                                        FROM
+                                                          PART AS F0_0
+                                                      ) AS F0_0
+                                                      CROSS JOIN (
+                                                        SELECT
+                                                          F0_0.S_SUPPKEY AS S_SUPPKEY,
+                                                          F0_0.S_NATIONKEY AS S_NATIONKEY,
+                                                          F0_0.rowid AS PROV_SUPPLIER_S__SUPPKEY
+                                                        FROM
+                                                          SUPPLIER AS F0_0
+                                                      ) AS F1_0
+                                                    )
+                                                ) AS F0_0
+                                                CROSS JOIN (
+                                                  SELECT
+                                                    F0_0.L_ORDERKEY AS L_ORDERKEY,
+                                                    F0_0.L_PARTKEY AS L_PARTKEY,
+                                                    F0_0.L_SUPPKEY AS L_SUPPKEY,
+                                                    F0_0.rowid AS PROV_LINEITEM_L__ORDERKEY
+                                                  FROM
+                                                    LINEITEM AS F0_0
+                                                ) AS F1_0
+                                              )
+                                          ) AS F0_0
+                                          CROSS JOIN (
+                                            SELECT
+                                              F0_0.O_ORDERKEY AS O_ORDERKEY,
+                                              F0_0.O_CUSTKEY AS O_CUSTKEY,
+                                              F0_0.O_ORDERDATE AS O_ORDERDATE,
+                                              F0_0.rowid AS PROV_ORDERS_O__ORDERKEY
+                                            FROM
+                                              ORDERS AS F0_0
+                                          ) AS F1_0
+                                        )
+                                    ) AS F0_0
+                                    CROSS JOIN (
+                                      SELECT
+                                        F0_0.C_CUSTKEY AS C_CUSTKEY,
+                                        F0_0.C_NATIONKEY AS C_NATIONKEY,
+                                        F0_0.rowid AS PROV_CUSTOMER_C__CUSTKEY
+                                      FROM
+                                        CUSTOMER AS F0_0
+                                    ) AS F1_0
+                                  )
+                              ) AS F0_0
+                              CROSS JOIN (
+                                SELECT
+                                  F0_0.N_NATIONKEY AS N_NATIONKEY,
+                                  F0_0.N_REGIONKEY AS N_REGIONKEY,
+                                  F0_0.rowid AS PROV_NATION_N__NATIONKEY
+                                FROM
+                                  NATION AS F0_0
+                              ) AS F1_0
+                            )
+                        ) AS F0_0
+                        CROSS JOIN (
+                          SELECT
+                            F0_0.N_NATIONKEY AS N_NATIONKEY,
+                            F0_0.rowid AS PROV_NATION_1_N__NATIONKEY
+                          FROM
+                            NATION AS F0_0
+                        ) AS F1_0
+                      )
+                  ) AS F0_0
+                  CROSS JOIN (
+                    SELECT
+                      F0_0.R_REGIONKEY AS R_REGIONKEY,
+                      F0_0.R_NAME AS R_NAME,
+                      F0_0.rowid AS PROV_REGION_R__REGIONKEY
+                    FROM
+                      REGION AS F0_0
+                  ) AS F1_0
+                )
+            ) AS F0_0
+          WHERE
+            (
+              (
+                (
+                  (
+                    (
+                      (
+                        (
+                          (
+                            (
+                              (
+                                (F0_0.P_PARTKEY = F0_0.L_PARTKEY)
+                                AND (F0_0.S_SUPPKEY = F0_0.L_SUPPKEY)
+                              )
+                              AND (F0_0.L_ORDERKEY = F0_0.O_ORDERKEY)
+                            )
+                            AND (F0_0.O_CUSTKEY = F0_0.C_CUSTKEY)
+                          )
+                          AND (F0_0.C_NATIONKEY = F0_0.N_NATIONKEY)
+                        )
+                        AND (F0_0.N_REGIONKEY = F0_0.R_REGIONKEY)
+                      )
+                      AND (F0_0.R_NAME = 'AMERICA')
+                    )
+                    AND (F0_0.S_NATIONKEY = F0_0."N_NATIONKEY1")
+                  )
+                  AND (F0_0.O_ORDERDATE >= '1995-01-01')
+                )
+                AND (F0_0.O_ORDERDATE <= '1996-12-31')
+              )
+              AND (F0_0.P_TYPE = 'ECONOMY ANODIZED STEEL')
+            )
+        ) AS F1_0 ON (
+          (
+            (F0_0."GROUP_0" = F1_0."_P_SIDE_GROUP_0")
+            OR (
+              (F0_0."GROUP_0" IS NULL)
+              AND (F1_0."_P_SIDE_GROUP_0" IS NULL)
+            )
+          )
+        )
+      )
+    ORDER BY
+      O_YEAR ASC
+  ) AS F0_0
