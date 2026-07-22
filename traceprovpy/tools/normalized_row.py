@@ -20,10 +20,15 @@ class Extendable(object):
 
     def add_key(self, outer_key: str):
         return [
-            {f"{outer_key}_{key}": value for (key, value) in item.items()}
+            add_keys(outer_key, item)
             for item in self.inner
         ]
 
+def add_keys(prefix, obj):
+    if not isinstance(obj, dict): return obj
+    return {
+        f"{prefix}_{key}": value for (key, value) in obj.items()
+    }
 
 def merge(multiples: Iterable[dict]) -> dict:
     return reduce(lambda prev, curr: ({**prev, **curr}), multiples, dict())
@@ -50,7 +55,7 @@ class Normalizable(object):
         extended = list(map(merge, zip(*extendables, strict=True)))
         iter_count = list(extended)
         simple_keys = {
-            key: getattr(self, key)
+            key: add_keys(key, getattr(self, key))
             for key in keys
             if hasattr(self, key)
             and not isinstance(getattr(self, key), Extendable)
@@ -112,8 +117,8 @@ def tap_simple_result(result: dict):
     )
 
 
-def make_dummy_simple_result(time):
-    return dict(time=time, width=-1, row_count=0)
+def make_dummy_simple_result(time, width=-1, row_count=-1):
+    return dict(time=time, width=width, row_count=row_count)
 
 
 def tap_profile_result(result: dict):
