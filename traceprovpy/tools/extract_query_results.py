@@ -180,7 +180,7 @@ def slice_throwaway(results):
     assert False, f"Not handled size: {len(results)}"
 
 def extract_pg_mult(pg_results):
-    all_profile_gen_results = [extract_postgres_data(of_result) for of in pg_results]
+    all_profile_gen_results = [extract_postgres_data(of) for of in pg_results]
     profile_result = Extendable([t[0] for t in all_profile_gen_results])
     gen_result = Extendable([t[1] for t in all_profile_gen_results])
     return profile_result, gen_result
@@ -203,7 +203,7 @@ def _get_muller_handle(db_system, version):
     )
     def _handle_all_result_query(current_q_result):
         query_num, query_result = current_q_result
-        if query == '15':
+        if query_num == '15':
             return _handle_all_result_query_15(current_q_result)
         query_result = query_result['phase_1_2_combined']
         phase_1_profile, phase_1 = extract_pg_mult(query_result['base'])
@@ -217,15 +217,15 @@ def _get_muller_handle(db_system, version):
             phase_2_profile=phase_2_profile,
             log_sizes=log_sizes
         )
-        return [TpchRow(**kwargs)]
+        return [TpchRow(**({**muller_raw_args, **kwargs}))]
         
     def _handle_all_result_query_15(current_q_result):
         query_num, query_result = current_q_result
         extras = get_first_value(query_result)['extras']
-        phase_1_results = [extra['base_phase_1_capture'] for extra in extras]
-        phase_2_results = [extra['base_phase_2_capture'] for extra in extras]
+        phase_1_results = [extra['base_phase_1_capture'][0] for extra in extras]
+        phase_2_results = [extra['base_phase_2_capture'][0] for extra in extras]
         phase_1_profile, phase_1 = extract_pg_mult(phase_1_results)
-        phase_2_prpfile, phase_2 = extract_pg_mult(phase_2_results)
+        phase_2_profile, phase_2 = extract_pg_mult(phase_2_results)
         log_sizes = Extendable([make_log_size(extra['base_muller_get_log_size']) for extra in extras])
         kwargs = dict(
             query_num=query_num,
@@ -235,7 +235,7 @@ def _get_muller_handle(db_system, version):
             phase_2_profile=phase_2_profile,
             log_sizes=log_sizes
         )
-        return [TpchRow(**kwargs)]
+        return  [TpchRow(**({**muller_raw_args, **kwargs}))]
 
     def _handle_offset_result_query(current_q_result):
         query_num, query_result = current_q_result
@@ -243,12 +243,12 @@ def _get_muller_handle(db_system, version):
         log_size_pack = extract_muller_log_size(core_result['base_muller_get_log_size'])
         phase_1_capture = core_result['base_phase_1_capture'][0]
         # phase 1 is not going to be extendable.
-        phase_1_profile_result, phase_1_gen_result = extract_postgres_data(phase_1_capture)
+        phase_1_profile_result, phase_1_gen_result = extract_postgres_data(phase_1_capture['timing'])
         phase_2_capture = core_result['base_phase_2_capture'][0]['backtrace_results']
         offset_rows = []
         for offset_id, offset_result in enumerate(phase_2_capture):
             offset_results = slice_throwaway(offset_result['results'])
-            phase_2_profile_result, phase_2_gen_result = extract_pg_mult(offset_result)
+            phase_2_profile_result, phase_2_gen_result = extract_pg_mult(offset_results)
             offset_rows.append(
                 dict(
                     query_num=query_num,
@@ -260,7 +260,7 @@ def _get_muller_handle(db_system, version):
                     log_sizes=log_size_pack
                 )
             )
-        return [TpchSampleRow(**kwarg) for kwarg in offset_rows]
+        return [TpchSampleRow(**({**muller_raw_args, **kwarg})) for kwarg in offset_rows]
     return _handle_all_result_query, _handle_offset_result_query
 
 
@@ -271,7 +271,7 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
     for gprom_mode, gprom_result in query_result.items():
         def_raw_args = dict(
             category=gprom_mode,
-            query_num=query,
+            query_num=query_num,
             parallel=thread_count,
             layer_number=0,
             index_build_time=0.0,
@@ -293,12 +293,12 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
             if mode != 'all':
                 kwargs = ({**kwargs, 'offset': offset_id})
             rows.append(kwargs)
-    return [_cls(**kwarg) for kwarg in rows]
+    return [_cls(**({**def_raw_args, **kwarg})) for kwarg in rows]
         
 
 def parse_postgres_parallel(extra_sql):
     WORKER_REG = r'set max_parallel_workers_per_gather=(\d+)'
-    match = re.match(WORKER_REG, extra_sql)
+    match = re.search(WORKER_REG, extra_sql)
     assert match is not None
     groups = match.groups()
     assert len(groups) == 1
@@ -308,16 +308,16 @@ def parse_postgres_parallel(extra_sql):
 def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: list):
     print("postgres handling ", db_system, result_path)
     result = json_read_file(result_path)
-    benchmark_params_path = result_path.absolute().replace("main_result.json", "benchmarks_params.json")
+    benchmark_params_path = str(result_path.absolute()).replace("main_result.json", "benchmarks_params.json")
     benchmark_params = json_read_file(benchmark_params_path)
-    extra_sql = ';'.join(benchmark_params[-1])
+    extra_sql = str((benchmark_params['call_options'])).replace('\n', '')
     main_res: dict = get_first_value(result['result'])
     terminal_name = result_path.name
     version = parse_reg(terminal_name)
     parallel = parse_postgres_parallel(extra_sql)+1
     rows = []
     if db_system == 'muller':
-        handler = _get_muller_handle()
+        handler = _get_muller_handle(db_system, version)
         if mode == 'all':
             handler = handler[0]
         else:
@@ -325,12 +325,13 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
         for current_result in result['result']['muller_params_default'].items():
             rows.extend(handler(current_result))
     elif db_system == 'gprom':
-        for current_result in get_first_value(result['result']):
+        for current_result in get_first_value(result['result']).items():
             rows.extend(
                 _handle_pg_gprom(current_result, mode, version, parallel)
             )
     else:
         raise Exception("not implemented yet!")
+    rows_list.extend(rows)
 
 import duckdb
 def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
