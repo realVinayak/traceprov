@@ -153,7 +153,15 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
         raise Exception("Not implemented anything else!")
     rows_list.extend(rows)
 
+class PgTimeout(Exception): ...
+
+PG_TIMEOUT = 'timeout'
 def extract_postgres_data(pg_result):
+    is_timeout = pg_result.get('timeout', False)
+
+    if is_timeout:
+        raise PgTimeout()
+
     timing = pg_result['explain_time']
     plan = json.loads(pg_result['complete_plan'])['Plan']
     row_count = plan['Actual Rows']
@@ -206,8 +214,19 @@ def _get_muller_handle(db_system, version):
         if query_num == '15':
             return _handle_all_result_query_15(current_q_result)
         query_result = query_result['phase_1_2_combined']
-        phase_1_profile, phase_1 = extract_pg_mult(query_result['base'])
-        phase_2_profile, phase_2 = extract_pg_mult(query_result['materialize'])
+        fail_reason = None
+        phase_1_profile, phase_1 = (None, None)
+        phase_2_profile, phase_2= (None, None)
+        try:
+            phase_1_profile, phase_1 = extract_pg_mult(query_result['base'])
+        except PgTimeout:
+            fail_reason = PG_TIMEOUT
+        
+        if fail_reason is None:
+            try:
+                phase_2_profile, phase_2 = extract_pg_mult(query_result['materialize'])
+            except PgTimeout:
+                fail_reason = PG_TIMEOUT
         log_sizes = Extendable([make_log_size(extra['base_muller_get_log_size']) for extra in query_result['extras']])
         kwargs = dict(
             query_num=query_num,
@@ -215,7 +234,8 @@ def _get_muller_handle(db_system, version):
             phase_1_profile=phase_1_profile,
             phase_2=phase_2,
             phase_2_profile=phase_2_profile,
-            log_sizes=log_sizes
+            log_sizes=log_sizes,
+            fail_reason=fail_reason or ""
         )
         return [TpchRow(**({**muller_raw_args, **kwargs}))]
         
@@ -224,8 +244,18 @@ def _get_muller_handle(db_system, version):
         extras = get_first_value(query_result)['extras']
         phase_1_results = [extra['base_phase_1_capture'][0] for extra in extras]
         phase_2_results = [extra['base_phase_2_capture'][0] for extra in extras]
-        phase_1_profile, phase_1 = extract_pg_mult(phase_1_results)
-        phase_2_profile, phase_2 = extract_pg_mult(phase_2_results)
+        fail_reason = None
+        phase_1_profile, phase_1 = (None, None)
+        phase_2_profile, phase_2= (None, None)
+        try:
+            phase_1_profile, phase_1 = extract_pg_mult(phase_1_results)
+        except PgTimeout:
+            fail_reason = PG_TIMEOUT
+        if fail_reason is None:
+            try:
+                phase_2_profile, phase_2 = extract_pg_mult(phase_2_results)
+            except PgTimeout:
+                fail_reason = PG_TIMEOUT
         log_sizes = Extendable([make_log_size(extra['base_muller_get_log_size']) for extra in extras])
         kwargs = dict(
             query_num=query_num,
@@ -233,7 +263,8 @@ def _get_muller_handle(db_system, version):
             phase_1_profile=phase_1_profile,
             phase_2=phase_2,
             phase_2_profile=phase_2_profile,
-            log_sizes=log_sizes
+            log_sizes=log_sizes,
+            fail_reason=fail_reason or ""
         )
         return  [TpchRow(**({**muller_raw_args, **kwargs}))]
 
@@ -243,23 +274,42 @@ def _get_muller_handle(db_system, version):
         log_size_pack = extract_muller_log_size(core_result['base_muller_get_log_size'])
         phase_1_capture = core_result['base_phase_1_capture'][0]
         # phase 1 is not going to be extendable.
-        phase_1_profile_result, phase_1_gen_result = extract_postgres_data(phase_1_capture['timing'])
-        phase_2_capture = core_result['base_phase_2_capture'][0]['backtrace_results']
-        offset_rows = []
-        for offset_id, offset_result in enumerate(phase_2_capture):
-            offset_results = slice_throwaway(offset_result['results'])
-            phase_2_profile_result, phase_2_gen_result = extract_pg_mult(offset_results)
-            offset_rows.append(
-                dict(
-                    query_num=query_num,
-                    offset=offset_id,
-                    phase_1=phase_1_gen_result,
-                    phase_1_profile=phase_1_profile_result,
-                    phase_2=phase_2_gen_result,
-                    phase_2_profile=phase_2_profile_result,
-                    log_sizes=log_size_pack
+        phase_1_gen_result, phase_1_profile_result = (None, None)
+        phase_2_gen_result, phase_2_profile_result = (None, None)
+        fail_reason = None
+        try:
+            phase_1_profile_result, phase_1_gen_result = extract_postgres_data(phase_1_capture['timing'])
+        except PgTimeout:
+            fail_reason = PG_TIMEOUT
+        if fail_reason is None:
+            phase_2_capture = core_result['base_phase_2_capture'][0]['backtrace_results']
+            offset_rows = []
+            for offset_id, offset_result in enumerate(phase_2_capture):
+                offset_results = slice_throwaway(offset_result['results'])
+                phase_2_profile_result, phase_2_gen_result = extract_pg_mult(offset_results)
+                offset_rows.append(
+                    dict(
+                        query_num=query_num,
+                        offset=offset_id,
+                        phase_1=phase_1_gen_result,
+                        phase_1_profile=phase_1_profile_result,
+                        phase_2=phase_2_gen_result,
+                        phase_2_profile=phase_2_profile_result,
+                        log_sizes=log_size_pack
+                    )
                 )
+        return [
+            dict(
+                query_num=query_num,
+                offset=-1,
+                phase_1=phase_1_gen_result,
+                phase_1_profile=phase_1_profile_result,
+                phase_2=phase_2_gen_result,
+                phase_2_profile=phase_2_profile_result,
+                log_sizes=log_size_pack,
+                fail_reason=fail_reason or ""
             )
+        ]
         return [TpchSampleRow(**({**muller_raw_args, **kwarg})) for kwarg in offset_rows]
     return _handle_all_result_query, _handle_offset_result_query
 
@@ -288,8 +338,12 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
         if mode != 'all':
             def_raw_args = ({**def_raw_args, 'offset': -1})
         for offset_id, offset_result in enumerate(gprom_result):
-            phase_1_profile, phase_1 = extract_pg_mult(offset_result['base'])
-            kwargs = dict(phase_1=phase_1, phase_1_profile=phase_1_profile)
+            phase_1_profile, phase_1 = (None, None)
+            try:
+                phase_1_profile, phase_1 = extract_pg_mult(offset_result['base'])
+            except PgTimeout:
+                fail_reason = PG_TIMEOUT
+            kwargs = dict(phase_1=phase_1, phase_1_profile=phase_1_profile, fail_reason=fail_reason)
             if mode != 'all':
                 kwargs = ({**kwargs, 'offset': offset_id})
             rows.append(kwargs)
