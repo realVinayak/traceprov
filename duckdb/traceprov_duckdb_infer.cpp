@@ -102,6 +102,7 @@ typedef struct TraceProvInitData
     uint64_t max_worker_idx;
     bool eager_parallel;
     uint64_t *read_time;
+    uint64_t self_thread_idx;
 } TraceProvInitData;
 
 std::vector<TraceProvBindData *> *setup_layers(
@@ -846,15 +847,16 @@ uint64_t compute_table_count(TraceProvBindData *combind_bind_data){
 }
 
 void handle_eager_parallel(TraceProvBindData *bind_data, TraceProvInitData *global_init_data, TraceProvInitData *local_init_data){
+    global_init_data->bind_data_mutex->lock();
+    const uint64_t self_idx = global_init_data->max_worker_idx++;
+    global_init_data->bind_data_mutex->unlock();
+    local_init_data->self_thread_idx = self_idx + 1;
     if (global_init_data->is_dummy){
         // Early out.
         local_init_data->is_dummy = true;
         local_init_data->eager_parallel = false;
         return;
     }
-    global_init_data->bind_data_mutex->lock();
-    const uint64_t self_idx = global_init_data->max_worker_idx++;
-    global_init_data->bind_data_mutex->unlock();
     bool is_dummy = false;
     // TODO: Make this smarter.
     // Specificially, see if this thread has a local context, and try "sticking" to that context
@@ -1349,7 +1351,15 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
     auto bind_data = (TraceProvBindData *)duckdb_function_get_bind_data(info);
     auto global_init_data = (TraceProvInitData *)duckdb_function_get_init_data(info);
     auto init_data = (TraceProvInitData *)duckdb_function_get_local_init_data(info);
-    auto current_time_entry = g_tp_duckdb_state.layer_time_index[traceprov_current.page_cache_idx - 1];
+
+    if (unlikely(init_data->eager_parallel)){
+        handle_eager_parallel(bind_data, global_init_data, init_data);
+    }
+
+    if (unlikely(init_data->self_thread_idx == 0)){
+        elog(ERROR, "Expected self idx to be set!");
+    }
+    auto current_time_entry = g_tp_duckdb_state.layer_time_index[init_data->self_thread_idx - 1];
     
     const uint64_t current_layer_number = (bind_data->rel_args.table_flags << 32) | bind_data->rel_args.layer_number;
     // once per scan, so why not.
@@ -1357,10 +1367,6 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
         current_time_entry->insert({current_layer_number, 0});
     }
     const auto read_start = std::chrono::steady_clock::now();
-
-    if (unlikely(init_data->eager_parallel)){
-        handle_eager_parallel(bind_data, global_init_data, init_data);
-    }
 
     if (init_data->is_dummy)
     {
