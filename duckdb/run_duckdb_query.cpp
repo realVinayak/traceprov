@@ -1711,7 +1711,7 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
     auto layer_string_map = new std::unordered_map<TraceProvLayerNumber, std::string>;
     std::unordered_map<uint64_t, std::string> sql_cache;
     for (auto result_map_pair: *result_spec->result_map){
-        if (result_map_pair.second->tag == T_TP_RELATION && traceprov_use_implicit_union){
+        if ((result_map_pair.second->tag == T_TP_RELATION || result_map_pair.second->tag == T_TP_FILTER_REMAP ) && traceprov_use_implicit_union){
             // In this case, it is a simple scan.
             // Apparently, for some reason, DuckDB does not parallelise this????
             // Anyways, right now, that breaks things.
