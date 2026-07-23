@@ -1356,9 +1356,9 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
         handle_eager_parallel(bind_data, global_init_data, init_data);
     }
 
-    if (unlikely(init_data->self_thread_idx == 0)){
-        elog(ERROR, "Expected self idx to be set!");
-    }
+    // if (unlikely(init_data->self_thread_idx == 0)){
+    //     elog(ERROR, "Expected self idx to be set!");
+    // }
     // auto current_time_entry = g_tp_duckdb_state.layer_time_index[init_data->self_thread_idx - 1];
     
     // const uint64_t current_layer_number = (bind_data->rel_args.table_flags << 32) | bind_data->rel_args.layer_number;
