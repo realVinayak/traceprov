@@ -23,7 +23,7 @@
 #include "derivation_utils.hpp"
 
 #include "tp_exprns.hpp"
-
+#include <thread>
 TraceProvDuckDbGlobalState g_tp_duckdb_state{
     .did_initialize = false,
     .worker_local_contexts = NULL,
@@ -71,6 +71,10 @@ typedef struct TraceProvBindData
     bool upper_exclusive;
     bool min_max_set;
     bool is_approx;
+    // This is stored in the bind, because that seems like the safest
+    // place this should be, which also doesn't impact the performance.
+    // Sure, there are better places. but whatever.
+    uint64_t *worker_time;
 } TraceProvBindData;
 
 typedef struct TraceProvInitData
@@ -271,13 +275,13 @@ void initialize_global_context()
 
         g_tp_duckdb_state.did_initialize = true;
         g_tp_duckdb_state.worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
-        // if (g_tp_duckdb_state.layer_time_index == NULL){
-        //     const auto size = (traceprov_thread_count)*sizeof(TraceProvLayerTime);
-        //     g_tp_duckdb_state.layer_time_index = (TraceProvLayerTime**)malloc(size);
-        //     for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
-        //         g_tp_duckdb_state.layer_time_index[idx] = new TraceProvLayerTime;
-        //     }
-        // }
+        if (g_tp_duckdb_state.layer_time_index == NULL){
+            const auto size = (traceprov_thread_count)*sizeof(TraceProvLayerTime);
+            g_tp_duckdb_state.layer_time_index = (TraceProvLayerTime**)malloc(size);
+            for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
+                g_tp_duckdb_state.layer_time_index[idx] = new TraceProvLayerTime;
+            }
+        }
     }
     g_tp_state_mutex.unlock();
 }
@@ -287,11 +291,11 @@ TraceProvLayerTime** dump_worker_layer_time(){
 }
 
 void reset_layer_time(TraceProvLayerTime **layer_time_index){
-    // for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
-    //     delete layer_time_index[idx];
-    // }
-    // free(layer_time_index);
-    // layer_time_index = NULL;
+    for (uint32_t idx = 0; idx < traceprov_thread_count; idx++){
+        delete layer_time_index[idx];
+    }
+    free(layer_time_index);
+    layer_time_index = NULL;
 }
 
 void reset_global_context()
@@ -536,6 +540,23 @@ void extract_partition_info(
     }
 }
 
+
+
+// TODO: add more cleanup here.
+void traceprov_free_bind(void *bind_data){
+    TraceProvBindData *tp_bind_data = (TraceProvBindData *)bind_data;
+    const uint64_t current_layer_number = (tp_bind_data->rel_args.table_flags << 32) | tp_bind_data->rel_args.layer_number;
+    for (uint32_t worker_idx = 0; worker_idx < traceprov_thread_count; worker_idx++){
+        auto time_entry = g_tp_duckdb_state.layer_time_index[worker_idx];
+        if (time_entry->find(current_layer_number) == time_entry->end(current_layer_number)){
+            time_entry->insert({current_layer_number, 0});
+        }
+        time_entry->at(current_layer_number) = tp_bind_data->worker_time[worker_idx];
+    }
+    free(tp_bind_data->worker_time);
+    free(bind_data);
+}
+
 void traceprov_duckdb_bind(duckdb_bind_info info)
 {
     initialize_global_context();
@@ -763,7 +784,11 @@ void traceprov_duckdb_bind(duckdb_bind_info info)
             bind_data->write_vector = index_context->vector_data;
         }
     }
-    duckdb_bind_set_bind_data(info, bind_data, free);
+    if (bind_data->worker_time){
+        elog(ERROR, "Expecte worker time to be unset!");
+    }
+    bind_data->worker_time = (uint64_t*)calloc(traceprov_thread_count, sizeof(uint64_t));
+    duckdb_bind_set_bind_data(info, bind_data, traceprov_free_bind);
 }
 
 void traceprov_duckdb_init(duckdb_init_info info)
@@ -771,6 +796,7 @@ void traceprov_duckdb_init(duckdb_init_info info)
     auto bind_data = (TraceProvBindData *)duckdb_init_get_bind_data(info);
     TraceProvInitData *init_data_inst = allocate_init_data();
     duckdb_init_set_init_data(info, init_data_inst, free);
+    init_data_inst->bind_data_mutex = new std::mutex;
     if (bind_data->is_dummy)
     {
         init_data_inst->is_dummy = true;
@@ -795,7 +821,7 @@ void traceprov_duckdb_init(duckdb_init_info info)
         init_data_inst->worker_init_data->push_back(
             traceprov_make_init_data(bind_data));
     }
-    init_data_inst->bind_data_mutex = new std::mutex;
+    // elog(INFO, "Requesting: %d for (%d, %d)", max_threads, bind_data->rel_args.table_flags, bind_data->rel_args.layer_number);
     // This way, all the threads will scan each portion of the init data.
     duckdb_init_set_max_threads(info, max_threads);
 }
@@ -850,6 +876,7 @@ void handle_eager_parallel(TraceProvBindData *bind_data, TraceProvInitData *glob
     global_init_data->bind_data_mutex->lock();
     const uint64_t self_idx = global_init_data->max_worker_idx++;
     global_init_data->bind_data_mutex->unlock();
+    // elog(INFO, "Setting thread: %p -> %ld", local_init_data, self_idx);
     local_init_data->self_thread_idx = self_idx + 1;
     if (global_init_data->is_dummy){
         // Early out.
@@ -900,13 +927,16 @@ void traceprov_duckdb_local_init(duckdb_init_info info)
     TraceProvInitData *init_data_inst = allocate_init_data();
     init_data_inst->worker_init_data = new std::vector<TraceProvInitData *>;
     duckdb_init_set_init_data(info, init_data_inst, free);
+    // std::th
+    // size_t thread_id = std::hash<std::thread::id>{}(std::this_thread::get_id());
+    // elog(INFO, "Calling local init for %d, %d [pid: %d]", bind_data->rel_args.table_flags, bind_data->rel_args.layer_number, thread_id);
+    init_data_inst->eager_parallel = true;
     if (bind_data->is_dummy)
     {
         init_data_inst->is_dummy = true;
         return;
     }
     bool is_dummy = false;
-    init_data_inst->eager_parallel = true;
 }
 
 uint64_t fillup_pointer(
@@ -1356,23 +1386,19 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
         handle_eager_parallel(bind_data, global_init_data, init_data);
     }
 
-    // if (unlikely(init_data->self_thread_idx == 0)){
-    //     elog(ERROR, "Expected self idx to be set!");
-    // }
-    // auto current_time_entry = g_tp_duckdb_state.layer_time_index[init_data->self_thread_idx - 1];
-    
-    // const uint64_t current_layer_number = (bind_data->rel_args.table_flags << 32) | bind_data->rel_args.layer_number;
-    // // once per scan, so why not.
-    // if (unlikely(current_time_entry->find(current_layer_number) == current_time_entry->end())){
-    //     current_time_entry->insert({current_layer_number, 0});
-    // }
-    // const auto read_start = std::chrono::steady_clock::now();
+    if (unlikely(init_data->self_thread_idx == 0)){
+        // elog(INFO, "Global: %p, Local: %p", global_init_data, init_data);
+        elog(ERROR, "Expected self idx to be set!");
+    }
+
+    const auto read_start = std::chrono::steady_clock::now();
 
     if (init_data->is_dummy)
     {
         duckdb_data_chunk_set_size(output, 0);
-        // const auto read_end = std::chrono::steady_clock::now();
-        // current_time_entry->at(current_layer_number) += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
+        const auto read_end = std::chrono::steady_clock::now();
+        const auto read_time = std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();;
+        bind_data->worker_time[init_data->self_thread_idx-1] += read_time;
         return;
     }
 
@@ -1386,8 +1412,9 @@ void traceprov_duckdb_func(duckdb_function_info info, duckdb_data_chunk output)
     }
     init_data->running_count += out_chunk_size;
 
-    // const auto read_end = std::chrono::steady_clock::now();
-    // current_time_entry->at(current_layer_number) += std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();
+    const auto read_end = std::chrono::steady_clock::now();
+    const auto read_time = std::chrono::duration_cast<std::chrono::nanoseconds>(read_end - read_start).count();;
+    bind_data->worker_time[init_data->self_thread_idx-1] += read_time;
 }
 
 struct TraceProvCTableFunctionInfo : public TableFunctionInfo
