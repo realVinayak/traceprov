@@ -489,6 +489,11 @@ static Node* generate_pushdown_qual(SubLink *candidate_sublink, TraceProvSublink
     Node *top_exprn = NULL;
     List *pushdown_quals = NIL;
     Node **left_node = NULL, **right_node = NULL;
+    PushdownQualContext pq_context = {
+        .current = NIL,
+        .parent_op_exprn = NULL,
+        .sublink = candidate_sublink
+    };
     if (sublink_context->qual_copy && sublink_context->has_seen_or){
         // If there's a valid qual copy, it means we're in a where / having clause.
         // The top should always be a boolean branch for now.
@@ -496,13 +501,14 @@ static Node* generate_pushdown_qual(SubLink *candidate_sublink, TraceProvSublink
         if (!IsA(qual, BoolExpr)){
             elog(ERROR, "Expected the qual to be a boolean expr, for now.");
         }
-        PushdownQualContext pq_context = {
-            .current = NIL,
-            .parent_op_exprn = NULL,
-            .sublink = candidate_sublink
-        };
         get_pushdown_qual(qual, &pq_context);
         pushdown_quals = pq_context.current;
+    }
+
+    if ((candidate_sublink->subLinkType == ANY_SUBLINK || candidate_sublink->subLinkType == ALL_SUBLINK)){
+        top_exprn = candidate_sublink->testexpr;
+        split_test_expr(top_exprn, &left_node, &right_node);
+    } else {
         top_exprn = (Node *)pq_context.parent_op_exprn;
         ListCell *op_args = ((OpExpr*)top_exprn)->args->elements;
         bool is_present = equal(op_args[0].ptr_value,candidate_sublink);
@@ -516,9 +522,6 @@ static Node* generate_pushdown_qual(SubLink *candidate_sublink, TraceProvSublink
             left_node = (Node **)&op_args[1].ptr_value;
             right_node = (Node **)&op_args[0].ptr_value;
         }
-    } else if ((candidate_sublink->subLinkType == ANY_SUBLINK || candidate_sublink->subLinkType == ALL_SUBLINK)){
-        top_exprn = candidate_sublink->testexpr;
-        split_test_expr(top_exprn, &left_node, &right_node);
     }
 
     if (right_node != NULL && left_node != NULL){
