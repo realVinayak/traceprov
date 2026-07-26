@@ -548,7 +548,7 @@ void traceprov_free_bind(void *bind_data){
     const uint64_t current_layer_number = (tp_bind_data->rel_args.table_flags << 32) | tp_bind_data->rel_args.layer_number;
     for (uint32_t worker_idx = 0; worker_idx < traceprov_thread_count; worker_idx++){
         auto time_entry = g_tp_duckdb_state.layer_time_index[worker_idx];
-        if (time_entry->find(current_layer_number) == time_entry->end(current_layer_number)){
+        if (time_entry->find(current_layer_number) == time_entry->end()){
             time_entry->insert({current_layer_number, 0});
         }
         time_entry->at(current_layer_number) = tp_bind_data->worker_time[worker_idx];
