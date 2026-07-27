@@ -635,6 +635,16 @@ class GenericBenchmark(NamedTuple):
             action=argparse.BooleanOptionalAction,
             default=False,
         )
+        parser.add_argument(
+            "--traceprov_fast",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
+        parser.add_argument(
+            "--traceprov_sample_fast",
+            action=argparse.BooleanOptionalAction,
+            default=False,
+        )
 
         for optimizations in TraceProvOptimizationsInstance._fields:
             parser.add_argument(
@@ -643,6 +653,14 @@ class GenericBenchmark(NamedTuple):
                 default=TraceProvOptimizationsInstance._field_defaults[optimizations],
             )
         parsed, _ = parser.parse_known_args()
+
+        if parsed.traceprov_fast or parsed.traceprov_sample_fast:
+            parsed.traceprov_use_table_stats = True
+
+        if parsed.traceprov_sample_fast:
+            parsed.traceprov_use_join_filter_rewrite = True
+            parsed.traceprov_use_filter_pushdown = True
+            parsed.traceprov_use_foldable = True
 
         connection_params = ConnectionParams(
             host=parsed.host,
