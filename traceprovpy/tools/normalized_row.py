@@ -55,12 +55,15 @@ class Normalizable(object):
         extended = list(map(merge, zip(*extendables, strict=True)))
         iter_count = list(extended)
         simple_keys = {
-            key: add_keys(key, getattr(self, key))
+            key: getattr(self, key)
             for key in keys
             if hasattr(self, key)
             and not isinstance(getattr(self, key), Extendable)
             and (preserve_null or getattr(self, key) is not None)
         }
+        truly_simple_keys = {key: value for (key, value) in simple_keys.items() if not isinstance(value, dict)}
+        expended_values = merge([add_keys(key, value) for (key, value) in simple_keys.items() if isinstance(value, dict)])
+        simple_keys = {**truly_simple_keys, **expended_values}
         if len(extended) == 0:
             return [simple_keys]
         rows = [

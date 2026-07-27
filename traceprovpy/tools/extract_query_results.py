@@ -298,8 +298,9 @@ def _get_muller_handle(db_system, version):
                         log_sizes=log_size_pack
                     )
                 )
-        return [
-            dict(
+        else:
+            return [
+                TpchSampleRow(**({**muller_raw_args, **(dict(
                 query_num=query_num,
                 offset=-1,
                 phase_1=phase_1_gen_result,
@@ -308,8 +309,8 @@ def _get_muller_handle(db_system, version):
                 phase_2_profile=phase_2_profile_result,
                 log_sizes=log_size_pack,
                 fail_reason=fail_reason or ""
-            )
-        ]
+            ))}))
+            ]
         return [TpchSampleRow(**({**muller_raw_args, **kwarg})) for kwarg in offset_rows]
     return _handle_all_result_query, _handle_offset_result_query
 
@@ -339,6 +340,7 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
             def_raw_args = ({**def_raw_args, 'offset': -1})
         for offset_id, offset_result in enumerate(gprom_result):
             phase_1_profile, phase_1 = (None, None)
+            fail_reason=None
             try:
                 phase_1_profile, phase_1 = extract_pg_mult(offset_result['base'])
             except PgTimeout:
