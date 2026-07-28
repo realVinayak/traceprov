@@ -34,11 +34,18 @@ def merge(multiples: Iterable[dict]) -> dict:
     return reduce(lambda prev, curr: ({**prev, **curr}), multiples, dict())
 
 
+NORM_ITER_COL = "iter"
+
+
 class Normalizable(object):
     def __init__(self, **kwargs):
         keys = set(self.keys())
-        in_keys = kwargs.keys()
-        assert keys == in_keys, f"Got different: {keys.symmetric_difference(in_keys)}"
+        in_keys = set(kwargs.keys())
+        check_keys = in_keys
+        if NORM_ITER_COL in in_keys:
+            check_keys = set(check_keys)
+            check_keys.remove(NORM_ITER_COL)
+        assert keys == check_keys, f"Got different: {keys.symmetric_difference(in_keys)}"
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -67,7 +74,7 @@ class Normalizable(object):
         if len(extended) == 0:
             return [simple_keys]
         rows = [
-            merge([simple_keys, extended_cell, dict(iter=_idx)])
+            merge([simple_keys, extended_cell, {NORM_ITER_COL: _idx}])
             for _idx, extended_cell in enumerate(extended, start=1)
         ]
         return rows

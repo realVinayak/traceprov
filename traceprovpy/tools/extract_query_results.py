@@ -9,7 +9,7 @@ from typing import Any, NamedTuple
 
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
-from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer
+from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer, NORM_ITER_COL
 from traceprovpy.tools.run_duckdb_generic import add_query_options
 
 VERSION_REG = r"^g_(\d+)_"
@@ -97,6 +97,57 @@ class StandardStats(NamedTuple):
         return sd_standard_stats._asdict()
 
 
+def _handle_sd_offset(sample_inference_result: dict):
+    sql_spec_map = sample_infer_result["sql_spec_map"]
+    capture_indexes = [
+        l_idx
+        for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
+        if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
+    ]
+    last_capture_index = max(capture_indexes)
+    last_capture_profile = sample_inference_result['profile'][last_capture_index]
+    last_capture_time = sample_inference_result['result_time'][last_capture_index]
+    offset_results = []
+    result_added = set()
+    for profile_entry_idx, profile_entry in enumerate(sample_inference_result['profile']):
+        if profile_entry_idx in capture_indexes:
+            continue
+        first_key, iter_id = sql_spec_map[profile_entry_idx]
+        composite_key = (tuple(first_key), iter_id)
+        if composite_key in result_added:
+            continue
+        result_added.add(composite_key)
+        # print(profile_entry)
+        assert len(first_key) in (2, 3)
+        if len(first_key) == 2:
+            part_key = first_key
+        else:
+            part_key = first_key[1:]
+        part_key = tuple(part_key)
+        if part_key not in offset_results:
+            offset_results[part_key] = []
+        offset = part_key[-1]
+        offset_results.append(
+            (
+                {**dict(
+                phase_2=tap_simple_result(sample_inference_result['result_time'][profile_entry_idx]),
+                phase_2_profile=tap_profile_result(profile_entry),
+                offset=offset,
+                ),
+                NORM_ITER_COL: iter_id
+                }
+            )
+        )
+    other_options = dict(
+        phase_1=tap_simple_result(last_capture_profile),
+        phase_1_profile=tap_profile_result(last_capture_time),
+        extra=StandardStats.get_sd_stats(sample_inference_result['stats'][0]),
+        log_sizes=make_log_size(sample_inference_result['stats'][0]['size_mb'])
+    )
+    return [({**other_options, **offset_result}) for offset_result in offset_results]
+        
+
+
 def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list):
     print("duckdb handling ", db_system, result_path)
     result = json_read_file(result_path)
@@ -108,6 +159,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
     #add_query_options(bench_parser)
     bench_parsed, _ = bench_parser.parse_known_args(call_options)
     thread_count = bench_parsed.threads
+    main_class = TpchRow if mode == 'all' else TpchSampleRow
 
     def _handle_gprom_result(pack):
         query, gprom_mode, gprom_result = pack
@@ -164,29 +216,45 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             version=version,
             fail_reason=""
         )
-        sd_result = query_result['result']['sd']
-        if sd_result['capture_time'] is None:
-            failed_dict = dict(phase_1=None, phase_1_profile=None, phase_2=None, phase_2_profile=None, log_sizes=None, extra=None, fail_reason=DUCKDB_SEGFAULT)
-            return [TpchRow(**{**def_raw_args, **failed_dict})]
-        phase_1_result = list(map(tap_simple_result, sd_result['capture_time']))
-        phase_1_profile_result = list(map(tap_profile_result, sd_result['capture_profile']))
+        def _add_fail(fail_reason):
+            failed_dict = dict(phase_1=None, phase_1_profile=None, phase_2=None, phase_2_profile=None, log_sizes=None, extra=None, fail_reason=fail_reason)
+            if mode == 'offset':
+                failed_dict = ({**failed_dict, 'offset': -1})
+                _cls = TpchSampleRow
+            else:
+                _cls = TpchRow
+            return _cls(**failed_dict)
         if mode == 'all':
+            sd_result = query_result['result']['sd']
+            if sd_result['capture_time'] is None:
+                failed_dict = [_add_fail(DUCKDB_GENERIC)]
+                return failed_dict
+            phase_1_result = list(map(tap_simple_result, sd_result['capture_time']))
+            phase_1_profile_result = list(map(tap_profile_result, sd_result['capture_profile']))
             phase_2_combined_result = extract_infer(sd_result['infer_results'])
             phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
             phase_2_profile_result = list(map(tap_profile_result, phase_2_combined_result))
             extra_stats = list(map(StandardStats.get_sd_stats, sd_result['capture_stats']))
             log_size = list(map(lambda _stats: make_log_size(_stats['size_mb']), sd_result['capture_stats']))
-            kwargs = dict(
+            kwargs = [dict(
                 phase_1=Extendable(phase_1_result),
                 phase_1_profile=Extendable(phase_1_profile_result),
                 phase_2=Extendable(phase_2_result),
                 phase_2_profile=Extendable(phase_2_profile_result),
                 log_sizes=Extendable(log_size),
                 extra=Extendable(extra_stats)
-            )
+            )]
         else:
-            assert False, "not implemented sd, offset"
-        return [TpchRow(**{**def_raw_args, **kwargs})]
+            sample_inference_result = query_result['sample_inference_result']
+            if 'type' in sample_inference_result:
+                assert 'return_code' in sample_inference_result
+                rc = sample_inference_result['return_code']
+                fail_reason = f"error_{rc}"
+                failed_dict = [_add_fail(fail_reason)]
+                return failed_dict
+            kwargs = _handle_sd_offset(sample_inference_result)
+            
+        return list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
 
     if db_system == 'gprom':
         rows = flatten([
@@ -207,6 +275,7 @@ class PgTimeout(Exception): ...
 
 PG_TIMEOUT = 'timeout'
 DUCKDB_SEGFAULT = 'segfault'
+DUCKDB_GENERIC = 'fail_generic'
 def extract_postgres_data(pg_result):
     is_timeout = pg_result.get('timeout', False)
 
