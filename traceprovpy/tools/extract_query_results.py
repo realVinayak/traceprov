@@ -5,7 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
