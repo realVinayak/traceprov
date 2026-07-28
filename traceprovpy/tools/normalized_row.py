@@ -53,7 +53,7 @@ class Normalizable(object):
         raise Exception("Expected to be implemented")
 
     def normalize(self, preserve_null=False) -> list[dict]:
-        keys = self.keys()
+        keys = self.keys() | {NORM_ITER_COL}
         extendables = [
             getattr(self, key).add_key(key)
             for key in keys

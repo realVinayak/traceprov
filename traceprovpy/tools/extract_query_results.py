@@ -11,7 +11,10 @@ from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
 from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer, NORM_ITER_COL
 from traceprovpy.tools.run_duckdb_generic import add_query_options
-
+from traceprovpy.tools.run_duckdb_generic import (
+    TRACEPROV_CAPTURE_ENTRY,
+    TRACEPROV_CAPTURE_ENTRY_SD,
+)
 VERSION_REG = r"^g_(\d+)_"
 
 
@@ -98,7 +101,7 @@ class StandardStats(NamedTuple):
 
 
 def _handle_sd_offset(sample_inference_result: dict):
-    sql_spec_map = sample_infer_result["sql_spec_map"]
+    sql_spec_map = sample_inference_result["sql_spec_map"]
     capture_indexes = [
         l_idx
         for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
@@ -124,8 +127,6 @@ def _handle_sd_offset(sample_inference_result: dict):
         else:
             part_key = first_key[1:]
         part_key = tuple(part_key)
-        if part_key not in offset_results:
-            offset_results[part_key] = []
         offset = part_key[-1]
         offset_results.append(
             (
@@ -139,8 +140,8 @@ def _handle_sd_offset(sample_inference_result: dict):
             )
         )
     other_options = dict(
-        phase_1=tap_simple_result(last_capture_profile),
-        phase_1_profile=tap_profile_result(last_capture_time),
+        phase_1=tap_simple_result(last_capture_time),
+        phase_1_profile=tap_profile_result(last_capture_profile),
         extra=StandardStats.get_sd_stats(sample_inference_result['stats'][0]),
         log_sizes=make_log_size(sample_inference_result['stats'][0]['size_mb'])
     )
@@ -223,6 +224,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
                 _cls = TpchSampleRow
             else:
                 _cls = TpchRow
+            failed_dict = ({**failed_dict, **def_raw_args})
             return _cls(**failed_dict)
         if mode == 'all':
             sd_result = query_result['result']['sd']
