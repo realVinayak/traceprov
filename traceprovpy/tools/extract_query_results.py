@@ -160,11 +160,14 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             category="smokedduck",
             query_num=query,
             parallel=thread_count,
-            layer=0,
+            layer_number=0,
             version=version,
             fail_reason=""
         )
         sd_result = query_result['result']['sd']
+        if sd_result['capture_time'] is None:
+            failed_dict = dict(phase_1=None, phase_1_profile=None, phase_2=None, phase_2_profile=None, log_sizes=None, extra=None, fail_reason=DUCKDB_SEGFAULT)
+            return [TpchRow(**{**def_raw_args, **failed_dict})]
         phase_1_result = list(map(tap_simple_result, sd_result['capture_time']))
         phase_1_profile_result = list(map(tap_profile_result, sd_result['capture_profile']))
         if mode == 'all':
@@ -203,6 +206,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
 class PgTimeout(Exception): ...
 
 PG_TIMEOUT = 'timeout'
+DUCKDB_SEGFAULT = 'segfault'
 def extract_postgres_data(pg_result):
     is_timeout = pg_result.get('timeout', False)
 
@@ -505,6 +509,7 @@ def main():
             if safe_compare(parsed.sf, sf): continue
             if safe_compare(parsed.system, db_system): continue
             if safe_compare(parsed.mode, mode): continue
+            print("Acutally using: ", adjusted)
             current_rows = all_rows[sf][db_name][mode]
             handler = handle_duckdb if (db_name == 'duckdb' or db_name == 'newduckdb') else handle_postgres
             print(handler)
