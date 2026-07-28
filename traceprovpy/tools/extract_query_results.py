@@ -116,7 +116,7 @@ def make_versioned_query(cursor, mode):
     create_table_expr = f"create or replace table dumped_versioned as ({query})"
     cursor.execute(create_table_expr)
     group_by_columns = list(base_columns)
-    group_by_columns.remove(NORM_ITER_COL)
+    group_by_columns.remove(f'"{NORM_ITER_COL}"')
     grouped_clause = ','.join(group_by_columns)
     count_query = f"""
         select
@@ -139,9 +139,9 @@ def make_versioned_query(cursor, mode):
                     {grouped_clause}
             )
     """
-    create_iter_pivot_table_expr = f"create or replace table dumped_pivot_table ({count_query})"
+    create_iter_pivot_table_expr = f"create or replace table dumped_pivot_table as ({count_query})"
     cursor.execute(create_iter_pivot_table_expr)
-    dumped_filtered = f"select dumped_versioned.*, dumped_pivot_table.iter_pivot from dumped_versioned join dumped_pivot_table using ({grouped_clause}) where dumped_versioned.{NORM_ITER_COL} >= iter_pivot"
+    dumped_filtered = f"select dumped_versioned.*, dumped_pivot_table.iter_pivot from dumped_versioned join dumped_pivot_table using ({grouped_clause}) where coalesce(dumped_versioned.{NORM_ITER_COL}, 1) >= iter_pivot"
     create_dump_filtered_expr = f"create or replace table dumped_versioned_filtered as ({dumped_filtered})"
     cursor.execute(create_dump_filtered_expr)
 
