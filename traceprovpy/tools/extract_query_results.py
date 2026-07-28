@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 from typing import Any, NamedTuple
 
+from duckdb.benchmark.tpch.gprom_results import reduce
+from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
 from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer, NORM_ITER_COL
@@ -82,12 +84,27 @@ def get_error(result: dict):
 def flatten(rows: list[list[Any]]):
     return list([cell for row in rows for cell in row])
 
+def extract_str(in_regex):
+    def _extract(in_str: int):
+        matches = re.findall(in_regex, in_str)
+        if len(matches) == 0:
+            return 0
+        assert len(matches) == 1
+        return int(matches[0])
+
+    return _extract
+
+
+EXTRACT_LAYER = extract_str(r"layer-(\d+)")
+EXTRACT_PARTITION = extract_str(r"partition_time-(\d+)")
 
 class StandardStats(NamedTuple):
     log_tuple_count: int = 0
     nchunks: int = 0
     postprocess_time: float = 0.0
-    index_time: float = 0.0
+    setup_cost: float = 0.0
+    partition_cost: float = 0.0
+    notes: str = ''
 
     @staticmethod
     def get_sd_stats(sd_stat: dict):
@@ -95,10 +112,30 @@ class StandardStats(NamedTuple):
             log_tuple_count=sd_stat['tuples_count'],
             nchunks=sd_stat['nchunks'],
             postprocess_time=sd_stat['postprocess_time'],
-            index_time=sd_stat['build_time']
+            setup_cost=sd_stat['build_time']
         )
         return sd_standard_stats._asdict()
 
+    @staticmethod
+    def get_tp_stats(option: dict, category: str):
+        extra = option['extra'][0]
+        tp_stat = option['misc_key_value_layer_stats']
+        tp_setup_cost = option['misc_key_value_sql_compilation_time'] / (10**6)
+        partition_time=EXTRACT_PARTITION(extra)
+        if partition_time != 0:
+            partition_time = partition_time / (10**6)
+        else:
+            partition_time = 0.0
+        total_tuple_count = reduce(lambda prev, curr: prev + curr['sum'], tp_stat.values(), 0)
+        nchunks = reduce(lambda prev, curr: prev + curr['count'], tp_stat.values(), 0)
+        tp_standard_stats = StandardStats(
+            log_tuple_count=total_tuple_count,
+            nchunks=nchunks,
+            setup_cost=tp_setup_cost,
+            notes=category,
+            partition_cost=partition_time
+        )
+        return tp_standard_stats._asdict()
 
 def _handle_sd_offset(sample_inference_result: dict):
     sql_spec_map = sample_inference_result["sql_spec_map"]
@@ -238,14 +275,16 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             phase_2_profile_result = list(map(tap_profile_result, phase_2_combined_result))
             extra_stats = list(map(StandardStats.get_sd_stats, sd_result['capture_stats']))
             log_size = list(map(lambda _stats: make_log_size(_stats['size_mb']), sd_result['capture_stats']))
-            kwargs = [dict(
-                phase_1=Extendable(phase_1_result),
-                phase_1_profile=Extendable(phase_1_profile_result),
-                phase_2=Extendable(phase_2_result),
-                phase_2_profile=Extendable(phase_2_profile_result),
-                log_sizes=Extendable(log_size),
-                extra=Extendable(extra_stats)
-            )]
+            kwargs = [
+                dict(
+                    phase_1=Extendable(phase_1_result),
+                    phase_1_profile=Extendable(phase_1_profile_result),
+                    phase_2=Extendable(phase_2_result),
+                    phase_2_profile=Extendable(phase_2_profile_result),
+                    log_sizes=Extendable(log_size),
+                    extra=Extendable(extra_stats)
+                )
+            ]
         else:
             sample_inference_result = query_result['sample_inference_result']
             if 'type' in sample_inference_result:
@@ -258,6 +297,44 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             
         return list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
 
+
+    def _handle_traceprov(pack):
+        query, query_result = pack
+        def_raw_args = dict(
+            category="traceprov",
+            query_num=query,
+            parallel=thread_count,
+            layer_number=0,
+            version=version,
+            fail_reason=""
+        )
+        suffix = DuckDBDriverOptions.get_suffix(bench_parsed)
+        if mode == 'all':
+            tp_result = query_result['result']
+            phase_1_result = list(map(tap_simple_result, tp_result['capture_time']))
+            phase_1_profile_result = list(map(tap_profile_result, tp_result['capture_profile']))
+            phase_2_combined_result = extract_infer(tp_result['infer_results'])
+            phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
+            phase_2_profile_result = list(map(tap_profile_result, phase_2_combined_result))
+            extra_stats = [StandardStats.get_tp_stats(node['option'], suffix) for node in tp_result['capture_time']]
+            log_size = [
+                capture_time["option"]["misc_key_value_total_log_size"][0]
+                for capture_time in tp_result['capture_time']
+            ]
+            kwargs = [
+                dict(
+                    phase_1=Extendable(phase_1_result),
+                    phase_1_profile=Extendable(phase_1_profile_result),
+                    phase_2=Extendable(phase_2_result),
+                    phase_2_profile=Extendable(phase_2_profile_result),
+                    log_sizes=Extendable(log_size),
+                    extra=Extendable(extra_stats)
+                )
+            ]
+        else:
+            assert False, "haven't implement offset for tp yet."
+
+        return list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
     if db_system == 'gprom':
         rows = flatten([
             _handle_gprom_result((query, gprom_mode, gprom_result))
@@ -268,6 +345,11 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
         rows = flatten(
             _handle_sd_result((query, sd_result))
             for query, sd_result in main_res.items()
+        )
+    elif db_system == 'traceprov':
+        rows = flatten(
+            _handle_traceprov((query, tp_result))
+            for query, tp_result in main_res.items()
         )
     else:
         raise Exception("Not implemented anything else!")
