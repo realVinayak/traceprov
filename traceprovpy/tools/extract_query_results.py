@@ -99,6 +99,22 @@ def extract_str(in_regex):
 EXTRACT_LAYER = extract_str(r"layer-(\d+)")
 EXTRACT_PARTITION = extract_str(r"partition_time-(\d+)")
 
+def make_versioned_query(cursor, mode):
+    base_columns = {
+        "category",
+        "parallel",
+        "query_num",
+        "layer_number",
+        NORM_ITER_COL
+    }
+    if mode == 'offset':
+        base_columns |= {"offset"}
+    distinct_on_clause = ','.join(list(base_columns))
+    distinct_on_clause = f"DISTINCT ON({distinct_on_clause})"
+    query = f"select {distinct_on_clause} * FROM dumped ORDER BY version desc;"
+    create_table_expr = f"create or replace table dumped_versioned as ({query})"
+    cursor.execute(create_table_expr)
+
 class StandardStats(NamedTuple):
     log_tuple_count: int = 0
     nchunks: int = 0
@@ -659,6 +675,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     cursor.execute(
         f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}'))"
     )
+    make_versioned_query(cursor, mode)
     cursor.close()
     connection.close()
 
@@ -694,44 +711,39 @@ def main():
     parsed = parser.parse_args()
     out_dir = Path(parsed.out_dir)
     os.makedirs(out_dir, exist_ok=True)
-    postgres_rows = dict(offset=[], all=[])
-    duckdb_rows = dict(offset=[], all=[])
-    new_duckdb_rows = dict(offset=[], all=[])
     all_rows = dict()
     for dir_path, dirnames, filenames in os.walk(parsed.root):
         # print(dir_path, dirnames, filenames)
-        if len(dirnames) == 0:
-            print("LEAF: ", dir_path, dirnames, filenames)
-            assert parsed.root in dir_path
-            adjusted = dir_path.replace(parsed.root, '')
-            adjusted_split = adjusted.split("/")[-4:]
-            print(adjusted_split)
-            db_name = adjusted_split[0]
-            db_system = adjusted_split[-1]
-            mode = adjusted_split[-2]
-            print(db_name, db_system)
-            print(list(sorted(filenames)))
-            filenames = list(sorted(filenames))
-            sf = adjusted_split[1]
-            if sf not in all_rows:
-                all_rows[sf] = get_new_rows()
-            # this allows passing command lines to check if things are alright or not.
-            if safe_compare(parsed.db, db_name): continue
-            if safe_compare(parsed.sf, sf): continue
-            if safe_compare(parsed.system, db_system): continue
-            if safe_compare(parsed.mode, mode): continue
-            print("Acutally using: ", adjusted)
-            current_rows = all_rows[sf][db_name][mode]
-            handler = handle_duckdb if (db_name == 'duckdb' or db_name == 'newduckdb') else handle_postgres
-            print(handler)
-            print("before length", len(current_rows))
-            for file in filenames:
-                if 'main_result.json' in file or 'result.json' in file:
-                    handler(db_system, mode, Path(dir_path) / file , current_rows)
-                    #dump_result(all_rows)
-                    print("after", len(current_rows))
-        else:
-            ...
+        if len(dirnames) != 0: continue
+        print("LEAF: ", dir_path, dirnames, filenames)
+        assert parsed.root in dir_path
+        adjusted = dir_path.replace(parsed.root, '')
+        adjusted_split = adjusted.split("/")[-4:]
+        print(adjusted_split)
+        db_name = adjusted_split[0]
+        db_system = adjusted_split[-1]
+        mode = adjusted_split[-2]
+        print(db_name, db_system)
+        print(list(sorted(filenames)))
+        filenames = list(sorted(filenames))
+        sf = adjusted_split[1]
+        if sf not in all_rows:
+            all_rows[sf] = get_new_rows()
+        # this allows passing command lines to check if things are alright or not.
+        if safe_compare(parsed.db, db_name): continue
+        if safe_compare(parsed.sf, sf): continue
+        if safe_compare(parsed.system, db_system): continue
+        if safe_compare(parsed.mode, mode): continue
+        print("Acutally using: ", adjusted)
+        current_rows = all_rows[sf][db_name][mode]
+        handler = handle_duckdb if (db_name == 'duckdb' or db_name == 'newduckdb') else handle_postgres
+        print(handler)
+        print("before length", len(current_rows))
+        for file in filenames:
+            if 'main_result.json' in file or 'result.json' in file:
+                handler(db_system, mode, Path(dir_path) / file , current_rows)
+                #dump_result(all_rows)
+                print("after", len(current_rows))
     dump_result(all_rows, out_dir)
     return
 
