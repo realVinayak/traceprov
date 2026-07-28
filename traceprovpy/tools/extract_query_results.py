@@ -115,6 +115,35 @@ def make_versioned_query(cursor, mode):
     query = f"select {distinct_on_clause} * FROM dumped ORDER BY version desc"
     create_table_expr = f"create or replace table dumped_versioned as ({query})"
     cursor.execute(create_table_expr)
+    group_by_columns = list(base_columns)
+    group_by_columns.remove(NORM_ITER_COL)
+    grouped_clause = ','.join(group_by_columns)
+    count_query = f"""
+        select
+            case
+                when (iter_count = 1) then 1
+                when (iter_count >= 15) then (iter_count - 9)
+                when (iter_count >= 10) then (iter_count - 7)
+                when (iter_count < 10) then (iter_count - 4)
+                else 1
+            end as iter_pivot,
+            *
+        from
+            (
+                select
+                    count(*) as iter_count,
+                    {grouped_clause}
+                from
+                    dumped_versioned
+                group by
+                    {grouped_clause}
+            )
+    """
+    create_iter_pivot_table_expr = f"create or replace table dumped_pivot_table ({count_query})"
+    cursor.execute(create_iter_pivot_table_expr)
+    dumped_filtered = f"select dumped_versioned.*, dumped_pivot_table.iter_pivot from dumped_versioned join dumped_pivot_table using ({grouped_clause}) where dumped_versioned.{NORM_ITER_COL} >= iter_pivot"
+    create_dump_filtered_expr = f"create or replace table dumped_versioned_filtered as ({dumped_filtered})"
+    cursor.execute(create_dump_filtered_expr)
 
 class StandardStats(NamedTuple):
     log_tuple_count: int = 0
