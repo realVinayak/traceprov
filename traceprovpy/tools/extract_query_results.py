@@ -216,7 +216,7 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
         part_key = first_key[1:]
         part_key = tuple(part_key)
         offset = part_key[-1]
-        result_time_entry = sample_inference_result['result_time'][profile_entry_idx]['extra']
+        result_time_entry = sample_inference_result['result_time'][profile_entry_idx]['option']['extra']
         assert len(result_time_entry) == 1
         layer_number = EXTRACT_LAYER(result_time_entry[0])
         partition_time = EXTRACT_PARTITION(result_time_entry[0]) / (10**6)
@@ -236,7 +236,7 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
     other_options = dict(
         phase_1=tap_simple_result(last_capture_time),
         phase_1_profile=tap_profile_result(last_capture_profile),
-        log_sizes=make_log_size(last_capture_option['misc_key_value_total_log_size'][0])
+        log_sizes=(last_capture_option['misc_key_value_total_log_size'][0])
     )
     combined = [
         ({**other_options, **offset_result, 'extra': StandardStats.get_tp_stats(last_capture_option, suffix, partition_time)}) for partition_time,  offset_result in zip(part_times, offset_results)
