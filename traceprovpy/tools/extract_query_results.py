@@ -7,7 +7,8 @@ from pathlib import Path
 import re
 from typing import Any, NamedTuple
 
-from duckdb.benchmark.tpch.gprom_results import reduce
+#from duckdb.benchmark.tpch.gprom_results import reduce
+from functools import reduce
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
@@ -118,10 +119,10 @@ class StandardStats(NamedTuple):
 
     @staticmethod
     def get_tp_stats(option: dict, category: str):
-        extra = option['extra'][0]
+        extra = None if len(option['extra']) == 0 else option['extra'][0]
         tp_stat = option['misc_key_value_layer_stats']
         tp_setup_cost = option['misc_key_value_sql_compilation_time'] / (10**6)
-        partition_time=EXTRACT_PARTITION(extra)
+        partition_time=0 if extra is None else EXTRACT_PARTITION(extra)
         if partition_time != 0:
             partition_time = partition_time / (10**6)
         else:
