@@ -9,7 +9,7 @@ from typing import Any
 
 from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
 from traceprovpy.tools.file_utils import json_read_file, just_write
-from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result
+from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer
 from traceprovpy.tools.run_duckdb_generic import add_query_options
 
 VERSION_REG = r"^g_(\d+)_"
@@ -25,11 +25,9 @@ class TpchRow(Normalizable):
     phase_2_profile: Extendable
     log_sizes: Extendable
     layer_number: int
-    index_build_time: float
-    sql_time: float
-    partition_time: float
     version: int
     fail_reason: str
+    extra: dict | Extendable
 
     def keys(self):
         return {
@@ -39,14 +37,12 @@ class TpchRow(Normalizable):
             "phase_1_profile",
             "phase_2_profile",
             "layer_number",
-            "index_build_time",
-            "sql_time",
-            "partition_time",
             "version",
             "phase_1",
             "phase_2",
             "fail_reason",
-            "log_sizes"
+            "log_sizes",
+            "extra"
         }
 
 # if it is sample then there's just offset to keep track off.
@@ -83,6 +79,24 @@ def get_error(result: dict):
 def flatten(rows: list[list[Any]]):
     return list([cell for row in rows for cell in row])
 
+
+class StandardStats(NamedTuple):
+    log_tuple_count: int = 0
+    nchunks: int = 0
+    postprocess_time: float = 0.0
+    index_time: float = 0.0
+
+    @staticmethod
+    def get_sd_stats(sd_stat: dict):
+        sd_standard_stats = StandardStats(
+            log_tuple_count=sd_stat['tuples_count'],
+            nchunks=sd_stat['nchunks'],
+            postprocess_time=sd_stat['postprocess_time'],
+            index_time=sd_stat['build_time']
+        )
+        return sd_standard_stats._asdict()
+
+
 def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list):
     print("duckdb handling ", db_system, result_path)
     result = json_read_file(result_path)
@@ -103,14 +117,12 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             query_num=query,
             parallel=thread_count,
             layer_number=0,
-            index_build_time=0.0,
-            sql_time=0.0,
-            partition_time=0.0,
             version=version,
             fail_reason=fail_reason or '',
             log_sizes=None,
             phase_2=None,
-            phase_2_profile=None
+            phase_2_profile=None,
+            extra=None
         )
         if mode != 'all':
             def_raw_args = ({**def_raw_args, 'offset': -1})
@@ -142,6 +154,36 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
         ]
         return rows
 
+    def _handle_sd_result(pack):
+        query, query_result = pack
+        def_raw_args = dict(
+            category="smokedduck",
+            query_num=query,
+            parallel=thread_count,
+            layer=0,
+            version=version,
+            fail_reason=""
+        )
+        sd_result = query_result['result']['sd']
+        phase_1_result = list(map(tap_simple_result, sd_result['capture_time']))
+        phase_1_profile_result = list(map(tap_profile_result, sd_result['capture_profile']))
+        if mode == 'all':
+            phase_2_combined_result = extract_infer(sd_result['infer_results'])
+            phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
+            phase_2_profile_result = list(map(tap_profile_result, phase_2_combined_result))
+            extra_stats = list(map(StandardStats.get_sd_stats, sd_result['capture_stats']))
+            log_size = list(map(lambda _stats: make_log_size(_stats['size_mb']), sd_result['capture_stats']))
+            kwargs = dict(
+                phase_1=Extendable(phase_1_result),
+                phase_1_profile=Extendable(phase_1_profile_result),
+                phase_2=Extendable(phase_2_result),
+                phase_2_profile=Extendable(phase_2_profile_result),
+                log_sizes=Extendable(log_size),
+                extra=Extendable(extra_stats)
+            )
+        else:
+            assert False, "not implemented sd, offset"
+        return [TpchRow(**{**def_raw_args, **kwargs})]
 
     if db_system == 'gprom':
         rows = flatten([
@@ -149,6 +191,11 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             for query, query_result in main_res.items()
             for gprom_mode, gprom_result in query_result.items()
         ])
+    elif db_system == 'smokedduck':
+        rows = flatten(
+            _handle_sd_result((query, sd_result))
+            for query, sd_result in main_res.items()
+        )
     else:
         raise Exception("Not implemented anything else!")
     rows_list.extend(rows)
@@ -203,11 +250,9 @@ def _get_muller_handle(db_system, version):
         category=db_system,
         parallel=1,
         layer_number=0,
-        index_build_time=0.0,
-        sql_time=0.0,
-        partition_time=0.0,
         version=version,
-        fail_reason=''
+        fail_reason='',
+        extra=None
     )
     def _handle_all_result_query(current_q_result):
         query_num, query_result = current_q_result
@@ -325,14 +370,12 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
             query_num=query_num,
             parallel=thread_count,
             layer_number=0,
-            index_build_time=0.0,
-            sql_time=0.0,
-            partition_time=0.0,
             version=version,
             fail_reason='',
             log_sizes=None,
             phase_2=None,
-            phase_2_profile=None
+            phase_2_profile=None,
+            extra=None
         )
         if not isinstance(gprom_result, list):
             gprom_result = [gprom_result]
@@ -414,10 +457,25 @@ def get_new_rows():
         newduckdb=new_duckdb_rows
     )
 
+ALL_SYSTEMS = [
+    "muller",
+    "gprom",
+    "smokedduck",
+    "traceprov",
+    "provsql"
+]
+
+def safe_compare(arg_1: str | None, arg_2: str):
+    return arg_1 is not None and (arg_1.lower() != arg_2.lower())
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", required=True)
     parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--db", required=False, choices=['postgres', 'duckdb', 'newduckdb'], default=None)
+    parser.add_argument("--sf", required=False, choices=['sf_01', 'sf_10', 'sf_100'], default=None)
+    parser.add_argument("--system", required=False, choices=ALL_SYSTEMS, default=None)
+    parser.add_argument("--mode", required=False, choices=["all", "offset"], default=None)
     parsed = parser.parse_args()
     out_dir = Path(parsed.out_dir)
     os.makedirs(out_dir, exist_ok=True)
@@ -442,6 +500,11 @@ def main():
             sf = adjusted_split[1]
             if sf not in all_rows:
                 all_rows[sf] = get_new_rows()
+            # this allows passing command lines to check if things are alright or not.
+            if safe_compare(parsed.db, db_name): continue
+            if safe_compare(parsed.sf, sf): continue
+            if safe_compare(parsed.system, db_system): continue
+            if safe_compare(parsed.mode, mode): continue
             current_rows = all_rows[sf][db_name][mode]
             handler = handle_duckdb if (db_name == 'duckdb' or db_name == 'newduckdb') else handle_postgres
             print(handler)
