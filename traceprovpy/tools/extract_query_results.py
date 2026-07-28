@@ -109,9 +109,10 @@ def make_versioned_query(cursor, mode):
     }
     if mode == 'offset':
         base_columns |= {"offset"}
+    base_columns = [f'"{column}"' for column in base_columns]
     distinct_on_clause = ','.join(list(base_columns))
     distinct_on_clause = f"DISTINCT ON({distinct_on_clause})"
-    query = f"select {distinct_on_clause} * FROM dumped ORDER BY version desc;"
+    query = f"select {distinct_on_clause} * FROM dumped ORDER BY version desc"
     create_table_expr = f"create or replace table dumped_versioned as ({query})"
     cursor.execute(create_table_expr)
 
@@ -669,6 +670,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     db_name = out_dir / f"{name}.db"
     tmp_file_name = out_dir / f"{name}.json"
     normalized = [row for rows in rows_list for row in rows.normalize()]
+    if len(normalized) == 0: return
     just_write(tmp_file_name, json.dumps(normalized))
     connection = duckdb.connect(db_name)
     cursor = connection.cursor()
