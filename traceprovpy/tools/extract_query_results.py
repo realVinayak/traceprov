@@ -10,7 +10,7 @@ from typing import Any, NamedTuple
 #from duckdb.benchmark.tpch.gprom_results import reduce
 from functools import reduce
 from traceprovpy.tools.duckdb_inference import DuckDBDriverOptions
-from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
+from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse, traceprov_handle_suffix
 from traceprovpy.tools.file_utils import json_read_file, just_write
 from traceprovpy.tools.normalized_row import Extendable, Normalizable, NormalizedSampleInferRow, tap_profile_result, tap_simple_result, make_dummy_profile_result, make_dummy_simple_result, extract_infer, NORM_ITER_COL
 from traceprovpy.tools.run_duckdb_generic import add_query_options
@@ -118,15 +118,18 @@ class StandardStats(NamedTuple):
         return sd_standard_stats._asdict()
 
     @staticmethod
-    def get_tp_stats(option: dict, category: str):
+    def get_tp_stats(option: dict, category: str, def_partition_time=None):
         extra = None if len(option['extra']) == 0 else option['extra'][0]
         tp_stat = option['misc_key_value_layer_stats']
         tp_setup_cost = option['misc_key_value_sql_compilation_time'] / (10**6)
-        partition_time=0 if extra is None else EXTRACT_PARTITION(extra)
-        if partition_time != 0:
-            partition_time = partition_time / (10**6)
+        if def_partition_time is None:
+            partition_time=0 if extra is None else EXTRACT_PARTITION(extra)
+            if partition_time != 0:
+                partition_time = partition_time / (10**6)
+            else:
+                partition_time = 0.0
         else:
-            partition_time = 0.0
+            partition_time = def_partition_time
         total_tuple_count = reduce(lambda prev, curr: prev + curr['sum'], tp_stat.values(), 0)
         nchunks = reduce(lambda prev, curr: prev + curr['count'], tp_stat.values(), 0)
         tp_standard_stats = StandardStats(
@@ -185,7 +188,60 @@ def _handle_sd_offset(sample_inference_result: dict):
     )
     return [({**other_options, **offset_result}) for offset_result in offset_results]
         
-
+def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
+    sql_spec_map = sample_inference_result['sql_spec_map']
+    capture_indexes = [
+        l_idx
+        for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
+        if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
+    ]
+    last_capture_index = max(capture_indexes)
+    last_capture_profile = sample_inference_result['profile'][last_capture_index]
+    last_capture_time = sample_inference_result['result_time'][last_capture_index]
+    last_capture_option = last_capture_time['option']
+    offset_results = []
+    result_added = set()
+    part_times = []
+    for profile_entry_idx, profile_entry in enumerate(sample_inference_result['profile']):
+        if profile_entry_idx in capture_indexes:
+            continue
+        first_key, iter_id = sql_spec_map[profile_entry_idx]
+        composite_key = (tuple(first_key), iter_id)
+        if composite_key in result_added:
+            continue
+        result_added.add(composite_key)
+        # print(profile_entry)
+        assert len(first_key) == 3
+        # layer_number = first_key[0]
+        part_key = first_key[1:]
+        part_key = tuple(part_key)
+        offset = part_key[-1]
+        result_time_entry = sample_inference_result['result_time'][profile_entry_idx]['extra']
+        assert len(result_time_entry) == 1
+        layer_number = EXTRACT_LAYER(result_time_entry[0])
+        partition_time = EXTRACT_PARTITION(result_time_entry[0]) / (10**6)
+        part_times.append(partition_time)
+        offset_results.append(
+            (
+                {**dict(
+                phase_2=tap_simple_result(sample_inference_result['result_time'][profile_entry_idx]),
+                phase_2_profile=tap_profile_result(profile_entry),
+                offset=offset,
+                layer_number=layer_number
+                ),
+                NORM_ITER_COL: iter_id
+                }
+            )
+        )
+    other_options = dict(
+        phase_1=tap_simple_result(last_capture_time),
+        phase_1_profile=tap_profile_result(last_capture_profile),
+        log_sizes=make_log_size(last_capture_option['misc_key_value_total_log_size'][0])
+    )
+    combined = [
+        ({**other_options, **offset_result, 'extra': StandardStats.get_tp_stats(last_capture_option, suffix, partition_time)}) for partition_time,  offset_result in zip(part_times, offset_results)
+    ]
+    return combined
 
 def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list):
     print("duckdb handling ", db_system, result_path)
@@ -197,6 +253,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
     bench_parser = make_duckdb_parse()
     #add_query_options(bench_parser)
     bench_parsed, _ = bench_parser.parse_known_args(call_options)
+    traceprov_handle_suffix(bench_parsed)
     thread_count = bench_parsed.threads
     main_class = TpchRow if mode == 'all' else TpchSampleRow
 
@@ -333,7 +390,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
                 )
             ]
         else:
-            assert False, "haven't implement offset for tp yet."
+            kwargs = _handle_duckdb_tp_offset(query_result['sample_inference_result'], suffix)
 
         return list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
     if db_system == 'gprom':
