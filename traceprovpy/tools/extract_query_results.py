@@ -187,6 +187,8 @@ class StandardStats(NamedTuple):
         )
         return tp_standard_stats._asdict()
 
+NULL_STATS = StandardStats()._asdict()
+
 def _handle_sd_offset(sample_inference_result: dict):
     sql_spec_map = sample_inference_result["sql_spec_map"]
     capture_indexes = [
@@ -316,7 +318,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             log_sizes=None,
             phase_2=None,
             phase_2_profile=None,
-            extra=None
+            extra=NULL_STATS
         )
         if mode != 'all':
             def_raw_args = ({**def_raw_args, 'offset': -1})
@@ -359,7 +361,7 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             fail_reason=""
         )
         def _add_fail(fail_reason):
-            failed_dict = dict(phase_1=None, phase_1_profile=None, phase_2=None, phase_2_profile=None, log_sizes=None, extra=None, fail_reason=fail_reason)
+            failed_dict = dict(phase_1=None, phase_1_profile=None, phase_2=None, phase_2_profile=None, log_sizes=None, extra=NULL_STATS, fail_reason=fail_reason)
             if mode == 'offset':
                 failed_dict = ({**failed_dict, 'offset': -1})
                 _cls = TpchSampleRow
@@ -513,7 +515,7 @@ def _get_muller_handle(db_system, version):
         layer_number=0,
         version=version,
         fail_reason='',
-        extra=None
+        extra=NULL_STATS
     )
     def _handle_all_result_query(current_q_result):
         query_num, query_result = current_q_result
@@ -636,7 +638,7 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
             log_sizes=None,
             phase_2=None,
             phase_2_profile=None,
-            extra=None
+            extra=NULL_STATS
         )
         if not isinstance(gprom_result, list):
             gprom_result = [gprom_result]
