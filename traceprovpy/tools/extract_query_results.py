@@ -152,6 +152,7 @@ class StandardStats(NamedTuple):
     setup_cost: float = 0.0
     partition_cost: float = 0.0
     notes: str = ''
+    sql_time: float = 0.0
 
     @staticmethod
     def get_sd_stats(sd_stat: dict):
@@ -167,7 +168,7 @@ class StandardStats(NamedTuple):
     def get_tp_stats(option: dict, category: str, def_partition_time=None):
         extra = None if len(option['extra']) == 0 else option['extra'][0]
         tp_stat = option['misc_key_value_layer_stats']
-        tp_setup_cost = option['misc_key_value_sql_compilation_time'] / (10**6)
+        tp_sql_compilation_time = option['misc_key_value_sql_compilation_time'] / (10**6)
         if def_partition_time is None:
             partition_time=0 if extra is None else EXTRACT_PARTITION(extra)
             if partition_time != 0:
@@ -181,7 +182,7 @@ class StandardStats(NamedTuple):
         tp_standard_stats = StandardStats(
             log_tuple_count=total_tuple_count,
             nchunks=nchunks,
-            postprocess_time=tp_setup_cost,
+            sql_time=tp_sql_compilation_time,
             notes=category,
             partition_cost=partition_time
         )
