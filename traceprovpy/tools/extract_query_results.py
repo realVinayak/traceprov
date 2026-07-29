@@ -181,7 +181,7 @@ class StandardStats(NamedTuple):
         tp_standard_stats = StandardStats(
             log_tuple_count=total_tuple_count,
             nchunks=nchunks,
-            setup_cost=tp_setup_cost,
+            postprocess_time=tp_setup_cost,
             notes=category,
             partition_cost=partition_time
         )
