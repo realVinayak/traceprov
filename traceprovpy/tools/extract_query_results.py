@@ -406,15 +406,19 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
 
     def _handle_traceprov(pack):
         query, query_result = pack
-        def_raw_args = dict(
-            category="traceprov",
-            query_num=query,
-            parallel=thread_count,
-            layer_number=0,
-            version=version,
-            fail_reason=""
+        def make_def_raw_args(_category):
+            return dict(
+                category=_category,
+                query_num=query,
+                parallel=thread_count,
+                layer_number=0,
+                version=version,
+                fail_reason=""
         )
+        def_raw_args = make_def_raw_args("traceprov")
+        base_def_raw_args = make_def_raw_args("base")
         suffix = DuckDBDriverOptions.get_suffix(bench_parsed)
+        base_kwargs = []
         if mode == 'all':
             tp_result = query_result['result']
             phase_1_result = list(map(tap_simple_result, tp_result['capture_time']))
@@ -437,10 +441,27 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
                     extra=Extendable(extra_stats)
                 )
             ]
+            # insert the base.
+            base_phase_1_result = list(map(tap_simple_result, tp_result['base_time']))
+            base_phase_1_profile_result = list(map(tap_profile_result, tp_result['base_profile']))
+            base_kwargs = [
+                dict(
+                    phase_1=base_phase_1_result,
+                    phase_1_profile=base_phase_1_profile_result,
+                    phase_2=None,
+                    phase_2_profile=None,
+                    log_sizes=None,
+                    extra=NULL_STATS,
+                )
+            ]
         else:
             kwargs = _handle_duckdb_tp_offset(query_result['sample_inference_result'], suffix)
 
-        return list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
+        core_results = list([main_class(**{**def_raw_args, **kwarg}) for kwarg in kwargs])
+        if mode == 'offset': return core_results
+        baseline_results = list([TpchRow(**{**base_def_raw_args, **kwarg}) for kwarg in base_kwargs])
+        return [*core_results, *baseline_results]
+
     if db_system == 'gprom':
         rows = flatten([
             _handle_gprom_result((query, gprom_mode, gprom_result))
@@ -706,7 +727,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     connection = duckdb.connect(db_name)
     cursor = connection.cursor()
     cursor.execute(
-        f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}'))"
+        f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}', sample_size=-1))"
     )
     make_versioned_query(cursor, mode)
     cursor.close()
