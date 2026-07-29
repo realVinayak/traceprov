@@ -446,8 +446,8 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             base_phase_1_profile_result = list(map(tap_profile_result, tp_result['base_profile']))
             base_kwargs = [
                 dict(
-                    phase_1=base_phase_1_result,
-                    phase_1_profile=base_phase_1_profile_result,
+                    phase_1=Extendable(base_phase_1_result),
+                    phase_1_profile=Extendable(base_phase_1_profile_result),
                     phase_2=None,
                     phase_2_profile=None,
                     log_sizes=None,
