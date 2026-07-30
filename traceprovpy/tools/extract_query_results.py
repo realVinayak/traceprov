@@ -99,7 +99,7 @@ def extract_str(in_regex):
 EXTRACT_LAYER = extract_str(r"layer-(\d+)")
 EXTRACT_PARTITION = extract_str(r"partition_time-(\d+)")
 
-def make_versioned_query(cursor, mode):
+def make_versioned_query(cursor, mode, db_system):
     base_columns = {
         "category",
         "parallel",
@@ -118,15 +118,19 @@ def make_versioned_query(cursor, mode):
     group_by_columns = list(base_columns)
     group_by_columns.remove(f'"{NORM_ITER_COL}"')
     grouped_clause = ','.join(group_by_columns)
-    count_query = f"""
-        select
-            case
+    iter_clause = "iter_count"
+    if db_system != 'postgres':
+        iter_clause = """
+                case
                 when (iter_count = 1) then 1
                 when (iter_count >= 15) then (iter_count - 9)
                 when (iter_count >= 10) then (iter_count - 7)
                 when (iter_count < 10) then (iter_count - 4)
                 else 1
-            end as iter_pivot,
+            end
+        """
+    count_query = f"""
+        select {iter_clause} as iter_pivot,
             *
         from
             (
@@ -644,6 +648,112 @@ def _get_muller_handle(db_system, version):
         return [TpchSampleRow(**({**muller_raw_args, **kwarg})) for kwarg in offset_rows]
     return _handle_all_result_query, _handle_offset_result_query
 
+def _handle_traceprov_infer(infer_extras: dict):
+    core_results = infer_extras["core_results"]
+    total_time = sum(
+        [
+            core_result["raw_results"][-1]["result"]["explain_time"]
+            for core_result in core_results
+        ]
+    )
+    row_counts = sum([core_result["row_count"] for core_result in core_results])
+    profile_result = make_dummy_profile_result(total_time)
+    simple_result = make_dummy_simple_result(total_time, row_counts)
+    return (profile_result, simple_result)
+
+def _handle_traceprov_log_size(log_size_extras: dict):
+    return json.loads(log_size_extras["captured"][0][0])
+
+def _get_pg_traceprov_handle(db_system, version, thread_count):
+    traceprov_raw_args = dict(
+        category=db_system,
+        parallel=thread_count,
+        version=version,
+        fail_reason="",
+        extra=NULL_STATS,
+        layer_number=0
+    )
+
+    def _handle_query_15(current_q_result, is_bulk_derive: bool):
+        query_num, query_result = current_q_result
+        traceprov_result = query_result['traceprov_15_skippable']
+        phase_1_explains = [extra['traceprov'][0] for extra in traceprov_result['extras']]
+        phase_1_profile, phase_1 = extract_pg_mult(phase_1_explains)
+        traceprov_extras_result = traceprov_result['extras']
+        if is_bulk_derive:
+            infer_extracted = [
+                _handle_traceprov_infer(item['traceprov_infer'][0]['results'][0]['offset_result'])
+                for item in traceprov_extras_result
+            ]
+            phase_2_profile = Extendable([t[0] for t in infer_extracted])
+            phase_2 = Extendable([t[1] for t in infer_extracted])
+            log_sizes = Extendable([
+                _handle_traceprov_log_size(item['traceprov_get_total_layer_size'][0])
+                for item in traceprov_extras_result
+            ])
+            tp_args = {
+                **traceprov_raw_args,
+                **dict(
+                    query_num=query_num,
+                    phase_1=phase_1,
+                    phase_1_profile=phase_1_profile,
+                    phase_2=phase_2,
+                    phase_2_profile=phase_2_profile,
+                    log_sizes=log_sizes
+                )
+            }
+            base_result = query_result['base_15_skippable']
+            base_phase_1_explains = [extra['base'][0] for extra in base_result['extras']]
+            base_phase_1_profile, base_phase_1 = extract_pg_mult(base_phase_1_explains)
+            base_args = {
+                **traceprov_raw_args,
+                **dict(
+                    query_num=query_num,
+                    category='base',
+                    phase_2=None,
+                    phase_2_profile=None,
+                    phase_1=base_phase_1,
+                    phase_1_profile=base_phase_1_profile,
+                    log_sizes=None    
+                )
+            }
+            all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
+        else:
+            raise Exception("not handled q15 pg traceprov offset")
+        return all_args
+
+
+    def _handle_query_result(current_q_result, is_bulk_derive: bool):
+        query_num, query_result = current_q_result
+        if query_num == '15':
+            return _handle_query_15(current_q_result, is_bulk_derive)
+        traceprov_result = query_result['traceprov']
+        traceprov_base_result = traceprov_result['base']
+        traceprov_extras_result = traceprov_result['extras']
+        phase_1_profile, phase_1 = extract_pg_mult(traceprov_base_result)
+        if is_bulk_derive:
+            infer_extracted = [
+                _handle_traceprov_infer(item["traceprov_infer"][0]['results'][0]['offset_result'])
+                for item in traceprov_extras_result
+            ]
+            phase_2_profile = Extendable([t[0] for t in infer_extracted])
+            phase_2 = Extendable([t[1] for t in infer_extracted])
+            log_sizes = Extendable([
+                _handle_traceprov_log_size(item["traceprov_get_total_layer_size"][0])
+                for item in traceprov_extras_result
+            ])
+            tp_args = {**traceprov_raw_args, **dict(query_num=query_num, phase_1=phase_1, phase_1_profile=phase_1_profile, phase_2=phase_2, phase_2_profile=phase_2_profile, log_sizes=log_sizes)}
+            base_phase_1_profile, base_phase_1 = extract_pg_mult(query_result['base']['base'])
+            base_args = {**traceprov_raw_args, **dict(query_num=query_num, category='base', phase_2=None, phase_2_profile=None, phase_1=base_phase_1, phase_1_profile=base_phase_1_profile, log_sizes=None)}
+            all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
+        else:
+            raise Exception("Not handling offset postgres tp yet!")
+        return all_args
+
+        
+    _handler_all = lambda q: _handle_query_result(q, True)
+    _handler_offset = lambda q: _handle_query_result(q, False)
+    return (_handler_all, _handler_offset)
 
 def _handle_pg_gprom(current_q_result, mode, version, thread_count):
     query_num, query_result = current_q_result
@@ -713,6 +823,16 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
             rows.extend(
                 _handle_pg_gprom(current_result, mode, version, parallel)
             )
+    elif db_system == 'traceprov':
+        handler = _get_pg_traceprov_handle(db_system, version, parallel)
+        if mode == 'all':
+            handler = handler[0]
+        else:
+            handler = handler[1]
+        for current_result in result['result']['params_default'].items():
+            rows.extend(
+                handler(current_result)
+            )
     else:
         raise Exception("not implemented yet!")
     rows_list.extend(rows)
@@ -730,7 +850,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     cursor.execute(
         f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}', sample_size=-1))"
     )
-    make_versioned_query(cursor, mode)
+    make_versioned_query(cursor, mode, db_name)
     cursor.close()
     connection.close()
 
@@ -810,3 +930,4 @@ def dump_result(all_rows, out_dir: Path):
 
 if __name__ == '__main__':
     main()
+
