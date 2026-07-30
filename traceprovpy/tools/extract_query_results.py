@@ -676,13 +676,13 @@ def _handle_traceprov_infer_no_merge(offset_results: list[dict]):
             true_result = layer_result['raw_results'][5:]
             row_count = layer_result['row_count']
             current = [
-                dict(
+                {**dict(
                     phase_2=make_dummy_simple_result(time['result']['explain_time'], row_count),
                     phase_2_profile=make_dummy_profile_result(time['result']['explain_time']),
                     layer_number=layer,
                     offset=offset
-                )
-                for time in true_result
+                ), NORM_ITER_COL: iter_id}
+                for iter_id, time in enumerate(true_result)
             ]
             offset_kwargs.extend(current)
     return offset_kwargs
@@ -750,7 +750,7 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             infer_extracted = _handle_traceprov_infer_no_merge(traceprov_extras_result[-1]["traceprov_infer"][0]['results'])
             log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
             all_args = ([
-                TpchSampleRow(**{**traceprov_raw_args, **{**dict(traceprov_raw_args, phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)}})
+                TpchSampleRow(**{**traceprov_raw_args, **{**dict(traceprov_raw_args, query_num=query_num, phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)}})
                 for other in infer_extracted
             ])
         return all_args
@@ -785,7 +785,7 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             infer_extracted = _handle_traceprov_infer_no_merge(traceprov_extras_result[-1]["traceprov_infer"][0]['results'])
             log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
             all_args = ([
-                TpchSampleRow(**{**traceprov_raw_args, **{**dict(traceprov_raw_args, phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)}})
+                TpchSampleRow(**{**traceprov_raw_args, **{**dict(traceprov_raw_args, query_num=query_num, phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)}})
                 for other in infer_extracted
             ])
         return all_args
