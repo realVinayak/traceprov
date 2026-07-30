@@ -661,6 +661,32 @@ def _handle_traceprov_infer(infer_extras: dict):
     simple_result = make_dummy_simple_result(total_time, row_counts)
     return (profile_result, simple_result)
 
+def _get_layer_num(layer: str):
+    split = layer.split("_")
+    assert len(split) == 4
+    return split[-1]
+
+def _handle_traceprov_infer_no_merge(offset_results: list[dict]):
+    offset_kwargs = []
+    for offset_result in offset_results:
+        offset = offset_result['offset']
+        core_offset_result = offset_result['offset_result']['core_results']
+        for layer_result in core_offset_result:
+            layer = _get_layer_num(layer_result['layer'])
+            true_result = layer_result['raw_results'][5:]
+            row_count = layer_result['row_count']
+            current = [
+                dict(
+                    phase_2=make_dummy_simple_result(time['result']['explain_time'], row_count),
+                    phase_2_profile=make_dummy_profile_result(time['result']['explain_time']),
+                    layer_number=layer,
+                    offset=offset
+                )
+                for time in true_result
+            ]
+            offset_kwargs.extend(current)
+    return offset_kwargs
+
 def _handle_traceprov_log_size(log_size_extras: dict):
     return json.loads(log_size_extras["captured"][0][0])
 
@@ -719,7 +745,17 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             }
             all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
         else:
-            raise Exception("not handled q15 pg traceprov offset")
+            phase_1_profile = phase_1_profile.inner[-1]
+            phase_1 = phase_1.inner[-1]
+            infer_extracted = flatten([
+                _handle_traceprov_infer_no_merge(item["traceprov_infer"][0]['results'])
+                for item in traceprov_extras_result
+            ])
+            log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
+            all_args = [
+                dict(phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)
+                for other in infer_extracted
+            ]
         return all_args
 
 
@@ -747,7 +783,17 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             base_args = {**traceprov_raw_args, **dict(query_num=query_num, category='base', phase_2=None, phase_2_profile=None, phase_1=base_phase_1, phase_1_profile=base_phase_1_profile, log_sizes=None)}
             all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
         else:
-            raise Exception("Not handling offset postgres tp yet!")
+            phase_1_profile = phase_1_profile.inner[-1]
+            phase_1 = phase_1.inner[-1]
+            infer_extracted = flatten([
+                _handle_traceprov_infer_no_merge(item["traceprov_infer"][0]['results'])
+                for item in traceprov_extras_result
+            ])
+            log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
+            all_args = [
+                dict(phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)
+                for other in infer_extracted
+            ]
         return all_args
 
         
