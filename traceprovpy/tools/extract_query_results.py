@@ -839,6 +839,7 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
 
 import duckdb
 def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
+    core_db_name = db_name
     name = f"data_{sf}_{db_name}_{mode}"
     db_name = out_dir / f"{name}.db"
     tmp_file_name = out_dir / f"{name}.json"
@@ -850,7 +851,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     cursor.execute(
         f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}', sample_size=-1))"
     )
-    make_versioned_query(cursor, mode, db_name)
+    make_versioned_query(cursor, mode, core_db_name)
     cursor.close()
     connection.close()
 
