@@ -749,10 +749,10 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             phase_1 = phase_1.inner[-1]
             infer_extracted = _handle_traceprov_infer_no_merge(traceprov_extras_result[-1]["traceprov_infer"][0]['results'])
             log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
-            all_args = [
+            all_args = TpchSampleRow([
                 dict(phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)
                 for other in infer_extracted
-            ]
+            ])
         return all_args
 
 
@@ -784,10 +784,10 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             phase_1 = phase_1.inner[-1]
             infer_extracted = _handle_traceprov_infer_no_merge(traceprov_extras_result[-1]["traceprov_infer"][0]['results'])
             log_size = _handle_traceprov_log_size(traceprov_extras_result[-1]['traceprov_get_total_layer_size'][0])
-            all_args = [
+            all_args = TpchSampleRow([
                 dict(phase_1=phase_1, phase_1_profile=phase_1_profile, log_sizes=log_size, **other)
                 for other in infer_extracted
-            ]
+            ])
         return all_args
 
         
