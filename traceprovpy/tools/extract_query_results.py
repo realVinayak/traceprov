@@ -118,7 +118,7 @@ def make_versioned_query(cursor, mode, db_system):
     group_by_columns = list(base_columns)
     group_by_columns.remove(f'"{NORM_ITER_COL}"')
     grouped_clause = ','.join(group_by_columns)
-    iter_clause = "iter_count"
+    iter_clause = "1"
     if db_system != 'postgres':
         iter_clause = """
                 case
