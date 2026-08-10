@@ -73,6 +73,10 @@ def restore_provsql_files(args):
 
 
 def restart_mmap_writer(args):
+    run_time_options = args["extra_pack"]
+    conn = run_time_options.run_connection_strict()
+    cursor = conn.cursor()
+    cursor.execute("select get_nb_gates();")
     tmp_file = Path(get_tmp_file()) / "process_list.txt"
     traceprov_assert_safe_run(
         f"ps -eo pid,command | grep ProvSQL > {tmp_file.as_posix()}"
