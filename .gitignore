@@ -104,3 +104,4 @@ common/bld/
 *.bkup
 dump_scratch*/
 *.wal
+*.tar.gz

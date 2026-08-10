@@ -5,10 +5,21 @@ import json
 from pathlib import Path
 import sys
 from typing import Any
-from traceprovpy.tools.benchmark import DropTable, ExtraQuery, Query, QueryLimitQuerySpec, QuerySpec
+from traceprovpy.tools.benchmark import (
+    DropTable,
+    ExtraQuery,
+    Query,
+    QueryLimitQuerySpec,
+    QuerySpec,
+)
 from traceprovpy.tools.callable_repr import CallableRepr
 from traceprovpy.tools.extract_gprom_simple import GpromOptions
-from traceprovpy.tools.provsql_utiis import provsql_get_log_size
+from traceprovpy.tools.provsql_utiis import (
+    backup_provsql_files,
+    make_provsql_backtrace_offset,
+    provsql_get_log_size,
+    restart_mmap_writer,
+)
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
 
@@ -143,8 +154,29 @@ MULLER_GET_LOG_SIZE = lambda: ExtraQuery(
 PROVSQL_LOG_SIZE_SPEC = lambda: ExtraQuery(
     label="provsql_log_size",
     query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(provsql_get_log_size, "provsql_get_log_size"),
+    runs_after_base=True,
+)
+
+PROVSQL_BACKUP_WRITER = lambda: ExtraQuery(
+    label="provsql_backup",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(backup_provsql_files, "backup_mmap_writer"),
+    runs_after_base=True,
+)
+
+PROVSQL_RESTART_WRITER = lambda: ExtraQuery(
+    label="provsql_reset",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(restart_mmap_writer, "restart_mmap_writer"),
+    runs_after_base=True,
+)
+
+PROVSQL_BACKTRACE_OFFSET = lambda table_name, query: ExtraQuery(
+    label="provsql_backtrace_offset",
+    query=TP_SKIPPABLE_OPTION,
     func=CallableRepr(
-        provsql_get_log_size, "provsql_get_log_size"
+        make_provsql_backtrace_offset(table_name, query), "provsql_backtrace_offset"
     ),
     runs_after_base=True,
 )
@@ -236,6 +268,11 @@ def get_gprom_candidates(gprom_mode: str):
     return [option]
 
 
+def get_strict_all_gprom_candidates():
+    all_options = product(["window", "join_composable", "join"], [True, False])
+    return [GpromOptions(*opt) for opt in all_options]
+
+
 def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
     cands = get_gprom_candidates(gprom_mode)
     valid_specs: list[GpromOptions] = []
@@ -243,10 +280,11 @@ def infer_gprom_candidates(gprom_mode: str, gprom_config: dict):
         cand_key = cand.to_str()
         is_valid = False
         if isinstance(gprom_config, bool):
-            if not gprom_config: continue
+            if not gprom_config:
+                continue
             is_valid = True
         elif isinstance(gprom_config, dict):
-            if  cand_key not in gprom_config:
+            if cand_key not in gprom_config:
                 continue
             config_spec = gprom_config[cand.to_str()]
             assert isinstance(config_spec, dict)
@@ -278,14 +316,20 @@ def make_gprom_query(
     gprom_config: dict | bool,
     query_spec_class: QuerySpec | QueryLimitQuerySpec,
     keys: dict,
-    sample_count=0
+    sample_count=0,
 ):
     valid_specs = infer_gprom_candidates(gprom_mode, gprom_config)
     # print(query_spec_class)
     return [
         Query(
             query_name=query_name,
-            spec=(query_spec_class)(base=f"{spec.safe_key()}.sql", key=spec.safe_key(), extra_options=dict(query=query_name, keys=keys, sample_count=sample_count)),
+            spec=(query_spec_class)(
+                base=f"{spec.safe_key()}.sql",
+                key=spec.safe_key(),
+                extra_options=dict(
+                    query=query_name, keys=keys, sample_count=sample_count
+                ),
+            ),
         )
         for spec in valid_specs
     ]
@@ -295,7 +339,12 @@ class LogCostBench:
     @staticmethod
     def select_clause(num_rows: int, num_cols: int, out_type="int"):
         print(num_cols)
-        columns = ','.join([f"((generate_series % {col}) + generate_series)::{out_type} as column_{col}" for col in range(1, num_cols+1)])
+        columns = ",".join(
+            [
+                f"((generate_series % {col}) + generate_series)::{out_type} as column_{col}"
+                for col in range(1, num_cols + 1)
+            ]
+        )
         from_clause = f"generate_series(1, {num_rows})"
         select_clause_stmt = f"select {columns} from {from_clause}"
         return select_clause_stmt
@@ -307,7 +356,12 @@ class LogCostBench:
         return f"log_{num_rows}_{num_cols}"
 
     @staticmethod
-    def create_table_clause(num_rows: int, num_cols: int, include_cols: bool = False, replace_table: bool = True):
+    def create_table_clause(
+        num_rows: int,
+        num_cols: int,
+        include_cols: bool = False,
+        replace_table: bool = True,
+    ):
         replace_clause = "or replace" if replace_table else ""
         return f"create {replace_clause} table {LogCostBench.get_table(num_rows, num_cols if include_cols else 0)} as ({LogCostBench.select_clause(num_rows, num_cols)})"
 

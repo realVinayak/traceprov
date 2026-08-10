@@ -163,6 +163,7 @@ class ReplaceSelectivity(Preprocessor):
     def __repr__(self):
         return f"ReplaceSelectivity('{self.clause}->{self.selectivity}')"
 
+
 class ReplaceBucket(Preprocessor):
     candidate_keys: Dict[str, List[int]]
 

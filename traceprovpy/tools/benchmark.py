@@ -122,9 +122,11 @@ class ExtraQuery(NamedTuple):
     func: CallableRepr | None = None
     use_dict_cursor: bool = False
 
+
 OPTION_GETTER = Callable[[str], RunWithTimeoutOptions]
 
 _counter = 0
+
 
 class QuerySpec(NamedTuple):
     key: str
@@ -416,8 +418,8 @@ class SketchValidationQuerySpec(QuerySpec):
 class QueryLimitQuerySpec(QuerySpec):
 
     def run_packs(self, top_dir, get_run_options, benchmark):
-        query = self.extra_options['query']
-        keys = self.extra_options['keys']
+        query = self.extra_options["query"]
+        keys = self.extra_options["keys"]
         sample_count = self.extra_options.get("sample_count", 0)
         default_base_getter = lambda _query: f"$ROOT/params_default/{_query}/base.sql"
         base_getter = self.extra_options.get("base_getter", default_base_getter)
@@ -437,7 +439,7 @@ class QueryLimitQuerySpec(QuerySpec):
         if result is None:
             return dict(timeout=True)
         offset_results = []
-        captured_results = result['captured']
+        captured_results = result["captured"]
         random.seed(20)
         if len(captured_results) > 1000 and sample_count > 0:
             # sample out sample_count.
@@ -448,15 +450,16 @@ class QueryLimitQuerySpec(QuerySpec):
             middle = list(captured_results[parts:-parts])
             remaining = sample_count - len(new_captured_result)
             new_captured_result.extend(random.sample(middle, remaining))
-            print(f"Sampling out of {len(new_captured_result)} -> {len(captured_results)}")
+            print(
+                f"Sampling out of {len(new_captured_result)} -> {len(captured_results)}"
+            )
             captured_results = new_captured_result
 
         for captured_result in captured_results:
             filtered_dict = {
                 key: value
                 for (key, value) in captured_result.items()
-                if not (key.lower().startswith("prov_"))
-                and key.lower() in query_keys
+                if not (key.lower().startswith("prov_")) and key.lower() in query_keys
             }
             make_selection_preprocessor = MakeKeySelection(filter_pack=filtered_dict)
             new_query = QuerySpec(*self)
@@ -464,11 +467,13 @@ class QueryLimitQuerySpec(QuerySpec):
                 preprocess=[*(self.preprocess or []), make_selection_preprocessor]
             )
             offset_result = new_query.run_packs(top_dir, get_run_options, benchmark)
-            if offset_result is None: break
-            offset_result_base = offset_result['base']
-            if len(offset_result_base) == 0: break
-            if 'timeout' in offset_result_base[0]:
-                assert offset_result_base[0]['timeout']
+            if offset_result is None:
+                break
+            offset_result_base = offset_result["base"]
+            if len(offset_result_base) == 0:
+                break
+            if "timeout" in offset_result_base[0]:
+                assert offset_result_base[0]["timeout"]
                 break
             offset_results.append(offset_result)
         return offset_results
@@ -548,7 +553,6 @@ class TraceProvOptimizations(NamedTuple):
 TraceProvOptimizationsInstance = TraceProvOptimizations()
 
 
-# Warning: AI generated.
 def delete_traceprov_tables(conn, shared_libraries: list[str]):
     with conn.cursor() as cur:
         for shared_lib in shared_libraries:
@@ -568,7 +572,8 @@ def delete_traceprov_tables(conn, shared_libraries: list[str]):
 
         for (table_name,) in tables:
             table_name_str = str(table_name)
-            if table_name_str.lower().endswith("mat"): continue
+            if table_name_str.lower().endswith("mat"):
+                continue
             cur.execute(f'DROP TABLE IF EXISTS "{table_name}" CASCADE')
             print(f"Dropped table: {table_name}")
 
@@ -678,7 +683,7 @@ class GenericBenchmark(NamedTuple):
             parsed.sd_num_threads,
             parsed.sd_create_idx,
             can_skip_build,
-            mat_infer=parsed.mat_infer
+            mat_infer=parsed.mat_infer,
         )
         local_optimization_instance = TraceProvOptimizations.make_from_parsed(parsed)
         start = time.perf_counter()
@@ -760,7 +765,7 @@ class GenericBenchmark(NamedTuple):
         sd_num_threads: int | None = None,
         sd_create_idx: bool = False,
         can_skip_build=False,
-        mat_infer=False
+        mat_infer=False,
     ):
         setup_response = traceprov_setup(
             suff or self.name,
@@ -771,7 +776,7 @@ class GenericBenchmark(NamedTuple):
             sd_num_threads,
             sd_create_idx,
             can_skip_build,
-            mat_infer
+            mat_infer,
         )
 
         return self._replace(**setup_response)

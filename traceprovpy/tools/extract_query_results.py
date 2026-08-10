@@ -227,9 +227,14 @@ def _handle_sd_offset(sample_inference_result: dict):
         for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
         if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
     ]
-    last_capture_index = max(capture_indexes)
-    last_capture_profile = sample_inference_result["profile"][last_capture_index]
-    last_capture_time = sample_inference_result["result_time"][last_capture_index]
+    phase_1_profiles = [
+        tap_profile_result(sample_inference_result["profile"][ci])
+        for ci in capture_indexes
+    ]
+    phase_1_times = [
+        tap_profile_result(sample_inference_result["result_time"][ci])
+        for ci in capture_indexes
+    ]
     offset_results = []
     result_added = set()
     for profile_entry_idx, profile_entry in enumerate(
@@ -254,6 +259,8 @@ def _handle_sd_offset(sample_inference_result: dict):
             (
                 {
                     **dict(
+                        phase_1=phase_1_times[iter_id],
+                        phase_1_profile=phase_1_profiles[iter_id],
                         phase_2=tap_simple_result(
                             sample_inference_result["result_time"][profile_entry_idx]
                         ),
@@ -265,8 +272,6 @@ def _handle_sd_offset(sample_inference_result: dict):
             )
         )
     other_options = dict(
-        phase_1=tap_simple_result(last_capture_time),
-        phase_1_profile=tap_profile_result(last_capture_profile),
         extra=StandardStats.get_sd_stats(sample_inference_result["stats"][0]),
         log_sizes=make_log_size(sample_inference_result["stats"][0]["size_mb"]),
     )
@@ -280,8 +285,15 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
         for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
         if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
     ]
+    phase_1_profiles = [
+        tap_profile_result(sample_inference_result["profile"][ci])
+        for ci in capture_indexes
+    ]
+    phase_1_times = [
+        tap_profile_result(sample_inference_result["result_time"][ci])
+        for ci in capture_indexes
+    ]
     last_capture_index = max(capture_indexes)
-    last_capture_profile = sample_inference_result["profile"][last_capture_index]
     last_capture_time = sample_inference_result["result_time"][last_capture_index]
     last_capture_option = last_capture_time["option"]
     offset_results = []
@@ -314,6 +326,8 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
             (
                 {
                     **dict(
+                        phase_1=phase_1_times[iter_id],
+                        phase_1_profile=phase_1_profiles[iter_id],
                         phase_2=tap_simple_result(
                             sample_inference_result["result_time"][profile_entry_idx]
                         ),
@@ -326,8 +340,6 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
             )
         )
     other_options = dict(
-        phase_1=tap_simple_result(last_capture_time),
-        phase_1_profile=tap_profile_result(last_capture_profile),
         log_sizes=(last_capture_option["misc_key_value_total_log_size"][0]),
     )
     combined = [
@@ -705,17 +717,18 @@ def _get_muller_handle(db_system, version):
 
     def _handle_offset_result_query(current_q_result):
         query_num, query_result = current_q_result
-        core_result = get_first_value(query_result)["extras"][-1]
+        all_extras = get_first_value(query_result)["extras"]
+        core_result = all_extras[-1]
         log_size_pack = extract_muller_log_size(core_result["base_muller_get_log_size"])
-        phase_1_capture = core_result["base_phase_1_capture"][0]
         # phase 1 is not going to be extendable.
         phase_1_gen_result, phase_1_profile_result = (None, None)
         phase_2_gen_result, phase_2_profile_result = (None, None)
         fail_reason = None
         try:
-            phase_1_profile_result, phase_1_gen_result = extract_postgres_data(
-                phase_1_capture["timing"]
-            )
+            phase_1_nice = [
+                ae["base_phase_1_capture"][0]["timing"] for ae in all_extras
+            ]
+            phase_1_profile_result, phase_1_gen_result = extract_pg_mult(phase_1_nice)
         except PgTimeout:
             fail_reason = PG_TIMEOUT
         if fail_reason is None:
@@ -788,7 +801,9 @@ def _get_layer_num(layer: str):
     return split[-1]
 
 
-def _handle_traceprov_infer_no_merge(offset_results: list[dict]):
+def _handle_traceprov_infer_no_merge(
+    offset_results: list[dict], phase_1_profile, phase_1_time
+):
     offset_kwargs = []
     for offset_result in offset_results:
         offset = offset_result["offset"]
@@ -800,6 +815,8 @@ def _handle_traceprov_infer_no_merge(offset_results: list[dict]):
             current = [
                 {
                     **dict(
+                        phase_1=phase_1_time[iter_id],
+                        phase_1_profile=phase_1_profile[iter_id],
                         phase_2=make_dummy_simple_result(
                             time["result"]["explain_time"], row_count
                         ),
@@ -886,10 +903,12 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             }
             all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
         else:
-            phase_1_profile = phase_1_profile.inner[-1]
-            phase_1 = phase_1.inner[-1]
+            # phase_1_profile = phase_1_profile.inner[-1]
+            # phase_1 = phase_1.inner[-1]
             infer_extracted = _handle_traceprov_infer_no_merge(
-                traceprov_extras_result[-1]["traceprov_infer"][0]["results"]
+                traceprov_extras_result[-1]["traceprov_infer"][0]["results"],
+                phase_1_profile,
+                phase_1,
             )
             log_size = _handle_traceprov_log_size(
                 traceprov_extras_result[-1]["traceprov_get_total_layer_size"][0]
@@ -902,8 +921,6 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
                             **dict(
                                 traceprov_raw_args,
                                 query_num=query_num,
-                                phase_1=phase_1,
-                                phase_1_profile=phase_1_profile,
                                 log_sizes=log_size,
                                 **other,
                             )
@@ -967,10 +984,12 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             }
             all_args = [TpchRow(**tp_args), TpchRow(**base_args)]
         else:
-            phase_1_profile = phase_1_profile.inner[-1]
-            phase_1 = phase_1.inner[-1]
+            # phase_1_profile = phase_1_profile.inner[-1]
+            # phase_1 = phase_1.inner[-1]
             infer_extracted = _handle_traceprov_infer_no_merge(
-                traceprov_extras_result[-1]["traceprov_infer"][0]["results"]
+                traceprov_extras_result[-1]["traceprov_infer"][0]["results"],
+                phase_1_profile,
+                phase_1,
             )
             log_size = _handle_traceprov_log_size(
                 traceprov_extras_result[-1]["traceprov_get_total_layer_size"][0]
@@ -1005,6 +1024,7 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
     rows = []
     _cls = TpchRow if mode == "all" else TpchSampleRow
     for gprom_mode, gprom_result in query_result.items():
+        print("VERSION: ", version, "GPRoM Mode: ", gprom_mode, thread_count)
         def_raw_args = dict(
             category=gprom_mode,
             query_num=query_num,
@@ -1035,8 +1055,9 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
             )
             if mode != "all":
                 kwargs = {**kwargs, "offset": offset_id}
-            rows.append(kwargs)
-    return [_cls(**({**def_raw_args, **kwarg})) for kwarg in rows]
+            print("Appending: ", kwargs)
+            rows.append(({**def_raw_args, **kwargs}))
+    return [_cls(**kwarg) for kwarg in rows]
 
 
 def parse_postgres_parallel(extra_sql):

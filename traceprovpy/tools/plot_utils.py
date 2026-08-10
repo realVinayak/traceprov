@@ -4,14 +4,20 @@
 # Every benchmark needs to be of this class (so that arguments can be captured.)
 # This is done to improve reliability.
 import argparse
+from datetime import datetime
 import glob
+import math
 import os
 from pathlib import Path
+import sys
 from typing import Any, Dict, NamedTuple, Tuple
 import statistics
 
-from traceprovpy.tools.file_utils import json_read_file, just_read
+from matplotlib import ticker
+
+from traceprovpy.tools.file_utils import json_read_file, just_read, just_write
 import json
+from matplotlib.transforms import blended_transform_factory
 
 
 class MaskedParser(argparse.ArgumentParser):
@@ -65,15 +71,16 @@ class BenchmarkPlot:
         "k",
     ]
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, ignore_args: bool = False):
         self.name = name
         self.plot_args = None
         # Makes a simple parser.
         # The caller can add more arguments if needed.
         parser = MaskedParser(self, prog=f"result_analyzer_{self.name}")
-        parser.add_argument("-r", "--root", required=True, type=str)
-        parser.add_argument("-f", "--files", required=False, type=str, nargs="+")
-        parser.add_argument("--i", required=False, type=str)
+        if not ignore_args:
+            parser.add_argument("-r", "--root", required=True, type=str)
+            parser.add_argument("-f", "--files", required=False, type=str, nargs="+")
+            parser.add_argument("--i", required=False, type=str)
         parser.add_argument("--out_dir", required=True, type=str)
         self.parser = parser
 
@@ -107,6 +114,21 @@ class BenchmarkPlot:
                 if not callback:
                     contents = contents.get_content()
                 yield (path, contents)
+
+    def add_timestamp(self):
+        parsed = self.parsed
+        db_name = parsed.db
+        db_path = Path(db_name).name
+        out_dir = Path(parsed.out_dir)
+        os.makedirs(out_dir, exist_ok=True)
+        current_timestamp = datetime.now()
+        datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
+        true_out_dir = out_dir / f"{db_path}_{self.name}_{datetime_string}"
+        os.makedirs(true_out_dir, exist_ok=False)
+        just_write(true_out_dir / "command.txt", " ".join(sys.argv))
+        assert not hasattr(parsed, "_true_out_dir")
+        setattr(parsed, "_true_out_dir", true_out_dir)
+        return true_out_dir
 
 
 class Plotable(NamedTuple):
@@ -319,28 +341,22 @@ def slice_filter(raw_values, invalid_values):
         for (_idx, raw_value) in enumerate(raw_values)
     ]
 
+
 class QueryCategory(NamedTuple):
     label: str
     queries: list[int]
 
+
 def query_categories():
-    simple_scans_aggregations_small_joins_leq_3 = [
-        1, 3, 6, 12, 14, 19
-    ]
-    scans_aggregations_larger_joins = [
-        10, 5, 9, 7, 8
-    ]
-    uncorrelated_subqueries = [
-        15, 16, 18, 11
-    ]
-    correlated_subqueries_complex_subqueries = [
-        4, 2, 13, 17, 20, 21, 22
-    ]
+    simple_scans_aggregations_small_joins_leq_3 = sorted([1, 3, 6, 12, 14, 19])
+    scans_aggregations_larger_joins = sorted([10, 5, 9, 7, 8])
+    uncorrelated_subqueries = sorted([15, 16, 18, 11])
+    correlated_subqueries_complex_subqueries = sorted([4, 2, 13, 17, 20, 21, 22])
     CAT_LABEL_1 = "Simple Scans / \n Aggregations with # Joins < 3"
     CAT_LABEL_2 = "Simple Scans / \n Aggregations with wider joins"
     CAT_LABEL_3 = "Uncorrelated \n Subqueries"
     CAT_LABEL_4 = "Correlated Subqueries / \n Complex subqueries"
-    
+
     cats = [
         QueryCategory(CAT_LABEL_1, simple_scans_aggregations_small_joins_leq_3),
         QueryCategory(CAT_LABEL_2, scans_aggregations_larger_joins),
@@ -348,3 +364,83 @@ def query_categories():
         QueryCategory(CAT_LABEL_4, correlated_subqueries_complex_subqueries),
     ]
     return cats
+
+
+def add_arrow_label(top_plot_axis, label, xpos=0, ypos=1.12, transform=None):
+    if transform is None:
+        transform = blended_transform_factory(
+            top_plot_axis.transAxes, top_plot_axis.transAxes
+        )
+
+    top_plot_axis.annotate(
+        "",
+        xy=(0, 1.1),
+        xycoords=transform,  # arrow head position (top)
+        xytext=(0, 0.0),
+        textcoords=transform,  # arrow tail position (bottom)
+        arrowprops=dict(arrowstyle="->", color="black", lw=1.5),
+    )
+    top_plot_axis.set_ylabel(None)
+    # Label at the top of the arrow
+    top_plot_axis.text(
+        xpos,
+        ypos,
+        label,
+        transform=transform,
+        ha="center",
+        va="bottom",
+        fontsize=10,
+    )
+
+
+def tp_add_grid_line(axis):
+    axis.grid(
+        visible=True,
+        axis="y",
+        which="major",
+        color="gray",
+        linestyle="--",
+        linewidth=0.5,
+        alpha=0.7,
+    )
+
+
+EXTRA_PREDICATE = "_EXTRA_PREDICATE_"
+
+
+def replace_extra_predicate(query: str, extra_predicate: str):
+    assert EXTRA_PREDICATE in query
+    return query.replace(EXTRA_PREDICATE, extra_predicate)
+
+
+def add_parallel_predicate(extra_predicates: str, parallel: int = None):
+    if parallel is None:
+        return extra_predicates
+    return f'({extra_predicates}) and "parallel"={parallel}'
+
+
+def make_list_query(in_query: str, extra_predicates: str, parallel: int = None):
+    new_extra_predicate = add_parallel_predicate(extra_predicates, parallel)
+    in_query = replace_extra_predicate(in_query, new_extra_predicate)
+    group_by_clause = f"category"
+    if parallel is None:
+        group_by_clause = f"{group_by_clause}, parallel"
+    return f"""
+    select
+        {group_by_clause},
+        list(t)
+    from
+        ( select * from ({in_query})) t group by {group_by_clause}
+    """
+
+
+def time_func_formatter():
+    def _formatter(val, _):
+        val = float(val)
+        if val.is_integer():
+            return str(int(val))
+        assert val < 1.0
+        logged = -1 * math.floor(math.log(val, 10))
+        return str(round(val, logged))
+
+    return ticker.FuncFormatter(_formatter)
