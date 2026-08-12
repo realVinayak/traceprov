@@ -376,7 +376,7 @@ def run_single_smokedduck(
 
     def run_old_sd():
         sysname = os.uname().sysname.lower()
-        if sysname == 'darwin':
+        if sysname == "darwin":
             prefix = "macos"
         else:
             prefix = None
@@ -385,7 +385,7 @@ def run_single_smokedduck(
             thread_combined_sql = base_dir / f"sd_thread_{1}_combined.{prefix}.sql"
             if not thread_combined_sql.exists():
                 thread_combined_sql = None
-        if thread_combined_sql is None: 
+        if thread_combined_sql is None:
             thread_combined_sql = base_dir / f"sd_thread_{1}_combined.sql"
         backtrace_queries = parse_backtrace_queries(thread_combined_sql)
         query_id = infer_detailed_option_setting(exe)
@@ -473,7 +473,9 @@ def run_single_smokedduck(
     )
     return final_result
 
+
 class ValidateException(Exception): ...
+
 
 def validate_query(
     base_dir: Path,
@@ -510,10 +512,9 @@ def validate_query(
     print(base_dump_path, base_dump_path.stat().st_size)
     print(capture_dump_path, capture_dump_path.stat().st_size)
 
-    rc = os.system(
-        f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}"
-    )
-    if (rc): raise ValidateException(rc)
+    rc = os.system(f"diff {base_dump_path.as_posix()} {capture_dump_path.as_posix()}")
+    if rc:
+        raise ValidateException(rc)
 
 
 def run_nice(cmd: str):
@@ -926,7 +927,7 @@ def run_single(
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         extra_multiple_count=extra_multiple_count,
         get_log_size=True,
-        repeat=iters
+        repeat=iters,
     ).parse_optimizations(parsed)
 
     if parsed.single_row_mode:
@@ -1117,6 +1118,13 @@ def main():
     os.makedirs(out_path.parent, exist_ok=True)
     with open(out_path, "w") as f:
         f.write(json.dumps(result, indent=4))
+
+
+def run_option(exec_str: str, options: DuckDBDriverOptions):
+    result = os.system(f"{exec_str} {options.serialize()}")
+    if result != 0:
+        return dict(type="fail", code=result)
+    return dict(type="sucess", infer=infer_option_results(options))
 
 
 if __name__ == "__main__":

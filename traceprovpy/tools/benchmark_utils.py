@@ -261,7 +261,7 @@ def add_gprom_candidates(parser):
 def get_gprom_candidates(gprom_mode: str):
     if gprom_mode == "all":
         # this is basically a ranked way.
-        all_options = product(["window", "join_composable", "join"], [True, False])
+        all_options = product(["window", "join"], [True])
         return [GpromOptions(*opt) for opt in all_options]
 
     option = GpromOptions.from_str(gprom_mode)

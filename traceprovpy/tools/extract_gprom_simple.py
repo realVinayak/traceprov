@@ -2,8 +2,15 @@
 # Simply takes in the connection params object, and handles things sanely.
 
 import argparse
+import json
+from pathlib import Path
 from typing import Literal, NamedTuple
-from traceprovpy.tools.run_with_timeout import ConnectionParams, DuckDBConnectionParams
+from traceprovpy.tools.file_utils import just_read, just_write
+from traceprovpy.tools.run_with_timeout import (
+    ConnectionParams,
+    DuckDBConnectionParams,
+    MakeKeySelection,
+)
 import os
 
 JOIN = "join"
@@ -128,3 +135,51 @@ def gprom_from_file(
         raise Exception("Error creating gprom file!")
 
     return gprom_sql
+
+
+def gprom_handle_rewrite_single_row_mode(
+    query_name: str,
+    base_query_path: Path,
+    temp_dir: Path,
+):
+    query = just_read(base_query_path)
+    assert query is not None
+    query_out_path = temp_dir / "query_out.json"
+    query_rewritten = temp_dir / f"query_rewritten_{query_name}.sql"
+    query = query.replace(";", "")
+    query = f"copy (select * from ({query})) to '{query_out_path.as_posix()}'"
+    just_write(query_rewritten, query)
+    return query_rewritten, query_out_path
+
+
+def gprom_add_predicates(
+    query_name: str,
+    query_path: Path | str,
+    result_path: Path,
+    temp_dir: Path,
+    query_keys: dict,
+):
+    raw_query_result = just_read(result_path).splitlines()
+    assert isinstance(raw_query_result, list)
+    query_result = list(map(json.loads, raw_query_result))
+    print(query_result)
+    if not isinstance(query_path, str):
+        query = just_read(query_path)
+    else:
+        query = query_path
+    files: list[Path] = []
+    query_keys = [key.lower() for key in query_keys]
+    for row_result_idx, row_result in enumerate(query_result):
+        filter_pack = {
+            key: value
+            for (key, value) in row_result.items()
+            if not key.lower().startswith("prov_") and key.lower() in query_keys
+        }
+        preprocessor = MakeKeySelection(filter_pack)
+        filtered = preprocessor.preprocess(query)
+        out_dir = temp_dir / str(row_result_idx)
+        os.makedirs(out_dir, exist_ok=True)
+        query_rewritten_file = out_dir / f"filtered_{query_name}.sql"
+        just_write(query_rewritten_file, filtered)
+        files.append(query_rewritten_file)
+    return files

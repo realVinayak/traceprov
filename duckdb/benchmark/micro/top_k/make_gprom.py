@@ -17,6 +17,9 @@ from utils import make_replacer
 def main():
     parser = argparse.ArgumentParser(prog="top-k-gprom")
     parser.add_argument("-s", "--source", type=str, required=True)
+    parser.add_argument(
+        "-keys", action=argparse.BooleanOptionalAction, required=False, default=False
+    )
     GpromOptions.add_parse_options(parser)
     curr_args = " ".join(sys.argv)
     if "--backend duckdb" in curr_args:
@@ -27,7 +30,12 @@ def main():
     connection_params = ConnectionParams.make_from_parsed(
         parsed, backend=parsed.backend
     )
-    absolute_input_path = Path(parsed.source) / f"post_base.extract.sql"
+    input_path = "post_base.extract.sql"
+    out_suffix = "gprom"
+    if parsed.keys:
+        input_path = "post_base.extract_key.sql"
+        out_suffix = "gprom_keys"
+    absolute_input_path = Path(parsed.source) / input_path
     input_query = just_read(absolute_input_path)
     replacer = make_replacer("1_000_000", 123)
     out_path = just_write(
@@ -38,7 +46,9 @@ def main():
         options = GPROM_OPTIONS_MAPPING[gprom_mode]
         gprom_sql = gprom_from_file(options, connection_params, out_path)
         print(gprom_sql)
-        with open(Path(parsed.source) / f"post_{gprom_mode}.gprom.sql", "w") as f:
+        with open(
+            Path(parsed.source) / f"post_{gprom_mode}.{out_suffix}.sql", "w"
+        ) as f:
             f.write(gprom_sql)
 
 
