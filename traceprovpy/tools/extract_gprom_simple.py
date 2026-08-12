@@ -57,8 +57,11 @@ class GpromOptions(NamedTuple):
         heu = "True" in self_str or "heu" in self_str
         return GpromOptions(mode=mode, heuristics=heu)
 
-    def safe_key(self):
-        parts = ["gprom", self.mode]
+    def safe_key(self, ignore_prefix=False):
+        if not ignore_prefix:
+            parts = ["gprom", self.mode]
+        else:
+            parts = [self.mode]
         if self.heuristics:
             parts.append("heuristics")
         return "_".join(parts)
