@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import statistics
 from typing import Any, NamedTuple
 
 # from duckdb.benchmark.tpch.gprom_results import reduce
@@ -177,6 +178,11 @@ class StandardStats(NamedTuple):
     partition_cost: float = 0.0
     notes: str = ""
     sql_time: float = 0.0
+    # in some cases, we know the total time (like for ProvSQL)
+    # in those cases, it is worth directly using that
+    # but then, for those cases, need to ignore phase 1 + phase 2 logic..
+    total_time: float = 0.0
+    total_time_set: bool = False
 
     @staticmethod
     def get_sd_stats(sd_stat: dict):
@@ -1064,21 +1070,6 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
     return [_cls(**kwarg) for kwarg in rows]
 
 
-def sub_latency(combined_results, simple_results, key):
-    new_results = []
-    for combined_result, simple_result in zip(
-        combined_results.inner, simple_results.inner, strict=True
-    ):
-        combined_time = combined_result[key]
-        simple_time = simple_result[key]
-        if combined_time < simple_time:
-            raise Exception(
-                f"expected combine time to always be strictly less than simple time! {combined_time}, {simple_time}"
-            )
-        new_results.append({**combined_result, key: combined_time - simple_time})
-    return new_results
-
-
 def _get_provsql_handle(db_system, version, parallel):
     provsql_raw_args = dict(
         category=db_system,
@@ -1102,18 +1093,25 @@ def _get_provsql_handle(db_system, version, parallel):
         phase_1_2_profile, phase_1_2_time = extract_pg_mult(
             phase_1_capture_and_backtrace
         )
-        phase_2_profile = sub_latency(phase_1_2_profile, phase_1_profile, "latency")
-        phase_2_time = sub_latency(phase_1_2_time, phase_1_time, "time")
         log_sizes = Extendable(
             [extract_provsql_log_size(res) for res in phase_1_result["extras"]]
+        )
+        stats_with_time = Extendable(
+            [
+                StandardStats(
+                    total_time=prof_res["latency"], total_time_set=True
+                )._asdict()
+                for prof_res in phase_1_2_profile
+            ]
         )
         kwargs = dict(
             query_num=query_num,
             phase_1=phase_1_time,
             phase_1_profile=phase_1_profile,
-            phase_2=phase_2_time,
-            phase_2_profile=phase_2_profile,
+            phase_2=phase_1_2_time,
+            phase_2_profile=phase_1_2_profile,
             log_sizes=log_sizes,
+            extra=stats_with_time,
         )
         return [TpchRow(**({**provsql_raw_args, **kwargs}))]
 
@@ -1141,7 +1139,7 @@ def _get_provsql_handle(db_system, version, parallel):
                     phase_1=phase_1_time,
                     phase_1_profile=phase_1_profile,
                     phase_2=phase_2_gen_result,
-                    phase_2_profile_result=phase_2_profile_result,
+                    phase_2_profile=phase_2_profile_result,
                     log_sizes=log_sizes,
                 )
             )
