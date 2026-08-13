@@ -1073,7 +1073,7 @@ def sub_latency(combined_results, simple_results, key):
         simple_time = simple_result[key]
         if combined_time < simple_time:
             raise Exception(
-                "expected combine time to always be strictly less than simple time!"
+                f"expected combine time to always be strictly less than simple time! {combined_time}, {simple_time}"
             )
         new_results.append({**combined_result, key: combined_time - simple_time})
     return new_results
