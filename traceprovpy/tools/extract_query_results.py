@@ -1067,7 +1067,7 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
 def sub_latency(combined_results, simple_results, key):
     new_results = []
     for combined_result, simple_result in zip(
-        combined_results, simple_results, strict=True
+        combined_results.inner, simple_results.inner, strict=True
     ):
         combined_time = combined_result[key]
         simple_time = simple_result[key]
