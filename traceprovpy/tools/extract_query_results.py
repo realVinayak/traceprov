@@ -238,7 +238,7 @@ def _handle_sd_offset(sample_inference_result: dict):
         for ci in capture_indexes
     ]
     phase_1_times = [
-        tap_profile_result(sample_inference_result["result_time"][ci])
+        tap_simple_result(sample_inference_result["result_time"][ci])
         for ci in capture_indexes
     ]
     offset_results = []
