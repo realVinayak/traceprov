@@ -1101,7 +1101,7 @@ def _get_provsql_handle(db_system, version, parallel):
                 StandardStats(
                     total_time=prof_res["latency"], total_time_set=True
                 )._asdict()
-                for prof_res in phase_1_2_profile
+                for prof_res in phase_1_2_profile.inner
             ]
         )
         kwargs = dict(
