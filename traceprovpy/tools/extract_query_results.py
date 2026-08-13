@@ -228,11 +228,13 @@ NULL_STATS = StandardStats()._asdict()
 
 def _handle_sd_offset(sample_inference_result: dict):
     sql_spec_map = sample_inference_result["sql_spec_map"]
-    capture_indexes = [
-        l_idx
-        for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
-        if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
-    ]
+    capture_indexes = list(
+        [
+            l_idx
+            for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
+            if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
+        ]
+    )
     phase_1_profiles = [
         tap_profile_result(sample_inference_result["profile"][ci])
         for ci in capture_indexes
@@ -286,11 +288,13 @@ def _handle_sd_offset(sample_inference_result: dict):
 
 def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
     sql_spec_map = sample_inference_result["sql_spec_map"]
-    capture_indexes = [
-        l_idx
-        for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
-        if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
-    ]
+    capture_indexes = list(
+        [
+            l_idx
+            for (l_idx, (map_entry, _)) in enumerate(sql_spec_map)
+            if tuple(map_entry) in (TRACEPROV_CAPTURE_ENTRY, TRACEPROV_CAPTURE_ENTRY_SD)
+        ]
+    )
     phase_1_profiles = [
         tap_profile_result(sample_inference_result["profile"][ci])
         for ci in capture_indexes
