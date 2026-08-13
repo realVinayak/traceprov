@@ -927,14 +927,11 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
                 TpchSampleRow(
                     **{
                         **traceprov_raw_args,
-                        **{
-                            **dict(
-                                traceprov_raw_args,
-                                query_num=query_num,
-                                log_sizes=log_size,
-                                **other,
-                            )
-                        },
+                        **dict(
+                            query_num=query_num,
+                            log_sizes=log_size,
+                        ),
+                        **other,
                     }
                 )
                 for other in infer_extracted
@@ -1008,16 +1005,11 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
                 TpchSampleRow(
                     **{
                         **traceprov_raw_args,
-                        **{
-                            **dict(
-                                traceprov_raw_args,
-                                query_num=query_num,
-                                phase_1=phase_1,
-                                phase_1_profile=phase_1_profile,
-                                log_sizes=log_size,
-                                **other,
-                            )
-                        },
+                        **dict(
+                            query_num=query_num,
+                            log_sizes=log_size,
+                        ),
+                        **other,
                     }
                 )
                 for other in infer_extracted
