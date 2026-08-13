@@ -485,9 +485,13 @@ def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list)
             ]
         else:
             sample_inference_result = query_result["sample_inference_result"]
-            if "type" in sample_inference_result:
-                assert "return_code" in sample_inference_result
-                rc = sample_inference_result["return_code"]
+            if "type" in sample_inference_result or any(
+                val is None for val in sample_inference_result["profile"]
+            ):
+                if "return_code" in sample_inference_result:
+                    rc = sample_inference_result["return_code"]
+                else:
+                    rc = 1
                 fail_reason = f"error_{rc}"
                 failed_dict = [_add_fail(fail_reason)]
                 return failed_dict
