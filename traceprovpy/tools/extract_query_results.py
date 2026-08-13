@@ -917,8 +917,8 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
             # phase_1 = phase_1.inner[-1]
             infer_extracted = _handle_traceprov_infer_no_merge(
                 traceprov_extras_result[-1]["traceprov_infer"][0]["results"],
-                phase_1_profile,
-                phase_1,
+                phase_1_profile.inner,
+                phase_1.inner,
             )
             log_size = _handle_traceprov_log_size(
                 traceprov_extras_result[-1]["traceprov_get_total_layer_size"][0]
