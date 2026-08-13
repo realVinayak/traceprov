@@ -280,3 +280,73 @@ postgres/benchmark/tpch/scale_10/results/macos_gprom_all_procs_2_gprom_params_de
 postgres/benchmark/tpch/scale_10/results/macos_gprom_all_procs_4_gprom_params_default_restricted_2026_07_19_18_45_11/
 postgres/benchmark/tpch/scale_10/results/macos_gprom_all_procs_8_gprom_params_default_restricted_2026_07_19_22_14_03/
 ```
+
+28. DuckDB SF=100 SmokedDuck all:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_sd_all_optimized-y__threads-1_2026_07_24_17_31_45/
+```
+
+29. DuckDB SF=100 SmokedDuck offset:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_sd_offset_optimized-y__threads-1_2026_08_07_14_07_40/
+```
+
+30. DuckDB SF=100 GProM all:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_gprom_optimized-y__threads-1_2026_07_21_19_33_25/
+```
+
+31. DuckDB SF=100 GProM offset:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_gprom_offset_optimized-y__threads-1_2026_08_10_00_31_29/
+```
+
+32. DuckDB SF=100 TraceProv all:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_tp_all_optimized-y__threads-1__compact-y__merge_chunks-y__table_stats-y_2026_07_25_14_58_15/
+```
+
+33. DuckDB SF=100 TraceProv offset:
+```
+duckdb/benchmark/tpch/scale_100/results/macos_tp_offset_optimized-y__threads-1__compact-y__filter_pushdown-y__join_filter_rewrite-y__merge_chunks-y__partition_in_agg-y__table_stats-y_2026_07_26_16_30_06/
+```
+
+34. Postgres SF=10 ProvSQL all:
+```
+postgres/benchmark/tpch/scale_10/results/macos_provsql_2026_08_10_19_11_26/
+```
+
+35. Postgres SF=10 ProvSQL offset:
+```
+postgres/benchmark/tpch/scale_10/results/macos_provsql_offset_2026_08_10_23_33_29/
+```
+
+35. Postgres SF=1 ProvSQL all:
+```
+postgres/benchmark/tpch/scale_1/results/macos_provsql_2026_08_11_02_08_05/
+```
+
+36. Postgres SF=1 ProvSQL offset:
+```
+postgres/benchmark/tpch/scale_1/results/macos_provsql_offset_2026_08_11_02_37_07/
+```
+
+37. Postgres SF=10 TraceProv all:
+```
+postgres/benchmark/tpch/scale_10/results/macos_traceprov_all_proc_0_2026_07_27_20_29_43/
+```
+
+38. Postgres SF=10 TraceProv offset:
+```
+postgres/benchmark/tpch/scale_1/results/macos_provsql_offset_2026_08_11_02_37_07/
+```
+
+39. Postgres SF=10 TraceProv all:
+```
+postgres/benchmark/tpch/scale_1/results/macos_traceprov_all_proc_0_2026_08_13_03_32_49/
+```
+
+40. Postgres SF=10 TraceProv offset:
+```
+postgres/benchmark/tpch/scale_1/results/macos_traceprov_offset_proc_0_2026_08_13_03_56_48/
+```
