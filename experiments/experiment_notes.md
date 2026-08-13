@@ -338,15 +338,15 @@ postgres/benchmark/tpch/scale_10/results/macos_traceprov_all_proc_0_2026_07_27_2
 
 38. Postgres SF=10 TraceProv offset:
 ```
-postgres/benchmark/tpch/scale_1/results/macos_provsql_offset_2026_08_11_02_37_07/
+postgres/benchmark/tpch/scale_1/results/macos_traceprov_offset_proc_0_2026_07_28_00_40_40/
 ```
 
-39. Postgres SF=10 TraceProv all:
+39. Postgres SF=1 TraceProv all:
 ```
 postgres/benchmark/tpch/scale_1/results/macos_traceprov_all_proc_0_2026_08_13_03_32_49/
 ```
 
-40. Postgres SF=10 TraceProv offset:
+40. Postgres SF=1 TraceProv offset:
 ```
 postgres/benchmark/tpch/scale_1/results/macos_traceprov_offset_proc_0_2026_08_13_03_56_48/
 ```
