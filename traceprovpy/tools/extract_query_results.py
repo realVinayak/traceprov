@@ -639,6 +639,10 @@ def extract_muller_log_size(log_size_obj):
     return log_size_pack
 
 
+def extract_provsql_log_size(log_size_obj):
+    return make_log_size(sum(log_size_obj["provsql_log_size"][0].values()))
+
+
 def _get_muller_handle(db_system, version):
     muller_raw_args = dict(
         category=db_system,
@@ -1060,6 +1064,94 @@ def _handle_pg_gprom(current_q_result, mode, version, thread_count):
     return [_cls(**kwarg) for kwarg in rows]
 
 
+def sub_latency(combined_results, simple_results, key):
+    new_results = []
+    for combined_result, simple_result in zip(
+        combined_results, simple_results, strict=True
+    ):
+        combined_time = combined_result[key]
+        simple_time = simple_result[key]
+        if combined_time < simple_time:
+            raise Exception(
+                "expected combine time to always be strictly less than simple time!"
+            )
+        new_results.append({**combined_result, key: combined_time - simple_time})
+    return new_results
+
+
+def _get_provsql_handle(db_system, version, parallel):
+    provsql_raw_args = dict(
+        category=db_system,
+        parallel=parallel,
+        layer_number=0,
+        version=version,
+        fail_reason="",
+        extra=NULL_STATS,
+    )
+
+    def _handle_all_result_query(current_q_result):
+        query_num, query_result = current_q_result
+        phase_1_result = query_result["phase_1"]
+        phase_1_2_result = query_result["phase_1_2"]
+
+        phase_1_capture = [res["capture"][0] for res in phase_1_result["extras"]]
+        phase_1_capture_and_backtrace = [
+            res["capture_and_backtrace"][0] for res in phase_1_2_result["extras"]
+        ]
+        phase_1_profile, phase_1_time = extract_pg_mult(phase_1_capture)
+        phase_1_2_profile, phase_1_2_time = extract_pg_mult(
+            phase_1_capture_and_backtrace
+        )
+        phase_2_profile = sub_latency(phase_1_2_profile, phase_1_profile, "latency")
+        phase_2_time = sub_latency(phase_1_2_time, phase_1_time, "time")
+        log_sizes = Extendable(
+            [extract_provsql_log_size(res) for res in phase_1_result["extras"]]
+        )
+        kwargs = dict(
+            query_num=query_num,
+            phase_1=phase_1_time,
+            phase_1_profile=phase_1_profile,
+            phase_2=phase_2_time,
+            phase_2_profile=phase_2_profile,
+            log_sizes=log_sizes,
+        )
+        return [TpchRow(**({**provsql_raw_args, **kwargs}))]
+
+    def _handle_offset_result_query(current_q_result):
+        query_num, query_result = current_q_result
+        phase_1_result = query_result["phase_1"]
+        phase_1_capture = [res["capture"][0] for res in phase_1_result["extras"]]
+        phase_1_profile, phase_1_time = extract_pg_mult(phase_1_capture)
+
+        phase_2_result = query_result["phase_2"]["extras"][-1]
+        backtrace_offset_result = phase_2_result["provsql_backtrace_offset"][0][
+            "backtrace_results"
+        ]
+        offset_rows = []
+        log_sizes = Extendable(
+            [extract_provsql_log_size(res) for res in phase_1_result["extras"]]
+        )
+        for offset_id, offset_result in enumerate(backtrace_offset_result):
+            offset_results = slice_throwaway(offset_result["results"])
+            phase_2_profile_result, phase_2_gen_result = extract_pg_mult(offset_results)
+            offset_rows.append(
+                dict(
+                    query_num=query_num,
+                    offset=offset_id,
+                    phase_1=phase_1_time,
+                    phase_1_profile=phase_1_profile,
+                    phase_2=phase_2_gen_result,
+                    phase_2_profile_result=phase_2_profile_result,
+                    log_sizes=log_sizes,
+                )
+            )
+        return [
+            TpchSampleRow(**({**provsql_raw_args, **kwarg})) for kwarg in offset_rows
+        ]
+
+    return _handle_all_result_query, _handle_offset_result_query
+
+
 def parse_postgres_parallel(extra_sql):
     WORKER_REG = r"set max_parallel_workers_per_gather=(\d+)"
     match = re.search(WORKER_REG, extra_sql)
@@ -1083,6 +1175,7 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
     version = parse_reg(terminal_name)
     parallel = parse_postgres_parallel(extra_sql) + 1
     rows = []
+    # TODO: Tidy a bit of the latter up when there's more time.
     if db_system == "muller":
         handler = _get_muller_handle(db_system, version)
         if mode == "all":
@@ -1096,6 +1189,14 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
             rows.extend(_handle_pg_gprom(current_result, mode, version, parallel))
     elif db_system == "traceprov":
         handler = _get_pg_traceprov_handle(db_system, version, parallel)
+        if mode == "all":
+            handler = handler[0]
+        else:
+            handler = handler[1]
+        for current_result in result["result"]["params_default"].items():
+            rows.extend(handler(current_result))
+    elif db_system == "provsql":
+        handler = _get_provsql_handle(db_system, version, parallel)
         if mode == "all":
             handler = handler[0]
         else:
