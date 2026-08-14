@@ -873,10 +873,18 @@ uint64_t compute_table_count(TraceProvBindData *combind_bind_data){
 }
 
 void handle_eager_parallel(TraceProvBindData *bind_data, TraceProvInitData *global_init_data, TraceProvInitData *local_init_data){
-    global_init_data->bind_data_mutex->lock();
-    const uint64_t self_idx = global_init_data->max_worker_idx++;
-    global_init_data->bind_data_mutex->unlock();
-    // elog(INFO, "Setting thread: %p -> %ld", local_init_data, self_idx);
+    uint64_t self_idx = 0;
+    if (bind_data->worker_bind_data->size() == traceprov_thread_count){
+        // elog(INFO,  "LEN: %d", bind_data->worker_bind_data->size());
+        if (traceprov_current.my_worker_id == 0){
+            elog(ERROR, "got worker id as 0!");
+        }
+        self_idx = traceprov_current.my_worker_id - 1;
+    }else{
+        global_init_data->bind_data_mutex->lock();
+        self_idx = global_init_data->max_worker_idx++;
+        global_init_data->bind_data_mutex->unlock();
+    }
     local_init_data->self_thread_idx = self_idx + 1;
     if (global_init_data->is_dummy){
         // Early out.
