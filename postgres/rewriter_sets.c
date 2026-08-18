@@ -545,8 +545,10 @@ List *traceprov_adjust_intersect(Query *base, List *ignore_list, TraceProvParseC
                 WindowFunc *window_traceprov_log_node = ((WindowFunc *)traceprov_log_node);
                 window_traceprov_log_node->winref = window_clause->winref;
                 List *current_traceprov_targets = (List *)list_nth(ignore_list, foreach_current_index(rte_cursor));
-                current_traceprov_targets = traceprov_append_targets(traceprov_aggregated_window, current_traceprov_targets);
+                // current_traceprov_targets = traceprov_append_targets(traceprov_aggregated_window, current_traceprov_targets);
                 // Add the newly added traceprov window function to the ignore list (it should be ignored during joining)
+                // Here, we don't really care about setting the resno, because that's get set during the later traceprov append target call.
+                current_traceprov_targets = list_concat(current_traceprov_targets, traceprov_aggregated_window);
                 list_nth_cell(ignore_list, foreach_current_index(rte_cursor))->ptr_value = current_traceprov_targets;
                 // Add the aggregated window to the subquery's target list.
                 cloned_subquery->targetList = traceprov_append_targets(traceprov_aggregated_window, cloned_subquery->targetList);

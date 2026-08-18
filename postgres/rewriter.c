@@ -565,7 +565,7 @@ Query *traceprov_perform_rewrite(
 
     if (parse->setOperations != NULL){
         // Assert that there are no res junks, if there are set operations.
-        traceprov_assert_no_resjunk(parse->rtable);
+        traceprov_assert_no_resjunk(parse->targetList);
         // Normalize the query here.
         SetOperationStmt *stmt = (SetOperationStmt *)parse->setOperations;
         purePointerInParent |= !stmt->all;
