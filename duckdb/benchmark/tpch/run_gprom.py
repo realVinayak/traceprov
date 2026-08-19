@@ -18,7 +18,11 @@ from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
     traceprov_handle_suffix,
 )
-from traceprovpy.tools.extract_gprom_simple import GpromOptions
+from traceprovpy.tools.extract_gprom_simple import (
+    GpromOptions,
+    gprom_add_predicates,
+    gprom_handle_rewrite_single_row_mode,
+)
 from traceprovpy.tools.file_utils import (
     get_tmp_file,
     json_read_file,
@@ -29,61 +33,11 @@ from traceprovpy.tools.file_utils import (
 from traceprovpy.tools.run_duckdb_generic import (
     add_query_options,
     infer_option_results,
+    run_option,
     run_single_query,
     run_single_query_dry,
 )
 from traceprovpy.tools.run_with_timeout import MakeKeySelection
-
-def handle_rewrite_single_row_mode(
-    query_name: str,
-    base_query_path: Path,
-    temp_dir: Path,
-):
-    query = just_read(base_query_path)
-    assert query is not None
-    query_out_path = temp_dir / "query_out.json"
-    query_rewritten = temp_dir / f"query_rewritten_{query_name}.sql"
-    query = query.replace(";", "")
-    query = f"copy (select * from ({query})) to '{query_out_path.as_posix()}'"
-    just_write(query_rewritten, query)
-    return query_rewritten, query_out_path
-
-
-def add_predicates(
-    query_name: str,
-    query_path: Path,
-    result_path: Path,
-    temp_dir: Path,
-    query_keys: dict,
-):
-    raw_query_result = just_read(result_path).splitlines()
-    assert isinstance(raw_query_result, list)
-    query_result = list(map(json.loads, raw_query_result))
-    print(query_result)
-    query = just_read(query_path)
-    files: list[Path] = []
-    query_keys = [key.lower() for key in query_keys]
-    for row_result_idx, row_result in enumerate(query_result):
-        filter_pack = {
-            key: value
-            for (key, value) in row_result.items()
-            if not key.lower().startswith("prov_") and key.lower() in query_keys
-        }
-        preprocessor = MakeKeySelection(filter_pack)
-        filtered = preprocessor.preprocess(query)
-        out_dir = temp_dir / str(row_result_idx)
-        os.makedirs(out_dir, exist_ok=True)
-        query_rewritten_file = out_dir / f"filtered_{query_name}.sql"
-        just_write(query_rewritten_file, filtered)
-        files.append(query_rewritten_file)
-    return files
-
-
-def run_option(exec_str: str, options: DuckDBDriverOptions):
-    result = os.system(f"{exec_str} {options.serialize()}")
-    if result != 0:
-        return dict(type="fail", code=result)
-    return dict(type="sucess", infer=infer_option_results(options))
 
 
 def run_possible_queries(
@@ -111,7 +65,7 @@ def run_possible_queries(
         # first, run it just once with a timeout, to check if it'll finish in timeout or not.
         original_query_str = query_str
         if parsed.single_row_mode:
-            query_str, query_out_path = handle_rewrite_single_row_mode(
+            query_str, query_out_path = gprom_handle_rewrite_single_row_mode(
                 query_name, base_query_path / query_name / "base.sql", temp_dir
             )
         exec_str, options = run_single_query_dry(query_str.as_posix(), parsed, 1)
@@ -143,7 +97,7 @@ def run_possible_queries(
 
         options_to_run = [repeat_options]
         if parsed.single_row_mode:
-            rewritten_files = add_predicates(
+            rewritten_files = gprom_add_predicates(
                 query_name,
                 original_query_str,
                 query_out_path,

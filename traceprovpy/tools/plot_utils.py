@@ -83,6 +83,9 @@ class BenchmarkPlot:
             parser.add_argument("--i", required=False, type=str)
         parser.add_argument("--out_dir", required=True, type=str)
         self.parser = parser
+        current_timestamp = datetime.now()
+        datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
+        self.time = datetime_string
 
     def plot(self, **kwargs):
         self.plot_args = kwargs
@@ -119,11 +122,9 @@ class BenchmarkPlot:
         parsed = self.parsed
         db_name = parsed.db
         db_path = Path(db_name).name
-        out_dir = Path(parsed.out_dir)
+        out_dir = Path(parsed.out_dir) / f"{db_path}_{self.name}"
         os.makedirs(out_dir, exist_ok=True)
-        current_timestamp = datetime.now()
-        datetime_string = current_timestamp.strftime("%Y_%m_%d_%H_%M_%S")
-        true_out_dir = out_dir / f"{db_path}_{self.name}_{datetime_string}"
+        true_out_dir = out_dir / f"time_{self.time}"
         os.makedirs(true_out_dir, exist_ok=False)
         just_write(true_out_dir / "command.txt", " ".join(sys.argv))
         assert not hasattr(parsed, "_true_out_dir")

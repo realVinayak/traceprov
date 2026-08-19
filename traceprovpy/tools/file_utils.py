@@ -98,17 +98,43 @@ def get_slowdown_cats(slowdown_data, break_points):
         cats[break_point_idx].append(query)
     max_slowdown = slowdown_data[-1][1]
     assert max_slowdown > 0
-    break_points.append(math.ceil(max_slowdown))
+    break_points.append(round(max_slowdown, 2))
+    print("CATS: ", cats, break_points)
     return cats
+
+
+def get_min_max_categories(slowdown_data, break_points):
+    broken_cats = get_slowdown_cats(slowdown_data, break_points)
+    slowdown_data = sorted(slowdown_data, key=lambda tup: tup[1])
+    min_max_pairs = []
+    min_value, max_value = slowdown_data[0][1], break_points[-1]
+    if len(broken_cats) == 1:
+        min_max_pairs = [[min_value, max_value]]
+    for cat_idx, _ in enumerate(broken_cats):
+        current_max_value = break_points[cat_idx]
+        current_min_value = min_value if cat_idx == 0 else break_points[cat_idx - 1]
+        min_max_pairs.append((current_min_value, current_max_value))
+    return (slowdown_data[0], slowdown_data[-1]), min_max_pairs, broken_cats
+
+
+def get_breakpoint_with_min_max(min_max_pairs, add_percent=True):
+    labels = []
+    round_precision = 0 if add_percent else 2
+    for _b_idx, (_min_value, _max_value) in enumerate(min_max_pairs):
+        suffix = rf"\%" if add_percent else rf"\times"
+        upper = rf"$\leq {round(_max_value, round_precision)}{suffix}$"
+        lower = rf"$> {round(_min_value, round_precision)}{suffix}$"
+        labels.append(f"{lower} & {upper}")
+        continue
+    assert len(labels) == len(min_max_pairs)
+    return labels
 
 
 def get_breakpoint_labels(breakpoints, add_percent=True):
     labels = []
     for _b_idx, _b_val in enumerate(breakpoints):
-        if add_percent:
-            current = rf"$\leq {_b_val}\%$"
-        else:
-            current = rf"$\leq {_b_val}\times$"
+        suffix = rf"\%" if add_percent else rf"\times"
+        current = rf"$\leq {_b_val}{suffix}$"
         if _b_idx == 0:
             labels.append(current)
             continue

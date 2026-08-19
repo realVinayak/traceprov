@@ -13,7 +13,10 @@ from typing import Iterable, Sequence, Tuple
 
 from traceprovpy.tools.file_utils import *
 from traceprovpy.tools.duckdb_inference import TRACEPROV_GRAPH_FILE, DuckDBDriverOptions
-from traceprovpy.tools.duckdb_parse_options import make_duckdb_parse
+from traceprovpy.tools.duckdb_parse_options import (
+    make_duckdb_parse,
+    traceprov_get_sample_count,
+)
 from traceprovpy.tools.run_with_timeout import DEFAULT_REPEAT, DEFAULT_THROWAWAY
 from traceprovpy.tools.file_utils import traceprov_assert_safe_run
 
@@ -39,10 +42,11 @@ def make_dump_query(in_query: str, out_path: str):
 
 def infer_sample_id(base_row_count: int, parsed):
     out_ids = range(base_row_count)
+    total_limit = traceprov_get_sample_count(parsed, base_row_count)
     if parsed.sample_inference == "sample":
-        out_ids = _infer_sample_id(out_ids, base_row_count, parsed.sample_num)
+        out_ids = random.sample(out_ids, total_limit)
     elif parsed.sample_inference == "limit":
-        return out_ids[: parsed.sample_inference_limit]
+        return out_ids[:total_limit]
     return out_ids
 
 
