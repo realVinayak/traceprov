@@ -1,12 +1,14 @@
 select
+    parallel,
     category,
     query_num,
     mean(total_time_offset) as total_time_mean,
-    max(phase_2_profile_latency_std) / mean(total_time_offset) as std_ratio,
+    max(phase_2_profile_latency_std) / mean(total_time_offset) as total_time_std_ratio,
     any_value(fail_reason) as fail_reason
 FROM
     (
         select
+            parallel,
             category,
             query_num,
             phase_1_profile_latency + coalesce(phase_2_profile_latency_median, 0.0) + coalesce(extra_setup_time, 0.0) as total_time_offset,
@@ -15,9 +17,10 @@ FROM
         from
             (
                 select
+                    parallel,
                     category,
                     query_num,
-                    any_value(phase_1_profile_latency) as phase_1_profile_latency,
+                    median(phase_1_profile_latency) as phase_1_profile_latency,
                     median(phase_2_profile_latency) as phase_2_profile_latency_median,
                     any_value(
                         coalesce(extra_setup_time, 0.0) + coalesce(extra_partition_time, 0.0) + coalesce(extra_setup_time, 0.0)
@@ -29,6 +32,7 @@ FROM
                 from
                     (
                         select
+                            parallel,
                             category,
                             query_num,
                             "offset",
@@ -43,20 +47,22 @@ FROM
                         from
                             dumped_versioned_filtered
                         where
-                            "parallel" = 1
-                            and (_EXTRA_PREDICATE_)
+                            (_EXTRA_PREDICATE_)
                         group by
+                            parallel,
                             category,
                             query_num,
                             "offset",
                             "iter"
                     )
                 group by
+                    parallel,
                     category,
                     query_num,
                     "offset"
             )
     )
 group by
+    parallel,
     category,
     query_num
