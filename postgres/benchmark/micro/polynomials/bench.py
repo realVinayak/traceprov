@@ -182,41 +182,106 @@ class ProvSQL:
         num_rows: int, is_non_factorized: bool, add_materialize: bool
     ):
         table_name = f"test_{is_non_factorized}_{num_rows}_provsql"
-        provsql_query = Query(
-            query_name=add_non_factorized_maybe("factor", is_non_factorized),
-            spec=QuerySpec(
-                key=add_prefix(
-                    add_non_factorized_maybe(
-                        f"factorization_provsql_{num_rows}", is_non_factorized
-                    ),
-                    "provsql",
+        simple_preprocessor = [ReplaceSelectivity(num_rows, clause="NUM")]
+        query_name = add_non_factorized_maybe("factor", is_non_factorized)
+        normal_key = (
+            add_prefix(
+                add_non_factorized_maybe(
+                    f"factorization_provsql_{num_rows}", is_non_factorized
                 ),
-                base=add_non_factorized_maybe("factorized_base.sql", is_non_factorized),
-                preprocess=[ReplaceSelectivity(num_rows, clause="NUM")],
+                "provsql",
+            ),
+        )
+        provsql_capture_query = Query(
+            query_name=query_name,
+            spec=QuerySpec(
+                base=TP_SKIPPABLE_OPTION,
+                key=f"{normal_key}_phase_1",
                 extras=[
+                    PROVSQL_BACKUP_WRITER(),
                     ExtraQuery(
-                        label="provsql_get_polynomial",
+                        label="capture",
+                        query=add_non_factorized_maybe(
+                            "factorized_base.sql", is_non_factorized
+                        ),
+                        runs_after_base=True,
+                        skip_validation=False,
+                        capture_output=False,
+                        strict_run=False,
+                        preprocess=[*simple_preprocessor],
+                    ),
+                    PROVSQL_LOG_SIZE_SPEC(),
+                    PROVSQL_RESTART_WRITER(),
+                ],
+                preprocess=[*simple_preprocessor],
+            ),
+            extra_commands=[*PROVSQL_EXTRA_COMMANDS],
+        )
+        provsql_backtrace_all = Query(
+            query_name=query_name,
+            spec=QuerySpec(
+                base=TP_SKIPPABLE_OPTION,
+                key=f"{normal_key}_phase_1_2",
+                extras=[
+                    PROVSQL_BACKUP_WRITER(),
+                    ExtraQuery(
+                        label="capture",
                         query=add_non_factorized_maybe(
                             "factorized_provsql.sql", is_non_factorized
                         ),
                         runs_after_base=True,
+                        skip_validation=False,
                         capture_output=False,
+                        strict_run=False,
                         preprocess=[
-                            ReplaceSelectivity(num_rows, clause="NUM"),
+                            *simple_preprocessor,
                             *([MatMaterialize(table_name)] if add_materialize else []),
                         ],
-                    )
+                    ),
+                    PROVSQL_LOG_SIZE_SPEC(),
+                    PROVSQL_RESTART_WRITER(),
                 ],
+                preprocess=[*simple_preprocessor],
             ),
-            extra_commands=["SET search_path TO provsql_test,provsql,public;"],
+            extra_commands=[*PROVSQL_EXTRA_COMMANDS],
         )
-        queries = [provsql_query]
+        # provsql_query = Query(
+        #     query_name=add_non_factorized_maybe("factor", is_non_factorized),
+        #     spec=QuerySpec(
+        #         key=add_prefix(
+        #             add_non_factorized_maybe(
+        #                 f"factorization_provsql_{num_rows}", is_non_factorized
+        #             ),
+        #             "provsql",
+        #         ),
+        #         base=TP_SKIPPABLE_OPTION,
+        #         base=add_non_factorized_maybe("factorized_base.sql", is_non_factorized),
+        #         preprocess=[ReplaceSelectivity(num_rows, clause="NUM")],
+        #         extras=[
+        #             PROVSQL_BACKUP_WRITER()
+        #             ExtraQuery(
+        #                 label="provsql_get_polynomial",
+        #                 query=add_non_factorized_maybe(
+        #                     "factorized_provsql.sql", is_non_factorized
+        #                 ),
+        #                 runs_after_base=True,
+        #                 capture_output=False,
+        #                 preprocess=[
+        #                     ReplaceSelectivity(num_rows, clause="NUM"),
+        #                     *([MatMaterialize(table_name)] if add_materialize else []),
+        #                 ],
+        #             )
+        #         ],
+        #     ),
+        #     extra_commands=["SET search_path TO provsql_test,provsql,public;"],
+        # )
+        queries = [provsql_capture_query, provsql_backtrace_all]
         if add_materialize:
             queries = [
                 make_drop_table(
                     [table_name],
                     add_non_factorized_maybe("factor", is_non_factorized),
-                    provsql_query.extra_commands,
+                    provsql_backtrace_all.extra_commands,
                 ),
                 *queries,
             ]

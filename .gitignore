@@ -105,3 +105,4 @@ common/bld/
 dump_scratch*/
 *.wal
 *.tar.gz
+*.tar
