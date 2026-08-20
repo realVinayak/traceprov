@@ -2,7 +2,7 @@
     "factorization": [1, 2, 3, 4, 5, 6, 7, 8],
     "simple_join": [],
     "runTimeOptions": {
-        "repeat":5,
-        "throwaway": 0
+        "repeat": 10,
+        "throwaway": 5
     }
 }
