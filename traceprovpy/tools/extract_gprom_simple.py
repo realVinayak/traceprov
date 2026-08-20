@@ -5,6 +5,10 @@ import argparse
 import json
 from pathlib import Path
 from typing import Literal, NamedTuple
+from traceprovpy.tools.connection_utils import (
+    duckdb_connection_from_cmd,
+    postgres_connection_from_cmd,
+)
 from traceprovpy.tools.file_utils import just_read, just_write
 from traceprovpy.tools.run_with_timeout import (
     ConnectionParams,
@@ -83,10 +87,10 @@ gprom_modes = {
 }
 
 
-def gprom_from_parsed(parsed, input_file):
+def gprom_from_parsed(parsed, input_file, mode):
 
     connection_params = ConnectionParams.make_from_parsed(parsed)
-    gprom_options = GpromOptions.from_parsed(parsed)
+    gprom_options = GpromOptions(mode=mode).from_parsed(parsed)
     return gprom_from_file(gprom_options, connection_params, input_file)
 
 
@@ -186,3 +190,22 @@ def gprom_add_predicates(
         just_write(query_rewritten_file, filtered)
         files.append(query_rewritten_file)
     return files
+
+
+def run_main():
+    parser = argparse.ArgumentParser("gprom-generic")
+    GpromOptions.add_parse_options(parser)
+    parser.add_argument("-i", "--input", required=True)
+    # parser.add_argument("-b", "--backend", required=True)
+    parsed, _ = parser.parse_known_args()
+    if parsed.backend == "postgres":
+        postgres_connection_from_cmd(parser)
+    elif parsed.backend == "duckdb":
+        duckdb_connection_from_cmd(parser)
+    parsed = parser.parse_args()
+    file = parsed.input
+    gprom_from_parsed(parsed, file, JOIN)
+
+
+if __name__ == "__main__":
+    run_main()
