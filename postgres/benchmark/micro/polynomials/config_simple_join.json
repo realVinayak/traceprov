@@ -1,8 +1,9 @@
 {
     "factorization": [],
-    "_simple_join": [1000, 5000, 10000, 50000, 100000],
+    "simple_join": [1000, 5000],
+    "num_joins": [1, 2, 3],
     "runTimeOptions": {
-        "repeat": 1,
+        "repeat": 2,
         "throwaway": 0
     }
 }

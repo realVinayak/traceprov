@@ -77,7 +77,10 @@ FROM
             (
                 SELECT
                     F0_0."1" AS "1",
-                    string_agg(F0_0."prov_polynomial__table__0_id", ' + ') AS "PROV"
+                    string_agg(
+                        F0_0."prov_polynomial__table__0_id" :: text,
+                        ' + '
+                    ) AS "PROV"
                 FROM
                     (
                         SELECT
@@ -91,7 +94,10 @@ FROM
             CROSS JOIN (
                 SELECT
                     F0_0."1" AS "1",
-                    string_agg(F0_0."prov_polynomial__table__1_id", ' + ') AS "PROV"
+                    string_agg(
+                        F0_0."prov_polynomial__table__1_id" :: text,
+                        ' + '
+                    ) AS "PROV"
                 FROM
                     (
                         SELECT
@@ -106,7 +112,10 @@ FROM
         CROSS JOIN (
             SELECT
                 F0_0."1" AS "1",
-                string_agg(F0_0."prov_polynomial__table__2_id", ' + ') AS "PROV"
+                string_agg(
+                    F0_0."prov_polynomial__table__2_id" :: text,
+                    ' + '
+                ) AS "PROV"
             FROM
                 (
                     SELECT

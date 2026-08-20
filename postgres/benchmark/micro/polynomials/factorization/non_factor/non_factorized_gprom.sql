@@ -73,11 +73,11 @@ SELECT
                         '(' || (
                             (
                                 (
-                                    ('(' || F0_0."prov_polynomial__table__0_id") || ' * '
+                                    ('(' || F0_0."prov_polynomial__table__0_id") || ' ⊗ '
                                 ) || F0_0."prov_polynomial__table__1_id"
                             ) || ')'
                         )
-                    ) || ' * '
+                    ) || ' ⊗ '
                 ) || F0_0."prov_polynomial__table__2_id"
             ) || ')'
         ),

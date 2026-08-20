@@ -289,6 +289,7 @@ duckdb/benchmark/tpch/scale_100/results/macos_sd_all_optimized-y__threads-1_2026
 29. DuckDB SF=100 SmokedDuck offset:
 ```
 duckdb/benchmark/tpch/scale_100/results/macos_sd_offset_optimized-y__threads-1_2026_08_07_14_07_40/
+duckdb/benchmark/tpch/scale_100/results/macos_sd_offset_optimized-y__threads-1_2026_08_19_17_22_01/
 ```
 
 30. DuckDB SF=100 GProM all:
