@@ -1,5 +1,5 @@
 {
-    "num_rows": ["10"],
+    "num_rows": ["10", "10_000"],
     "num_cols": [1],
     "runTimeOptions": {
         "repeat": 4,
