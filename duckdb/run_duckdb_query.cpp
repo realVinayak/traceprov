@@ -229,6 +229,7 @@ struct Options {
     uint64_t output_column_idx;
     bool disable_perfect_hash;
     bool _dump_worker_layer_time;
+    bool mock_traceprov_bt_data;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -541,6 +542,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--disable_perfect_hash")){
             options.disable_perfect_hash = true;
+            continue;
+        } else if (IS_OPTION("--mock_traceprov_bt_data")){
+            options.mock_traceprov_bt_data = true;
             continue;
         }
 
@@ -1806,7 +1810,7 @@ TraceProvDerivationSpec* augment_extra_sql(
     TraceProvPartitionLayers *partition_layers,
     std::vector<uint64_t> *output_log_offset
 ){
-    if (!options->traceprov_perform_derivation) return NULL;
+    if (!options->traceprov_perform_derivation && !options->mock_traceprov_bt_data) return NULL;
     TraceProvDerivationSpec *result_spec = NULL;
     std::vector<std::string> ddls;
     std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
@@ -1832,7 +1836,19 @@ TraceProvDerivationSpec* augment_extra_sql(
                 const auto _end_time = std::chrono::steady_clock::now();
                 info->partition_time += (std::chrono::duration_cast<std::chrono::microseconds>(_end_time - _start_time)).count();
             }
+
         }
+
+        // There should be no need to use partitioning here, ever.
+        // or at least currently....
+        if (options->mock_traceprov_bt_data){
+            auto table_extra = make_table_extra();
+            table_extra->pointer_spec = result_spec->p_context;
+            table_extra->partition_spec = info;
+            table_func_extra->push_back(table_extra);
+            continue;
+        }
+
         for (auto layer_string_pair: *layer_string_map){
             auto table_extra = make_table_extra();
             uint64_t extra_added = 0;

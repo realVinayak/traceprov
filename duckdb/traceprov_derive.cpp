@@ -664,7 +664,7 @@ void traceprov_infer_pointers(
             if (worker_combine_layers->size() > 0){
                 pointer_context_add_layer(
                     pointer_context,
-                    graph->headNumber,
+                    child_graph->headNumber,
                     start_idx + foreach_current_index(entry_cursor)
                 );
             }

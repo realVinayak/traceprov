@@ -80,6 +80,8 @@ def create_base_offset(query_dir: Path):
 TRACEPROV_EXTRA_OPTIONS = "_traceprov_parse_extra_options"
 TRACEPROV_BASE_OPTIONS = "_traceprov_parse_base_extra_options"
 
+TRACEPROV_SAMPLE_EXTRA_OPTIONS = "_traceprov_parse_sample_extra_options"
+
 
 def set_extra_traceprov_options(parsed, options):
     setattr(parsed, TRACEPROV_EXTRA_OPTIONS, options)
@@ -95,6 +97,14 @@ def get_extra_base_options(parsed):
 
 def set_extra_base_options(parsed, options):
     setattr(parsed, TRACEPROV_BASE_OPTIONS, options)
+
+
+def set_extra_traceprov_sample_options(parsed, options):
+    setattr(parsed, TRACEPROV_SAMPLE_EXTRA_OPTIONS, options)
+
+
+def get_extra_traceprov_sample_options(parsed):
+    return getattr(parsed, TRACEPROV_SAMPLE_EXTRA_OPTIONS, "")
 
 
 def replace_evaluate(in_sql: str, using_index: bool):
@@ -178,7 +188,7 @@ def run_sample_inference(
     capture_options = capture_options.parse_optimizations(parsed)
 
     traceprov_assert_safe_run(
-        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)}"
+        f"{exec_str} {capture_options.serialize()} {get_extra_traceprov_options(parsed)} {get_extra_traceprov_sample_options(parsed)}"
     )
     capture_result_time: list = json_read_file(capture_options.time)
     if capture_options.profile:
@@ -187,7 +197,9 @@ def run_sample_inference(
             range(0, len(log_offsets) * len(list(traceprov_layers_to_derive)) + 1),
             range(capture_options.repeat),
         )
-        assert len(capture_profile_out) == len(capture_result_time)
+        assert len(capture_profile_out) == len(
+            capture_result_time
+        ), f"Got diff: {len(capture_profile_out)} != {len(capture_result_time)}"
     else:
         capture_profile_out = None
     if capture_options.settings:
@@ -591,6 +603,23 @@ def get_base(parsed):
     return "base.sql"
 
 
+TP_PREPROCESSOR = "_tp_preprocessor"
+
+
+def sd_apply_preprocessor(parsed, in_query: str, output_id: int):
+    if not hasattr(parsed, TP_PREPROCESSOR):
+        return in_query
+    preprocessor = getattr(parsed, TP_PREPROCESSOR)
+    return preprocessor(output_id, in_query)
+
+
+def sd_set_preprocessor(parsed, func):
+    # assert (not hasattr(parsed, TP_PREPROCESSOR)) or (
+    #     getattr(parsed, TP_PREPROCESSOR) is None
+    # )
+    setattr(parsed, TP_PREPROCESSOR, func)
+
+
 def run_sample_inference_smokedduck(
     query_num: str,
     samples: list[int],
@@ -636,8 +665,11 @@ def run_sample_inference_smokedduck(
         final_q_path = sample_q_dir / f"infer_{sample_id}.sql"
         final_q_stats_path = sample_q_dir / f"infer_{sample_id}_stats.sql"
         stats_path = sample_q_dir / f"stats_{sample_id}_{out_id}.json"
-        infer_with_offset = (
+        raw_infer_with_offset = (
             f"select * from lineage_query({query_id}, 100, {out_id}::UINTEGER)"
+        )
+        infer_with_offset = sd_apply_preprocessor(
+            parsed, raw_infer_with_offset, sample_id
         )
 
         infer_with_offset_stats = f"copy (select * from lineage_query_stats({query_id}, 100, {out_id}::UINTEGER)) to '{stats_path.as_posix()}'"
@@ -836,6 +868,17 @@ def run_single_query(
     return infer_option_results(base_options)
 
 
+TP_USE_EXTRA = "_use_traceprov_extra"
+
+
+def tp_use_extra_infer_set(parsed, extra_queries: list[str]):
+    setattr(parsed, TP_USE_EXTRA, extra_queries)
+
+
+def tp_use_extra_infer_get(parsed):
+    return getattr(parsed, TP_USE_EXTRA, [])
+
+
 def run_single(
     query_num: str,
     traceprov_graph_path: Path,
@@ -932,6 +975,7 @@ def run_single(
         extra_multiple_count=extra_multiple_count,
         get_log_size=True,
         repeat=iters,
+        extras=tp_use_extra_infer_get(parsed),
     ).parse_optimizations(parsed)
 
     if parsed.single_row_mode:

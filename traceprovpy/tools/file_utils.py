@@ -60,7 +60,7 @@ def json_read_iters(file: str, iters: int):
 def json_read_two_iters(file: str, first_iter: list[int], second_iter: list[int]):
     assert "%d_%d" in file
     return [
-        json_read_file(file.replace("%d_%d", f"{a}_{b}"))
+        json_read_file(file.replace("%d_%d", f"{a}_{b}"), True)
         for a, b in product(first_iter, second_iter)
     ]
 
