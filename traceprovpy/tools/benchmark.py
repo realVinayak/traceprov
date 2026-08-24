@@ -17,6 +17,7 @@
 #       -- Q02
 
 from collections import defaultdict
+import math
 import random
 import re
 from typing import Any, Callable, NamedTuple, Tuple
@@ -442,18 +443,22 @@ class QueryLimitQuerySpec(QuerySpec):
         captured_results = result["captured"]
         random.seed(20)
         if len(captured_results) > 1000 and sample_count > 0:
+            current_length = len(captured_results)
+            current_sample_count = math.ceil((1 * current_length) / 100)
+            captured_results = random.sample(captured_results, current_sample_count)
+            print(f"Sampling out of {(current_length)} -> {len(captured_results)}")
             # sample out sample_count.
-            parts = int(sample_count / 3)
-            new_captured_result = list(captured_results[:parts])
-            new_captured_result.extend(list(captured_results[-parts:]))
-            assert len(new_captured_result) < len(captured_results)
-            middle = list(captured_results[parts:-parts])
-            remaining = sample_count - len(new_captured_result)
-            new_captured_result.extend(random.sample(middle, remaining))
-            print(
-                f"Sampling out of {len(new_captured_result)} -> {len(captured_results)}"
-            )
-            captured_results = new_captured_result
+            # parts = int(sample_count / 3)
+            # new_captured_result = list(captured_results[:parts])
+            # new_captured_result.extend(list(captured_results[-parts:]))
+            # assert len(new_captured_result) < len(captured_results)
+            # middle = list(captured_results[parts:-parts])
+            # remaining = sample_count - len(new_captured_result)
+            # new_captured_result.extend(random.sample(middle, remaining))
+            # print(
+            #     f"Sampling out of {len(new_captured_result)} -> {len(captured_results)}"
+            # )
+            # captured_results = new_captured_result
 
         for captured_result in captured_results:
             filtered_dict = {
