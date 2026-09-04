@@ -1,5 +1,6 @@
 ###
 
+import argparse
 from collections import defaultdict
 from functools import reduce
 from pathlib import Path
@@ -85,6 +86,9 @@ class Reduced(NamedTuple):
             return self.get_single_child().get_row_width()
         if self.name == "left_delim_join":
             return 0
+        if self.name == "nested_loop_join":
+            assert "subquery" in self.extras.lower(), f"Got {self.extras} in extras"
+            return self.children[0].get_row_width()
         assert False, f"Got unhandled {self.name}, {self}"
 
     def get_first_normal(self):
@@ -217,7 +221,7 @@ def get_adjusted_r2(correct, pred, X_orig):
     return adjusted_r2
 
 
-def get_traceprov_results(in_json: Path):
+def get_traceprov_results(in_json: Path, include_all: bool):
     tp_file = json_read_file(in_json)
     all_results = tp_file["results"]
     query_profiles = {
@@ -236,7 +240,7 @@ def get_traceprov_results(in_json: Path):
     }
     same_queries = {}
     for query, query_result in query_profiles.items():
-        if query_result["base"].simple_check(query_result["capture"]):
+        if query_result["base"].simple_check(query_result["capture"]) or include_all:
             print("Plan Same: ", query, query_result["capture"])
             same_queries[query] = query_result
         else:
@@ -246,8 +250,10 @@ def get_traceprov_results(in_json: Path):
     return same_queries, query_profiles
 
 
-def plot_predictions(in_json: Path, traceprov_overhead: dict, out_dir: Path):
-    same_queries, query_profiles = get_traceprov_results(in_json)
+def plot_predictions(
+    in_json: Path, traceprov_overhead: dict, out_dir: Path, include_all: bool
+):
+    same_queries, query_profiles = get_traceprov_results(in_json, include_all)
     log_based_predictions = make_prediction(
         same_queries, query_profiles, traceprov_overhead, LOG_FEATURES
     )
@@ -261,7 +267,7 @@ def plot_predictions(in_json: Path, traceprov_overhead: dict, out_dir: Path):
     overhead_fig, (overhead_axis) = plt.subplots(
         1,
         1,
-        figsize=(4, 2),
+        figsize=(len(log_based_predictions["true_overhead"]) * 4 / 11, 2),
     )
     x_axis_values = [item[0] for item in true_overhead_pack]
     true_overhead = list([item[1][-1] for item in true_overhead_pack])
@@ -431,6 +437,9 @@ def main():
     plot_context.parser.add_argument(
         "--duckdb_tpch_dir", required=False, default=("../duckdb/benchmark/tpch/")
     )
+    plot_context.parser.add_argument(
+        "--include_all", action=argparse.BooleanOptionalAction, default=False
+    )
     parsed = plot_context.parser.parse_args()
 
     db_option = lambda _mode: DataOptions(
@@ -458,7 +467,9 @@ def main():
         for cell in results
     }
     traceprov_overhead = result_map["traceprov"]
-    plot_predictions(parsed.traceprov_result, traceprov_overhead, out_dir)
+    plot_predictions(
+        parsed.traceprov_result, traceprov_overhead, out_dir, parsed.include_all
+    )
 
 
 if __name__ == "__main__":
