@@ -66,22 +66,8 @@ temp_view_0 AS (
 SELECT
     F0_0."1" AS "1",
     string_agg(
-        (
-            (
-                (
-                    (
-                        '(' || (
-                            (
-                                (
-                                    ('(' || F0_0."prov_polynomial__table__0_id") || ' ⊗ '
-                                ) || F0_0."prov_polynomial__table__1_id"
-                            ) || ')'
-                        )
-                    ) || ' ⊗ '
-                ) || F0_0."prov_polynomial__table__2_id"
-            ) || ')'
-        ),
-        ' + '
+        '(' || F0_0."prov_polynomial__table__0_id" || ' ⊗ ' || F0_0."prov_polynomial__table__1_id" || ' ⊗ ' || F0_0."prov_polynomial__table__2_id" || ')',
+        ' ⊕ '
     ) AS "PROV"
 FROM
     (

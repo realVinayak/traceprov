@@ -69,7 +69,7 @@ temp_view_4 AS (
 )
 SELECT
     (
-        (((F0_0."PROV" || ' ⊗ ') || F1_0."PROV") || ' ⊗ ') || F2_0."PROV"
+        F0_0."PROV" || ' ⊗ ' || F1_0."PROV" || ' ⊗ ' || F2_0."PROV"
     ) AS "((((PROV||'⊗')||PROV)||'⊗')||PROV)"
 FROM
     (
@@ -77,10 +77,10 @@ FROM
             (
                 SELECT
                     F0_0."1" AS "1",
-                    string_agg(
+                    '(' || string_agg(
                         F0_0."prov_polynomial__table__0_id" :: text,
-                        ' + '
-                    ) AS "PROV"
+                        ' ⊕ '
+                    ) || ')' AS "PROV"
                 FROM
                     (
                         SELECT
@@ -94,10 +94,10 @@ FROM
             CROSS JOIN (
                 SELECT
                     F0_0."1" AS "1",
-                    string_agg(
+                    '(' || string_agg(
                         F0_0."prov_polynomial__table__1_id" :: text,
-                        ' + '
-                    ) AS "PROV"
+                        ' ⊕ '
+                    ) || ')' AS "PROV"
                 FROM
                     (
                         SELECT
@@ -112,10 +112,10 @@ FROM
         CROSS JOIN (
             SELECT
                 F0_0."1" AS "1",
-                string_agg(
+                '(' || string_agg(
                     F0_0."prov_polynomial__table__2_id" :: text,
-                    ' + '
-                ) AS "PROV"
+                    ' ⊕ '
+                ) || ')' AS "PROV"
             FROM
                 (
                     SELECT
