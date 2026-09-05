@@ -9,7 +9,7 @@ select
 from
     (
         select
-            '(' || string_agg(table_row_id :: text, ' + ') || ')' as table_prov,
+            '(' || string_agg(table_row_id :: text, ' ⊕ ') || ')' as table_prov,
             table_id
         from
             lineage_query_result

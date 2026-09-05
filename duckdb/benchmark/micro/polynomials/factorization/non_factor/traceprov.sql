@@ -61,14 +61,9 @@ with layer_1 as (
     )
 )
 select
-    '(' || string_agg(
-        '(' || concat_ws(
-            ' ⊗ ',
-            terminal_column_1 :: text,
-            terminal_column_2 :: text,
-            terminal_column_3 :: text
-        ) || ')',
+    string_agg(
+        '(' || terminal_column_1 :: text || ' ⊗ ' || terminal_column_2 :: text || ' ⊗ ' || terminal_column_3 :: text || ')',
         ' ⊕ '
-    ) || ')' as provsql
+    ) as provsql
 from
     layer_1

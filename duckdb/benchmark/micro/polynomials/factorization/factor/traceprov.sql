@@ -191,24 +191,21 @@ layer_3 as (
     )
 )
 select
-    '(' || concat_ws(
-        ' ⊗ ',
+    (
         (
             select
                 '(' || string_agg(terminal_column_1 :: text, ' ⊕ ') || ')'
             from
                 layer_1
-        ),
-        (
+        ) || ' ⊗ ' || (
             select
                 '(' || string_agg(terminal_column_1 :: text, ' ⊕ ') || ')'
             from
                 layer_2
-        ),
-        (
+        ) || ' ⊗ ' || (
             select
                 '(' || string_agg(terminal_column_1 :: text, ' ⊕ ') || ')'
             from
                 layer_3
         )
-    ) || ')' as prov
+    ) as prov
