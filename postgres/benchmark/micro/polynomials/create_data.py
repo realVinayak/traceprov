@@ -68,7 +68,7 @@ def add_to_many_join_data(connection, control_table_count):
         )
         safe_execute(
             cursor,
-            f"create index if not exists idx_{table}_{control_table}_z ON {table} (z);",
+            f"create index if not exists idx_{table}_z ON {table} (z);",
         )
     cursor.close()
     connection.commit()
