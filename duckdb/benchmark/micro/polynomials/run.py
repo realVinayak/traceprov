@@ -106,6 +106,7 @@ def run_factorized_traceprov(
 
 
 def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: int):
+    orig_raw_num_joins = raw_num_joins
     raw_num_joins += 1
     num_join_label = str(raw_num_joins)
     # # factor_label = "factor" if factor else "non_factor"
@@ -141,9 +142,20 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
     )
     sd_set_preprocessor(parsed, preprocessor)
     os.makedirs(query_out_dir, exist_ok=True)
-    if sd_polynomial_query:
-        just_write(query_out_dir / "sd_thread_1_combined.sql", (sd_polynomial_query))
     for table_size in join_table_size:
+        sd_combined_path = query_out_dir / "sd_thread_1_combined.sql"
+        if sd_polynomial_query:
+            just_write(sd_combined_path, (sd_polynomial_query))
+        if parsed.sd_mode is not None and parsed.sample_inference is None:
+            sd_query_dir = Path(parsed.sd_query_dir)
+            sd_query_file = just_read(
+                sd_query_dir / str(orig_raw_num_joins) / f"{table_size}.sql"
+            )
+            assert sd_query_file is not None
+            just_write(
+                sd_combined_path,
+                sd_query_file,
+            )
         base_sql = just_read(query_dir / "base.sql")
         create_base_offset(query_dir)
         base_offset_sql = just_read(query_dir / "base_offset.sql")
@@ -195,6 +207,9 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
 def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("-cfg", "--config", required=True)
+    base_parser.add_argument(
+        "--sd_query_dir", required=False, default="./join/sd_query_dir/"
+    )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
     config: dict = json_read_file(parsed.config)
