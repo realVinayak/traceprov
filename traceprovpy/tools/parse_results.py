@@ -30,7 +30,7 @@ def get_qualified_names(dbname, result_dir: Path, prefix: str):
 
 
 def extract_version(file_name: str):
-    connection = duckdb.open(file_name)
+    connection = duckdb.connect(file_name)
     cursor = connection.cursor()
     cursor.execute("select max(version) from dumped;")
     result = cursor.fetchall()
