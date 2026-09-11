@@ -37,6 +37,7 @@ def extract_version(file_name: str):
     max_value = result[0][0]
     cursor.close()
     connection.close()
+    print(f"Max value of {file_name} -> {max_value}")
     return max_value
 
 
@@ -54,7 +55,7 @@ def main():
     if parsed.old_duckdb_dir is not None:
         # need to run the version query on all the old duckdb dirs to figure out the next
         # version to use.
-        duckdb_files = glob.glob(f"{parsed.old_duckdb_dir}/**/*.db")
+        duckdb_files = glob.glob(f"{parsed.old_duckdb_dir}/*.db")
         assert len(duckdb_files) != 0, "Expected to find at least some duckdb files."
         for duckdb_file in duckdb_files:
             file_version = extract_version(duckdb_file)
