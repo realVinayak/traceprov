@@ -117,6 +117,7 @@ def main():
     for raw_g_idx, (current_file_dirs, mtd_elem) in enumerate(
         zip(file_dirs_filt, match_trimmed_nice, strict=True)
     ):
+        raw_g_idx += start_version
         g_index = str(raw_g_idx).rjust(total_length, "0")
         db, sf_str, system, mode = tuple(mtd_elem)
         sf_str_split: str = sf_str.split("=")[1]
