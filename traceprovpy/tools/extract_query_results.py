@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import re
 import statistics
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 # from duckdb.benchmark.tpch.gprom_results import reduce
 from functools import reduce
@@ -121,17 +121,33 @@ EXTRACT_LAYER = extract_str(r"layer-(\d+)")
 EXTRACT_PARTITION = extract_str(r"partition_time-(\d+)")
 
 
-def make_versioned_query(cursor, mode, db_system):
-    base_columns = {"category", "parallel", "query_num", "layer_number", NORM_ITER_COL}
-    if mode == "offset":
-        base_columns |= {"offset"}
+def make_versioned_query(
+    cursor, mode, db_system: Literal["postgres"] | Literal["duckdb"]
+):
+    # previously, we used a different logic to determine whether we need to use result of a
+    # successive version
+    # Now, if a query is found with new version, it is immediately taken and ALL the layers and offsets
+    # are used. This makes things less prone to break.
+    base_columns = {"category", "parallel", "query_num"}
     base_columns = [f'"{column}"' for column in base_columns]
-    distinct_on_clause = ",".join(list(base_columns))
-    distinct_on_clause = f"DISTINCT ON({distinct_on_clause})"
-    query = f"select {distinct_on_clause} * FROM dumped ORDER BY version desc"
+    base_column_joined = ",".join(list(base_columns))
+    window_def = f'partition by {base_column_joined} order by "version" desc'
+    query = f"select * from (select *, dense_rank() over ({window_def}) as dr FROM dumped) where dr=1"
     create_table_expr = f"create or replace table dumped_versioned as ({query})"
     cursor.execute(create_table_expr)
-    group_by_columns = list(base_columns)
+
+    orig_base_columns = {
+        "category",
+        "parallel",
+        "query_num",
+        "layer_number",
+        NORM_ITER_COL,
+    }
+    if mode == "offset":
+        orig_base_columns |= {"offset"}
+
+    orig_base_columns = [f'"{column}"' for column in orig_base_columns]
+    group_by_columns = list(orig_base_columns)
     group_by_columns.remove(f'"{NORM_ITER_COL}"')
     grouped_clause = ",".join(group_by_columns)
     iter_clause = "1"
@@ -275,7 +291,7 @@ def _handle_sd_offset(sample_inference_result: dict):
                         phase_2_profile=tap_profile_result(profile_entry),
                         offset=offset,
                     ),
-                    NORM_ITER_COL: iter_id,
+                    NORM_ITER_COL: iter_id + 1,
                 }
             )
         )
@@ -345,7 +361,7 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
                         offset=offset,
                         layer_number=layer_number,
                     ),
-                    NORM_ITER_COL: iter_id,
+                    NORM_ITER_COL: iter_id + 1,
                 }
             )
         )
@@ -844,7 +860,7 @@ def _handle_traceprov_infer_no_merge(
                         layer_number=layer,
                         offset=offset,
                     ),
-                    NORM_ITER_COL: iter_id,
+                    NORM_ITER_COL: iter_id + 1,
                 }
                 for iter_id, time in enumerate(true_result)
             ]
