@@ -61,7 +61,7 @@ def main():
             file_version = extract_version(duckdb_file)
             assert file_version is not None and file_version > 0
             start_version = max(start_version, file_version)
-
+    start_version += 1
     print("Using start version: ", start_version)
     if parsed.dry_run:
         print("Dry run mode")
