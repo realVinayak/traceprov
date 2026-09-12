@@ -229,12 +229,14 @@ extern "C" {
         int64_t offset;
     } TraceProvRelationArgs;
 
+    typedef std::pair<std::string, std::string> StringPair;
+
     typedef struct TraceProvToSQLContext {
         TraceProvParseContext *context;
         bool use_table_def;
         TraceProvSizeLayers *size_layer_map;
         // If set, it'll record the base relations too.
-        std::vector<std::string> *ddls;
+        std::vector<StringPair> *ddls;
         std::vector<std::pair<uint64_t, uint64_t>> *added_ddls;
         // So that, in relation scans, we can wrap this 
         TraceProvPointerContext *pointer_context;

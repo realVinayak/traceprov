@@ -34,6 +34,8 @@ class DriverDefaultValues(NamedTuple):
     traceprov_use_join_filter_rewrite: bool = False
     traceprov_use_filter_pushdown: bool = False
     traceprov_use_hash_index: bool = False
+    dump_base_table: bool = False
+    no_use_table_def: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -97,6 +99,8 @@ class DuckDBDriverOptions(NamedTuple):
         DriverDefaultValues.traceprov_use_filter_pushdown
     )
     traceprov_use_hash_index: bool = DriverDefaultValues.traceprov_use_hash_index
+    dump_base_table: bool = DriverDefaultValues.dump_base_table
+    no_use_table_def: bool = DriverDefaultValues.no_use_table_def
     warm_up_time: int = 0
     load_micro_benchmarks: bool = False
     sd_join_mode: bool = False

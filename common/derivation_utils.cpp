@@ -566,7 +566,7 @@ extern "C" {
                 }
             }
             if (!found){
-                context.ddls->push_back(sql);
+                context.ddls->push_back(StringPair(sql, relation->name));
                 context.added_ddls->push_back(curr_pair);
             }
         }

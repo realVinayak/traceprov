@@ -230,6 +230,7 @@ struct Options {
     bool disable_perfect_hash;
     bool _dump_worker_layer_time;
     bool mock_traceprov_bt_data;
+    bool use_table_def;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -243,7 +244,7 @@ typedef struct Funcs {
 std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
     Options *options,
     TraceProvDerivationSpec **derivation_spec,
-    std::vector<std::string> &ddls,
+    std::vector<StringPair> &ddls,
     std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
     const bool derive_sql_mapping = true
 );
@@ -315,7 +316,8 @@ struct Options get_base_option(){
         .disable_chunk_cache = false,
         .output_column_idx = 0,
         .disable_perfect_hash = false,
-        ._dump_worker_layer_time = false
+        ._dump_worker_layer_time = false,
+        .use_table_def = true
     };
     return options;
 }
@@ -546,7 +548,11 @@ struct Options parse_args(int argc, char **argv){
         } else if (IS_OPTION("--mock_traceprov_bt_data")){
             options.mock_traceprov_bt_data = true;
             continue;
+        } else if (IS_OPTION("--no_use_table_def")){
+            options.use_table_def = false;
+            continue;
         }
+
 
         std::cout << "Got unexpected option: " << argv[i] << std::endl;
         std::exit(1);
@@ -1613,7 +1619,7 @@ template <typename T>  HashIndexDir populate_counts(std::vector<duckdb_data_chun
 MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Funcs table_funcs){
     const auto start_time = std::chrono::steady_clock::now();
     TraceProvDerivationSpec *result_spec = NULL;
-    std::vector<std::string> ddls;
+    std::vector<StringPair> ddls;
     std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
     auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls);
     auto table_extra = make_table_extra();
@@ -1707,7 +1713,7 @@ MiscKeyValue setup_traceprov_indexes(duckdb_connection con, Options *options, Fu
 std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
     TraceProvDerivationSpec *result_spec,
     Options *options,
-    std::vector<std::string> &ddls,
+    std::vector<StringPair> &ddls,
     std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
     void *row_content=NULL
 ){
@@ -1735,7 +1741,7 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
             result_map_pair.second, 
             TraceProvToSQLContext{
                 .context = result_spec->parse_context,
-                .use_table_def = true,
+                .use_table_def = options->use_table_def,
                 .ddls = &ddls,
                 .added_ddls = &added_ddls,
                 .pointer_context = NULL,
@@ -1751,7 +1757,7 @@ std::unordered_map<TraceProvLayerNumber, std::string> *get_sql_mapping(
 std::unordered_map<TraceProvLayerNumber, std::string> *get_layer_string_map(
     Options *options,
     TraceProvDerivationSpec **derivation_spec,
-    std::vector<std::string> &ddls,
+    std::vector<StringPair> &ddls,
     std::vector<std::pair<uint64_t, uint64_t>> &added_ddls,
     const bool derive_sql_mapping
 ){
@@ -1812,7 +1818,7 @@ TraceProvDerivationSpec* augment_extra_sql(
 ){
     if (!options->traceprov_perform_derivation && !options->mock_traceprov_bt_data) return NULL;
     TraceProvDerivationSpec *result_spec = NULL;
-    std::vector<std::string> ddls;
+    std::vector<StringPair> ddls;
     std::vector<std::pair<uint64_t, uint64_t>> added_ddls;
     auto layer_string_map = get_layer_string_map(options, &result_spec, ddls, added_ddls, !traceprov_use_join_filter_rewrite);
     for (auto log_offset: *log_offsets){
@@ -1865,10 +1871,10 @@ TraceProvDerivationSpec* augment_extra_sql(
                 node_sql = "create or replace table " + table_name + " as (" + node_sql + ")";
                 if (options->dump_base_table){
                     for (auto ddl_string : ddls){
-                        std::string base_table_name = "base_table_" + std::to_string(global_counter++);
-                        extra_sqls.push_back(ExtraQuery{.sql = ddl_string, .extra = ""});
-                        extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + base_table_name + " as (" + ddl_string + ")", .extra = ""});
-                        elog(INFO, "Table: %s", base_table_name.c_str());
+                        // std::string base_table_name = "base_table_" + std::to_string(global_counter++);
+                        extra_sqls.push_back(ExtraQuery{.sql = ddl_string.first, .extra = ""});
+                        extra_sqls.push_back(ExtraQuery{.sql = "create or replace table " + ddl_string.second + " as (" + ddl_string.first + ")", .extra = ""});
+                        elog(INFO, "Table: %s", ddl_string.second.c_str());
                         elog(INFO, "SQL (Table): %s", extra_sqls.back().sql.c_str());
                         extra_added += 2;
                     }
