@@ -10,6 +10,7 @@ from traceprovpy.tools.file_utils import (
 )
 from traceprovpy.tools.run_with_timeout import RunWithTimeoutOptions, run_with_timeout
 import random
+import time
 
 TRACEPROV_LAYERS_TO_DERIVE_KEY = "TRACEPROV_LAYERS_TO_DERIVE_KEY"
 TRACEPROV_MATERIALIZE_LAYER_KEY = "TRACEPROV_MATERIALIZE_LAYER_KEY"
@@ -89,17 +90,21 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         run_time_options: RunWithTimeoutOptions = args["extra_pack"]
         getter = args["get_run_options"]
         current_result = args["current_result"]
-        global_benchmark = args['global_benchmark']
+        global_benchmark = args["global_benchmark"]
         # print(args)
         assert query_spec.extra_options is not None
         layers_to_derive = query_spec.extra_options[TRACEPROV_LAYERS_TO_DERIVE_KEY]
         print("Deriving layers: ", layers_to_derive)
-        is_validate = query_spec.extra_options.get(TRACEPROV_MATERIALIZE_LAYER_KEY, False)
+        is_validate = query_spec.extra_options.get(
+            TRACEPROV_MATERIALIZE_LAYER_KEY, False
+        )
         is_validate = is_validate or global_benchmark.mat_infer
         bulk_derive = query_spec.extra_options.get(TRACEPROV_DERIVE_OFFSET_KEY, True)
         should_sample = query_spec.extra_options.get(TRACEPROV_SHOULD_SAMPLE, False)
         sample_limit = query_spec.extra_options.get(TRACEPROV_OFFSET_LIMIT, 100)
-        use_extra_result = query_spec.extra_options.get(TRACEPROV_USE_EXTRA_RESULT, False)
+        use_extra_result = query_spec.extra_options.get(
+            TRACEPROV_USE_EXTRA_RESULT, False
+        )
         global_is_last = args["is_global_last"]
         can_result = current_result
         if use_extra_result:
@@ -120,7 +125,9 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
         )
 
         def derive_for_offset(offset):
-            capture_duckdb_profile = query_spec.extra_options.get(TRACEPROV_PROFILE_DUCKDB, False)
+            capture_duckdb_profile = query_spec.extra_options.get(
+                TRACEPROV_PROFILE_DUCKDB, False
+            )
             prepare_for_scan = TRACEPROV_PREPARE_FOR_SCAN(
                 "" if offset == -1 else str(offset)
             )
@@ -147,8 +154,13 @@ def get_traceprov_extra_infer_func(perform_inference: bool = True):
             assert len(filtered_layers) > 0
             create_table_analyze_results = []
             for table, (_, create_table_sql) in filtered_layers:
+                timer_start = time.perf_counter()
                 cursor.execute(f"DROP TABLE IF EXISTS {table};")
                 cursor.execute(create_table_sql)
+                timer_end = time.perf_counter()
+                create_table_analyze_results.append(
+                    dict(table=table, time_taken=timer_end - timer_start)
+                )
                 # create_table_explain_sql = (
                 #     f"{run_time_options.get_explain(conn)} {create_table_sql}"
                 # )
