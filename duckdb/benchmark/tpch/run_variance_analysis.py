@@ -36,11 +36,13 @@ def main():
     version_counter = 1
     for file in traceprov_results:
         version_counter += 1
-        handle_duckdb("traceprov", "all", file, all_rows_list, version_counter)
+        handle_duckdb("traceprov", "all", Path(file), all_rows_list, version_counter)
 
     for file in duckdb_results:
         version_counter += 1
-        handle_duckdb("traceprov", "all", file, all_duckdb_rows_list, version_counter)
+        handle_duckdb(
+            "traceprov", "all", Path(file), all_duckdb_rows_list, version_counter
+        )
 
     traceprov_dir = Path(parsed.out_dir) / "traceprov"
     duckdb_dir = Path(parsed.out_dir) / "duckdb"
