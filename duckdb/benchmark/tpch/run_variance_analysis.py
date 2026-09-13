@@ -30,6 +30,9 @@ def main():
             elif re.findall(TRACEPROV_RE, complete_path):
                 traceprov_results.append(complete_path)
 
+    traceprov_results = list(sorted(traceprov_results))
+    duckdb_results = list(sorted(duckdb_results))
+
     print("TraceProv Results: ", traceprov_results)
     print("DuckDB Results: ", duckdb_results)
 
