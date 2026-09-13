@@ -3,7 +3,11 @@ import os
 from pathlib import Path
 import re
 
-from traceprovpy.tools.extract_query_results import dump_result, handle_duckdb
+from traceprovpy.tools.extract_query_results import (
+    dump_result,
+    dump_rows_list,
+    handle_duckdb,
+)
 
 DUCKDB_RE = r"local_test_variance_duckdb_run_no_use_table_def-y__optimized-y__threads-\d+_(\d+)_2026"
 TRACEPROV_RE = r"local_test_variance_traceprov_run_optimized-y__threads-\d+_(\d+)_2026"
@@ -13,6 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dir", required=True)
     parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--sf", required=True)
 
     parsed = parser.parse_args()
     traceprov_results = []
@@ -48,8 +53,8 @@ def main():
     duckdb_dir = Path(parsed.out_dir) / "duckdb"
     os.makedirs(traceprov_dir, exist_ok=True)
     os.makedirs(duckdb_dir, exist_ok=True)
-    dump_result(all_rows_list, traceprov_dir)
-    dump_result(all_duckdb_rows_list, duckdb_dir)
+    dump_rows_list(parsed.sf, "duckdb", "all", all_rows_list, traceprov_dir)
+    dump_rows_list(parsed.sf, "duckdb", "all", all_duckdb_rows_list, duckdb_dir)
 
 
 if __name__ == "__main__":
