@@ -383,12 +383,19 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
     return combined
 
 
-def handle_duckdb(db_system: str, mode: str, result_path: Path, rows_list: list):
+def handle_duckdb(
+    db_system: str, mode: str, result_path: Path, rows_list: list, default_version=None
+):
     print("duckdb handling ", db_system, result_path)
     result = json_read_file(result_path)
     main_res: dict = result["results"]
     terminal_name = result_path.name
-    version = parse_reg(terminal_name)
+    try:
+        version = parse_reg(terminal_name)
+    except AssertionError:
+        if default_version is None:
+            raise
+        version = default_version
     call_options = result["call_options"]
     bench_parser = make_duckdb_parse()
     # add_query_options(bench_parser)
