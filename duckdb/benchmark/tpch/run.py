@@ -68,7 +68,7 @@ def run(force_materialize=False, execution_hook=None):
     # sd_join_mode = [8]
     # if parsed.
     # needs_perfect_hash_disable = [8]
-    needs_perfect_hash_disable = ['8']
+    needs_perfect_hash_disable = ["8"]
     for query in map(str, config_queries):
         pre_base = query_configs.get(query, dict()).get("pre_base")
         pre_base_path = Path(pre_base) if pre_base is not None else None
@@ -91,8 +91,9 @@ def run(force_materialize=False, execution_hook=None):
             else:
                 disable_col_opt = query in NEEDS_DISABLE
                 graph_dir = extract_graph_dir(parsed)
-                query_result = run_single(
+                query_result = run_sample_inference(
                     query_num=query,
+                    samples=[-1],
                     traceprov_graph_path=graph_dir / query / "graph.bin",
                     traceprov_layers_to_derive=tuple(
                         query_layer_config[query]["layers_used"]
@@ -164,7 +165,8 @@ def run(force_materialize=False, execution_hook=None):
         results = {
             **results,
             query: dict(
-                result=main_query_result, sample_inference_result=main_sample_inference_result
+                result=main_query_result,
+                sample_inference_result=main_sample_inference_result,
             ),
         }
 

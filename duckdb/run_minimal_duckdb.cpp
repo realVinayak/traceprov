@@ -7,6 +7,9 @@
 #include <fstream>
 
 #include <iostream>
+#include "traceprov.hpp"
+#include "utils.hpp"
+#include <sys/mman.h>
 
 struct Options {
     // via --db
@@ -18,6 +21,7 @@ struct Options {
     std::string input_path;
     uint32_t num_threads;
     uint32_t repeat;
+    bool emulate_mmap;
 };
 
 struct Options get_base_option(){
@@ -26,13 +30,28 @@ struct Options get_base_option(){
         .profile_out_path = "",
         .input_path = "",
         .num_threads = 1,
-        .repeat = 1
+        .repeat = 1,
+        .emulate_mmap = false
     };
     return options;
 }
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
 #define IS_SET(X) (X.size() != 0)
+
+
+void portable_elog(int level){
+    if (level == INFO) return;
+    if (level == ERROR){
+        //  Recursive call is safe
+        elog(INFO, "Error no: %d", errno);
+        elog(INFO, "Error: %s", strerror(errno));
+        exit(1);
+    }
+}
+
+
+static bool should_write = false;
 
 struct Options parse_args(int argc, char **argv){
     auto options = get_base_option();
@@ -51,6 +70,12 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--repeat")){
             options.repeat = std::atoi(argv[++i]);
+            continue;
+        } else if (IS_OPTION("--should_write")){
+            should_write = true;
+            continue;
+        } else if (IS_OPTION("--emulate_mmap")){
+            options.emulate_mmap = true;
             continue;
         }
     }
@@ -92,6 +117,142 @@ struct Options parse_args(int argc, char **argv){
 } \
 
 
+static inline void fill_space(void *ptr, const uint64_t size){
+    if (!should_write) return;
+    memset(ptr, size, 1);
+}
+
+int map_traceprov_shared_context(struct traceprov_shared_context *ptr){
+    const size_t size_shared_context_filename = sizeof(TRACEPROV_SHARED_CONTEXT) + strlen(DataDir) + 1;
+    int rc = 0;
+    struct traceprov_shared_context *temp_ptr;
+    char *shared_context_filename = (char*)malloc(size_shared_context_filename);
+    if (shared_context_filename == NULL){
+        elog(ERROR, "Couldn't allocate memory to hold shared context file");
+        return 1;
+    }
+    memset(shared_context_filename, 0, size_shared_context_filename);
+    sprintf(shared_context_filename, TRACEPROV_SHARED_CONTEXT, DataDir);
+
+    int shared_context_fd = open(shared_context_filename, O_RDONLY);
+    if (shared_context_fd < 0){
+        PRINT_ON_DEBUG("Error opening the scratch file");
+        goto exit_map;
+    }
+
+    temp_ptr = (struct traceprov_shared_context *)mmap(
+        NULL,
+        TRACEPROV_SHARED_CONTEXT_SIZE,
+        PROT_READ,
+        MAP_SHARED,
+        shared_context_fd,
+        0
+    );
+
+    if (temp_ptr == MAP_FAILED){
+        PRINT_ON_DEBUG("Error mapping the scratch file");
+        goto exit_map;
+    }
+
+    PRINT_ON_DEBUG("Map shared context succesful!");
+
+    memcpy(ptr, temp_ptr, sizeof(struct traceprov_shared_context));
+
+exit_map:
+    if (shared_context_fd > 0) close(shared_context_fd);
+    if (shared_context_filename) free(shared_context_filename);
+    return rc;
+}
+
+std::vector<struct local_context *> *traceprov_get_local_contexts(const uint32_t worker_count){
+    auto worker_local_contexts = new std::vector<struct local_context *>;
+    for (uint8_t worker_id = 0; worker_id < worker_count; worker_id++){
+        char buff[256] = {0};
+        sprintf(buff, TRACEPROV_WORKER_LAYER_MAP, DataDir, worker_id + 1);
+        int fd = open(buff, O_RDONLY);
+        if (fd < 0) elog(ERROR, "Error opening the worker laye rmap!");
+        void *ptr = mmap(
+            NULL,
+            sizeof(struct local_context),
+            PROT_READ,
+            MAP_SHARED,
+            fd,
+            0
+        );
+        if (ptr == MAP_FAILED){
+            elog(ERROR, "Error mmaping the layer file!");
+        }
+        struct local_context *worker_local_context = (struct local_context *)ptr;
+        worker_local_contexts->push_back(worker_local_context);
+        close(fd);
+    }
+    return worker_local_contexts;
+}
+
+// Figure out the gap between last ptr and head and fill that gap.
+static inline void fill_gap(void *ptr, const traceprov_aggregate_layer *layer){
+    if (!should_write) return;
+    const int64_t gap = (uint64_t)layer->current_row - (uint64_t)layer->last_mapping;
+    if (gap < 0) elog(ERROR, "Expected gap to always be > 0");
+    memset(ptr, gap, 1);
+}
+// Just emulates the writes that have been done in the mapping.
+void emulate_file_writes(){
+
+    traceprov_shared_context shared_context;
+    if (map_traceprov_shared_context(&shared_context))
+        elog(ERROR, "error maping shared context!");
+
+    auto worker_local_contexts = traceprov_get_local_contexts(shared_context.worker_count);
+    uint64_t mock_sum = 0;
+    std::vector<void *> page_list;
+    for (auto entry: *worker_local_contexts){
+        for (idx_t layer_idx = 0; layer_idx < TRACEPROV_MAX_LAYER_PER_WORKER; layer_idx++){
+            const traceprov_aggregate_layer *layer = &entry->cached_layers[layer_idx];
+            if (layer->layer_number == 0) continue;
+            // Need to always set the initial ptr.
+            void *initial_ptr = mmap(
+                NULL,
+                TRACEPROV_PAGE_SIZE,
+                PROT_WRITE,
+                TRACEPROV_MMAP_FLAGS,
+                0,
+                0
+            );
+            page_list.push_back(initial_ptr);
+            void *last_ptr = NULL;
+            if (layer->size > 1) { fill_space(initial_ptr, TRACEPROV_PAGE_SIZE); }
+            else{
+                last_ptr = initial_ptr;
+            }
+            // Need to figure out the last page, and fill out all the intermediate pages.
+            if (layer->size > 1){
+                const uint64_t alloc_count = (layer->size - 1) / TRACEPROV_INCREMENT_TRACE_BY_PG;
+                for (uint64_t alloc_idx = 0; alloc_idx < alloc_count; alloc_idx){
+                    void *incr_ptr = mmap(
+                        NULL,
+                        TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG,
+                        PROT_WRITE,
+                        TRACEPROV_MMAP_FLAGS,
+                        0,
+                        0
+                    );
+                    page_list.push_back(incr_ptr);
+                    // Fillup any intermediate region.
+                    if (alloc_idx < alloc_count - 1){
+                        fill_space(incr_ptr, TRACEPROV_PAGE_SIZE*TRACEPROV_INCREMENT_TRACE_BY_PG);
+                    }
+                    last_ptr = incr_ptr;
+                }
+            }
+            // Now need to fill up any gap.
+            fill_gap(last_ptr, layer);
+        }
+    }
+    for (auto ptr_head : page_list){
+        mock_sum += (uint64_t)ptr_head;
+    }
+}
 
 int main(int argc, char **argv){
 
@@ -119,7 +280,9 @@ int main(int argc, char **argv){
     sprintf(thread_set_query, "SET threads=%d;", options.num_threads);
     DUCKDB_RUN_SHORT_QUERY(con, thread_set_query, "setting threads");
 
-
+    if (options.emulate_mmap){
+        emulate_file_writes();
+    }
 
     for (int i = 0; i < options.repeat; i++){
         char final_profile_out[256] = {0};

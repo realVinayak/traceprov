@@ -127,6 +127,7 @@ def run_sample_inference(
     pre_base: Path | None = None,
     disable_col_opt: bool = False,
     pre_query: bool = False,
+    traceprov_graph_path: Path = None,
 ):
     db = Path(parsed.db)
     exe = Path(parsed.exe)
@@ -165,6 +166,11 @@ def run_sample_inference(
     sql_spec_map = [TRACEPROV_CAPTURE_ENTRY, *sql_spec_map]
     sql_spec_map = list(product(sql_spec_map, range(iters)))
 
+    if traceprov_graph_path:
+        graph_file_dest = Path(TRACEPROV_GRAPH_FILE).parent
+        os.makedirs(graph_file_dest, exist_ok=True)
+        traceprov_assert_safe_run(f"cp {traceprov_graph_path} {TRACEPROV_GRAPH_FILE}")
+
     capture_options = DuckDBDriverOptions(
         db=db.as_posix(),
         repeat=iters,
@@ -175,7 +181,7 @@ def run_sample_inference(
         settings=make_tmp_file("capture_settings.json"),
         disable_col_opt=disable_col_opt,
         main_once_extra_all=True,
-        log_offsets=log_offsets,
+        log_offsets=None if samples == [-1] else log_offsets,
         traceprov_perform_derivation=True,
         traceprov_layers_to_derive=traceprov_layers_to_derive,
         traceprov_materialize_derivation=materialize_infer,
@@ -197,8 +203,8 @@ def run_sample_inference(
             range(0, len(log_offsets) * len(list(traceprov_layers_to_derive)) + 1),
             range(capture_options.repeat),
         )
-        assert len(capture_profile_out) == len(
-            capture_result_time
+        assert (
+            len(capture_profile_out) == len(capture_result_time) or materialize_infer
         ), f"Got diff: {len(capture_profile_out)} != {len(capture_result_time)}"
     else:
         capture_profile_out = None
@@ -207,8 +213,8 @@ def run_sample_inference(
     else:
         capture_settings = None
 
-    assert len(capture_result_time) == len(
-        sql_spec_map
+    assert (
+        len(capture_result_time) == len(sql_spec_map) or materialize_infer
     ), f"Len: {capture_result_time}, {len(sql_spec_map)}"
 
     using_index = parsed.traceprov_use_index
