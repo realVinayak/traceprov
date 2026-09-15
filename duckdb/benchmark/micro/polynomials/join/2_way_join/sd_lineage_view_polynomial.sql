@@ -1,3 +1,5 @@
+-- 0 -> skew
+-- 1 --> control_0
 select
     t_0.in_index :: text || ' ⊗ ' || t_1.in_index :: text as polynomial
 from

@@ -146,16 +146,6 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
         sd_combined_path = query_out_dir / "sd_thread_1_combined.sql"
         if sd_polynomial_query:
             just_write(sd_combined_path, (sd_polynomial_query))
-        if parsed.sd_mode is not None and parsed.sample_inference is None:
-            sd_query_dir = Path(parsed.sd_query_dir)
-            sd_query_file = just_read(
-                sd_query_dir / str(orig_raw_num_joins) / f"{table_size}.sql"
-            )
-            assert sd_query_file is not None
-            just_write(
-                sd_combined_path,
-                sd_query_file,
-            )
         base_sql = just_read(query_dir / "base.sql")
         create_base_offset(query_dir)
         base_offset_sql = just_read(query_dir / "base_offset.sql")
@@ -207,11 +197,12 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
 def run():
     base_parser = make_duckdb_parse()
     base_parser.add_argument("-cfg", "--config", required=True)
-    base_parser.add_argument(
-        "--sd_query_dir", required=False, default="./join/sd_query_dir/"
-    )
+    # base_parser.add_argument(
+    #     "--sd_query_dir", required=False, default="./join/sd_query_dir/"
+    # )
     parsed = base_parser.parse_args()
     traceprov_handle_suffix(parsed)
+    parsed.simple_join_mode = True
     config: dict = json_read_file(parsed.config)
     assert config is not None
     # factorization = config["factorization"]

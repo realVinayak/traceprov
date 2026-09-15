@@ -231,6 +231,7 @@ struct Options {
     bool _dump_worker_layer_time;
     bool mock_traceprov_bt_data;
     bool use_table_def;
+    bool simple_join_mode;
 };
 
 #define IS_OPTION(X) (strcmp(argv[i], X) == 0)
@@ -260,6 +261,12 @@ std::string *get_disabled_optimizations(const Options *options){
     }
     if (options->disable_column_optimizer){
         disabled_names.push_back("unused_columns");
+    }
+    if (options->simple_join_mode){
+        disabled_names.push_back("join_order");
+        #if TRACEPROV_SD_MODE==0
+        disabled_names.push_back("build_side_probe_side");
+        #endif
     }
     for (int idx = 0; idx < disabled_names.size(); idx++){
        if (idx > 0) disabled += ",";
@@ -317,7 +324,8 @@ struct Options get_base_option(){
         .output_column_idx = 0,
         .disable_perfect_hash = false,
         ._dump_worker_layer_time = false,
-        .use_table_def = true
+        .use_table_def = true,
+        .simple_join_mode = false
     };
     return options;
 }
@@ -550,6 +558,9 @@ struct Options parse_args(int argc, char **argv){
             continue;
         } else if (IS_OPTION("--no_use_table_def")){
             options.use_table_def = false;
+            continue;
+        } else if (IS_OPTION("--simple_join_mode")){
+            options.simple_join_mode = true;
             continue;
         }
 
@@ -1191,6 +1202,7 @@ int main(int argc, char **argv){
                 new_options.stats_path = "";
                 new_options.get_log_size = false;
                 new_options.disable_column_optimizer = false;
+                new_options.simple_join_mode = false;
                 std::string *extra_profile_str = new std::string((std::string(profile_out) + "_" + std::to_string(extra_idx) + "_extra.json"));
                 memset(final_profile_out, 0, sizeof(char)*256);
                 sprintf(final_profile_out, TP_SET_PROFILE_OUTPUT, extra_profile_str->c_str());

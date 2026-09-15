@@ -189,6 +189,7 @@ def run_sample_inference(
         get_log_size=True,
         warm_up_time=parsed.warm_up_time,
         output_col_idx=output_column_index,
+        sd_join_mode=parsed.simple_join_mode,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
@@ -358,6 +359,7 @@ def run_single_smokedduck(
         pre_query=pre_query,
         warm_up_time=parsed.warm_up_time,
         extra_multiple_count=1,
+        simple_join_mode=parsed.simple_join_mode,
     )
     return_code = run_cmd(
         f"{exec_str} {base_options.serialize()} {get_extra_traceprov_options(parsed)}"
@@ -716,6 +718,7 @@ def run_sample_inference_smokedduck(
         lineage=True,
         main_once_extra_all=not parsed.single_row_mode,
         warm_up_time=parsed.warm_up_time,
+        simple_join_mode=parsed.simple_join_mode,
     )
 
     rc = run_cmd(
@@ -854,6 +857,7 @@ def run_single_query_dry(
         profile=make_tmp_file("base_profile_%d.json"),
         settings=make_tmp_file("base_settings.json"),
         warm_up_time=parsed.warm_up_time,
+        simple_join_mode=parsed.simple_join_mode,
     )
 
     return (exec_str, base_options)

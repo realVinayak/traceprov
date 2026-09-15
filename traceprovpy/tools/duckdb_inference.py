@@ -36,6 +36,7 @@ class DriverDefaultValues(NamedTuple):
     traceprov_use_hash_index: bool = False
     dump_base_table: bool = False
     no_use_table_def: bool = False
+    simple_join_mode: bool = False
 
 
 DriverDefaultValuesInstance = DriverDefaultValues()
@@ -105,6 +106,7 @@ class DuckDBDriverOptions(NamedTuple):
     load_micro_benchmarks: bool = False
     sd_join_mode: bool = False
     output_col_idx: int = 0
+    simple_join_mode: bool = DriverDefaultValues.simple_join_mode
 
     @staticmethod
     def get_suffix(parsed):
