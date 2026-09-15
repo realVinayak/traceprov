@@ -37,6 +37,12 @@ from traceprovpy.tools.run_duckdb_generic import (
 def run_factorized_traceprov(
     config, parsed, tmp: Path, total_iters, factor: bool = False
 ):
+    if (
+        parsed.sd_mode is not None
+        and parsed.sample_inference is not None
+        and not factor
+    ):
+        return dict(skipped=True)
     factor_label = "factor" if factor else "non_factor"
     factorization = config["factorization"]
     # run all the factor ones first
