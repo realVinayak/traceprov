@@ -151,23 +151,20 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
         base_offset_sql = just_read(query_dir / "base_offset.sql")
         capture_new_compact_sql = just_read(query_dir / "capture_new_compact.sql")
         print("Capture SQL: ", capture_new_compact_sql)
-        traceprov_extra = [query_dir / "traceprov.sql"]
         # traceprov_sql = just_read(query_dir / "traceprov.sql")
         replacer = make_replacer(table_size)
         just_write(query_out_dir / "base.sql", replacer(base_sql))
         just_write(query_out_dir / "base_offset.sql", replacer(base_offset_sql))
         just_write(
-            query_out_dir / "capture_new_compact.sql",
-            replacer(capture_new_compact_sql),
+            query_out_dir / "capture_new_compact.sql", replacer(capture_new_compact_sql)
         )
-        # parsed.infer = False
-        tp_use_extra_infer_set(parsed, traceprov_extra)
-        extra_file_out = tmp / "extra_offsets.txt"
-        traceprov_extra_expanded = []
-        current_query = just_read(traceprov_extra[0])
+
         # for file in just_read(extra_file_out):
         if parsed.sd_mode is None:
+            current_query = just_read(query_dir / "traceprov.sql")
             if parsed.sample_inference is not None:
+                traceprov_extra_expanded = []
+                extra_file_out = tmp / "extra_offsets.txt"
                 for output_id in range((table_size)):
                     replaced_query = current_query.replace(";", "")
                     if parsed.mat_infer:
@@ -182,6 +179,16 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
                     extra_file_out, "\n".join(traceprov_extra_expanded)
                 )
                 set_extra_traceprov_sample_options(parsed, f"--extra_file {extra_out}")
+            else:
+                main_extra_file = tmp / "main_extra.sql"
+                backtrace_query = current_query
+                if parsed.mat_infer:
+                    backtrace_query = backtrace_query.replace(";", "")
+                    backtrace_query = f"create or replace table traceprov_lineage_1 as ({backtrace_query})"
+                just_write(main_extra_file, backtrace_query)
+                traceprov_extra = [main_extra_file]
+                tp_use_extra_infer_set(parsed, traceprov_extra)
+
             set_extra_traceprov_options(parsed, f" --mock_traceprov_bt_data")
         else:
             extra_options = ["disable_chunk_cache"]
