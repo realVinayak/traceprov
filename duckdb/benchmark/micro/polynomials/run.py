@@ -167,7 +167,7 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
         current_query = just_read(traceprov_extra[0])
         # for file in just_read(extra_file_out):
         if parsed.sd_mode is None:
-            if parsed.sample_inference is None:
+            if parsed.sample_inference is not None:
                 for output_id in range((table_size)):
                     replaced_query = current_query.replace(";", "")
                     if parsed.mat_infer:
