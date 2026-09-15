@@ -167,19 +167,22 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
         current_query = just_read(traceprov_extra[0])
         # for file in just_read(extra_file_out):
         if parsed.sd_mode is None:
-            for output_id in range((table_size)):
-                replaced_query = current_query.replace(";", "")
-                if parsed.mat_infer:
-                    replaced_query = f"create or replace table traceprov_out_{output_id} as ({replaced_query})"
-                traceprov_extra_expanded.append(
-                    just_write(
-                        tmp / f"traceprov_backtrace_{output_id}.sql", replaced_query
+            if parsed.sample_inference is None:
+                for output_id in range((table_size)):
+                    replaced_query = current_query.replace(";", "")
+                    if parsed.mat_infer:
+                        replaced_query = f"create or replace table traceprov_out_{output_id} as ({replaced_query})"
+                    traceprov_extra_expanded.append(
+                        just_write(
+                            tmp / f"traceprov_backtrace_{output_id}.sql", replaced_query
+                        )
                     )
+                traceprov_extra_expanded = list(map(str, traceprov_extra_expanded))
+                extra_out = just_write(
+                    extra_file_out, "\n".join(traceprov_extra_expanded)
                 )
-            traceprov_extra_expanded = list(map(str, traceprov_extra_expanded))
-            extra_out = just_write(extra_file_out, "\n".join(traceprov_extra_expanded))
+                set_extra_traceprov_sample_options(parsed, f"--extra_file {extra_out}")
             set_extra_traceprov_options(parsed, f" --mock_traceprov_bt_data")
-            set_extra_traceprov_sample_options(parsed, f"--extra_file {extra_out}")
         else:
             extra_options = ["disable_chunk_cache"]
             # if query in needs_perfect_hash_disable:
