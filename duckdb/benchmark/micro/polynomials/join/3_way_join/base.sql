@@ -9,3 +9,5 @@ from
             polynomial_table_control_1 as t3
             join polynomial_table_control_0 as t2 on t3.id = t2.id
     ) as t3 on t1.z = t3.id
+order by
+    t1.rowid

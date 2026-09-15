@@ -15,3 +15,5 @@ from
                     join polynomial_table_control_1 as t3 on t3.id = t4.id
             ) as t3 on t2.id = t3.id
     ) as t2 on t1.z = t2.id
+order by
+    t1.rowid
