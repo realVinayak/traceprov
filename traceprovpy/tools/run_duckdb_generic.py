@@ -83,6 +83,9 @@ TRACEPROV_BASE_OPTIONS = "_traceprov_parse_base_extra_options"
 TRACEPROV_SAMPLE_EXTRA_OPTIONS = "_traceprov_parse_sample_extra_options"
 
 
+TRACEPROV_MAT_TABLE = "_traceprov_mat_table"
+
+
 def set_extra_traceprov_options(parsed, options):
     setattr(parsed, TRACEPROV_EXTRA_OPTIONS, options)
 
@@ -104,6 +107,14 @@ def set_extra_traceprov_sample_options(parsed, options):
 
 
 def get_extra_traceprov_sample_options(parsed):
+    return getattr(parsed, TRACEPROV_SAMPLE_EXTRA_OPTIONS, "")
+
+
+def set_traceprov_mat_table(parsed, table_name: str):
+    setattr(parsed, TRACEPROV_SAMPLE_EXTRA_OPTIONS, table_name)
+
+
+def get_traceprov_mat_table(parsed):
     return getattr(parsed, TRACEPROV_SAMPLE_EXTRA_OPTIONS, "")
 
 
@@ -422,7 +433,7 @@ def run_single_smokedduck(
         ):
             if materialize_infer or validate:
                 backtrace_sql = [
-                    f"create or replace table {lineage_table_name} AS (",
+                    f"create or replace table {get_traceprov_mat_table(parsed) or lineage_table_name } AS (",
                     lineage_query.replace(";", ""),
                     ");",
                 ]

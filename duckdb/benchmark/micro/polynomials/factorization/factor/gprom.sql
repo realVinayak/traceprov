@@ -11,7 +11,7 @@ WITH temp_view_1 AS (
 temp_view_0 AS (
     SELECT
         /*+ materialize */
-        1 AS "1",
+        F0_0.b AS b,
         F0_0."prov_polynomial__table__0_id" AS "prov_polynomial__table__0_id"
     FROM
         (
@@ -34,7 +34,7 @@ temp_view_3 AS (
 temp_view_2 AS (
     SELECT
         /*+ materialize */
-        1 AS "1",
+        F0_0.b AS b,
         F0_0."prov_polynomial__table__1_id" AS "prov_polynomial__table__1_id"
     FROM
         (
@@ -57,7 +57,7 @@ temp_view_5 AS (
 temp_view_4 AS (
     SELECT
         /*+ materialize */
-        1 AS "1",
+        F0_0.b AS b,
         F0_0."prov_polynomial__table__2_id" AS "prov_polynomial__table__2_id"
     FROM
         (
@@ -70,13 +70,13 @@ temp_view_4 AS (
 SELECT
     (
         (((F0_0."PROV" || ' ⊗ ') || F1_0."PROV") || ' ⊗ ') || F2_0."PROV"
-    ) AS prov
+    ) AS "polynomial"
 FROM
     (
         (
             (
                 SELECT
-                    F0_0."1" AS "1",
+                    F0_0.b AS b,
                     '(' || string_agg(
                         F0_0."prov_polynomial__table__0_id" :: text,
                         ' ⊕ '
@@ -89,11 +89,11 @@ FROM
                             temp_view_0
                     ) F0_0
                 GROUP BY
-                    F0_0."1"
+                    F0_0.b
             ) F0_0
-            CROSS JOIN (
+            JOIN (
                 SELECT
-                    F0_0."1" AS "1",
+                    F0_0.b AS b,
                     '(' || string_agg(
                         F0_0."prov_polynomial__table__1_id" :: text,
                         ' ⊕ '
@@ -106,12 +106,12 @@ FROM
                             temp_view_2
                     ) F0_0
                 GROUP BY
-                    F0_0."1"
-            ) F1_0
+                    F0_0.b
+            ) F1_0 ON ((F0_0.b = F1_0.b))
         )
-        CROSS JOIN (
+        JOIN (
             SELECT
-                F0_0."1" AS "1",
+                F0_0.b AS b,
                 '(' || string_agg(
                     F0_0."prov_polynomial__table__2_id" :: text,
                     ' ⊕ '
@@ -124,6 +124,6 @@ FROM
                         temp_view_4
                 ) F0_0
             GROUP BY
-                F0_0."1"
-        ) F2_0
-    )
+                F0_0.b
+        ) F2_0 ON ((F2_0.b = F1_0.b))
+    );

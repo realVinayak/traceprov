@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from utils import create_or_replace_table
 from traceprovpy.tools.benchmark_utils import traceprov_dump_safe_results
 from traceprovpy.tools.duckdb_parse_options import (
     make_duckdb_parse,
@@ -20,6 +21,7 @@ from traceprovpy.tools.run_duckdb_generic import (
     sd_set_preprocessor,
     set_extra_traceprov_options,
     set_extra_traceprov_sample_options,
+    set_traceprov_mat_table,
     tp_use_extra_infer_set,
 )
 
@@ -76,16 +78,24 @@ def run_factorized_traceprov(
     )
     sd_set_preprocessor(parsed, preprocessor)
     os.makedirs(query_out_dir, exist_ok=True)
+    system = "sd" if parsed.sd_mode is not None else "traceprov"
+
     if sd_polynomial_query:
         just_write(query_out_dir / "sd_thread_1_combined.sql", (sd_polynomial_query))
     for factor in factorization:
+        mat_table_name = f"traceprov_{system}_{factor_label}_{factor}"
         base_sql = just_read(query_dir / "base.sql")
         create_base_offset(query_dir)
         base_offset_sql = just_read(query_dir / "base_offset.sql")
         capture_new_compact_sql = just_read(query_dir / "capture_new_compact.sql")
         print("Capture SQL: ", capture_new_compact_sql)
         traceprov_extra = [query_dir / "traceprov.sql"]
-        # traceprov_sql = just_read(query_dir / "traceprov.sql")
+        traceprov_sql = just_read(query_dir / "traceprov.sql")
+        if parsed.mat_infer:
+            traceprov_sql = create_or_replace_table(traceprov_sql, mat_table_name)
+            traceprov_extra = [
+                just_write(query_out_dir / "traceprov.sql", traceprov_sql)
+            ]
         replacer = make_replacer(factor)
         just_write(query_out_dir / "base.sql", replacer(base_sql))
         just_write(query_out_dir / "base_offset.sql", replacer(base_offset_sql))
@@ -104,12 +114,14 @@ def run_factorized_traceprov(
             #     extra_options.append("disable_perfect_hash")
             extra_options = " ".join([f"--{key}" for key in extra_options])
             set_extra_traceprov_options(parsed, extra_options)
+        set_traceprov_mat_table(parsed, mat_table_name)
         traceprov_result = run_combined(parsed, total_iters, query, [], 5)
+        set_traceprov_mat_table(parsed, "")
         set_extra_traceprov_options(parsed, "")
         tp_use_extra_infer_set(parsed, [])
         factor_results[factor] = traceprov_result
     sd_set_preprocessor(parsed, None)
-    return factor_results
+    return all_factor_results
 
 
 def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: int):
@@ -149,6 +161,7 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
     )
     sd_set_preprocessor(parsed, preprocessor)
     os.makedirs(query_out_dir, exist_ok=True)
+    system = "sd" if parsed.sd_mode is not None else "traceprov"
     for table_size in join_table_size:
         sd_combined_path = query_out_dir / "sd_thread_1_combined.sql"
         if sd_polynomial_query:
@@ -166,6 +179,7 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
             query_out_dir / "capture_new_compact.sql", replacer(capture_new_compact_sql)
         )
 
+        mat_table_name = f"traceprov_{system}_{raw_num_joins}_{table_size}"
         # for file in just_read(extra_file_out):
         if parsed.sd_mode is None:
             current_query = just_read(query_dir / "traceprov.sql")
@@ -190,8 +204,9 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
                 main_extra_file = tmp / "main_extra.sql"
                 backtrace_query = current_query
                 if parsed.mat_infer:
-                    backtrace_query = backtrace_query.replace(";", "")
-                    backtrace_query = f"create or replace table traceprov_lineage_1 as ({backtrace_query})"
+                    backtrace_query = create_or_replace_table(
+                        backtrace_query, mat_table_name
+                    )
                 just_write(main_extra_file, backtrace_query)
                 traceprov_extra = [main_extra_file]
                 tp_use_extra_infer_set(parsed, traceprov_extra)
@@ -203,12 +218,14 @@ def run_join_traceprov(config, parsed, tmp: Path, total_iters, raw_num_joins: in
             #     extra_options.append("disable_perfect_hash")
             extra_options = " ".join([f"--{key}" for key in extra_options])
             set_extra_traceprov_options(parsed, extra_options)
+        set_traceprov_mat_table(parsed, mat_table_name)
         traceprov_result = run_combined(parsed, total_iters, query, [], 2)
         set_extra_traceprov_options(parsed, "")
         tp_use_extra_infer_set(parsed, [])
+        set_traceprov_mat_table(parsed, "")
         factor_results[table_size] = traceprov_result
     sd_set_preprocessor(parsed, None)
-    return factor_results
+    return all_factor_results
 
 
 def run():
