@@ -1,5 +1,5 @@
 select
-    t_3.in_index :: text || ' ⊗ ' || t_0.in_index :: text || ' ⊗ ' || t_1.in_index :: text as polynomial
+    t_0.in_index :: text || ' ⊗ ' || t_1.in_index :: text || ' ⊗ ' || t_3.in_index :: text as polynomial
 from
     lineage_view(0, 8) t_8
     join lineage_view(0, 4) t_4 on t_8.in_index = t_4.out_index

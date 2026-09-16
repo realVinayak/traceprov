@@ -76,7 +76,8 @@ def run_factorized_traceprov(
     )
     sd_set_preprocessor(parsed, preprocessor)
     os.makedirs(query_out_dir, exist_ok=True)
-    just_write(query_out_dir / "sd_thread_1_combined.sql", (sd_polynomial_query))
+    if sd_polynomial_query:
+        just_write(query_out_dir / "sd_thread_1_combined.sql", (sd_polynomial_query))
     for factor in factorization:
         base_sql = just_read(query_dir / "base.sql")
         create_base_offset(query_dir)
@@ -236,7 +237,10 @@ def run():
     )
     # factorization_result = None
     # non_factorization_result = None
-    all_results["factorization"] = [factorization_result, non_factorization_result]
+    all_results["factorization"] = [
+        dict(factor=True, result=factorization_result),
+        dict(factor=False, result=non_factorization_result),
+    ]
     join_results = []
     for num_joins in config["num_joins"]:
         join_results.append(
