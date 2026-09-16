@@ -91,9 +91,8 @@ def run(force_materialize=False, execution_hook=None):
             else:
                 disable_col_opt = query in NEEDS_DISABLE
                 graph_dir = extract_graph_dir(parsed)
-                query_result = run_sample_inference(
+                query_result = run_single(
                     query_num=query,
-                    samples=[-1],
                     traceprov_graph_path=graph_dir / query / "graph.bin",
                     traceprov_layers_to_derive=tuple(
                         query_layer_config[query]["layers_used"]
