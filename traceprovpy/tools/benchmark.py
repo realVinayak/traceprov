@@ -188,6 +188,7 @@ class QuerySpec(NamedTuple):
             is_global_last: bool = False,
         ):
             extra_results = defaultdict(list)
+            is_extra_timeout = False
             for extra in extras:
                 extra_pack = QuerySpec.get_pack(
                     top_dir, extra.query, get_run_options
@@ -223,8 +224,11 @@ class QuerySpec(NamedTuple):
                         extra_result = extra.func(arg_dict)
                     else:
                         extra_result = _run_with_timeout(extra_pack)
+                    if extra_result is None:
+                        is_extra_timeout = True
+                        break
                     extra_results[extra.label].append(extra_result)
-            return extra_results
+            return extra_results, is_extra_timeout
 
         original_get_options = get_run_options
 
@@ -267,9 +271,12 @@ class QuerySpec(NamedTuple):
                 extra for extra in self.extras if extra.runs_after_base
             ]
 
-            base_extra_results = _run_extras(
+            base_extra_results, is_extra_timeout = _run_extras(
                 base_extras_to_run, base_time, base_context, global_is_last
             )
+            if is_extra_timeout:
+                results["base"].append(dict(base_extra_timeout=True))
+                break
             base_pack.close_all()
             materialize_context = dict()
             is_timeout = False
@@ -300,7 +307,7 @@ class QuerySpec(NamedTuple):
                 mat_extras_to_run = [
                     extra for extra in self.extras if extra.runs_after_materialize
                 ]
-                materialize_extra_results = _run_extras(
+                materialize_extra_results, is_extra_timeout = _run_extras(
                     mat_extras_to_run,
                     materialize_time,
                     materialize_context,
