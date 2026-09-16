@@ -4,24 +4,24 @@ FROM
     (
         PROVENANCE WITH SEMIRING COMBINER NX OF (
             select
-                1
+                b
             from
                 polynomial_table_0 has provenance (id)
         )
-    ) x,
-    (
+    ) x
+    JOIN (
         PROVENANCE WITH SEMIRING COMBINER NX OF (
             select
-                1
+                b
             from
                 polynomial_table_1 has provenance (id)
         )
-    ) y,
-    (
+    ) y ON x.b = y.b
+    JOIN(
         PROVENANCE WITH SEMIRING COMBINER NX OF (
             select
-                1
+                b
             from
                 polynomial_table_2 has provenance (id)
         )
-    ) z;
+    ) z ON z.b = y.b;

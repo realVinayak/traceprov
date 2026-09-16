@@ -3,25 +3,25 @@ select
 from
     (
         select
-            distinct 1
+            distinct b
         from
             polynomial_table_0
         where
             id <= NUM
-    )
-    cross JOIN (
+    ) as t1
+    JOIN (
         select
-            distinct 1
+            distinct b
         from
             polynomial_table_1
         where
             id <= NUM
-    )
-    cross JOIN (
+    ) as t2 on t1.b = t2.b
+    JOIN (
         select
-            distinct 1
+            distinct b
         from
             polynomial_table_2
         where
             id <= NUM
-    )
+    ) as t3 on t2.b = t3.b

@@ -26,7 +26,7 @@ WITH temp_view_1 AS (
                             where
                                 id <= NUM
                         ) F0_0
-                        CROSS JOIN (
+                        JOIN (
                             SELECT
                                 F0_0.b AS b,
                                 F0_0.id AS "prov_polynomial__table__1_id"
@@ -34,10 +34,10 @@ WITH temp_view_1 AS (
                                 "polynomial_table_1" F0_0
                             where
                                 id <= NUM
-                        ) F1_0
+                        ) F1_0 ON ((F0_0.b = F1_0.b))
                     )
             ) F0_0
-            CROSS JOIN (
+            JOIN (
                 SELECT
                     F0_0.b AS b,
                     F0_0.id AS "prov_polynomial__table__2_id"
@@ -45,7 +45,7 @@ WITH temp_view_1 AS (
                     "polynomial_table_2" F0_0
                 where
                     id <= NUM
-            ) F1_0
+            ) F1_0 ON ((F0_0."b1" = F1_0.b))
         )
 ),
 temp_view_0 AS (
@@ -64,7 +64,6 @@ temp_view_0 AS (
         ) F0_0
 )
 SELECT
-    F0_0."1" AS "1",
     string_agg(
         '(' || F0_0."prov_polynomial__table__0_id" || ' ⊗ ' || F0_0."prov_polynomial__table__1_id" || ' ⊗ ' || F0_0."prov_polynomial__table__2_id" || ')',
         ' ⊕ '
