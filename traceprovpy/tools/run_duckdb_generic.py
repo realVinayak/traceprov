@@ -189,7 +189,7 @@ def run_sample_inference(
         get_log_size=True,
         warm_up_time=parsed.warm_up_time,
         output_col_idx=output_column_index,
-        sd_join_mode=parsed.simple_join_mode,
+        simple_join_mode=parsed.simple_join_mode,
     )
 
     capture_options = capture_options.parse_optimizations(parsed)
