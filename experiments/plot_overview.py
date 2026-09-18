@@ -75,7 +75,7 @@ def plot_legends(out_dir: Path):
             handles.append(top)
             continue
         handles.extend((top, bottom))
-    print(handles)
+    # print(handles)
     generic_dump_legends(fig, ax, out_dir, handles, len(CATEGORY_MAPPING))
 
 
@@ -144,18 +144,25 @@ def get_all(parsed, _, extra_predicates: str, parallel=1):
     connection = duckdb.connect(db_path)
     cursor = connection.cursor()
     sql = just_read("./overview_all_query.sql")
-    cursor.execute(make_list_query(sql, extra_predicates, parallel))
+    cursor_safe_execute(cursor, make_list_query(sql, extra_predicates, parallel))
     results = cursor.fetchall()
     print("len results: ", len(results))
-    cursor.execute(
+    cursor_safe_execute(
+        cursor,
         make_slowdown_query(
             sql, ALL_TIME_KEY, add_parallel_predicate(extra_predicates, parallel)
-        )
+        ),
     )
     slowdown_values = list(cursor.fetchall())
-    print(list(slowdown_values))
+    # print(list(slowdown_values))
     cursor.close()
+    # print("All Base Results: ", list([res for res in results if res[0] == "base"]))
     return results, slowdown_values
+
+
+def cursor_safe_execute(cursor, query):
+    # print("Running: ", query)
+    cursor.execute(query)
 
 
 def plot_offset(
@@ -167,7 +174,7 @@ def plot_offset(
     connection = duckdb.connect(db_all_path)
     cursor = connection.cursor()
     all_sql = just_read("./overview_all_query.sql")
-    cursor.execute(make_list_query(all_sql, extra_predicates, parallel))
+    cursor_safe_execute(cursor, make_list_query(all_sql, extra_predicates, parallel))
     results_all = cursor.fetchall()
     results_all_base = [res for res in results_all if res[0] == "base"]
     cursor.close()
@@ -175,20 +182,25 @@ def plot_offset(
     connection = duckdb.connect(db_path)
     cursor = connection.cursor()
     offset_sql = just_read("./overview_offset_query.sql")
-    cursor.execute(make_list_query(offset_sql, extra_predicates, parallel))
+    cursor_safe_execute(cursor, make_list_query(offset_sql, extra_predicates, parallel))
     results_offset = cursor.fetchall()
     base_added = [*results_offset, *results_all_base]
-    cursor.execute(
+    cursor_safe_execute(
+        cursor,
         make_slowdown_query(
             offset_sql,
             OFFSET_TIME_KEY,
             add_parallel_predicate(extra_predicates, parallel),
-        )
+        ),
     )
     slowdown_values = list(cursor.fetchall())
-    print(list(slowdown_values))
+    # print(list(slowdown_values))
     cursor.close()
     connection.close()
+    # print(
+    #     "Offset Base Results: ",
+    #     list([res for res in results_all_base if res[0] == "base"]),
+    # )
     return base_added, slowdown_values
 
 
@@ -238,19 +250,22 @@ def plot_main(
     slowdown_box_plot_axis.margins(x=MARGIN)
     pending_bars = []
     query_time_map = dict()
+    query_error_map = dict()
     for category_idx, (category_key, category_data) in enumerate(results_sorted):
         category_data_mapped = make_category_data_mapped(category_data)
-        query_errors = [
-            (
-                (q, get_main_error(category_data_mapped[q]["fail_reason"], options))
-                if (
-                    q in category_data_mapped
-                    and category_data_mapped[q][time_key] is not None
+        query_errors = list(
+            [
+                (
+                    (q, get_main_error(category_data_mapped[q]["fail_reason"], options))
+                    if (
+                        q in category_data_mapped
+                        and category_data_mapped[q][time_key] is not None
+                    )
+                    else (q, PlotErrors.not_available)
                 )
-                else (q, PlotErrors.not_available)
-            )
-            for q in x_axis_values
-        ]
+                for q in x_axis_values
+            ]
+        )
         query_with_errors_mapped = get_query_error_mapping(query_errors)
         query_without_errors = query_with_errors_mapped[None]
         total_time_values = [
@@ -267,6 +282,7 @@ def plot_main(
             for q in x_axis_values
         }
         query_time_map[category_key] = absolute_time_value_map
+        query_error_map[category_key] = query_errors
         x_axis_shifted = x_axis + width * category_idx
         total_time_axis.bar(
             x_axis_shifted,
@@ -362,7 +378,7 @@ def plot_main(
     slowdown_sorted = sorted(raw_slowdown, key=lambda x: x[0])
     slowdown_map = {x[1]: x[0] for x in slowdown_sorted}
     slowdown_data = [x[0] for x in slowdown_sorted]
-
+    print("Using slowdown data: ", slowdown_data)
     slowdown_box_plot_axis.boxplot(slowdown_data, whis=(0, 100), showfliers=False)
     # slowdown_box_plot_axis.axhline(y=1, color='red', linestyle='--', linewidth=2)
     # slowdown_box_plot_axis.axhline(y=2, color='red', linestyle='--', linewidth=2)
@@ -421,11 +437,11 @@ def plot_main(
         bbox_inches="tight",
     )
     plot_legends(out_dir)
-    return query_time_map
+    return query_time_map, query_error_map
 
 
-ALL_TIME_KEY = "total_time_median"
-OFFSET_TIME_KEY = "total_time_mean"
+ALL_TIME_KEY = "total_usage_time"
+OFFSET_TIME_KEY = "total_usage_time"
 
 
 def get_category_by_top(elems):
@@ -498,6 +514,7 @@ def run_and_get_time_map(plot_context, parsed, sf, strict=True):
         result_map[db_option] = plot_main(
             results, data_options, out_dir, time_key, slowdown
         )
+        # print("Result layer base: ", result_map[db_option][0]["base"])
     return result_map
 
 

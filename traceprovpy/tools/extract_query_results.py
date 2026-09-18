@@ -36,10 +36,9 @@ from traceprovpy.tools.run_duckdb_generic import (
 VERSION_REG = r"^g_(\d+)_"
 
 
-class TpchRow(Normalizable):
+class GenericRow(Normalizable):
     category: str
     parallel: int
-    query_num: str
     phase_1: Extendable
     phase_2: Extendable
     phase_1_profile: Extendable
@@ -54,7 +53,6 @@ class TpchRow(Normalizable):
         return {
             "category",
             "parallel",
-            "query_num",
             "phase_1_profile",
             "phase_2_profile",
             "layer_number",
@@ -65,6 +63,13 @@ class TpchRow(Normalizable):
             "log_sizes",
             "extra",
         }
+
+
+class TpchRow(GenericRow):
+    query_num: str
+
+    def keys(self):
+        return super().keys() | {"query_num"}
 
 
 # if it is sample then there's just offset to keep track off.
@@ -120,15 +125,20 @@ def extract_str(in_regex):
 EXTRACT_LAYER = extract_str(r"layer-(\d+)")
 EXTRACT_PARTITION = extract_str(r"partition_time-(\d+)")
 
+DEFAULT_QUERY_ID = ("query_num",)
+
 
 def make_versioned_query(
-    cursor, mode, db_system: Literal["postgres"] | Literal["duckdb"]
+    cursor,
+    mode,
+    db_system: Literal["postgres"] | Literal["duckdb"],
+    query_identifier=DEFAULT_QUERY_ID,
 ):
     # previously, we used a different logic to determine whether we need to use result of a
     # successive version
     # Now, if a query is found with new version, it is immediately taken and ALL the layers and offsets
     # are used. This makes things less prone to break.
-    base_columns = {"category", "parallel", "query_num"}
+    base_columns = {"category", "parallel", *query_identifier}
     base_columns = [f'"{column}"' for column in base_columns]
     base_column_joined = ",".join(list(base_columns))
     window_def = f'partition by {base_column_joined} order by "version" desc'
@@ -139,16 +149,16 @@ def make_versioned_query(
     orig_base_columns = {
         "category",
         "parallel",
-        "query_num",
+        *query_identifier,
         "layer_number",
-        NORM_ITER_COL,
+        # NORM_ITER_COL,
     }
     if mode == "offset":
         orig_base_columns |= {"offset"}
 
     orig_base_columns = [f'"{column}"' for column in orig_base_columns]
     group_by_columns = list(orig_base_columns)
-    group_by_columns.remove(f'"{NORM_ITER_COL}"')
+    # group_by_columns.remove(f'"{NORM_ITER_COL}"')
     grouped_clause = ",".join(group_by_columns)
     iter_clause = "1"
     if db_system != "postgres":
@@ -168,6 +178,7 @@ def make_versioned_query(
             (
                 select
                     count(*) as iter_count,
+                    coalesce(min({NORM_ITER_COL}), 1) as iter_min_value,
                     {grouped_clause}
                 from
                     dumped_versioned
@@ -179,7 +190,7 @@ def make_versioned_query(
         f"create or replace table dumped_pivot_table as ({count_query})"
     )
     cursor.execute(create_iter_pivot_table_expr)
-    dumped_filtered = f"select dumped_versioned.*, dumped_pivot_table.iter_pivot from dumped_versioned join dumped_pivot_table using ({grouped_clause}) where coalesce(dumped_versioned.{NORM_ITER_COL}, 1) >= iter_pivot"
+    dumped_filtered = f"select dumped_versioned.*, dumped_pivot_table.iter_pivot from dumped_versioned join dumped_pivot_table using ({grouped_clause}) where coalesce(dumped_versioned.{NORM_ITER_COL}, 1)  + (1 - least(iter_min_value, 1)) >= iter_pivot"
     create_dump_filtered_expr = (
         f"create or replace table dumped_versioned_filtered as ({dumped_filtered})"
     )
@@ -383,11 +394,14 @@ def _handle_duckdb_tp_offset(sample_inference_result: dict, suffix):
     return combined
 
 
-def handle_duckdb(
-    db_system: str, mode: str, result_path: Path, rows_list: list, default_version=None
+def handle_duckdb_result(
+    db_system: str,
+    mode: str,
+    result: dict,
+    result_path: Path,
+    rows_list: list,
+    default_version=None,
 ):
-    print("duckdb handling ", db_system, result_path)
-    result = json_read_file(result_path)
     main_res: dict = result["results"]
     terminal_name = result_path.name
     try:
@@ -619,6 +633,16 @@ def handle_duckdb(
     else:
         raise Exception("Not implemented anything else!")
     rows_list.extend(rows)
+
+
+def handle_duckdb(
+    db_system: str, mode: str, result_path: Path, rows_list: list, default_version=None
+):
+    print("duckdb handling ", db_system, result_path)
+    result = json_read_file(result_path)
+    handle_duckdb_result(
+        db_system, mode, result, result_path, rows_list, default_version
+    )
 
 
 class PgTimeout(Exception): ...
@@ -1232,7 +1256,9 @@ def handle_postgres(db_system: str, mode: str, result_path: Path, rows_list: lis
 import duckdb
 
 
-def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
+def dump_rows_list(
+    sf, db_name, mode, rows_list, out_dir, query_identifier=DEFAULT_QUERY_ID
+):
     core_db_name = db_name
     name = f"data_{sf}_{db_name}_{mode}"
     db_name = out_dir / f"{name}.db"
@@ -1246,7 +1272,7 @@ def dump_rows_list(sf, db_name, mode, rows_list, out_dir):
     cursor.execute(
         f"create or replace table dumped as (select * from read_json_auto('{tmp_file_name.absolute()}', sample_size=-1))"
     )
-    make_versioned_query(cursor, mode, core_db_name)
+    make_versioned_query(cursor, mode, core_db_name, query_identifier)
     cursor.close()
     connection.close()
 

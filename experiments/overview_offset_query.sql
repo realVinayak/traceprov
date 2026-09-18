@@ -2,7 +2,7 @@ select
     parallel,
     category,
     query_num,
-    mean(total_time_offset) as total_time_mean,
+    mean(total_time_offset) as total_usage_time,
     max(phase_2_profile_latency_std) / mean(total_time_offset) as total_time_std_ratio,
     any_value(fail_reason) as fail_reason
 FROM

@@ -27,6 +27,14 @@ class DataOptions(NamedTuple):
     def normalize_sf(self):
         return self._replace(sf="")
 
+    def get_timeout_value(self):
+        resolved_db_name = self.get_db_name()
+        if resolved_db_name == "duckdb":
+            return 300
+        if resolved_db_name == "postgres":
+            return 600
+        assert False, f"Expected to not reach here!"
+
 
 def get_options_split(parsed):
     db = Path(parsed.db).name
@@ -77,6 +85,7 @@ SYSTEM_MARKERS = {
     SystemLabels.gprom: "^",
     SystemLabels.smokedduck: "s",
     SystemLabels.muller: "d",
+    SystemLabels.provsql: "s",
 }
 
 

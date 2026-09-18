@@ -19,16 +19,14 @@ class Extendable(object):
         self.inner = inner
 
     def add_key(self, outer_key: str):
-        return [
-            add_keys(outer_key, item)
-            for item in self.inner
-        ]
+        return [add_keys(outer_key, item) for item in self.inner]
+
 
 def add_keys(prefix, obj):
-    if not isinstance(obj, dict): return obj
-    return {
-        f"{prefix}_{key}": value for (key, value) in obj.items()
-    }
+    if not isinstance(obj, dict):
+        return obj
+    return {f"{prefix}_{key}": value for (key, value) in obj.items()}
+
 
 def merge(multiples: Iterable[dict]) -> dict:
     return reduce(lambda prev, curr: ({**prev, **curr}), multiples, dict())
@@ -38,6 +36,7 @@ NORM_ITER_COL = "iter"
 
 
 class Normalizable(object):
+
     def __init__(self, **kwargs):
         keys = set(self.keys())
         in_keys = set(kwargs.keys())
@@ -45,7 +44,9 @@ class Normalizable(object):
         if NORM_ITER_COL in in_keys:
             check_keys = set(check_keys)
             check_keys.remove(NORM_ITER_COL)
-        assert keys == check_keys, f"Got different: {keys.symmetric_difference(in_keys)}"
+        assert (
+            keys == check_keys
+        ), f"Got different: {keys.symmetric_difference(in_keys)}"
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -68,8 +69,18 @@ class Normalizable(object):
             and not isinstance(getattr(self, key), Extendable)
             and (preserve_null or getattr(self, key) is not None)
         }
-        truly_simple_keys = {key: value for (key, value) in simple_keys.items() if not isinstance(value, dict)}
-        expended_values = merge([add_keys(key, value) for (key, value) in simple_keys.items() if isinstance(value, dict)])
+        truly_simple_keys = {
+            key: value
+            for (key, value) in simple_keys.items()
+            if not isinstance(value, dict)
+        }
+        expended_values = merge(
+            [
+                add_keys(key, value)
+                for (key, value) in simple_keys.items()
+                if isinstance(value, dict)
+            ]
+        )
         simple_keys = {**truly_simple_keys, **expended_values}
         if len(extended) == 0:
             return [simple_keys]

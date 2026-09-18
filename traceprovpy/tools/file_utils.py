@@ -3,6 +3,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 
 
 def safe_file(func):
@@ -194,3 +195,58 @@ def get_tmp_file():
 def run_query(cursor, query):
     cursor.execute(query)
     return cursor.fetchall()
+
+
+def strip_pound(val: str):
+    return val.split("#")[0].strip()
+
+
+LINE_REG = r"^\d+\.(.*):\s*$"
+
+
+def extract_from_notes(exp_notes, reg=LINE_REG):
+    exp_notes_split = exp_notes.splitlines()
+    match_count = 0
+    match_trimmed_dir = []
+    for line in exp_notes_split:
+        match = re.match(reg, line)
+        if match is None:
+            continue
+        match_count += 1
+        groups = match.groups()
+        # print(line, groups)
+        assert len(groups) == 1
+        match_trimmed: str = groups[0].strip()
+        print(match_trimmed)
+        match_trimmed_dir.append(strip_pound(match_trimmed.lower()))
+    pending = None
+    file_dirs = []
+    for line in exp_notes_split:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if len(stripped) == 0:
+            continue
+        if re.match(reg, line):
+            continue
+        if stripped == "```":
+            if pending is None:
+                pending = []
+                continue
+            file_dirs.append(pending)
+            pending = []
+            continue
+        assert pending is not None
+        pending.append(stripped)
+    print("Res: ", match_count)
+    for file_dir in file_dirs:
+        if len(file_dir) == 0:
+            continue
+        print("file dir: ")
+        print("\n".join(file_dir))
+    file_dirs_filt = [l for l in file_dirs if len(l) > 0]
+    print(len(file_dirs_filt))
+    assert len(file_dirs_filt) == len(match_trimmed_dir)
+    match_trimmed_nice = [mtd.split(" ") for mtd in match_trimmed_dir]
+    print(match_trimmed_nice)
+    return match_trimmed_nice, file_dirs_filt

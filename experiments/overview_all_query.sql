@@ -2,7 +2,7 @@ select
     parallel,
     category,
     query_num,
-    median(total_time) as total_time_median,
+    median(total_time) as total_usage_time,
     stddev(total_time) as total_time_std,
     mean(total_time) as total_time_mean,
     count(*) as c,
@@ -21,6 +21,8 @@ from
             (
                 case
                     when extra_total_time_set then extra_total_time
+                    -- Be mindful of the fact that the time can never be null
+                    when phase_1_profile_latency is NULL then NULL
                     else (
                         coalesce(phase_1_profile_latency, 0.0) + coalesce(phase_2_profile_latency, 0.0) + coalesce(extra_postprocess_time, 0.0) + coalesce(extra_sql_time, 0.0)
                     )

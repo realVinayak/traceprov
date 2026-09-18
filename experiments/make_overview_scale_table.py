@@ -5,8 +5,10 @@ from typing import List, NamedTuple, Tuple
 from matplotlib import pyplot as plt
 import numpy as np
 
+old_settings = np.seterr(all="raise")
+
 from traceprovpy.tools.file_utils import just_write
-from utils import SYSTEM_COLORS, SYSTEM_MARKERS, DataOptions
+from utils import SYSTEM_COLORS, SYSTEM_MARKERS, DataOptions, PlotErrors
 from plot_overview import (
     CATEGORY_LABEL,
     make_overview_base_parser,
@@ -120,6 +122,7 @@ def main():
     all_scale_results = dict()
     for scale_factor in SF:
         scale_result = run_and_get_time_map(plot_context, parsed, scale_factor, False)
+        just_write("./tmp/all_scale_results.py", str(all_scale_results))
         for data_option, results in scale_result.items():
             norm_data_option = data_option.normalize_sf()
             current = all_scale_results.get(norm_data_option, {})
@@ -134,9 +137,10 @@ def main():
     all_cells = []
     for data_option, data_option_results in all_scale_results.items():
         scale_category_results = []
-        for scale, scale_results in sorted(
+        for scale, combined_scale_results in sorted(
             data_option_results.items(), key=lambda x: int(x[0])
         ):
+            scale_results, _ = combined_scale_results
             baseline = scale_results["base"]
             category_results_flat = []
             for category, category_results in sorted(
@@ -172,18 +176,20 @@ IGNORE_SYSTEMS = ["provsql"]
 
 def plot_total_time_plots(all_scale_results: dict, outdir: Path):
     for data_option, data_option_results in all_scale_results.items():
-        print(data_option)
+        print("Handling", data_option)
         all_queries = set(list(map(str, range(1, 23))))
         # MARGIN = 0.02
         # total_time_axis.margins(x=MARGIN)
         scale_values = []
         true_scale_values = []
 
-        for scale, scale_results in sorted(
+        # ALl queries are considered valid now.
+        for scale, combined_scale_results in sorted(
             data_option_results.items(), key=lambda x: int(x[0])
         ):
-            scale_values.append(f"S={scale}")
-            true_scale_values.append(scale)
+            scale_results, error_list = combined_scale_results
+            # scale_values.append(f"S={scale}")
+            # true_scale_values.append(scale)
             for category, category_results in scale_results.items():
                 if category in IGNORE_SYSTEMS:
                     continue
@@ -194,15 +200,37 @@ def plot_total_time_plots(all_scale_results: dict, outdir: Path):
                 all_queries = all_queries.intersection(valid_queries)
 
         category_result_map = {}
-        for scale, scale_results in sorted(
+        for scale, combined_scale_results in sorted(
             data_option_results.items(), key=lambda x: int(x[0])
         ):
+            scale_results, error_list = combined_scale_results
+            scale_values.append(f"S={int(scale)}")
+            true_scale_values.append(scale)
             for category, category_results in scale_results.items():
+                query_error_mapping = {q: q_err for (q, q_err) in error_list[category]}
                 if category in IGNORE_SYSTEMS:
                     continue
-                total_category_time = sum(
-                    [category_results[q] for q in all_queries if category_results[q]]
-                )
+                total_category_time = 0.0
+                for query in all_queries:
+                    # need to handle unknown results (if they are null.)
+                    current_time = category_results[query]
+                    assert current_time != 0, "Got time as 0!!"
+                    if current_time is not None:
+                        total_category_time += current_time
+                        continue
+                    assert False
+                    assert (
+                        query in query_error_mapping
+                    ), f"Expected {query} to be found in {query_error_mapping}"
+                    query_error = query_error_mapping[query]
+                    if query_error == PlotErrors.timeout:
+                        total_category_time += data_option.get_timeout_value()
+                        print("Handling error via timeout!: ", scale, category, query)
+                        continue
+                    baseline_result = combined_scale_results[0]["base"][query]
+                    total_category_time += baseline_result
+                    # if category == 'smokedduck':
+                    #    print("Handling SmokedDuck invalid case!")
                 if category not in category_result_map:
                     category_result_map[category] = dict()
                 category_result_map[category][scale] = total_category_time
