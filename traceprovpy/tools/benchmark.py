@@ -224,7 +224,7 @@ class QuerySpec(NamedTuple):
                         extra_result = extra.func(arg_dict)
                     else:
                         extra_result = _run_with_timeout(extra_pack)
-                    if extra_result is None:
+                    if extra_result is None and extra.func is None:
                         is_extra_timeout = True
                         break
                     extra_results[extra.label].append(extra_result)
@@ -274,10 +274,10 @@ class QuerySpec(NamedTuple):
             base_extra_results, is_extra_timeout = _run_extras(
                 base_extras_to_run, base_time, base_context, global_is_last
             )
+            base_pack.close_all()
             if is_extra_timeout:
                 results["base"].append(dict(base_extra_timeout=True))
                 break
-            base_pack.close_all()
             materialize_context = dict()
             is_timeout = False
             if materialize_pack:
