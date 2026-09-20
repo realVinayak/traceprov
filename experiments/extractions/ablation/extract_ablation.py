@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from traceprovpy.tools.extract_query_results import handle_duckdb_result
+from traceprovpy.tools.extract_query_results import dump_rows_list, handle_duckdb_result
 from traceprovpy.tools.file_utils import json_read_file
 from traceprovpy.tools.normalized_row import ResultExtractor
 
@@ -39,6 +39,8 @@ def run():
                     continue
                 row.category = f"traceprov_{new_version}"
             all_rows.extend(current_rows)
+
+    dump_rows_list(10, "duckdb", "offset", all_rows, out_dir)
 
 
 if __name__ == "__main__":
