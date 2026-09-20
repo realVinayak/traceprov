@@ -170,10 +170,7 @@ def plot_thread_result(
             query_errors = [
                 (
                     (q, get_main_error(category_data_mapped[q]["fail_reason"], options))
-                    if (
-                        q in category_data_mapped
-                        and category_data_mapped[q][time_key] is not None
-                    )
+                    if (q in category_data_mapped)
                     else (q, PlotErrors.not_available)
                 )
                 for q in x_axis_values

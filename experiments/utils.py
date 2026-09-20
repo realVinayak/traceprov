@@ -54,6 +54,7 @@ class SystemLabels:
     smokedduck = "SmokedDuck"
     muller = "Müller"
     provsql = "ProvSQL"
+    traceprov_file = "TraceProv (File)"
 
 
 # colors = [

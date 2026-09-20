@@ -91,10 +91,7 @@ def plot_main(
         query_errors = [
             (
                 (q, get_main_error(category_data_mapped[q]["fail_reason"], options))
-                if (
-                    q in category_data_mapped
-                    and category_data_mapped[q][time_key] is not None
-                )
+                if (q in category_data_mapped)
                 else (q, PlotErrors.not_available)
             )
             for q in x_axis_values
@@ -285,13 +282,15 @@ def _get_break(in_dict: dict):
     latency_diff = in_dict["diff_latency"]
     index_diff = in_dict["diff_index"]
     is_less = latency_diff < 0
-    count = math.ceil(index_diff / latency_diff)
+    count = index_diff / latency_diff
     if count < 0:
         if is_less:
             return False
         count = 0
     return dict(
-        iter=count, is_less=is_less, total_count=int(in_dict["record_count"] * count)
+        iter=math.ceil(count),
+        is_less=is_less,
+        total_count=int(in_dict["record_count"] * count),
     )
 
 
