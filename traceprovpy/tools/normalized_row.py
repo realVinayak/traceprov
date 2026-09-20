@@ -1,6 +1,8 @@
+import argparse
 from collections import defaultdict
 from functools import reduce
 import math
+import os
 from pathlib import Path
 from typing import Iterable
 
@@ -9,6 +11,7 @@ import re
 from matplotlib import pyplot as plt
 import numpy as np
 
+from traceprovpy.tools.file_utils import extract_from_notes, just_read
 from traceprovpy.tools.plot_utils import BenchmarkPlot
 
 
@@ -520,3 +523,32 @@ def parse_sample_results(sample_infer_result, capture_indexes, is_traceprov):
         ]
     )
     return sample_result, sample_result_reduced
+
+
+class ResultExtractor:
+
+    def __init__(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--dir", required=False)
+        parser.add_argument("--notes", required=True)
+        parser.add_argument(
+            "--dry_run", action=argparse.BooleanOptionalAction, default=False
+        )
+        parser.add_argument("--out_dir", required=False, default="./tmp/")
+        self.parser = parser
+        self._parsed = None
+
+    def parse_args(self):
+        parsed = self.parser.parse_args()
+        out_dir = Path(parsed.out_dir)
+        os.makedirs(out_dir, exist_ok=True)
+        self._parsed = parsed
+        return parsed
+
+    def extract_notes(self):
+        parsed = self._parsed
+        notes = just_read(parsed.notes)
+        assert notes is not None
+        dirs, file_dirs = extract_from_notes(notes)
+        print(dirs, file_dirs)
+        return dirs, file_dirs

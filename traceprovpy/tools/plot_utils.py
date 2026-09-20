@@ -118,9 +118,9 @@ class BenchmarkPlot:
                     contents = contents.get_content()
                 yield (path, contents)
 
-    def add_timestamp(self):
+    def add_timestamp(self, attr="db"):
         parsed = self.parsed
-        db_name = parsed.db
+        db_name = getattr(parsed, attr)
         db_path = Path(db_name).name
         out_dir = Path(parsed.out_dir) / f"{db_path}_{self.name}"
         os.makedirs(out_dir, exist_ok=True)
@@ -367,7 +367,9 @@ def query_categories():
     return cats
 
 
-def add_arrow_label(top_plot_axis, label, xpos=0, ypos=1.12, transform=None):
+def add_arrow_label(
+    top_plot_axis, label, xpos=0, ypos=1.12, transform=None, ypos_start=1.1
+):
     if transform is None:
         transform = blended_transform_factory(
             top_plot_axis.transAxes, top_plot_axis.transAxes
@@ -375,7 +377,7 @@ def add_arrow_label(top_plot_axis, label, xpos=0, ypos=1.12, transform=None):
 
     top_plot_axis.annotate(
         "",
-        xy=(0, 1.1),
+        xy=(0, ypos_start),
         xycoords=transform,  # arrow head position (top)
         xytext=(0, 0.0),
         textcoords=transform,  # arrow tail position (bottom)
@@ -410,6 +412,8 @@ EXTRA_PREDICATE = "_EXTRA_PREDICATE_"
 
 
 def replace_extra_predicate(query: str, extra_predicate: str):
+    if extra_predicate is None:
+        return query
     assert EXTRA_PREDICATE in query
     return query.replace(EXTRA_PREDICATE, extra_predicate)
 

@@ -250,3 +250,10 @@ def extract_from_notes(exp_notes, reg=LINE_REG):
     match_trimmed_nice = [mtd.split(" ") for mtd in match_trimmed_dir]
     print(match_trimmed_nice)
     return match_trimmed_nice, file_dirs_filt
+
+
+def set_query_num(rows):
+    for row in rows:
+        assert hasattr(row, "query_num")
+        row.query_num = row.query_num._asdict()
+    return rows

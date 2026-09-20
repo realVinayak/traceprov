@@ -403,8 +403,9 @@ def handle_duckdb_result(
     default_version=None,
 ):
     main_res: dict = result["results"]
-    terminal_name = result_path.name
     try:
+        assert result_path is not None
+        terminal_name = result_path.name
         version = parse_reg(terminal_name)
     except AssertionError:
         if default_version is None:
@@ -496,11 +497,15 @@ def handle_duckdb_result(
             phase_1_profile_result = list(
                 map(tap_profile_result, sd_result["capture_profile"])
             )
-            phase_2_combined_result = extract_infer(sd_result["infer_results"])
-            phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
-            phase_2_profile_result = list(
-                map(tap_profile_result, phase_2_combined_result)
-            )
+            if sd_result["infer_results"] is not None:
+                phase_2_combined_result = extract_infer(sd_result["infer_results"])
+                phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
+                phase_2_profile_result = list(
+                    map(tap_profile_result, phase_2_combined_result)
+                )
+            else:
+                phase_2_result = None
+                phase_2_profile_result = None
             extra_stats = list(
                 map(StandardStats.get_sd_stats, sd_result["capture_stats"])
             )
@@ -514,8 +519,14 @@ def handle_duckdb_result(
                 dict(
                     phase_1=Extendable(phase_1_result),
                     phase_1_profile=Extendable(phase_1_profile_result),
-                    phase_2=Extendable(phase_2_result),
-                    phase_2_profile=Extendable(phase_2_profile_result),
+                    phase_2=(
+                        None if phase_2_result is None else Extendable(phase_2_result)
+                    ),
+                    phase_2_profile=(
+                        None
+                        if phase_2_profile_result is None
+                        else Extendable(phase_2_profile_result)
+                    ),
                     log_sizes=Extendable(log_size),
                     extra=Extendable(extra_stats),
                 )
@@ -559,11 +570,15 @@ def handle_duckdb_result(
             phase_1_profile_result = list(
                 map(tap_profile_result, tp_result["capture_profile"])
             )
-            phase_2_combined_result = extract_infer(tp_result["infer_results"])
-            phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
-            phase_2_profile_result = list(
-                map(tap_profile_result, phase_2_combined_result)
-            )
+            if tp_result["infer_results"] is not None:
+                phase_2_combined_result = extract_infer(tp_result["infer_results"])
+                phase_2_result = list(map(tap_simple_result, phase_2_combined_result))
+                phase_2_profile_result = list(
+                    map(tap_profile_result, phase_2_combined_result)
+                )
+            else:
+                phase_2_result = None
+                phase_2_profile_result = None
             extra_stats = [
                 StandardStats.get_tp_stats(node["option"], suffix)
                 for node in tp_result["capture_time"]
@@ -576,8 +591,14 @@ def handle_duckdb_result(
                 dict(
                     phase_1=Extendable(phase_1_result),
                     phase_1_profile=Extendable(phase_1_profile_result),
-                    phase_2=Extendable(phase_2_result),
-                    phase_2_profile=Extendable(phase_2_profile_result),
+                    phase_2=(
+                        None if phase_2_result is None else Extendable(phase_2_result)
+                    ),
+                    phase_2_profile=(
+                        None
+                        if phase_2_profile_result is None
+                        else Extendable(phase_2_profile_result)
+                    ),
                     log_sizes=Extendable(log_size),
                     extra=Extendable(extra_stats),
                 )
@@ -654,9 +675,14 @@ DUCKDB_GENERIC = "fail_generic"
 
 
 def extract_postgres_data(pg_result):
+    # print("PG RESULT: ", pg_result)
     is_timeout = pg_result.get("timeout", False)
 
     if is_timeout:
+        raise PgTimeout()
+
+    is_extra_timeout = pg_result.get("base_extra_timeout", False)
+    if is_extra_timeout:
         raise PgTimeout()
 
     timing = pg_result["explain_time"]
@@ -688,7 +714,7 @@ def slice_throwaway(results):
 
 
 def extract_pg_mult(pg_results):
-    all_profile_gen_results = [extract_postgres_data(of) for of in pg_results]
+    all_profile_gen_results = list([extract_postgres_data(of) for of in pg_results])
     profile_result = Extendable([t[0] for t in all_profile_gen_results])
     gen_result = Extendable([t[1] for t in all_profile_gen_results])
     return profile_result, gen_result
@@ -727,14 +753,14 @@ def _get_muller_handle(db_system, version):
         except PgTimeout:
             fail_reason = PG_TIMEOUT
 
-        if fail_reason is None:
+        if fail_reason is None and len(query_result["materialize"]) != 0:
             try:
                 phase_2_profile, phase_2 = extract_pg_mult(query_result["materialize"])
             except PgTimeout:
                 fail_reason = PG_TIMEOUT
         log_sizes = Extendable(
             [
-                make_log_size(extra["base_muller_get_log_size"])
+                extract_muller_log_size(extra["base_muller_get_log_size"])
                 for extra in query_result["extras"]
             ]
         )
@@ -767,7 +793,10 @@ def _get_muller_handle(db_system, version):
             except PgTimeout:
                 fail_reason = PG_TIMEOUT
         log_sizes = Extendable(
-            [make_log_size(extra["base_muller_get_log_size"]) for extra in extras]
+            [
+                extract_muller_log_size(extra["base_muller_get_log_size"])
+                for extra in extras
+            ]
         )
         kwargs = dict(
             query_num=query_num,
@@ -1002,14 +1031,21 @@ def _get_pg_traceprov_handle(db_system, version, thread_count):
         traceprov_extras_result = traceprov_result["extras"]
         phase_1_profile, phase_1 = extract_pg_mult(traceprov_base_result)
         if is_bulk_derive:
-            infer_extracted = [
-                _handle_traceprov_infer(
-                    item["traceprov_infer"][0]["results"][0]["offset_result"]
-                )
-                for item in traceprov_extras_result
-            ]
-            phase_2_profile = Extendable([t[0] for t in infer_extracted])
-            phase_2 = Extendable([t[1] for t in infer_extracted])
+            # in this case, skip the phase 2 derivation.
+            if len(traceprov_extras_result) == 0 or any(
+                not ("traceprov_infer" in item) for item in traceprov_extras_result
+            ):
+                phase_2_profile = None
+                phase_2 = None
+            else:
+                infer_extracted = [
+                    _handle_traceprov_infer(
+                        item["traceprov_infer"][0]["results"][0]["offset_result"]
+                    )
+                    for item in traceprov_extras_result
+                ]
+                phase_2_profile = Extendable([t[0] for t in infer_extracted])
+                phase_2 = Extendable([t[1] for t in infer_extracted])
             log_sizes = Extendable(
                 [
                     _handle_traceprov_log_size(
@@ -1128,38 +1164,75 @@ def _get_provsql_handle(db_system, version, parallel):
     )
 
     def _handle_all_result_query(current_q_result):
+        # print("CURR Q: ", current_q_result)
         query_num, query_result = current_q_result
         phase_1_result = query_result["phase_1"]
-        phase_1_2_result = query_result["phase_1_2"]
+        is_timeout = False
+        if "phase_1_2" in query_result:
+            phase_1_2_result = query_result["phase_1_2"]
 
-        phase_1_capture = [res["capture"][0] for res in phase_1_result["extras"]]
-        phase_1_capture_and_backtrace = [
-            res["capture_and_backtrace"][0] for res in phase_1_2_result["extras"]
-        ]
-        phase_1_profile, phase_1_time = extract_pg_mult(phase_1_capture)
-        phase_1_2_profile, phase_1_2_time = extract_pg_mult(
-            phase_1_capture_and_backtrace
-        )
-        log_sizes = Extendable(
-            [extract_provsql_log_size(res) for res in phase_1_result["extras"]]
-        )
-        stats_with_time = Extendable(
-            [
-                StandardStats(
-                    total_time=prof_res["latency"], total_time_set=True
-                )._asdict()
-                for prof_res in phase_1_2_profile.inner
-            ]
-        )
-        kwargs = dict(
-            query_num=query_num,
-            phase_1=phase_1_time,
-            phase_1_profile=phase_1_profile,
-            phase_2=phase_1_2_time,
-            phase_2_profile=phase_1_2_profile,
-            log_sizes=log_sizes,
-            extra=stats_with_time,
-        )
+            for res in phase_1_2_result["base"]:
+                if "base_extra_timeout" in res:
+                    is_timeout = True
+                break
+        else:
+            phase_1_2_result = None
+
+        if is_timeout:
+            print("Handling via timeout!")
+            kwargs = dict(
+                query_num=query_num,
+                phase_1=None,
+                phase_1_profile=None,
+                phase_2=None,
+                phase_2_profile=None,
+                log_sizes=None,
+                extra=None,
+                fail_reason=PG_TIMEOUT,
+            )
+        else:
+            phase_1_capture = [res["capture"][0] for res in phase_1_result["extras"]]
+            phase_1_profile, phase_1_time = extract_pg_mult(phase_1_capture)
+            log_sizes = Extendable(
+                [extract_provsql_log_size(res) for res in phase_1_result["extras"]]
+            )
+
+            if (
+                phase_1_2_result is None
+                or len(phase_1_2_result["extras"]) == 0
+                or any(
+                    "capture_and_backtrace" not in res
+                    for res in phase_1_2_result["extras"]
+                )
+            ):
+                phase_1_2_profile = None
+                phase_1_2_time = None
+                stats_with_time = NULL_STATS
+            else:
+                phase_1_capture_and_backtrace = [
+                    res["capture_and_backtrace"][0]
+                    for res in phase_1_2_result["extras"]
+                ]
+                phase_1_2_profile, phase_1_2_time = extract_pg_mult(
+                    phase_1_capture_and_backtrace
+                )
+                stats_with_time = Extendable(
+                    [
+                        StandardStats(
+                            total_time=prof_res["latency"], total_time_set=True
+                        )._asdict()
+                        for prof_res in phase_1_2_profile.inner
+                    ]
+                )
+            kwargs = dict(
+                query_num=query_num,
+                phase_1=phase_1_time,
+                phase_1_profile=phase_1_profile,
+                phase_2=phase_1_2_time,
+                phase_2_profile=phase_1_2_profile,
+                log_sizes=log_sizes,
+                extra=stats_with_time,
+            )
         return [TpchRow(**({**provsql_raw_args, **kwargs}))]
 
     def _handle_offset_result_query(current_q_result):
