@@ -111,6 +111,7 @@ def prepare_for_provsql(connection, tables, factor_iters, join_iters):
         f"create table factor_mapping as (select * from ({factor_mapping_table}))"
     )
     cursor.execute(mappings)
+    connection.commit()
     for f in zipf_tables:
         for j_count in range(1, join_iters + 1):
             control_tables = [
