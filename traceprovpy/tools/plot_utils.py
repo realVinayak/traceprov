@@ -368,7 +368,13 @@ def query_categories():
 
 
 def add_arrow_label(
-    top_plot_axis, label, xpos=0, ypos=1.12, transform=None, ypos_start=1.1
+    top_plot_axis,
+    label,
+    xpos=0,
+    ypos=1.12,
+    transform=None,
+    ypos_start=1.1,
+    extra_kwargs=dict(),
 ):
     if transform is None:
         transform = blended_transform_factory(
@@ -385,14 +391,18 @@ def add_arrow_label(
     )
     top_plot_axis.set_ylabel(None)
     # Label at the top of the arrow
-    top_plot_axis.text(
-        xpos,
-        ypos,
-        label,
+    all_kwargs = dict(
         transform=transform,
         ha="center",
         va="bottom",
         fontsize=10,
+    )
+    all_kwargs = {**all_kwargs, **extra_kwargs}
+    top_plot_axis.text(
+        xpos,
+        ypos,
+        label,
+        **all_kwargs,
     )
 
 

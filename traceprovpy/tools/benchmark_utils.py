@@ -19,6 +19,7 @@ from traceprovpy.tools.provsql_utiis import (
     make_provsql_backtrace_offset,
     provsql_get_log_size,
     restart_mmap_writer,
+    provsql_perf_query
 )
 from traceprovpy.tools.run_with_timeout import TP_SKIPPABLE_OPTION, MakeTraceProv
 import os
@@ -181,6 +182,12 @@ PROVSQL_BACKTRACE_OFFSET = lambda table_name, query: ExtraQuery(
     runs_after_base=True,
 )
 
+PROVSQL_PERFORM_PROF_QUERY = lambda: ExtraQuery(
+    label="provsql_perf_query",
+    query=TP_SKIPPABLE_OPTION,
+    func=CallableRepr(provsql_perf_query, "provsql_perf_query"),
+    runs_after_base=True,
+)
 
 def traceprov_make_drop_view(label: str, view_name: str, strict: bool):
     return ExtraQuery(

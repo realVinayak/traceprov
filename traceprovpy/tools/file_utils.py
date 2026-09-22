@@ -85,7 +85,7 @@ def get_total_iters(config: dict):
 TP_OUT_ID_TICKER = "%OUT_ID%"
 
 
-def get_slowdown_cats(slowdown_data, break_points):
+def get_slowdown_cats(slowdown_data, break_points, round_up=False):
     slowdown_data = sorted(slowdown_data, key=lambda tup: tup[1])
     cats = []
     for _ in range(len(break_points) + 1):
@@ -99,7 +99,11 @@ def get_slowdown_cats(slowdown_data, break_points):
         cats[break_point_idx].append(query)
     max_slowdown = slowdown_data[-1][1]
     assert max_slowdown > 0
-    break_points.append(round(max_slowdown, 2))
+    if round_up:
+        final_slowdown = math.ceil(max_slowdown)
+    else:
+        final_slowdown = round(max_slowdown, 2)
+    break_points.append(final_slowdown)
     print("CATS: ", cats, break_points)
     return cats
 

@@ -12,8 +12,9 @@ from traceprovpy.tools.run_with_timeout import (
     MakeKeySelection,
     RunWithTimeoutOptions,
     run_with_timeout,
+    CACHED_CONNECTION
 )
-
+import time
 
 def get_db_path(conn):
     cursor = conn.cursor()
@@ -161,3 +162,38 @@ def provsql_get_log_size(args):
     file_sizes = {file.name: os.path.getsize(file) for file in files}
     print(file_sizes)
     return file_sizes
+
+PROVSQL_RAW_QUERY = "PROVSQL_RAW_QUERY"
+
+
+def provsql_perf_query(args):
+    run_time_options: RunWithTimeoutOptions = args["extra_pack"]
+    conn = run_time_options.connection_params.make_connection()
+    query_spec = args["self"]
+    # conn = run_time_options.run_connection_strict()
+    cursor = conn.cursor()
+    query = query_spec.extra_options[PROVSQL_RAW_QUERY]
+    getter = args["get_run_options"]
+    rt_option = query_spec.get_pack(
+        Path("/tmp/"),
+        query,
+        getter,
+    )
+    for subq in rt_option.extra_commands:
+        cursor.execute(subq)
+    cursor.execute("select get_nb_gates();")
+    cursor.close()
+    rt_option = rt_option._replace(extras={CACHED_CONNECTION: conn})
+    start = time.perf_counter()
+    rsi_result = run_with_timeout(rt_option)
+    cursor = conn.cursor()
+    cursor.execute("explain (analyze, timing off) select get_nb_gates();")
+    end = time.perf_counter()
+    combined_result = dict(
+        wall_clock_time=end - start,
+        rsi_result=rsi_result
+    )
+    cursor.close()
+    run_time_options.extras[CACHED_CONNECTION] = conn
+    return combined_result
+    
