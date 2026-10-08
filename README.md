@@ -19,4 +19,4 @@ We verify that each system generates an equivalent provenance polynomial for a g
 
 ## Experimental Setup
 
-For all the figures presented in the main paper, we use `DuckDB 0.10.3` and `PostgreSQL 16.0`. Further, for all the figures except Figure 9 under Section 7.3, we use the single-threaded version of DuckDB and the single-process version of PostgreSQL.
+For all the figures presented in the main paper, we use `DuckDB 0.10.3` and `PostgreSQL 16.0`. Further, for all the figures except Figure 9 under Section 7.3, we use no intra-query parallelism (single-threaded configuration of DuckDB and the no-parallel-worker configuration of PostgreSQL)
