@@ -4,6 +4,11 @@ Derives the provenance of the query using user-defined functions and aggregates,
 
 # Experimental Setup
 
+## Parallelism
+
+For all the figures presented in the main paper, we use `DuckDB 0.10.3` and `PostgreSQL 16.0`. Further, for all the figures except Figure 9 under Section 7.3, we use no intra-query parallelism (single-threaded configuration of DuckDB and the no-parallel-worker configuration of PostgreSQL)
+
+
 ## A. TPC-H
 
 ### Data:
@@ -164,11 +169,6 @@ To run DuckDB experiments, run the following command:
 ```
 cd duckdb/benchmark/micro/log_cost/ && bash run.sh
 ```
-
-# Parallelism
-
-For all the figures presented in the main paper, we use `DuckDB 0.10.3` and `PostgreSQL 16.0`. Further, for all the figures except Figure 9 under Section 7.3, we use no intra-query parallelism (single-threaded configuration of DuckDB and the no-parallel-worker configuration of PostgreSQL)
-
 
 # Correctness
 
