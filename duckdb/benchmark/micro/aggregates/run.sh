@@ -1,0 +1,60 @@
+# Run SmokedDuck
+
+
+set -e
+set -x
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 2
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 2
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 2
+
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 4
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 4
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 4
+
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 8
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 8
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 8
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 10
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 10
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 10
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 12
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 12
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_smokedduck_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --sample_inference all --sd_mode old --threads 12
+
+
+# Run TraceProv
+
+set -e
+set -x
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 2
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 2
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 2
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 4
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 4
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 4
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 8
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 8
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 8
+
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 10
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 10
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 10
+
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_10_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_10.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 12
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_100_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_100.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 12
+python3 run.py --exe ../../../bld/bin/run_smokedduck --suff macos_group_1000_traceprov_SMART --db /Users/uicdbgroup/vinny/git_experiments/traceprov_clone/data/microbench_zipf/microbench_agg_02_zip/microbench_agg_02_1000.db --config config_bench.json --graph_dir ./graphs/ --traceprov_fast --traceprov_sample_fast --sample_inference all --threads 12
