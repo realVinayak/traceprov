@@ -1,0 +1,1 @@
+plot_polynomials.py --out_dir final_results/factor/ --db ./extractions/polynomials/tmp/factor_v02/data_factor_duckdb_all.db

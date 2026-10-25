@@ -1,0 +1,1 @@
+plot_parallel.py --out_dir ./final_results/parallel/ --db ../traceprovpy/tools/results_db_2026_08_13/data_sf_10_duckdb_offset.db --restrict_sd

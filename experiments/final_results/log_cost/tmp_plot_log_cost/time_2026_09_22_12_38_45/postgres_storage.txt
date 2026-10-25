@@ -1,0 +1,9 @@
+\begin{tabular}{ccccc}
+\hline
+Category & 10 & 1K & 100K & 10M \\
+\hline
+traceprov &	 1 K &	 16 &	 8.0 &	 8.0 \\
+muller &	 819 &	 73 &	 68 &	 68 \\
+provsql &	 2 M &	 25 K &	 469 &	 350 \\
+\hline
+\end{tabular}

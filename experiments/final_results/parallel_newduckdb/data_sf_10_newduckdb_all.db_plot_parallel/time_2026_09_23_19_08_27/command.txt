@@ -1,0 +1,1 @@
+plot_parallel.py --out_dir ./final_results/parallel_newduckdb/ --db ../traceprovpy/tools/results_db_2026_08_13/data_sf_10_newduckdb_all.db

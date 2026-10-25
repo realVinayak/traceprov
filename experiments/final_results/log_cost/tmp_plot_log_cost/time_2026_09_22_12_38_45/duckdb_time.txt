@@ -1,0 +1,9 @@
+\begin{tabular}{ccccc}
+\hline
+Category & 10 & 1K & 100K & 10M \\
+\hline
+traceprov &	 20 &	 0.2 &	 0.004 &	 0.003 \\
+traceprov_file &	 27 &	 0.29 &	 0.006 &	 0.003 \\
+smokedduck &	 0.8 &	 0.009 &	 0.001 &	 0.001 \\
+\hline
+\end{tabular}

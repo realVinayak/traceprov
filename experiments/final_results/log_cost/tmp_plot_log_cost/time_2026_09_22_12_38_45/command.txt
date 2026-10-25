@@ -1,0 +1,1 @@
+plot_log_cost.py --out_dir ./final_results/log_cost/ --db_dir ./extractions/log_cost/tmp/

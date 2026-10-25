@@ -1,0 +1,1 @@
+plot_sd_comparison_zipf.py --out_dir ./final_results/sd_zipf_v01/ --db ./extractions/zipf/macos_db/data_0_duckdb_offset.db

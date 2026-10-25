@@ -1,0 +1,7 @@
+{
+    "min_max_labels": [
+        "$> 1.04\\times$ & $\\leq 1.1\\times$",
+        "$> 1.1\\times$ & $\\leq 1.2\\times$",
+        "$> 1.2\\times$ & $\\leq 1.73\\times$"
+    ]
+}
