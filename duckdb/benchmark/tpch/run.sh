@@ -1,22 +1,79 @@
-#!/bin/bash
-#
-
 set -e
 set -x
 
-OPT_OPTION=""
-METHOD="hugw_mem"
-OPT_STR="no_optimized"
-if [ "$OPTIMIZED" = "true" ]; then
-OPT_OPTION="--optimized"
-OPT_STR="optimized"
-fi
+# Run GProM (all)
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized --threads 2
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized --threads 4
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized --threads 8
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized --threads 10
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_latest_duck_SMART --optimized --threads 12
 
-SUFF="aws_bench_${METHOD}_${OPT_STR}"
+# Run GProM (single)
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --single_row_mode
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --threads 2 --single_row_mode
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db  --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --threads 4 --single_row_mode
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db  --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --threads 8 --single_row_mode
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db  --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --threads 10 --single_row_mode
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db  --config ../configs/config_gprom.json --dir gprom_params_default_restricted_keys_optimized --suff macos_gprom_offset_latest_duck_SMART --optimized --threads 12 --single_row_mode
 
+# Run TraceProv (all)
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 1
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 2
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff local_test_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 4
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 8
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 10
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 12
 
-if [ "$VALIDATE" = "true" ]; then
-python3 ../run.py --db $1 --exe ../../../bld/bin/run_smokedduck --suff local_test_0 --validate $OPT_OPTION --spec spec.json --config config_validate.json --base_root ~/traceprov/postgres/benchmark/tpch/scale_$2/params_default/ --root ./
-else
-python3 ../run.py --db $1 --exe ../../../bld/bin/run_smokedduck --suff $SUFF $OPT_OPTION --spec spec.json --config config_bench.json --base_root ~/traceprov/postgres/benchmark/tpch/scale_$2/params_default/ --root ./
-fi
+# Run TraceProv (single)
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 2 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 4 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 8 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 10 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 12 --sample_inference all
+
+# Run SmokedDuck (all)
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 1
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 2
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 4
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 8
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 10
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 12
+
+# Run SmokedDuck (single)
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 2 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 4 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 8 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 10 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_sd_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --sd_mode old --threads 12 --sample_inference all
+
+# Run TraceProv ablation
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_ablation_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_ablation_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_use_partition_in_agg --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_ablation_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_join_rewrite --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_tp_offset_ablation_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_use_join_filter_rewrite --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+
+# Run TraceProv (new DuckDB)
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 1
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 2
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 4
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 8
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 10
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_all_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --graph_dir ../traceprov_graphs/ --threads 12
+
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 1 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 2 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 4 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 8 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 10 --sample_inference all
+python3 ../run.py --exe ../../../bld/bin/run_smokedduck --suff macos_duckdb_latest_tp_offset_SMART --db ../tpch_sd_sf_10.db --spec spec.json --base_root ./ --root ./ --config ../configs/config_bench.json --query_layer_cfg ../query_layer_used.json --traceprov_fast --traceprov_sample_fast --graph_dir ../traceprov_graphs/ --threads 12 --sample_inference all
+
+# Run GProM (new DuckDB)
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 1
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 2
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 4
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 8
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 10
+python3 ../run_gprom.py --exe ../../../bld/bin/run_smokedduck --db ../tpch_gprom_sf_10.db --config ./config_sd_all.json --dir gprom_params_default_restricted_optimized --suff macos_gprom_SMART --optimized --threads 12
