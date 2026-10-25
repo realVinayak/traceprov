@@ -178,12 +178,12 @@ To verify correctness, after capturing provenance, we run the query only on the 
 
 Note: To check whether results over the provenance and over the database are identical, we dump the query result into a text file and apply the standard POSIX diff check.
 
-### TPC-H:
+## TPC-H:
 We use the above methodology for both "P_all" and "P_single" tasks, on DuckDB and PostgreSQL. Specifically, for P_all, we verify that the captured provenance reproduces all the query result rows for all TPC-H queries (SF=1 and 10). For P_single, we verify that the captured provenance reproduces the query result row for which the provenance was requested, and we perform this check for all the query output rows for all TPC-H queries (SF=1 and 10). For both tasks, if GProM's results are available (for the corresponding SF and backend system, i.e., DuckDB or PostgreSQL), we verify that TraceProv and GProM return the same rows as the provenance.
+
+## Provenance Polynomials:
+We verify that each system generates an equivalent provenance polynomial for a given query.
 
 # Analysis of Experimental Results
 
 The general workflow of analysis of experimental results is to parse the produced JSON files produced during experimentation into DuckDB tables and generate plots. The respective code is available in `experiments/` directory.
-
-### Provenance Polynomials:
-We verify that each system generates an equivalent provenance polynomial for a given query.
